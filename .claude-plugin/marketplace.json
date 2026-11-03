@@ -1,0 +1,6 @@
+{
+  "name": "ai-terrarium",
+  "description": "Pixel-art office terrarium for your Claude Code sessions",
+  "owner": { "name": "LuanLD" },
+  "plugins": [{ "name": "ai-terrarium", "source": "./" }]
+}
