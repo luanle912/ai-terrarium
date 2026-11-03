@@ -225,17 +225,21 @@ class ClaudeOffice extends React.Component{
     if(a.parent){
       const p=this.byId(a.parent),d=DESKS[p?p.desk:a.desk];
       const subs=this.agents.filter(o=>!o.leaving&&o.parent===a.parent);
-      const slot=Math.max(0,subs.indexOf(a))%3;
-      const spots=[[[d.gx+2,d.gy],[d.gx+2.45,d.gy+0.55]],[[d.gx+2,d.gy+1],[d.gx+2.45,d.gy+1.5]],[[d.gx+1,d.gy+2],[d.gx+1.5,d.gy+2.3]]];
-      return{key:'sub'+a.parent+'-'+slot,tile:spots[slot][0],pt:spots[slot][1]};
+      const slot=Math.max(0,subs.indexOf(a));
+      const baseSpots=[[[d.gx+2,d.gy],[d.gx+2.45,d.gy+0.55]],[[d.gx+2,d.gy+1.2],[d.gx+2.45,d.gy+1.7]],[[d.gx+0.8,d.gy+2.2],[d.gx+1.3,d.gy+2.6]],[[d.gx+2,d.gy+2.2],[d.gx+2.45,d.gy+2.7]],[[d.gx-0.2,d.gy+2.2],[d.gx+0.3,d.gy+2.6]]];
+      const si=slot%baseSpots.length,row=Math.floor(slot/baseSpots.length);
+      const s=baseSpots[si];
+      return{key:'sub'+a.parent+'-'+slot,tile:[s[0][0],s[0][1]+row*1.2],pt:[s[1][0],s[1][1]+row*1.2]};
     }
     const t=(a.status==='talking'||a.status==='waiting')&&a.target&&this.byId(a.target);
-    if(t&&!t.leaving){
+    if(t&&!t.leaving&&t.parent!==a.id){
       const d=DESKS[t.desk];
-      const visitors=this.agents.filter(o=>!o.leaving&&o.target===t.id&&(o.status==='talking'||o.status==='waiting'));
-      const slot=Math.max(0,visitors.indexOf(a))%3;
-      const spots=[[[d.gx+2,d.gy],[d.gx+2.45,d.gy+0.55]],[[d.gx+2,d.gy+1],[d.gx+2.45,d.gy+1.5]],[[d.gx+1,d.gy+2],[d.gx+1.5,d.gy+2.3]]];
-      return{key:'visit'+t.id+'-'+slot,tile:spots[slot][0],pt:spots[slot][1]};
+      const visitors=this.agents.filter(o=>!o.leaving&&o.target===t.id&&(o.status==='talking'||o.status==='waiting')&&o.parent!==t.id);
+      const slot=Math.max(0,visitors.indexOf(a));
+      const baseSpots=[[[d.gx-0.5,d.gy+1],[d.gx,d.gy+1.5]],[[d.gx+0.5,d.gy+2.8],[d.gx+1,d.gy+3.2]],[[d.gx-0.5,d.gy+2.5],[d.gx,d.gy+2.9]],[[d.gx+1.8,d.gy+2.8],[d.gx+2.3,d.gy+3.2]],[[d.gx-0.5,d.gy+3.5],[d.gx,d.gy+3.9]]];
+      const si=slot%baseSpots.length,row=Math.floor(slot/baseSpots.length);
+      const s=baseSpots[si];
+      return{key:'visit'+t.id+'-'+slot,tile:[s[0][0],s[0][1]+row*1.5],pt:[s[1][0],s[1][1]+row*1.5]};
     }
     const d=DESKS[a.desk];
     return{key:'seat',tile:[d.gx,d.gy+1],pt:[d.gx+1,d.gy+1.45]};
