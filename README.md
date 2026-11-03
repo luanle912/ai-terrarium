@@ -1,44 +1,108 @@
-# ai-terrarium
+# 🏢 ai-terrarium
 
-> Watch your AI agents work in a pixel-art terrarium.
+**Watch your AI agents work in a pixel-art terrarium.**
 
-Each active Claude Code session becomes an animated character sitting at a desk in an isometric pixel-art office. Day and night follow your real clock — lights dim at sunset, stars come out, desk lamps glow.
+A Claude Code plugin that turns your active coding sessions into animated characters working at desks in an isometric pixel-art office. Day and night follow your real clock — lights dim at sunset, stars come out, desk lamps glow.
 
-![demo](https://claude.ai/artifact/7rKQWsQxG8WttUXiWqEUt6)
+```
+  ┌─────────────────────────────────────┐
+  │  ☁           ☀                      │
+  │     ╔══════╗    ╔══════╗            │
+  │     ║ 🧑‍💻  ║    ║ 🧑‍💻  ║  ← sessions │
+  │     ║ ████ ║    ║ ████ ║            │
+  │     ╚══════╝    ╚══════╝            │
+  │         ☕           📁             │
+  │  ╔══════╗    ╔══════╗               │
+  │  ║ 💤   ║    ║ 🧑‍💻  ║               │
+  │  ║ ████ ║    ║ ████ ║               │
+  │  ╚══════╝    ╚══════╝     🚪       │
+  └─────────────────────────────────────┘
+       each desk = one Claude session
+```
 
-## Install
+## ⚡ Quick Start
 
-At the Claude Code prompt:
+**Install** (at the Claude Code prompt):
 
 ```
 /plugin install ai-terrarium --marketplace luanle912/ai-terrarium
 ```
 
-Then open **http://localhost:4317** in your browser.
-
-## How it works
-
-The plugin hooks into `session.start` and spawns a zero-dependency Node.js SSE server on port 4317. The server reads Claude Code transcripts from `~/.claude/projects/` and streams session state to the browser in real time.
+**Open** your browser:
 
 ```
-~/.claude/projects/**/*.jsonl  →  SSE server :4317  →  Pixel-art canvas
+http://localhost:4317
 ```
 
-## Features
+That's it. The server starts automatically with every Claude Code session.
 
-- **Zero setup** — installs as a Claude Code plugin, server auto-starts
-- **Real-time** — sessions appear/disappear as you open/close Claude Code
-- **Continuous lighting** — smooth day/night cycle based on your local time
-- **No dependencies** — pure Node.js, no npm install needed
-- **Private** — reads local transcripts only, nothing leaves your machine
+## 🔧 How It Works
 
-## Update
+```
+~/.claude/projects/**/*.jsonl  →  SSE Server :4317  →  Pixel-Art Canvas
+       (transcripts)              (zero deps)          (isometric office)
+```
+
+The plugin hooks into `session.start` and spawns a lightweight Node.js server that:
+
+1. Reads Claude Code transcript files from `~/.claude/projects/`
+2. Detects which sessions are active, idle, thinking, or waiting
+3. Streams state via Server-Sent Events to the browser UI
+4. Renders each session as an animated character at a desk
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| **Zero setup** | Installs as a plugin — server auto-starts, no config needed |
+| **Real-time** | Sessions appear and disappear as you open/close Claude Code |
+| **Day/night cycle** | Smooth continuous lighting based on your local time |
+| **Session status** | See who's working, thinking, waiting for permission, or idle |
+| **Sub-agents** | Child agents appear as smaller desks next to their parent |
+| **No dependencies** | Pure Node.js — no `npm install` required |
+| **Private** | Everything stays local — nothing leaves your machine |
+
+## 🖥️ Alternative: Run Without Plugin
+
+If you prefer not to install the plugin, run the server manually:
+
+```bash
+# Clone and run
+git clone https://github.com/luanle912/ai-terrarium.git
+node ai-terrarium/server.js
+```
+
+Then open `http://localhost:4317`.
+
+## 🌐 Remote UI
+
+You can also use the hosted UI and point it to your local server:
+
+```
+https://claude.ai/artifact/7rKQWsQxG8WttUXiWqEUt6?server=localhost:4317
+```
+
+> The server includes `Access-Control-Allow-Origin: *` so the hosted page can connect to your local SSE endpoint.
+
+## ⚙️ Configuration
+
+| Env Variable | Default | Description |
+|-------------|---------|-------------|
+| `PORT` | `4317` | Server port |
+| `CLAUDE_DIR` | `~/.claude/projects` | Transcript directory |
+| `ACTIVE_MIN` | `120` | Minutes before a session is considered inactive |
+
+## 🔄 Update
 
 ```
 claude plugin update ai-terrarium
 ```
 
-## Requirements
+## 📋 Requirements
 
-- Node.js 18+
-- Claude Code 2.1+
+- **Node.js 18+**
+- **Claude Code 2.1+**
+
+## 📄 License
+
+MIT
