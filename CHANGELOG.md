@@ -23,8 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Activity arm animations** — Each pantry activity has unique arm/hand animations (phone screen glow, coffee cup raise, fridge door reach, water bottle tilt, vending button press, stretching)
 - **Stool sitting** — Agents at the round table sit on stools with adjusted leg and body positioning
 - **Department chips** — "PHÒNG BAN" row in the UI shows each department's short label, full name, color badge, and agent count
-- **Zone labels** — Department name and key painted on the floor in isometric text per zone
+- **Zone nameplates** — Department name displayed as colored badges floating above glass partition walls, clearly visible above furniture
 - **Dashed zone dividers** — Visual dashed lines separating the 4 work zones and the pantry corridor
+
+### Fixed
+
+- **Sub-agent infinite respawn** — Done sub-agents no longer re-enter the office in an endless loop (tracked via `goneSids` Set)
+- **Idle agents always go to pantry** — Fixed timing bug where sleeping check fired before pantry spot assignment
+- **Department grouping by folder** — Sessions sharing the same working directory (`cwd`) are now correctly grouped, not by session name
+- **Full session names in bubbles** — Bubble labels show full names (e.g., "playground", "nexa-kb-v3") instead of abbreviated codes ("PLA1", "NEX1")
+- **Event tree scale** — Seasonal tree scaled 1.8× to match office proportions
 
 ### Changed
 
