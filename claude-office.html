@@ -589,6 +589,11 @@ class ClaudeOffice extends React.Component{
     this.setBack=el=>{this.backCanvas=el;};this.setFront=el=>{this.frontCanvas=el;};this.setWrap=el=>{this.wrapEl=el;};
     // Weather: this.wx is the SkyLogic transition state; snow (lawn cover) and flash (lightning) are 0..1.
     this.wx={...SkyLogic.initialWeather('clear',Date.now()),nextAt:Date.now()+SkyLogic.changeDelayMs(Math.random())};
+// Màu của bàn trống: khử bão hoà rồi chỉnh độ sáng. Tính sẵn bằng màu thay cho ctx.filter — filter trên canvas
+// bắt Chrome dựng một layer riêng cho từng lệnh vẽ và kéo cả trang xuống ~1 FPS.
+const greyHex=(hh,sat,bri)=>{if(!hh||hh[0]!=='#'||hh.length!==7)return hh;const n=parseInt(hh.slice(1),16),r=(n>>16)&255,g=(n>>8)&255,b=n&255,l=0.299*r+0.587*g+0.114*b,c=v=>Math.max(0,Math.min(255,Math.round((v+(l-v)*sat)*bri)));return'#'+((1<<24)+(c(r)<<16)+(c(g)<<8)+c(b)).toString(16).slice(1);};
+const VACANT_CACHE=new Map();
+const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);if(v)return v;const sat=th.stroke?0.9:0.85,bri=th.stroke?1.08:0.7;v={};for(const k in th)v[k]=typeof th[k]==='string'?greyHex(th[k],sat,bri):th[k];v._metal=greyHex(th.stroke?'#ffffff':'#2d3142',sat,bri);v._mouse=greyHex(th.stroke?'#ffffff':'#d9dbe2',sat,bri);if(VACANT_CACHE.size>64)VACANT_CACHE.clear();VACANT_CACHE.set(key,v);return v;};
     this.snow=0;this.flash=0;this.flashStart=0;this.flashMs=0;this.nextFlashAt=0;this.preview=null;this.lastSky=Date.now();
     this.reducedMq=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
     this.onClick=e=>{const a=this.hit(e);this.setState({sel:a?a.id:null});};
@@ -1048,15 +1053,14 @@ class ClaudeOffice extends React.Component{
   }
 
   drawDesk(G,d,i){
-    const{ctx,poly,box,rect,th,t,df}=G,{gx,gy}=d,owner=this.agents.find(a=>a.desk===i&&!a.leaving&&!a.parent);
+    const{ctx,poly,box,rect,t,df}=G,{gx,gy}=d,owner=this.agents.find(a=>a.desk===i&&!a.leaving&&!a.parent);
     const at=owner&&owner.seated,st=owner&&owner.status;
-    // Bàn chưa ai nhận (khác bàn có chủ đang ra pantry): dọn trống, ghế đẩy vào, màu xám tối.
-    const vacant=!owner,co=vacant?-0.2:0;
-    ctx.save();if(vacant)ctx.filter=th.stroke?'grayscale(0.9) opacity(0.75)':'grayscale(0.85) brightness(0.7)';
+    // Bàn chưa ai nhận (khác bàn có chủ đang ra pantry): dọn trống, ghế đẩy vào, vẽ bằng bảng màu xám tối.
+    const vacant=!owner,co=vacant?-0.2:0,th=vacant?vacantTheme(G.th):G.th;
     let scr=th.off;
     if(at)scr={error:'#e5484d',permission:'#f5a524',done:'#46a758',idle:shade(th.off,10)}[st]||(df<0.5?'#0f2233':th.stroke?'#2f5bff':'#203040');
     if(at&&df<0.7&&st!=='idle'){ctx.globalAlpha=0.16*(1-df);poly([P(gx+0.3,gy+0.9),P(gx+1.7,gy+0.9),P(gx+1.7,gy+2),P(gx+0.3,gy+2)],scr==='#0f2233'?th.on:scr,null);ctx.globalAlpha=1;}
-    const metal=th.stroke?'#ffffff':'#2d3142';
+    const metal=vacant?th._metal:th.stroke?'#ffffff':'#2d3142';
     box(gx+0.92,gy+1.36+co,0.16,0.16,0,3,metal);
     [[-0.22,0],[0.22,0],[0,-0.2],[0,0.22]].forEach(([dx,dy])=>{const[wx,wy]=P(gx+1+dx,gy+1.44+co+dy);rect(wx-1,wy-1,2,2,th.stroke||'#1a1a1a');});
     box(gx+0.66,gy+1.18+co,0.68,0.5,3,6,th.chair);
@@ -1088,11 +1092,10 @@ class ClaudeOffice extends React.Component{
     else if(at&&st==='idle'){const p=(t*0.25+i*0.13)%1;S(0.68+p*0.6,0.72+p*0.6,18+((i*5+Math.floor(t))%7),19+((i*5+Math.floor(t))%7),'#8b93a7');}
     box(gx+0.68,gy+0.58,0.6,0.18,11,12,th.kb);
     for(let k=0;k<6;k++)for(let r=0;r<2;r++){const[kx,ky]=P(gx+0.73+k*0.09,gy+0.62+r*0.07,12);const hot=at&&st==='working'&&((Math.floor(t*12)+k*3+r)%7===0);rect(kx,ky,1,1,hot?'#ffffff':shade(th.kb,20));}
-    box(gx+1.36,gy+0.6,0.08,0.13,11,12.5,th.stroke?'#ffffff':'#d9dbe2');
+    box(gx+1.36,gy+0.6,0.08,0.13,11,12.5,vacant?th._mouse:th.stroke?'#ffffff':'#d9dbe2');
     const mug=['#e5484d','#3e8ed0','#f5a524','#46a758','#8e4ec6','#ffffff'][i%6];
     if(!vacant)box(gx+1.62,gy+0.34,0.16,0.16,11,15.5,mug);
     if(at&&(st==='working'||st==='thinking'))for(let k=0;k<2;k++){const ph=(t*0.9+k*0.5+i*0.1)%1;const[sx,sy]=P(gx+1.7,gy+0.42,17+ph*9);ctx.globalAlpha=0.7*(1-ph);rect(sx+(Math.floor(ph*4)%2),sy,1,2,'#e6e9ef');ctx.globalAlpha=1;}
-    ctx.restore();
   }
 
   actArms(R,act,sx,by,t,sh,shD,sk){
