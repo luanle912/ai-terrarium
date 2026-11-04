@@ -50,11 +50,13 @@ Open your browser → **http://localhost:4317** — that's it.
 |---|---------|-------------|
 | 🔌 | **Zero setup** | Installs as a Claude Code plugin — server auto-starts on `session.start` |
 | ⚡ | **Real-time** | Sessions appear and disappear as you open and close Claude Code |
-| 🌅 | **Day/night cycle** | Smooth continuous lighting with cosine interpolation based on local time |
+| 🏝️ | **Sky island** | The office stands on a floating island above a sea of block clouds, with distant islands fading into the haze |
+| 🌅 | **Day/night cycle** | Smooth continuous lighting with cosine interpolation based on local time, warm dawn and dusk skies, stars and moon at night |
+| 🌦️ | **Weather** | Clear, cloudy, rain, storm, snow and fog — random every 20–40 min, or following the real weather of a city you choose |
 | 🔍 | **Session status** | See who's working, thinking, waiting for permission, talking, or idle |
 | 🤖 | **Sub-agents** | Child agents appear as smaller desks next to their parent |
 | 📦 | **Zero dependencies** | Pure Node.js — no `npm install`, no build step |
-| 🔒 | **Private** | Reads local transcripts only — nothing leaves your machine |
+| 🔒 | **Private** | Reads local transcripts only; nothing leaves your machine unless you turn on Real weather, which sends the city name to Open-Meteo |
 
 ---
 
@@ -99,6 +101,15 @@ https://claude.ai/artifact/7rKQWsQxG8WttUXiWqEUt6?server=localhost:4317
 | `PORT` | `4317` | Server port |
 | `CLAUDE_DIR` | `~/.claude/projects` | Transcript directory |
 | `ACTIVE_MIN` | `120` | Minutes before a session is considered inactive |
+
+### Weather
+
+Open the ⚙ panel in the bottom-right corner of the office:
+
+- **Thời tiết** picks the mode: *Ngẫu nhiên* (random, the default), *Thời tiết thật* (real weather) or *Tắt* (always clear).
+- *Thời tiết thật* asks for a city. The page looks it up with [Open-Meteo](https://open-meteo.com/) (free for non-commercial use, no key) and refreshes every 15 minutes. If the lookup fails, the panel says why and the page falls back to random weather.
+- The preview buttons (*Quang, Mây, Mưa, Giông, Tuyết, Sương*) show a weather right away.
+- The mode and city are remembered in this browser. With "reduce motion" turned on in your OS, lightning does not flash and rain and snow are lighter.
 
 ---
 
