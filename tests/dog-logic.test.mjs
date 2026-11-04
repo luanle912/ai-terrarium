@@ -234,6 +234,12 @@ test('every pose the logic asks for exists in every breed\'s sprite set', () => 
   }
 })
 
+test('at night the dogs dim only half as much as the scene (characters stay readable), and not at all by day', () => {
+  assert.equal(Dog.nightMix(1), 0)
+  assert.ok(Math.abs(Dog.nightMix(0) - 0.3) < 1e-9)
+  assert.ok(Dog.nightMix(0.5) < 0.6 * 0.5)
+})
+
 // ---- sprites ----
 
 test('every sprite pixel uses a colour from its breed\'s palette, and every frame has its feet on the bottom row', () => {
