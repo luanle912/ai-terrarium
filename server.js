@@ -2,7 +2,7 @@
 // Claude Office — local server. Đọc transcript ~/.claude/projects/**/*.jsonl và stream trạng thái session qua SSE.
 // Chạy: node claude-office-server.js   (Node 18+, không cần cài package)
 // Env: PORT (4317), CLAUDE_DIR (~/.claude/projects), ACTIVE_MIN (10), PERM_SEC (8)
-const fs = require('fs'), path = require('path'), os = require('os'), http = require('http'), { execSync } = require('child_process');
+const fs = require('fs'), path = require('path'), os = require('os'), http = require('http');
 const ROOT = process.env.CLAUDE_DIR || path.join(os.homedir(), '.claude', 'projects');
 const PKG = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, '.claude-plugin', 'plugin.json'), 'utf8')); } catch { return {}; } })();
 const VERSION = PKG.version || 'dev';
@@ -30,12 +30,27 @@ function readUsage() {
   return usageCache;
 }
 const files = new Map();
-let psSessionCache = []; let psLastScan = 0;
+// Chỉ đọc transcript thật: <uuid>.jsonl (session) và agent-*.jsonl (sub-agent). Bỏ qua journal.jsonl của workflow v.v.
+const TRANSCRIPT_RE = /^(agent-[\w-]+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+// Tool mà sub-agent gọi để nộp kết quả cuối — sau tool_result của nó agent không chạy tiếp nữa.
+const FINISH_TOOLS = new Set(['StructuredOutput', 'SubagentHandback']);
 
 function walk(dir, out = []) {
   let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
-  for (const e of ents) { const p = path.join(dir, e.name); if (e.isDirectory()) walk(p, out); else if (e.name.endsWith('.jsonl')) out.push(p); }
+  for (const e of ents) { const p = path.join(dir, e.name); if (e.isDirectory()) walk(p, out); else if (TRANSCRIPT_RE.test(e.name)) out.push(p); }
   return out;
+}
+// Phòng ban = tên repo gốc: bỏ phần .claude/worktrees/<tên> để mọi worktree của một repo về chung một phòng.
+function projectOf(cwd) {
+  if (!cwd) return '';
+  const mark = path.sep + '.claude' + path.sep + 'worktrees' + path.sep;
+  const i = cwd.indexOf(mark);
+  return path.basename(i >= 0 ? cwd.slice(0, i) : cwd.replace(/\/+$/, ''));
+}
+// ~/.claude/projects/<proj>/<sessionId>/subagents/[workflows/wf_x/]agent-*.jsonl → <sessionId>
+function parentFromPath(file) {
+  const seg = file.split(path.sep); const i = seg.lastIndexOf('subagents');
+  return i > 0 ? seg[i - 1] : null;
 }
 function brief(name, input = {}) {
   if (name === 'SendMessage' && input.to) return String(input.to).slice(0, 48);
@@ -50,7 +65,7 @@ function brief(name, input = {}) {
 const hhmmss = t => new Date(t).toTimeString().slice(0, 8);
 
 function ingest(st, e, isIncremental) {
-  if (e.cwd) st.cwd = e.cwd;
+  if (e.cwd) { st.cwd = e.cwd; if (!st.firstCwd) st.firstCwd = e.cwd; }
   if (e.sessionId) st.sessionId = e.sessionId;
   if (e.isSidechain) st.sidechain = true;
   if (e.type === 'agent-name' && e.agentName) st.name = e.agentName;
@@ -64,10 +79,18 @@ function ingest(st, e, isIncremental) {
     if (msg.model) st.model = msg.model;
     const u = msg.usage || {}; st.tokens += (u.input_tokens || 0) + (u.output_tokens || 0);
     for (const c of content) {
-      if (c.type === 'tool_use') { const entry = { name: c.name, detail: brief(c.name, c.input), t }; if (c.name === 'SendMessage' && c.input && c.input.to) { entry.to = String(c.input.to); st.lastSendTo = { name: String(c.input.to), ts: t }; } st.pending.set(c.id, entry); st.recent.unshift({ t: hhmmss(t), text: c.name + ' · ' + brief(c.name, c.input) }); }
+      if (c.type === 'tool_use') { st.finished = FINISH_TOOLS.has(c.name); const entry = { name: c.name, detail: brief(c.name, c.input), t }; if (c.name === 'SendMessage' && c.input && c.input.to) { entry.to = String(c.input.to); st.lastSendTo = { name: String(c.input.to), ts: t }; } st.pending.set(c.id, entry); st.recent.unshift({ t: hhmmss(t), text: c.name + ' · ' + brief(c.name, c.input) }); }
     }
     st.last = 'assistant'; st.stop = msg.stop_reason || st.stop;
+    // Hết lượt → mọi tool của lượt đó đã xong; tool_use không có result (bị huỷ) không được treo lại.
+    if (msg.stop_reason === 'end_turn') st.pending.clear();
   } else if (e.type === 'user') {
+    const firstText = content.length && content[0].type === 'text' ? String(content[0].text || '') : '';
+    if (firstText.startsWith('[Request interrupted')) {
+      st.pending.clear(); st.last = 'interrupted'; st.lastSendTo = null;
+      st.recent.unshift({ t: hhmmss(t), text: 'Bị ngắt bởi user' }); if (st.recent.length > 8) st.recent.length = 8;
+      return;
+    }
     let isResult = false;
     for (const c of content) {
       if (c.type === 'tool_result') { isResult = true; st.pending.delete(c.tool_use_id); if (c.is_error) { st.lastError = t; st.errText = String(typeof c.content === 'string' ? c.content : 'tool error').slice(0, 60); st.recent.unshift({ t: hhmmss(t), text: 'Lỗi · ' + st.errText }); } }
@@ -101,16 +124,42 @@ function scan() {
   }
 }
 
+// Session đang chạy thật: Claude Code ghi ~/.claude/sessions/<pid>.json cho mỗi tiến trình (sessionId, cwd, name, status).
+// Có danh sách này thì chỉ hiện session còn sống; không có (bản Claude Code cũ) thì quay về lọc theo thời gian.
+const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions');
+let liveCache = null, liveTs = 0;
+function liveSessions() {
+  const now = Date.now();
+  if (now - liveTs < 2000) return liveCache;
+  liveTs = now;
+  const m = new Map();
+  let names = []; try { names = fs.readdirSync(SESSIONS_DIR).filter(f => /^\d+\.json$/.test(f)); } catch {}
+  for (const f of names) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf8'));
+      const pid = +j.pid || parseInt(f, 10);
+      try { process.kill(pid, 0); } catch (err) { if (err.code !== 'EPERM') continue; }
+      if (j.sessionId) m.set(j.sessionId, { pid, name: j.name || '', status: j.status || '', cwd: j.cwd || '' });
+    } catch {}
+  }
+  return (liveCache = m.size ? m : null);
+}
+
+const MAX_ROOTS = 16, MAX_SUBS = 12, SUB_STALE_MS = 5 * 60e3;
 function snapshot() {
   const now = Date.now(), out = [];
+  const live = liveSessions();
   for (const st of files.values()) {
     const aliveTs = Math.max(st.fileMtime || 0, st.lastTs || 0);
     if (!aliveTs || now - aliveTs > ACTIVE_MS) continue;
     const activityTs = st.lastTs || st.fileMtime || 0;
-    const isSub = st.file.includes(path.sep + 'subagents' + path.sep) || st.sidechain;
+    const fromPath = parentFromPath(st.file);
+    const isSub = !!fromPath || !!st.sidechain;
     const id = isSub ? path.basename(st.file, '.jsonl') : (st.sessionId || path.basename(st.file, '.jsonl'));
-    let parentId = null;
-    if (isSub) parentId = st.file.includes(path.sep + 'subagents' + path.sep) ? path.basename(path.dirname(path.dirname(st.file))) : st.sessionId;
+    const parentId = isSub ? (fromPath || st.sessionId || null) : null;
+    // Session (hoặc session cha của sub-agent) đã đóng → bỏ.
+    if (live && !live.has(isSub ? parentId : id)) continue;
+    const reg = !isSub && live ? live.get(id) : null;
     const pend = [...st.pending.values()].sort((a, b) => b.t - a.t)[0];
     let status = 'working', tool = '', detail = '', talkingTo = '';
     if (pend) {
@@ -122,22 +171,36 @@ function snapshot() {
     else if ((st.last === 'prompt' || st.last === 'tool_result') && now - activityTs < 600000) status = 'thinking';
     else if (st.last === 'assistant' && st.stop === 'end_turn') status = now - activityTs < 60000 ? 'done' : 'idle';
     else status = 'idle';
-    // Sub-agent xong việc (idle) → báo done rồi loại khỏi snapshot sau 30s
-    if (isSub && status === 'idle') { if (now - activityTs > 30000) continue; status = 'done'; }
-    const displayName = st.name || st.title || (isSub ? 'sub-agent' : path.basename(st.cwd || id));
+    if (isSub) {
+      // Sub-agent đã nộp kết quả (StructuredOutput/SubagentHandback) hoặc hết việc → báo done 30s rồi loại.
+      if (!pend && (st.finished || status === 'idle' || status === 'done')) { if (now - activityTs > 30000) continue; status = 'done'; }
+      // Không tool nào đang chạy mà im lặng quá lâu → agent đã chết/bị huỷ.
+      else if (!pend && now - activityTs > SUB_STALE_MS) continue;
+    } else if (reg) {
+      // Trạng thái do chính Claude Code báo là nguồn đáng tin nhất cho session gốc.
+      if (reg.status === 'idle' && (status === 'working' || status === 'thinking' || status === 'talking')) status = now - activityTs < 60000 ? 'done' : 'idle';
+      else if (reg.status === 'busy' && (status === 'idle' || status === 'done')) status = 'working';
+    }
+    const displayName = (reg && reg.name) || st.name || st.title || (isSub ? 'sub-agent' : path.basename(st.cwd || id));
+    const project = projectOf((reg && reg.cwd) || st.firstCwd || st.cwd);
     const _sendTo = st.lastSendTo && now - st.lastSendTo.ts < 600000 ? st.lastSendTo.name : null;
-    out.push({ id, parentId, name: displayName, cwd: st.cwd, model: st.model, tokens: st.tokens, status, tool, detail, talkingTo, _sendTo, recent: st.recent, updatedAt: aliveTs });
+    out.push({ id, parentId, name: displayName, project, cwd: st.cwd, model: st.model, tokens: st.tokens, status, tool, detail, talkingTo, _sendTo, recent: st.recent, updatedAt: aliveTs });
   }
-  const knownNames = new Set(out.map(s => s.name));
-  for (const ps of scanProcesses()) {
-    if (knownNames.has(ps.name)) continue;
-    out.push({ id: 'ps-' + ps.pid, parentId: null, name: ps.name, cwd: ps.cwd, model: '', tokens: 0, status: ps.status, tool: '', detail: 'no transcript', recent: [], updatedAt: now });
+  // Session đang mở nhưng chưa/không còn transcript gần đây (idle lâu) → vẫn có mặt ở bàn.
+  if (live) for (const [sid, r] of live) {
+    if (out.some(s => s.id === sid)) continue;
+    out.push({ id: sid, parentId: null, name: r.name || path.basename(r.cwd || '') || 'session', project: projectOf(r.cwd), cwd: r.cwd, model: '', tokens: 0, status: r.status === 'busy' ? 'working' : 'idle', tool: '', detail: '', talkingTo: '', recent: [], updatedAt: now });
   }
-  for (const s of out) if (s.status === 'waiting') {
-    const kids = out.filter(k => k.parentId === s.id).sort((a, b) => b.updatedAt - a.updatedAt);
-    if (kids[0]) s.waitingOn = kids[0].id;
-  }
+  // Sub-agent mà session cha không có mặt → bỏ (tránh nhân vật mồ côi tạo phòng "sub-agent").
+  const ids = new Set(out.filter(s => !s.parentId).map(s => s.id));
+  for (let i = out.length - 1; i >= 0; i--) if (out[i].parentId && !ids.has(out[i].parentId)) out.splice(i, 1);
   const ACTIVE = new Set(['working', 'thinking', 'talking', 'permission']);
+  for (const s of out) {
+    if (s.status !== 'waiting' && !(s.status === 'working' && !s.tool && !s.parentId)) continue;
+    const kids = out.filter(k => k.parentId === s.id && (ACTIVE.has(k.status) || k.status === 'waiting')).sort((a, b) => b.updatedAt - a.updatedAt);
+    if (kids[0]) { s.status = 'waiting'; s.waitingOn = kids[0].id; }
+    else if (s.status === 'waiting') { const any = out.find(k => k.parentId === s.id); if (any) s.waitingOn = any.id; }
+  }
   for (const s of out) {
     if ((s.status === 'idle' || s.status === 'done') && s._sendTo) {
       const tgt = out.find(t => t.name === s._sendTo && ACTIVE.has(t.status));
@@ -152,37 +215,13 @@ function snapshot() {
       if (par && (par.status === 'idle' || par.status === 'done')) s.status = 'done';
     }
   }
-  return { at: now, sessions: out.slice(0, 12), usage: readUsage(), version: VERSION };
-}
-
-const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions');
-function scanProcesses() {
-  const now = Date.now();
-  if (now - psLastScan < 5000) return psSessionCache;
-  psLastScan = now;
-  try {
-    const out = execSync("ps axo pid,args 2>/dev/null | grep '[c]laude' | grep -v 'claude-office'", { encoding: 'utf8', timeout: 3000 });
-    const sessions = [];
-    for (const line of out.split('\n')) {
-      const m = line.match(/^\s*(\d+)\s+claude\s+(-r|--resume)\s+(\S+)/);
-      if (!m) continue;
-      const [, pid, , argName] = m;
-      const isFork = line.includes('--fork-session');
-      let name = isFork ? argName + '-fork' : argName;
-      let status = 'working', cwd = '';
-      try {
-        const sj = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, pid + '.json'), 'utf8'));
-        if (sj.name) name = sj.name;
-        if (sj.cwd) cwd = sj.cwd;
-        if (sj.status === 'busy') status = 'working';
-        else if (sj.status === 'idle') status = 'idle';
-        else if (sj.status === 'shell') status = 'idle';
-      } catch {}
-      sessions.push({ pid, name, status, cwd });
-    }
-    psSessionCache = sessions;
-  } catch { psSessionCache = []; }
-  return psSessionCache;
+  // Ưu tiên session gốc (mỗi session một bàn), sub-agent đứng cạnh bàn cha nên giới hạn riêng.
+  const byRecent = (a, b) => b.updatedAt - a.updatedAt;
+  const roots = out.filter(s => !s.parentId).sort(byRecent).slice(0, MAX_ROOTS);
+  const keep = new Set(roots.map(s => s.id));
+  const subs = out.filter(s => s.parentId && keep.has(s.parentId)).sort(byRecent).slice(0, MAX_SUBS);
+  for (const s of subs) s.project = roots.find(r => r.id === s.parentId).project;
+  return { at: now, sessions: roots.concat(subs), usage: readUsage(), version: VERSION };
 }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');

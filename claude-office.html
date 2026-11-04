@@ -683,7 +683,7 @@ class ClaudeOffice extends React.Component{
   addAgent({seated,parent,live,deptKey}){
     let dk;
     if(parent)dk=parent.dept;
-    else if(live){const p=live.parentId&&this.agents.find(x=>x.sid===live.parentId);dk=p?p.dept:this.dept(cwdKey(live.cwd)||live.name||'khác').key;}
+    else if(live){const p=live.parentId&&this.agents.find(x=>x.sid===live.parentId);dk=p?p.dept:this.dept(live.project||cwdKey(live.cwd)||live.name||'khác').key;}
     else{dk=deptKey;if(!dk){const c=SIM_DEPTS.map(([k,l])=>[this.dept(k,l),this.agents.filter(a=>a.dept===k&&!a.leaving&&!a.parent).length]);const min=Math.min(...c.map(x=>x[1]));const pool=c.filter(x=>x[1]<=min+1);dk=pick(pool)[0].key;}}
     const Dp=this.dept(dk);
     const desk=parent?parent.desk:this.freeDeskFor(dk);if(desk<0)return null;
