@@ -458,9 +458,7 @@ class ClaudeOffice extends React.Component{
       ctx.strokeStyle=th.stroke?'#c9d3e3':(df>0.5?'#c9a77a':'#3a4462');ctx.lineWidth=1;
       [[9,0,9,H],[0,7,20,7],[19,0,19,H]].forEach(([a,b,c,d])=>{const L=Math.max(c-a,d-b)*2;for(let k=0;k<L;k+=2){const p0=P(a+(c-a)*k/L,b+(d-b)*k/L),p1=P(a+(c-a)*(k+0.8)/L,b+(d-b)*(k+0.8)/L);ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);ctx.stroke();}});
     }
-    {const own=this.colOwners();
-      const paint=(x,y,txt,c)=>{const[px,py]=P(x,y);ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.transform(1,0.5,-1,0.5,0,0);ctx.scale(2.5,2.5);ctx.globalAlpha=th.stroke?0.7:0.6;text3(ctx,txt,0,0,c);ctx.restore();ctx.globalAlpha=1;};
-      ZONES.forEach((z,zi)=>{const dk=own[zi];if(!dk)return;const Dp=this.depts.get(dk);paint(z.zx+0.25,z.zy+5.15,dk.toUpperCase().slice(0,14),shade(Dp.color,df<0.5?40:-30));});
+    {const paint=(x,y,txt,c)=>{const[px,py]=P(x,y);ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.transform(1,0.5,-1,0.5,0,0);ctx.scale(2.5,2.5);ctx.globalAlpha=th.stroke?0.7:0.6;text3(ctx,txt,0,0,c);ctx.restore();ctx.globalAlpha=1;};
       paint(20.3,13.2,'PANTRY',df>0.5?'#8a5a2a':'#a8763e');}
     poly([P(-0.9,6.55),P(0,6.55),P(0,7.45),P(-0.9,7.45)],th.door,null);
     poly([P(0.05,6.4),P(0.9,6.4),P(0.9,7.6),P(0.05,7.6)],lerpHex('#3a2f55','#b5523b',df),null);
@@ -468,7 +466,10 @@ class ClaudeOffice extends React.Component{
     if(window.SeasonTree)this.seasonKey=window.SeasonTree.seasonFor(new Date());
     const items=[];
     DESKS.forEach((d,i)=>{items.push({z:d.gx+d.gy+1.5,f:()=>this.drawDesk(G,d,i)});});
-    {const own=this.colOwners();SEGS.forEach(sg=>items.push({z:sg.v?sg.X+sg.y+0.5:sg.x+0.5+sg.Y,f:()=>this.drawSeg(G,sg,own)}));}
+    {const own=this.colOwners();SEGS.forEach(sg=>items.push({z:sg.v?sg.X+sg.y+0.5:sg.x+0.5+sg.Y,f:()=>this.drawSeg(G,sg,own)}));
+      const LP=[[1.5,6],[11.5,6],[1.5,8],[11.5,8]];
+      ZONES.forEach((z,zi)=>{const dk=own[zi];if(!dk)return;const Dp=this.depts.get(dk);const[mx,my]=LP[zi];
+        items.push({z:mx+my+0.5,f:()=>{const label=dk.toUpperCase().slice(0,12);const[px,py]=P(mx,my,16);ctx.save();ctx.font="bold 9px 'JetBrains Mono',monospace";const tw=ctx.measureText(label).width;ctx.globalAlpha=0.92;ctx.fillStyle=Dp.color;const bx=px-tw/2-5,by=py-7;ctx.fillRect(bx,by,tw+10,14);ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,px,py);ctx.globalAlpha=1;ctx.restore();}});});}
     this.pantryItems(G,items);
     [[8.5,13.5],[19.5,13.5],[18.5,0.5]].forEach(([x,y])=>items.push({z:x+y,f:()=>{box(x-0.2,y-0.2,0.4,0.4,0,7,th.pot);const[px,py]=P(x,y,7);[[-5,-8,10,8,0],[-3,-14,6,6,1],[-7,-5,4,4,1],[3,-6,4,4,0],[-1,-17,3,4,0]].forEach(([a,b,w,hh,v])=>rect(px+a,py+b,w,hh,v?shade(th.plant,-25):th.plant));}}));
     items.push({z:9,f:()=>{box(8.55,0.05,0.9,0.4,0,42,shade(th.trim,-5));[10,20,30,40].forEach(z=>box(8.58,0.06,0.84,0.38,z,z+1,shade(th.trim,-30)));
