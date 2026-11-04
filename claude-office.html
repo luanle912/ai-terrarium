@@ -154,7 +154,7 @@ class ClaudeOffice extends React.Component{
     const ep=srv.includes('/events')?srv:(srv.startsWith('http')?srv:('http://'+srv))+'/events';
     this.state={sel:null,paused:false,tick:0,live:'off',
       dataSource:'live',endpoint:ep,agentCount:6,speed:1,showBubbles:true,autoApprove:false,showSettings:false};
-    this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';
+    this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';this.goneSids=new Set();
     this.setCanvas=el=>{this.canvas=el;};
     this.onClick=e=>{const a=this.hit(e);this.setState({sel:a?a.id:null});};
     this.onMove=e=>{e.currentTarget.style.cursor=this.hit(e)?'pointer':'default';};
@@ -183,7 +183,7 @@ class ClaudeOffice extends React.Component{
   get theme(){const f=dayFactor();if(f<=0)return Object.assign({_day:0},THEMES.night);if(f>=1)return Object.assign({_day:1},THEMES.day);return lerpTheme(f);}
 
   startSource(){
-    this.es&&this.es.close();this.es=null;this.agents=[];this.firstSnap=true;
+    this.es&&this.es.close();this.es=null;this.agents=[];this.goneSids=new Set();this.firstSnap=true;
     if(this.isLive){
       const url=this.state.endpoint||'http://localhost:4317/events';
       this.setState({live:'connecting',sel:null});
@@ -267,6 +267,7 @@ class ClaudeOffice extends React.Component{
     const seen=new Set();
     for(const s of list){
       seen.add(s.id);
+      if(this.goneSids.has(s.id)){seen.add(s.id);continue;}
       let a=this.agents.find(x=>x.sid===s.id&&!x.leaving);
       if(!a){if(this.agents.some(x=>x.sid===s.id&&x.leaving)){seen.add(s.id);continue;}
         let par=null;if(s.parentId){par=this.agents.find(x=>x.sid===s.parentId&&!x.leaving);}
@@ -285,6 +286,7 @@ class ClaudeOffice extends React.Component{
       if(a.parent&&s.status==='done'){if(!a.doneAt)a.doneAt=Date.now();else if(Date.now()-a.doneAt>3000)this.leave(a);}else a.doneAt=0;
     }
     this.agents.forEach(a=>{if(!seen.has(a.sid))this.leave(a);});
+    for(const sid of this.goneSids)if(!seen.has(sid))this.goneSids.delete(sid);
     this.firstSnap=false;
   }
 
@@ -342,7 +344,7 @@ class ClaudeOffice extends React.Component{
   frame(ts){
     const dt=Math.min(0.05,(ts-this.last)/1000);this.last=ts;
     if(!this.state.paused){this.agents.forEach(a=>this.updateAgent(a,dt));
-      if(this.agents.some(a=>a.gone)){const gone=this.agents.filter(a=>a.gone).map(a=>a.id);this.agents=this.agents.filter(a=>!a.gone);if(gone.includes(this.state.sel))this.setState({sel:null});}}
+      if(this.agents.some(a=>a.gone)){const goneA=this.agents.filter(a=>a.gone);goneA.forEach(a=>this.goneSids.add(a.sid));const goneIds=goneA.map(a=>a.id);this.agents=this.agents.filter(a=>!a.gone);if(goneIds.includes(this.state.sel))this.setState({sel:null});}}
     this.draw(ts/1000);
     for(const a of this.agents){const el=this.bubbleEls[a.id];if(!el)continue;const[sx,sy]=this.headPos(a);el.style.left=Math.min(92,Math.max(8,sx/LW*100))+'%';el.style.top=((sy-12)/LH*100)+'%';}
   }
