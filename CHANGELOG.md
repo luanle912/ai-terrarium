@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-11-04
+
+### Added
+
+- **Pan and zoom** — Drag to pan, scroll or pinch to zoom the island 1×–4× about the cursor; a press only becomes a drag after 4 px so clicking an agent still selects it, bubbles keep their size and the sky stays put
+- **Vacant desks and empty departments** — Unclaimed desks drop their papers, lamp, plant and mug and look greyed out; a zone no department owns gets a darker floor and an EMPTY label
+
+### Fixed
+
+- **Only live sessions** — Who is in the office now comes from the live Claude Code process registry (`~/.claude/sessions/<pid>.json`), with the old time-based filter as a fallback; departments are grouped by repo
+- **Horizontal drag at 1×** — Some left-right drag is allowed when the island exactly fits the stage width
+- **Vacant-desk performance** — Greyed-out desks use a palette instead of `ctx.filter`, back to 60 FPS at 2× DPR
+- **Lawn stuck white or grey after a snow preview** — Previewing *Tuyết* used to write straight into the lawn's real snow cover, which takes 20 minutes to melt, so after switching weathers the lawn stayed white (grey at night). A preview now only shows a snowy lawn while it lasts; real snow still builds over about 10 minutes and melts over about 20
+
 ## [1.3.0] - 2026-11-04
 
 ### Added
@@ -165,6 +179,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.3.1]: https://github.com/luanle912/ai-terrarium/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/luanle912/ai-terrarium/compare/v1.2.7...v1.3.0
 [1.2.7]: https://github.com/luanle912/ai-terrarium/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/luanle912/ai-terrarium/compare/v1.2.5...v1.2.6
