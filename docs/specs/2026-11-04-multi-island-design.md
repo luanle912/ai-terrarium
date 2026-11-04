@@ -272,7 +272,7 @@ Hub dùng chung `claude-office.html` của repo (đọc lại mỗi lần tải 
 1. Trên máy: `node server.js join https://terrarium.newera.inc`, có thể thêm `--name "Laptop"`.
    - URL hub phải là `https://`. Chỉ `http://localhost` và `http://127.0.0.1` được phép để phát triển.
    - Gọi `POST /api/device/start {name}` → `{device_code, user_code, verification_uri, expires_in: 600, interval: 5}`.
-2. Terminal in mã (ví dụ `KHMT-4QXP`) và link. Thử mở trình duyệt tới `verification_uri?code=<user_code>`.
+2. Terminal in mã (ví dụ `KHMT-BQXP`) và link. Thử mở trình duyệt tới `verification_uri` (không kèm mã, xem B10).
 3. Trình duyệt (đã đăng nhập) hiện: tên máy, thời điểm yêu cầu, mã, cảnh báo "Chỉ bấm Cho phép nếu bạn vừa chạy
    lệnh này trên máy của mình". Hai nút **Cho phép** / **Từ chối**. POST kèm CSRF.
 4. Máy hỏi `POST /api/device/token {device_code}` đúng nhịp `interval`:
