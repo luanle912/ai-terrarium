@@ -644,6 +644,584 @@ function drawFront(ctx,w,h,t,env){
 window.SkyRender={mix,night,renderIsland,drawWaterfall,drawPond,drawTree,drawBack,drawFront};
 })();
 </script>
+<script id="dog-logic">
+// The three office dogs out on the lawn: where they may go, what they do next and which pose they show.
+// Pure (no DOM, no canvas): the page and tests/dog-logic.test.mjs both run this block. Randomness comes in
+// through world.rand so a test can replay a whole day.
+(function(){
+'use strict';
+const BREEDS=['corgi','husky','dalmatian'];
+const key=(x,y)=>x+','+y,fl=Math.floor;
+// Tiles per second. A corgi's short legs cover less ground; the long-legged dalmatian is the fastest.
+const STROLL=1.1,RUN=3.2,LEGS={corgi:0.88,husky:1.06,dalmatian:1.12};
+const N8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+const isNight=h=>h>=22||h<6;
+
+// Lawn cells a dog may stand on: the walkable lawn minus water and reserved areas, and only in front of or beside
+// the office. Behind the walls (x<0 or y<0) a dog would be drawn over the wall, since it sorts with the office items.
+function roamCells(walk,{W,H,pond,avoid=[]}){
+  const out=new Set();
+  for(const k of walk){
+    const[x,y]=k.split(',').map(Number);
+    if(x<0||y<0||(x<W&&y<H)||pond.has(k))continue;
+    if(avoid.some(r=>x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h))continue;
+    out.add(k);
+  }
+  return out;
+}
+// Shortest path over roam cells, 8 directions, never cutting the corner of a cell the dog may not enter.
+function path(roam,from,to){
+  const s=key(from[0],from[1]),g=key(to[0],to[1]);
+  if(!roam.has(g))return[];
+  const prev=new Map([[s,null]]),q=[[from[0],from[1]]];
+  for(let i=0;i<q.length&&!prev.has(g);i++){
+    const[x,y]=q[i];
+    for(const[dx,dy]of N8){
+      const nx=x+dx,ny=y+dy,k=key(nx,ny);
+      if(prev.has(k)||!roam.has(k))continue;
+      if(dx&&dy&&(!roam.has(key(x+dx,y))||!roam.has(key(x,y+dy))))continue;
+      prev.set(k,key(x,y));q.push([nx,ny]);
+    }
+  }
+  if(!prev.has(g))return[];
+  const out=[];for(let k=g;k!==null;k=prev.get(k))out.push(k.split(',').map(Number));
+  return out.reverse();
+}
+// `clear` holds the cells dogs may run across but never settle on (stone paths, the foot of each stair flight):
+// every spot where a dog lies, sits, sleeps, sniffs or drinks is picked outside it.
+// Lawn cells right at the water's edge, each with the water cell it faces.
+function drinkSpots(roam,pond,clear=new Set()){
+  const out=[],seen=new Set();
+  for(const k of pond){const[px,py]=k.split(',').map(Number);
+    for(const[dx,dy]of N8.slice(0,4)){const x=px+dx,y=py+dy,c=key(x,y);if(roam.has(c)&&!clear.has(c)&&!seen.has(c)){seen.add(c);out.push({x,y,tx:px,ty:py});}}}
+  return out;
+}
+// Where the dogs curl up at night: three cells together at the foot of a tree, off the paths. Ties go to the cell
+// nearer the viewer, so the trunk does not hide a sleeping dog.
+function denCells(roam,tree,clear=new Set()){
+  const tx=tree[0]+0.5,ty=tree[1]+0.5,cells=[...roam].filter(k=>!clear.has(k)).map(k=>k.split(',').map(Number));
+  const by=(a,b)=>((a[0]+0.5-tx)**2+(a[1]+0.5-ty)**2)-((b[0]+0.5-tx)**2+(b[1]+0.5-ty)**2)||(b[0]+b[1])-(a[0]+a[1]);
+  const den=[];
+  while(den.length<3){
+    const next=cells.filter(c=>!den.some(o=>o[0]===c[0]&&o[1]===c[1])&&(!den.length||den.some(o=>Math.max(Math.abs(o[0]-c[0]),Math.abs(o[1]-c[1]))===1))).sort(by)[0];
+    if(!next)break;den.push(next);
+  }
+  return den;
+}
+
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+// Facing on screen: +1 = right. Screen x grows with x−y, so that is what decides left or right.
+const faceToward=(d,tx,ty)=>((tx-ty)-(d.x-d.y))<0?-1:1;
+const tileOf=d=>[fl(d.x),fl(d.y)];
+const pick=(arr,r)=>arr[fl(r()*arr.length)%arr.length];
+function goTo(d,w,tile,speed){
+  const p=path(w.roam,tileOf(d),tile);
+  if(!p.length)return false;
+  d.path=p.slice(1).map(c=>[c[0]+0.5,c[1]+0.5]);
+  if(!d.path.length)d.path=[[tile[0]+0.5,tile[1]+0.5]];
+  d.speed=speed;return true;
+}
+const settleable=(w,c)=>!(w.clear&&w.clear.has(key(c[0],c[1])));
+// A random cell within r tiles where a dog may stop (null when none turned up).
+function near(d,w,r){
+  for(let i=0;i<20;i++){const c=pick(w.roamList,w.rand);if(Math.abs(c[0]+0.5-d.x)<=r&&Math.abs(c[1]+0.5-d.y)<=r&&settleable(w,c))return c;}
+  return null;
+}
+function idle(d,w,s,happy){d.act='idle';d.path=[];d.until=w.now+s;d.wag=!!happy;d.partner=null;d.lead=false;}
+function wander(d,w){d.act='wander';d.wag=false;const c=near(d,w,6);if(!c||!goTo(d,w,c,STROLL*LEGS[d.breed]))idle(d,w,1+w.rand()*2);}
+function rest(d,dogs,w){
+  d.act='rest';d.wag=false;d.until=Infinity;
+  // Half the time lie down next to a dog that is already resting.
+  const buddy=dogs.find(o=>o!==d&&o.act==='rest'&&!o.path.length);
+  const spot=(buddy&&w.rand()<0.5&&near(buddy,w,1.5))||near(d,w,5);
+  if(!spot||!goTo(d,w,spot,STROLL*LEGS[d.breed]))wander(d,w);
+}
+function drink(d,w){
+  if(!w.drink.length)return wander(d,w);
+  const s=[...w.drink].sort((a,b)=>Math.hypot(a.x-d.x,a.y-d.y)-Math.hypot(b.x-d.x,b.y-d.y))[fl(w.rand()*3)%w.drink.length];
+  d.act='drink';d.wag=false;d.spot=s;d.until=Infinity;goTo(d,w,[s.x,s.y],STROLL*LEGS[d.breed]);
+}
+// Chase: the runner dashes off, stops to look back when it has room, the chaser closes in; a catch ends in a play
+// bow, then they swap. The chaser is always a little faster than the runner so every round ends.
+function startChase(a,b,w){
+  a.rounds=1+(w.rand()<0.6?1:0)+(w.rand()<0.3?1:0);
+  round(a,b,w);
+}
+function round(a,b,w){
+  const rs=RUN*LEGS[b.breed];
+  b.act='flee';b.partner=a;b.lead=false;b.wag=true;flee(b,a,w,rs);
+  a.act='chase';a.partner=b;a.lead=true;a.wag=true;a.repath=0;a.roundEnd=w.now+12;a.speed=Math.max(RUN*LEGS[a.breed],rs*1.15);a.path=[];
+}
+function flee(b,a,w,speed){
+  let best=null,bd=-1;
+  for(let i=0;i<10;i++){const c=pick(w.roamList,w.rand),dx=c[0]+0.5-b.x,dy=c[1]+0.5-b.y;
+    if(Math.abs(dx)>7||Math.abs(dy)>7||!settleable(w,c))continue;const da=Math.hypot(c[0]+0.5-a.x,c[1]+0.5-a.y);if(da>bd){bd=da;best=c;}}
+  if(!best||!goTo(b,w,best,speed||b.speed)){b.path=[];}
+}
+function bow(a,b,w,s){
+  for(const[d,o]of[[a,b],[b,a]]){d.act='bow';d.path=[];d.face=faceToward(d,o.x,o.y);d.until=w.now+s;d.wag=true;}
+}
+// Play: one trots up to the other, then both bow and hop at each other for a few seconds.
+function startPlay(a,b,w){
+  a.act='play';a.partner=b;a.lead=true;a.wag=true;a.until=Infinity;
+  b.act='play';b.partner=a;b.lead=false;b.wag=true;b.until=Infinity;b.path=[];b.face=faceToward(b,a.x,a.y);
+  const t=tileOf(b),side=[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy])=>[t[0]+dx,t[1]+dy]).filter(c=>w.roam.has(key(...c))&&settleable(w,c));
+  if(!side.length||!goTo(a,w,pick(side,w.rand),RUN*0.7*LEGS[a.breed])){idle(a,w,1,true);idle(b,w,1,true);}
+}
+// Zoomies: the husky tears round a loop of nearby points on its own.
+function zoom(d,w){d.act='zoom';d.wag=true;d.laps=3+fl(w.rand()*3);const c=near(d,w,5);if(!c||!goTo(d,w,c,RUN*1.15*LEGS[d.breed]))idle(d,w,1,true);}
+
+const isFree=d=>d.act==='idle'||d.act==='wander'||d.act==='sniff';
+function next(d,dogs,w){
+  const evening=w.hour>=18,free=dogs.filter(o=>o!==d&&isFree(o));
+  const opts=[['wander',4],['rest',evening?3.2:1.4],['drink',0.8]];
+  // With reduced motion (w.calm) they only stroll, sniff, drink and nap: no dashing about.
+  if(free.length&&!w.calm)opts.push(['chase',evening?0.3:1.3],['play',evening?0.3:0.9]);
+  if(d.breed==='husky'&&!w.calm)opts.push(['zoom',0.35+1.6*(w.snow||0)]);
+  let r=w.rand()*opts.reduce((s,o)=>s+o[1],0),choice=opts[0][0];
+  for(const[o,wt]of opts){if(r<wt){choice=o;break;}r-=wt;}
+  const mate=()=>pick(free,w.rand);
+  if(choice==='wander')wander(d,w);else if(choice==='rest')rest(d,dogs,w);else if(choice==='drink')drink(d,w);
+  else if(choice==='chase')startChase(d,mate(),w);else if(choice==='play')startPlay(d,mate(),w);else zoom(d,w);
+}
+
+// A person out on the lawn (bathing in the pond, walking past) gets one dog trotting over to sit by them, wagging.
+const GREET_AGAIN=90;
+function greet(dogs,w){
+  for(const a of w.agents||[]){
+    if(dogs.some(d=>d.greet===a.id&&(d.act==='greet'||d.act==='sit')))continue;
+    if(dogs.some(d=>(d.greeted||{})[a.id]>w.now-GREET_AGAIN))continue;
+    const cand=dogs.filter(d=>isFree(d)||(d.act==='rest'&&!d.path.length)).sort((p,q)=>Math.hypot(p.x-a.x,p.y-a.y)-Math.hypot(q.x-a.x,q.y-a.y))[0];
+    if(!cand)continue;
+    cand.greeted=cand.greeted||{};cand.greeted[a.id]=w.now;
+    cand.act='greet';cand.greet=a.id;cand.wag=true;cand.until=w.now+25;cand.repath=0;
+  }
+}
+// The cell a greeting dog sits on: right beside the person, or on the nearest bank when they bathe out in the pond
+// with water all round; off the path if any such cell is free, else on it anyway.
+function greetSpot(d,a,w){
+  const t=[fl(a.x),fl(a.y)];
+  for(const r of[1,2]){
+    const cands=[];
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++)if(Math.max(Math.abs(dx),Math.abs(dy))===r&&w.roam.has(key(t[0]+dx,t[1]+dy)))cands.push([t[0]+dx,t[1]+dy]);
+    if(!cands.length)continue;
+    const off=cands.filter(c=>settleable(w,c));
+    return(off.length?off:cands).sort((p,q)=>Math.hypot(p[0]+0.5-d.x,p[1]+0.5-d.y)-Math.hypot(q[0]+0.5-d.x,q[1]+0.5-d.y))[0];
+  }
+  return null;
+}
+
+function move(d,w,dt){
+  let step=(d.speed||0)*dt;
+  while(step>0&&d.path.length){
+    const[tx,ty]=d.path[0],dx=tx-d.x,dy=ty-d.y,len=Math.hypot(dx,dy);
+    if(len>0.001&&Math.abs(dx-dy)>0.001)d.face=dx-dy<0?-1:1;
+    if(len<=step){d.x=tx;d.y=ty;d.path.shift();step-=len;}else{d.x+=dx/len*step;d.y+=dy/len*step;step=0;}
+  }
+}
+// What a dog does once it has got where it was going.
+function arrive(d,dogs,w){
+  const r=w.rand;
+  switch(d.act){
+    case'wander':if(r()<0.5){d.act='sniff';d.until=w.now+1.5+r()*2;}else idle(d,w,1+r()*2);break;
+    case'rest':d.until=w.now+14+r()*22;break;
+    case'drink':d.face=faceToward(d,d.spot.tx+0.5,d.spot.ty+0.5);d.until=w.now+3+r()*2.5;break;
+    case'den':d.act='sleep';d.face=(dogs.indexOf(d)%2)?-1:1;break;
+    case'zoom':{const c=--d.laps>0&&near(d,w,5);if(c)goTo(d,w,c,d.speed);else idle(d,w,2+r()*2,true);break;}
+    case'flee':d.face=faceToward(d,d.partner.x,d.partner.y);break;
+    case'play':if(d.lead){const b=d.partner;d.face=faceToward(d,b.x,b.y);b.face=faceToward(b,d.x,d.y);d.until=b.until=w.now+3.5+r()*2.5;d.playing=b.playing=true;}break;
+  }
+}
+function tick(d,dogs,w){
+  const done=w.now>=d.until,still=!d.path.length;
+  switch(d.act){
+    case'idle':case'sniff':if(done)next(d,dogs,w);break;
+    case'wander':case'zoom':case'den':if(still&&d.act==='wander')next(d,dogs,w);break;
+    case'rest':case'drink':if(still&&done)idle(d,w,1+w.rand()*2);break;
+    case'sleep':break;
+    case'chase':{
+      const b=d.partner;
+      if(dist(d,b)<0.9||w.now>d.roundEnd){d.rounds--;bow(d,b,w,1.4);break;}
+      if(w.now>=d.repath){d.repath=w.now+0.4;goTo(d,w,tileOf(b),d.speed);}
+      break;}
+    case'flee':{const a=d.partner;if(still&&dist(d,a)<2.6)flee(d,a,w,d.speed);break;}
+    case'bow':
+      if(done&&d.lead){const b=d.partner;
+        if(d.rounds>0){b.rounds=d.rounds;d.lead=false;round(b,d,w);}
+        else{idle(d,w,2+w.rand()*2,true);idle(b,w,2+w.rand()*2,true);}}
+      else if(done&&!d.partner)idle(d,w,1);
+      break;
+    case'play':
+      if(d.lead&&d.playing&&done){const b=d.partner;d.playing=b.playing=false;idle(d,w,2,true);idle(b,w,2.5,true);}
+      break;
+    case'greet':{
+      const a=(w.agents||[]).find(o=>o.id===d.greet);
+      if(!a||done){d.greet=null;idle(d,w,1);break;}
+      // Re-aim once a second (the person may still be walking); sit once standing still on the chosen cell.
+      if(w.now>=d.repath){d.repath=w.now+1;d.seat=greetSpot(d,a,w);if(d.seat&&(d.seat[0]!==fl(d.x)||d.seat[1]!==fl(d.y)))goTo(d,w,d.seat,RUN*0.75*LEGS[d.breed]);}
+      if(still&&d.seat&&d.seat[0]===fl(d.x)&&d.seat[1]===fl(d.y)){d.act='sit';d.face=faceToward(d,a.x,a.y);d.until=w.now+8+w.rand()*5;d.since=w.now;}
+      break;}
+    case'sit':{const a=(w.agents||[]).find(o=>o.id===d.greet);if(a)d.face=faceToward(d,a.x,a.y);if(!a||done){d.greet=null;idle(d,w,1.5,true);}break;}
+  }
+}
+
+function create(w){
+  const used=new Set(),ok=c=>!used.has(key(...c))&&settleable(w,c);
+  return BREEDS.map((breed,id)=>{
+    let c=pick(w.roamList,w.rand);for(let i=0;i<40&&!ok(c);i++)c=pick(w.roamList,w.rand);used.add(key(...c));
+    return{id,breed,x:c[0]+0.5,y:c[1]+0.5,act:'idle',until:w.now+0.5+w.rand()*2,path:[],speed:0,face:id===1?-1:1,wag:false};
+  });
+}
+function step(dogs,w,dt){
+  const night=isNight(w.hour);
+  for(const d of dogs){
+    if(night&&d.act!=='sleep'&&d.act!=='den'){
+      // Everyone heads for their own cell of the den; games and greetings simply stop.
+      const c=(w.den||[])[d.id!=null?d.id:dogs.indexOf(d)];d.partner=null;d.lead=false;d.greet=null;d.wag=false;
+      d.act='den';if(!c||!goTo(d,w,c,STROLL*LEGS[d.breed])){d.act='sleep';d.path=[];}
+      else{// Curl up a little toward the middle of the den so the three sleep in a huddle, each still in its own cell.
+        const mx=w.den.reduce((s,o)=>s+o[0]+0.5,0)/w.den.length,my=w.den.reduce((s,o)=>s+o[1]+0.5,0)/w.den.length,end=d.path[d.path.length-1];
+        end[0]+=Math.max(-0.3,Math.min(0.3,mx-end[0]));end[1]+=Math.max(-0.3,Math.min(0.3,my-end[1]));}
+    }else if(!night&&(d.act==='sleep'||d.act==='den'))idle(d,w,1+w.rand()*3,true);
+  }
+  if(!night)greet(dogs,w);
+  for(const d of dogs){
+    const had=d.path.length>0;move(d,w,dt);
+    if(had&&!d.path.length)arrive(d,dogs,w);
+    tick(d,dogs,w);
+  }
+}
+
+// Which sprite frame to show, mirrored or not, and how many pixels to lift it (a hop).
+function pose(d,t){
+  const ph=(t+(d.id||0)*0.37);
+  if(d.path&&d.path.length){
+    if((d.speed||0)>=2){const hz=d.breed==='corgi'?11:8;return{frame:fl(ph*hz)%2?'run2':'run1',dy:fl(ph*hz)%2?1:0,flip:d.face<0};}
+    return{frame:fl(ph*5)%2?'run2':'stand',dy:0,flip:d.face<0};
+  }
+  let frame='stand',dy=0;
+  switch(d.act){
+    case'rest':frame='lie';break;
+    case'sleep':frame='sleep';break;
+    case'drink':case'sniff':frame='drink';break;
+    case'sit':frame='sit';break;
+    case'bow':frame='bow';break;
+    case'play':if(d.playing){const p=(ph*1.6)%2;if(p<1){frame='bow';}else{frame='run1';dy=Math.round(Math.sin((p-1)*Math.PI)*3);}}break;
+    // Standing about, a happy dog keeps wagging; any other wags for a moment every few seconds.
+    default:frame=(d.wag?fl(ph*4)%2:((ph*0.4)%4<0.5?fl(ph*4)%2:0))?'wag':'stand';
+  }
+  return{frame,dy,flip:d.face<0};
+}
+
+globalThis.DogLogic={BREEDS,STROLL,RUN,isNight,roamCells,path,drinkSpots,denCells,faceToward,create,step,pose,startChase,startPlay,wander,greetSpot};
+})();
+</script>
+<script id="dog-sprites">
+// Pixel sprites for the three office dogs, all drawn facing right; the page mirrors them to face left.
+// Each letter is a palette colour ('.' is empty). The bottom row is where the paws touch the lawn and `ax` is the
+// column under the dog's middle. A frame may also be {from, set} to patch a few pixels of another frame.
+(function(){
+'use strict';
+const BREEDS={
+  corgi:{name:'Corgi',ax:7,pal:{o:'#d9822b',O:'#b2621c',w:'#f6f1e7',s:'#d8cfbf',k:'#1d1a18',p:'#e7a3a0',g:'#c3b8a6',c:'#3e8ed0',t:'#e0606a'},
+    frames:{
+      stand:[
+        '.........o..o..',
+        '........oo.op..',
+        '........oooowo.',
+        '........oookwwk',
+        '.oooooooocwwww.',
+        'wooooooooowww..',
+        'wOooooooooww...',
+        '.wssssssswww...',
+        '.ooO....wwg....',
+        '.wws....wws....'],
+      wag:{from:'stand',set:[[0,6,'.'],[0,4,'w'],[14,4,'t']]},
+      run1:[
+        '.........o..o...',
+        '........oo.op...',
+        '........oooowo..',
+        '........oookwwk.',
+        '.oooooooocwwwwt.',
+        'wooooooooowww...',
+        'wOooooooooww....',
+        '.wssssssswww....',
+        'oO.........ww...',
+        'w...........ws..'],
+      run2:[
+        '.........o..o..',
+        '........oo.op..',
+        '........oooowo.',
+        '........oookwwk',
+        '.oooooooocwwwwt',
+        'wooooooooowww..',
+        'wOooooooooww...',
+        '.wssssssswww...',
+        '...oOg.wwg.....',
+        '...wsw.ws......'],
+      sit:{ax:6,rows:[
+        '......o..o..',
+        '.....oo.op..',
+        '.....oooowo.',
+        '.....oookwwk',
+        '....oocwwww.',
+        '...oooowww..',
+        '..ooooowww..',
+        '.wooooowww..',
+        '.wwooOowwg..',
+        'wwsooO.wwg..',
+        '.wsss..wws..']},
+      lie:[
+        '..........o..o..',
+        '.........oo.op..',
+        '.........oooowo.',
+        '.........oookwwk',
+        '.ooooooooocwwww.',
+        'wooooooooooww...',
+        'wOssssssssswwww.'],
+      sleep:[
+        '................',
+        '................',
+        '................',
+        '..........o..o..',
+        '.ooooooooooo.op.',
+        'woooooooooocoOwwk',
+        'wOssssssssswwwww.'],
+      bow:[
+        '..........o..o..',
+        'ww.......oo.op..',
+        'wooooo...oooowo.',
+        '.ooooooooooookwwk',
+        '.Ooooooooocwwwwt.',
+        '.oO..sssswwww....',
+        '.ww....wwwwwwww..'],
+      drink:[
+        '...............',
+        '...............',
+        '...............',
+        '...............',
+        '.ooooooooo.....',
+        'woooooooooo.o.o',
+        'wOooooooocoooop',
+        '.wssssssswwoooo',
+        '.ooO....wwgokww',
+        '.wws....wws.wwk'],
+    }},
+  husky:{name:'Husky',ax:8,pal:{G:'#727b8c',D:'#4c5361',w:'#f2f4f7',s:'#c8cdd8',k:'#1b1d22',b:'#58b4ff',p:'#e7a3a0',c:'#f5a524',t:'#e0606a'},
+    frames:{
+      stand:[
+        '...........D.D...',
+        '..GG......DGGpG..',
+        '.G..G....GGGwGG..',
+        '.Gw.G....GwwbGwwk',
+        '..ww.....cwwwwww.',
+        '..DDDDDDDcGwwss..',
+        '..GGGGGGGGGww....',
+        '..wGGGGGGGwww....',
+        '...wsssssswww....',
+        '...wws....wws....',
+        '...wws....wws....',
+        '...wws....wws....'],
+      wag:{from:'stand',set:[[2,1,'.'],[3,1,'.'],[1,2,'.'],[4,2,'G'],[1,1,'G'],[2,1,'G'],[16,4,'t']]},
+      run1:[
+        '............D.D...',
+        '...........DGGpG..',
+        '..........GGGwGG..',
+        '..........GwwbGwwk',
+        '..........cwwwwwwt',
+        '.GGDDDDDDDcGwwss..',
+        'Gw.GGGGGGGGGww....',
+        'w..wGGGGGGGwww....',
+        '..wwsssssswwww....',
+        '.ws.........ws....',
+        'ws...........ws...',
+        'w.............w...'],
+      run2:[
+        '...........D.D...',
+        '..GG......DGGpG..',
+        '.G..G....GGGwGG..',
+        '.Gw.G....GwwbGwwk',
+        '..ww.....cwwwwwwt',
+        '..DDDDDDDcGwwss..',
+        '..GGGGGGGGGww....',
+        '..wGGGGGGGwww....',
+        '...wsssssswww....',
+        '....ws..wws......',
+        '....ws.ws........',
+        '....ws.w.........'],
+      sit:{ax:6,rows:[
+        '.......D.D...',
+        '......DGGpG..',
+        '.....GGGwGG..',
+        '.....GwwbGwwk',
+        '.....cwwwwww.',
+        '....GcGwwss..',
+        '...GGGGwww...',
+        '..GGGGGwww...',
+        '.GGGGGGwww...',
+        'GwGGGDGwws...',
+        'wwwwGD.wws...',
+        '.wsss..wws...',
+        'wwsss..wws...']},
+      lie:[
+        '............D.D...',
+        '...........DGGpG..',
+        '..........GGGwGG..',
+        '..........GwwbGwwk',
+        '.GG.......cwwwwww.',
+        'G..DDDDDDDcGwwss..',
+        'Gw.GGGGGGGGGwwwww.',
+        '.wwwsssssssswwwww.'],
+      sleep:[
+        '..................',
+        '..................',
+        '..................',
+        '...........D.D....',
+        '.GG.......DGGpG...',
+        'G..DDDDDDDGGGwGG..',
+        'Gw.GGGGGGGGDwwGwwk',
+        '.wwwsssssssswwwww.'],
+      bow:[
+        '..GG..............',
+        '.G..G.............',
+        '.Gw.DDDD..........',
+        '..wGGGGGDDD.D.D...',
+        '..GGGGGGGGcDGGpG..',
+        '..wGGGGGGGcGGwGG..',
+        '...wsssssswGwbGwwk',
+        '...ws....wwwwwwww.',
+        '...ws.....wwwwwwww',
+        '...ws.............'],
+      drink:[
+        '.................',
+        '..GG.............',
+        '.G..G............',
+        '.Gw.G............',
+        '..ww.............',
+        '..DDDDDDDDD......',
+        '..GGGGGGGGGGc.D.D',
+        '..wGGGGGGGGcGDGpG',
+        '...wsssssswwGGwGG',
+        '...wws....wwGwbww',
+        '...wws....wws.www',
+        '...wws....wws..wk'],
+    }},
+  dalmatian:{name:'Dalmatian',ax:8,pal:{w:'#f4f1ea',s:'#d3ccc0',k:'#22242b',g:'#b1aa9e',p:'#e8a0a0',c:'#e5484d',t:'#e0606a'},
+    frames:{
+      stand:[
+        '.............www.',
+        '...........kkwww.',
+        'w..........kkwkww',
+        '.w.........kwwwwk',
+        '.w.........cwss..',
+        '..wwwkwwwkwcw....',
+        '..wwwwkwwwwkw....',
+        '..wwkwwwwkwww....',
+        '..wwws....sww....',
+        '...wwg....wwg....',
+        '...kwg....wwg....',
+        '...wwg....wkg....',
+        '...wwg....wwg....'],
+      wag:{from:'stand',set:[[0,2,'.'],[1,3,'.'],[0,3,'w'],[0,4,'w'],[15,4,'t']]},
+      run1:[
+        '..............www.',
+        '............kkwww.',
+        '............kkwkww',
+        '.ww.........kwwwwk',
+        '...w........cwsst.',
+        '...wwkwwwwkwwc....',
+        '..wwwwwkwwwwkw....',
+        '..wkwwwwwkwwwww...',
+        '.wwws.....swwww...',
+        'wwg..........wg...',
+        'kg............wg..',
+        'w..............ww.'],
+      run2:[
+        '.............www.',
+        '...........kkwww.',
+        '...........kkwkww',
+        'ww.........kwwwwk',
+        '..w........cwsst.',
+        '..wwwkwwwkwcw....',
+        '..wwwwkwwwwkw....',
+        '..wwkwwwwkwww....',
+        '..wwws....sww....',
+        '....wwg..wwg.....',
+        '....kwg..wkg.....',
+        '....wwg..wwg.....',
+        '.....wg...wg.....'],
+      sit:{ax:6,rows:[
+        '.........www.',
+        '.......kkwww.',
+        '.......kkwkww',
+        '.......kwwwwk',
+        '.......cwss..',
+        '.....wwcww...',
+        '....wwkwww...',
+        '...wkwwwkw...',
+        '..wwwwwwww...',
+        '.wwkwwwwwg...',
+        '.wwwwkgwwg...',
+        'wwwwwg.wwg...',
+        '.wswwg.wkg...',
+        'wwsss..wwg...']},
+      lie:[
+        '..............www.',
+        '............kkwww.',
+        '............kkwkww',
+        '............kwwwwk',
+        '..wwkwwwwkwwcwss..',
+        'wwwwwwkwwwwkwwwwww',
+        '.wkwssssssswwwwwww'],
+      sleep:[
+        '..................',
+        '..................',
+        '..................',
+        '.............www..',
+        '..wwkwwwwkwkkwwwwk',
+        'wwwwwwkwwwwkkswwww',
+        '.wkwssssssswwwwwww'],
+      bow:[
+        'w.................',
+        '.w.wwk............',
+        '.wwwwwwkw.........',
+        '..wkwwwwwwk...www.',
+        '..wwwwkwwwwcckwww.',
+        '..ws..sswwwckkwkww',
+        '..ww.....wwckwwwwk',
+        '..kw.......wwss...',
+        '..ww......wwwwwww.',
+        '..ww......wwwwwww.'],
+      drink:[
+        '.................',
+        '.................',
+        '.................',
+        'w................',
+        '.w...............',
+        '..wwwkwwwkwww....',
+        '..wwwwkwwwwkwc...',
+        '..wwkwwwwkwwwww..',
+        '..wwws....swkwww.',
+        '...wwg....wwkkkw.',
+        '...kwg....wwgkww.',
+        '...wwg....wkg.ww.',
+        '...wwg....wwg..wk'],
+    }},
+};
+const cache=new Map();
+function frame(b,name){
+  const id=b+'/'+name;if(cache.has(id))return cache.get(id);
+  const B=BREEDS[b],src0=B.frames[name],src=Array.isArray(src0)?{rows:src0}:src0;let rows;
+  if(src.rows)rows=src.rows;
+  else{rows=frame(b,src.from).rows.map(r=>r.split(''));for(const[x,y,c]of src.set||[])rows[y][x]=c;rows=rows.map(r=>r.join(''));}
+  const w=Math.max(...rows.map(r=>r.length));
+  const f={rows,w,h:rows.length,ax:src.ax!=null?src.ax:(src.from?frame(b,src.from).ax:B.ax)};
+  cache.set(id,f);return f;
+}
+const frameNames=b=>Object.keys(BREEDS[b].frames);
+globalThis.DogSprites={BREEDS,frame,frameNames};
+})();
+</script>
 <script>
 "use strict";
 const h=React.createElement;
@@ -660,6 +1238,14 @@ const P=(x,y,z=0)=>PG(x,y,z+FLOOR_Z);
 // Agents can step down the stairs onto the lawn, so a person stands at the ground height of wherever they are.
 const STAIRS=SkyLogic.stairs(W,H),LAWN_WALK=SkyLogic.lawnWalk(ISLAND,W,H);
 const PA=(x,y,z=0)=>PG(x,y,z+SkyLogic.groundZ(x,y,W,H,STAIRS,FLOOR_Z));
+// The office dogs live on the lawn in front of and beside the office, never in the pond or the smoking corner.
+const DOG_ROAM=DogLogic.roamCells(LAWN_WALK,{W,H,pond:ISLAND.pond.cells,avoid:ISLAND.spots.filter(s=>s.id==='east-back')});
+// They run across the stone paths and past the stairs but never lie, sit, sniff or sleep on them (the stairs' foot and
+// the tile beyond it stay free). At night they curl up at the foot of the tree at (33,8), a quiet corner of the east
+// lawn away from both paths and still in view at 1×.
+const DOG_CLEAR=new Set(ISLAND.paths.cells);
+STAIRS.forEach(s=>{for(let i=0;i<s.len;i++)for(let o=0;o<2;o++)DOG_CLEAR.add(s.side==='east'?(s.x+o)+','+(s.y+i):(s.x+i)+','+(s.y+o));});
+const DOG_PLACES={W,H,roam:DOG_ROAM,roamList:[...DOG_ROAM].map(k=>k.split(',').map(Number)),clear:DOG_CLEAR,den:DogLogic.denCells(DOG_ROAM,[33,8],DOG_CLEAR),drink:DogLogic.drinkSpots(DOG_ROAM,ISLAND.pond.cells,DOG_CLEAR)};
 const REAL_WEATHER_EVERY_MS=15*60_000;
 const WEATHER_LABEL={clear:'Trời quang',cloudy:'Nhiều mây',rain:'Mưa',storm:'Giông',snow:'Tuyết',fog:'Sương mù'};
 const WEATHER_PREVIEW=[['clear','Quang'],['cloudy','Mây'],['rain','Mưa'],['storm','Giông'],['snow','Tuyết'],['fog','Sương']];
@@ -760,6 +1346,7 @@ class ClaudeOffice extends React.Component{
     this.state={sel:null,paused:false,tick:0,live:'off',
       dataSource:'live',endpoint:ep,agentCount:6,speed:1,showBubbles:true,autoApprove:false,showSettings:false,
       weatherMode:ws.mode,city:ws.city,cityDraft:ws.city,realStatus:{state:'idle',text:''}};
+    this.dogWorld={...DOG_PLACES,agents:[],hour:12,snow:0,calm:false,now:0,rand:Math.random};this.dogs=DogLogic.create(this.dogWorld);this.dogSprites=new Map();
     this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';this.goneSids=new Set();this.depts=new Map();
     this.setCanvas=el=>{this.canvas=el;};
     this.setStage=el=>{this.stageEl=el;};
@@ -816,6 +1403,7 @@ class ClaudeOffice extends React.Component{
     const loop=t=>{this.lastFrame=performance.now();this.frame(t);this.raf=requestAnimationFrame(loop);};
     this.raf=requestAnimationFrame(loop);
     window.__sky={preview:type=>this.previewWeather(type),state:()=>({to:this.wx.to,fx:SkyLogic.weatherFx(this.wx,Date.now()),snow:this.snow,snowShown:this.snowShown,flash:this.flash})};
+    window.__dogs={dogs:this.dogs,world:this.dogWorld};
     if(this.state.weatherMode==='real')this.refreshReal();
     this.realTimer=setInterval(()=>{if(this.state.weatherMode==='real')this.refreshReal();},REAL_WEATHER_EVERY_MS);
   }
@@ -1044,7 +1632,7 @@ class ClaudeOffice extends React.Component{
 
   frame(ts){
     const dt=Math.min(0.05,(ts-this.last)/1000);this.last=ts;
-    if(!this.state.paused){this.agents.forEach(a=>this.updateAgent(a,dt));
+    if(!this.state.paused){this.agents.forEach(a=>this.updateAgent(a,dt));this.stepDogs(dt);
       if(this.agents.some(a=>a.gone)){const goneA=this.agents.filter(a=>a.gone);goneA.forEach(a=>this.goneSids.add(a.sid));const goneIds=goneA.map(a=>a.id);this.agents=this.agents.filter(a=>!a.gone);if(goneIds.includes(this.state.sel))this.setState({sel:null});}}
     this.env=this.envNow();
     this.draw(ts/1000);
@@ -1253,6 +1841,7 @@ class ClaudeOffice extends React.Component{
     items.push({z:9,f:()=>{box(8.55,0.05,0.9,0.4,0,42,shade(th.trim,-5));[10,20,30,40].forEach(z=>box(8.58,0.06,0.84,0.38,z,z+1,shade(th.trim,-30)));
       [[12,'#e5484d','#3e8ed0','#f5a524'],[22,'#46a758','#e8e2d6','#8e4ec6'],[32,'#12a594','#5b5bd6','#e93d82']].forEach(([z,...cs])=>cs.forEach((col,k)=>box(8.65+k*0.24,0.12,0.16,0.28,z,z+7-(k%2)*2,col)));}});
     if(this.treeOn)items.push({z:39.55,f:()=>{const ST_=window.SeasonTree;if(!ST_)return;box(25.82,12.97,0.76,0.76,0,4,th.stroke?'#ffffff':lerpHex('#454b5c','#c2beb3',df));const[bx,by]=P(26.2,13.35,4);ctx.save();ctx.translate(Math.round(bx),Math.round(by));ST_.drawSeasonTree(ctx,0,0,this.season,t);ctx.restore();}});
+    this.dogs.forEach(d=>items.push({z:d.x+d.y,f:()=>this.drawDog(G,d,t,dfB,snB)}));
     this.agents.forEach(a=>{if(a.sleeping){const d=DESKS[a.desk];items.push({z:d.gx+d.gy+0.5,f:()=>this.drawSleeper(G,a)});items.push({z:d.gx+d.gy+2,f:()=>{const[hx,hy]=this.headPos(a);for(let k=0;k<3;k++){const p=(t*0.5+k*0.33)%1;ctx.globalAlpha=Math.min(1,(1-p)*1.4);text3(ctx,'Z',hx-2+p*8+Math.sin(p*6)*2,hy-4-p*22,th.stroke?'#33415c':'#e6e9ef');ctx.globalAlpha=1;}}});}else{items.push({z:a.x+a.y+(a.seated?0.2:a.stool?0.1:0),f:()=>this.drawPerson(G,a)});}});
     items.sort((p,q)=>p.z-q.z).forEach(it=>it.f());
     // A storm darkens the island and office; source-atop only tints what is already drawn, never the sky behind.
@@ -1472,6 +2061,42 @@ class ClaudeOffice extends React.Component{
     }
   }
 
+  stepDogs(dt){
+    const w=this.dogWorld,now=new Date();
+    w.now+=dt;w.hour=now.getHours()+now.getMinutes()/60;w.snow=this.snowShown||0;w.calm=!!(this.env&&this.env.reduced);
+    // People out on the lawn (down the stairs, bathing in the pond) are who the dogs run over to greet.
+    w.agents=this.agents.filter(a=>(a.x>=W||a.y>=H)&&LAWN_WALK.has(Math.floor(a.x)+','+Math.floor(a.y))).map(a=>({id:a.id,x:a.x,y:a.y}));
+    DogLogic.step(this.dogs,w,dt);
+  }
+  // A dog's frame baked once per light level and snow level (like the island), then stamped with one drawImage.
+  dogSprite(breed,name,dfB,snB){
+    const k=breed+'/'+name+'/'+dfB+'/'+snB,hit=this.dogSprites.get(k);if(hit)return hit;
+    if(this.dogSprites.size>300)this.dogSprites.clear();
+    const f=DogSprites.frame(breed,name),pal=DogSprites.BREEDS[breed].pal,cv=document.createElement('canvas');
+    cv.width=f.w;cv.height=f.h;const c=cv.getContext('2d'),top=new Array(f.w).fill(-1);
+    f.rows.forEach((row,y)=>[...row].forEach((ch,x)=>{if(ch!=='.'&&top[x]<0)top[x]=y;}));
+    f.rows.forEach((row,y)=>[...row].forEach((ch,x)=>{
+      if(ch==='.')return;let col=pal[ch];
+      // Snow settles on whatever faces the sky: the top pixel of each column (back, head, ears, tail).
+      if(snB>=3&&top[x]===y)col=SkyRender.mix(col,'#eef3f7',snB/10*0.75);
+      c.fillStyle=SkyRender.night(col,dfB/10);c.fillRect(x,y,1,1);
+    }));
+    this.dogSprites.set(k,cv);return cv;
+  }
+  drawDog(G,d,t,dfB,snB){
+    const{ctx,th,rect}=G,p=DogLogic.pose(d,t),f=DogSprites.frame(d.breed,p.frame),img=this.dogSprite(d.breed,p.frame,dfB,snB);
+    let[sx,sy]=PG(d.x,d.y);sx=Math.round(sx);sy=Math.round(sy);
+    const top=sy-f.h-p.dy,dir=p.flip?-1:1,nose=sx+dir*(f.w-f.ax-1);
+    ctx.fillStyle=th.shadow;ctx.beginPath();ctx.ellipse(sx,sy,Math.ceil(f.w/2)-1,2,0,0,Math.PI*2);ctx.fill();
+    // Mirroring is a transform on one drawImage; column ax lands on sx either way.
+    if(p.flip){ctx.save();ctx.translate(sx+1,0);ctx.scale(-1,1);ctx.drawImage(img,-f.ax,top);ctx.restore();}
+    else ctx.drawImage(img,sx-f.ax,top);
+    if(d.act==='drink'&&!d.path.length)for(let k=0;k<2;k++){const q=(t*0.7+k*0.5+d.id*0.3)%1;ctx.strokeStyle='rgba(255,255,255,'+(0.5*(1-q))+')';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(nose+dir*2,sy,2+q*4,1+q*2,0,0,Math.PI*2);ctx.stroke();}
+    if(d.act==='sleep'){const q=(t*0.3+d.id*0.33)%1;ctx.globalAlpha=Math.min(1,(1-q)*1.5)*0.85;text3(ctx,'Z',sx+dir*3+q*5,top-2-q*12,'#e6e9ef');ctx.globalAlpha=1;}
+    // Sitting down by a person: one small heart floats up and fades.
+    if(d.act==='sit'&&d.greet!=null){const q=(this.dogWorld.now-(d.since||0))/2.5;if(q<1){ctx.globalAlpha=1-q*q;const hx=nose-dir*3-2,hy=Math.round(top-4-q*8);
+      [[1,0],[3,0],[0,1],[1,1],[2,1],[3,1],[4,1],[1,2],[2,2],[3,2],[2,3]].forEach(([a,b])=>rect(hx+a,hy+b,1,1,'#e93d82'));ctx.globalAlpha=1;}}
+  }
   drawSleeper(G,a){
     const{ctx,poly,box,rect,th,t}=G,d=DESKS[a.desk],x=d.gx,y=d.gy;
     poly([P(x+0.08,y+0.3,0.5),P(x+1.32,y+0.3,0.5),P(x+1.32,y+1.12,0.5),P(x+0.08,y+1.12,0.5)],th.stroke?'#ffffff':'#d9c27a');
