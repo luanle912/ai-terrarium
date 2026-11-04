@@ -14,7 +14,7 @@ const { openDb } = require('./db.js');
 const { createRouter, clientIp, readBody, send, sendJson, parseCookies, HttpError } = require('./http.js');
 const { createLimiter } = require('./limits.js');
 
-const ROUTE_MODULES = [require('./auth.js').routes]; // later: require('./device.js').routes, require('./publish.js').routes
+const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes]; // later: require('./publish.js').routes
 
 const HOUR = 3600 * 1000;
 
