@@ -121,3 +121,34 @@ test('output keys are exactly the allowlist', () => {
   for (const x of view(s, opts()).sessions) for (const k of Object.keys(x)) assert.ok(base.includes(k), k)
   for (const x of view(s, opts({ share: 'co-ban' })).sessions) for (const k of Object.keys(x)) assert.ok([...base, 'tool', 'model'].includes(k), k)
 })
+
+test('kin never shows a listed project name', () => {
+  const s = snap([mk({ id: '1', project: 'ai-terrarium' })])
+  const out = createPublicView(SALT)(s, opts({ share: 'kin', projects: ['ai-terrarium'] }))
+  assert.ok(!JSON.stringify(out).includes('ai-terrarium'))
+  assert.match(out.sessions[0].dept, /^[A-P]$/)
+})
+
+test('co-ban tool is sanitized', () => {
+  const view = createPublicView(SALT)
+  const s = snap([
+    mk({ id: '1', tool: 'Bash; rm -rf /Users/victim' }),
+    mk({ id: '2', tool: 'A'.repeat(80) }),
+    mk({ id: '4', tool: 'B'.repeat(32) + '/Users/victim' }),
+    mk({ id: '3', tool: 'mcp__ev il/srv__fn' }),
+  ])
+  for (const x of view(s, opts({ share: 'co-ban' })).sessions) {
+    if ('tool' in x) assert.match(x.tool, /^[A-Za-z0-9_.-]{0,32}$/)
+  }
+  // Path text after the 32-char cap must not survive.
+  const long = view(snap([mk({ id: '4', tool: 'B'.repeat(32) + '/Users/victim' })]), opts({ share: 'co-ban' }))
+  assert.ok(!JSON.stringify(long).includes('victim'))
+})
+
+test('co-ban listed project failing the dept regex becomes a letter', () => {
+  const view = createPublicView(SALT)
+  const bad = ['../x', 'p'.repeat(41)]
+  const s = snap(bad.map((p, i) => mk({ id: 'i' + i, project: p })))
+  const out = view(s, opts({ share: 'co-ban', projects: bad })).sessions
+  for (const x of out) assert.match(x.dept, /^[A-P]$/)
+})
