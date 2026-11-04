@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2026-11-04
+
+### Fixed
+
+- **Pinch to zoom on phones and tablets** — Two fingers now zoom the island 1×–4× about the point between them, and the island follows the fingers as they move; before, only the mouse wheel and a trackpad pinch could zoom, and a two-finger pinch on a touch screen just dragged the view
+
 ## [1.3.3] - 2026-11-04
 
 ### Changed
@@ -207,6 +213,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.3.4]: https://github.com/luanle912/ai-terrarium/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/luanle912/ai-terrarium/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/luanle912/ai-terrarium/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/luanle912/ai-terrarium/compare/v1.3.0...v1.3.1
