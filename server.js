@@ -76,6 +76,7 @@ function ingest(st, e, isIncremental) {
 
 function scan() {
   const now = Date.now();
+  for (const f of files.keys()) { try { fs.accessSync(f); } catch { files.delete(f); } }
   for (const f of walk(ROOT)) {
     let stat; try { stat = fs.statSync(f); } catch { continue; }
     if (now - stat.mtimeMs > ACTIVE_MS) { files.delete(f); continue; }
