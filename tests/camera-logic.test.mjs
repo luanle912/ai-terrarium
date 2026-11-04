@@ -72,6 +72,40 @@ test('zooming past a limit does not move the view', () => {
   assert.deepEqual(Cam.zoomAt(cam, 200, 100, 1.5, box), cam)
 })
 
+// ---- two-finger pinch (touch screens) ----
+// pinch(cam at the start, finger A and B at the start, finger A and B now, box) → the view now.
+
+test('spreading two fingers to twice their distance zooms 2× about the point between them', () => {
+  const cam = { z: 1, tx: 0, ty: 0 }
+  const q = [(500 - box.ox) / 1, (300 - box.oy) / 1] // island point under the fingers' midpoint (500, 300)
+  const next = Cam.pinch(cam, [450, 300], [550, 300], [400, 300], [600, 300], box)
+  assert.equal(next.z, 2)
+  const [sx, sy] = onStage(next, ...q)
+  close(sx, 500); close(sy, 300)
+})
+
+test('moving both fingers together pans the view one to one', () => {
+  const next = Cam.pinch({ z: 2, tx: -300, ty: -200 }, [400, 300], [500, 300], [430, 280], [530, 280], box)
+  assert.deepEqual(next, { z: 2, tx: -270, ty: -220 })
+})
+
+test('zooming and moving at once keeps the island point under the fingers', () => {
+  const cam = { z: 1, tx: 0, ty: 0 }
+  const q = [(500 - box.ox) / 1, (300 - box.oy) / 1]
+  const next = Cam.pinch(cam, [450, 300], [550, 300], [380, 340], [580, 340], box)
+  assert.equal(next.z, 2)
+  const [sx, sy] = onStage(next, ...q)
+  close(sx, 480); close(sy, 340) // the new midpoint
+})
+
+test('a pinch zooms no further than 1× out and 4× in, and keeps the island in view', () => {
+  const out = Cam.pinch({ z: 1.5, tx: 0, ty: 0 }, [400, 300], [600, 300], [490, 300], [510, 300], box)
+  assert.equal(out.z, 1)
+  const inn = Cam.pinch({ z: 2, tx: -300, ty: -200 }, [490, 300], [510, 300], [300, 300], [700, 300], box)
+  assert.equal(inn.z, 4)
+  assert.deepEqual(inn, Cam.clamp(inn, box))
+})
+
 // ---- drag ----
 
 test('a press counts as a drag only after moving 4 px', () => {

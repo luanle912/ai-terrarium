@@ -350,6 +350,14 @@ globalThis.SkyLogic={stepSnow,stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLe
     return clamp({z,tx:px-b.ox-z*qx,ty:py-b.oy-z*qy},b);
   }
   function panBy(cam,dx,dy,b){return clamp({z:cam.z,tx:cam.tx+dx,ty:cam.ty+dy},b);}
+  // Two-finger pinch on a touch screen, from the view when the second finger landed (cam) and both fingers then
+  // (a0, b0) and now (a1, b1): zoom by how far the fingers spread, and keep the island point that was between them
+  // under their midpoint as it moves, so the island follows the fingers one to one (unlike the slowed mouse drag).
+  function pinch(cam,a0,b0,a1,b1,b){
+    const z=clampN(cam.z*Math.hypot(b1[0]-a1[0],b1[1]-a1[1])/Math.hypot(b0[0]-a0[0],b0[1]-a0[1]),ZOOM_MIN,ZOOM_MAX);
+    const qx=((a0[0]+b0[0])/2-b.ox-cam.tx)/cam.z,qy=((a0[1]+b0[1])/2-b.oy-cam.ty)/cam.z;
+    return clamp({z,tx:(a1[0]+b1[0])/2-b.ox-z*qx,ty:(a1[1]+b1[1])/2-b.oy-z*qy},b);
+  }
   const isDrag=(dx,dy)=>Math.hypot(dx,dy)>=DRAG_THRESHOLD;
   const dragOffset=(dx,dy)=>[dx*DRAG_SPEED,dy*DRAG_SPEED];
   // Canvas pixels per scene pixel. At 1× it is exactly the screen's (as before zoom existed); zoomed in it follows
@@ -358,7 +366,7 @@ globalThis.SkyLogic={stepSnow,stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLe
     const base=clientW*dpr/LW;
     return clampN(z<=1?base:Math.ceil(base*z*2)/2,1,4);
   }
-  globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,PAN_MARGIN_X,wheelFactor,clamp,zoomAt,panBy,isDrag,dragOffset,renderScale};
+  globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,PAN_MARGIN_X,wheelFactor,clamp,zoomAt,panBy,pinch,isDrag,dragOffset,renderScale};
 })();
 </script>
 <script id="sky-render">
@@ -660,7 +668,7 @@ class ClaudeOffice extends React.Component{
     this.wx={...SkyLogic.initialWeather('clear',Date.now()),nextAt:Date.now()+SkyLogic.changeDelayMs(Math.random())};
     this.snow=0;this.snowShown=0;this.flash=0;this.flashStart=0;this.flashMs=0;this.nextFlashAt=0;this.preview=null;this.lastSky=Date.now();
     this.reducedMq=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
-    // Camera: drag pans, wheel/pinch zooms about the cursor (CameraLogic). kZoom is the zoom the canvas resolution
+    // Camera: drag pans, wheel/trackpad pinch zooms about the cursor, two fingers pinch-zoom (CameraLogic). kZoom is the zoom the canvas resolution
     // follows; it catches up 150 ms after the last wheel tick so the island bitmap is not re-baked on every tick.
     this.cam={z:1,tx:0,ty:0};this.kZoom=1;this.drag=null;this.dragged=false;
     this.onClick=e=>{if(this.dragged){this.dragged=false;return;}const a=this.hit(e);this.setState({sel:a?a.id:null});};
@@ -670,11 +678,27 @@ class ClaudeOffice extends React.Component{
     this.onWheel=e=>{if(!this.onScene(e)||!e.deltaY)return;e.preventDefault();
       const r=this.stageEl.getBoundingClientRect(),b=this.camBox();if(!b)return;
       this.setCam(CameraLogic.zoomAt(this.cam,e.clientX-r.left,e.clientY-r.top,CameraLogic.wheelFactor(e),b));};
-    this.onDown=e=>{if(e.button!==0||!this.onScene(e))return;this.dragged=false;this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,tx:this.cam.tx,ty:this.cam.ty,on:false};};
-    this.onDrag=e=>{const d=this.drag;if(!d||e.pointerId!==d.id)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;
+    // Every pointer down on the scene is tracked (stage px). With a second finger down the one-finger drag stops and
+    // the view follows CameraLogic.pinch until a finger lifts; the finger left behind does nothing until a new touch.
+    this.pts=new Map();this.pinchAt=null;
+    this.stagePt=e=>{const r=this.stageEl.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top];};
+    this.onDown=e=>{if(e.button!==0||!this.onScene(e))return;this.dragged=false;
+      if(e.isPrimary)this.pts.clear();
+      this.pts.set(e.pointerId,this.stagePt(e));
+      if(this.pts.size===2){const ids=[...this.pts.keys()];this.pinchAt={cam:this.cam,ids,a:this.pts.get(ids[0]),b:this.pts.get(ids[1])};this.drag=null;
+        for(const id of ids)try{this.stageEl.setPointerCapture(id);}catch(_){}return;}
+      if(this.pts.size>2)return;
+      this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,tx:this.cam.tx,ty:this.cam.ty,on:false};};
+    this.onDrag=e=>{if(this.pts.has(e.pointerId))this.pts.set(e.pointerId,this.stagePt(e));
+      const p=this.pinchAt;
+      if(p){if(!p.ids.includes(e.pointerId))return;const b=this.camBox();if(!b)return;this.dragged=true;
+        this.setCam(CameraLogic.pinch(p.cam,p.a,p.b,this.pts.get(p.ids[0]),this.pts.get(p.ids[1]),b));return;}
+      const d=this.drag;if(!d||e.pointerId!==d.id)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;
       if(!d.on){if(!CameraLogic.isDrag(dx,dy))return;d.on=true;try{this.stageEl.setPointerCapture(d.id);}catch(_){}this.setDragCursor('grabbing');}
       const b=this.camBox(),[ox,oy]=CameraLogic.dragOffset(dx,dy);if(b)this.setCam(CameraLogic.panBy({z:this.cam.z,tx:d.tx,ty:d.ty},ox,oy,b));};
-    this.onUp=e=>{const d=this.drag;if(!d||e.pointerId!==d.id)return;this.drag=null;
+    this.onUp=e=>{this.pts.delete(e.pointerId);
+      const p=this.pinchAt;if(p&&p.ids.includes(e.pointerId)){this.pinchAt=null;setTimeout(()=>{this.dragged=false;},0);return;}
+      const d=this.drag;if(!d||e.pointerId!==d.id)return;this.drag=null;
       if(d.on){this.dragged=true;setTimeout(()=>{this.dragged=false;},0);this.setDragCursor('grab');}};
     this.setDragCursor=c=>{for(const el of[this.canvas,this.backCanvas])if(el)el.style.cursor=c;};
   }
