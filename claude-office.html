@@ -13,10 +13,10 @@ button{font-family:inherit}
 .btn-active{background:var(--fg);color:var(--bg)}
 .btn-accent{border-color:var(--warn);background:var(--warn);color:#1a1300;font-weight:600}
 .btn-accent:hover{background:#ffe08f}
-.chip{display:flex;align-items:center;gap:7px;padding:5px 10px;background:var(--surface);border:1px solid #232a39;color:#aab2c5;white-space:nowrap;flex:none;font-size:11px}
-.settings-toggle{position:fixed;bottom:16px;right:max(16px,env(safe-area-inset-right,0px));z-index:100;width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--surface);color:var(--fg);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px}
+.chip{display:flex;align-items:center;gap:6px;padding:3px 8px;background:var(--surface);border:1px solid #232a39;color:#aab2c5;white-space:nowrap;flex:none;font-size:11px}
+.settings-toggle{position:absolute;bottom:12px;right:12px;z-index:100;width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--surface);color:var(--fg);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px}
 .settings-toggle:hover{background:#1d2433}
-.settings-panel{position:fixed;bottom:60px;right:max(16px,env(safe-area-inset-right,0px));z-index:100;width:280px;max-width:calc(100vw - 32px);background:var(--surface);border:2px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:12px;font-size:12px}
+.settings-panel{position:absolute;bottom:56px;right:12px;z-index:100;width:280px;max-width:calc(100% - 24px);max-height:calc(100% - 68px);overflow-y:auto;background:var(--surface);border:2px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:12px;font-size:12px}
 .settings-panel label{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .settings-panel input[type=range]{flex:1;max-width:120px}
 .settings-panel input[type=text]{flex:1;max-width:160px;background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:4px 8px;font-family:inherit;font-size:11px}
@@ -702,40 +702,38 @@ class ClaudeOffice extends React.Component{
 
     const pad={paddingLeft:'max(16px, env(safe-area-inset-left, 0px))',paddingRight:'max(16px, env(safe-area-inset-right, 0px))'};
 
-    return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:16,paddingTop:20,paddingBottom:28,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
+    const hdrCtl={padding:'4px 10px',fontSize:11};
 
-      h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'14px 24px'}},
-        h('div',{style:{display:'flex',flexDirection:'column',gap:4,flex:'1 1 300px',minWidth:0}},
-          h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:28,fontWeight:700,letterSpacing:'0.02em',color:'#ffffff'}},'CLAUDE CO.'),
-          h('div',{style:{fontSize:12,color:'var(--muted)'}},'Mỗi nhân viên là một Claude session đang chạy trên máy bạn')
+    return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:8,paddingTop:12,paddingBottom:12,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
+
+      h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'8px 16px'}},
+        h('div',{title:'Mỗi nhân viên là một Claude session đang chạy trên máy bạn',style:{fontFamily:"'Pixelify Sans',monospace",fontSize:20,fontWeight:700,letterSpacing:'0.02em',color:'#ffffff',flex:'none'}},'CLAUDE CO.'),
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:6,fontSize:11,alignItems:'center',flex:'1 1 360px',minWidth:0}},
+          seasonInfo&&h('div',{className:'chip',style:{borderColor:seasonInfo.accent,gap:6}},
+            h('span',{style:{width:8,height:8,borderRadius:'50%',background:seasonInfo.accent,display:'inline-block',boxShadow:'0 0 4px '+seasonInfo.accent}}),
+            h('span',{style:{color:seasonInfo.accent,fontWeight:600}},seasonInfo.label)
+          ),
+          summary.map((c,i)=>h('div',{key:i,className:'chip'},
+            h('span',{style:{width:8,height:8,background:c.color,display:'inline-block'}}),
+            h('span',null,c.label),
+            h('strong',{style:{color:'#ffffff'}},c.n)
+          ))
         ),
-        h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:10}},
-          h('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',border:'2px solid var(--border)',background:'var(--surface)',fontSize:12}},
+        h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8,flex:'none'}},
+          h('div',{style:{display:'flex',alignItems:'center',gap:8,border:'2px solid var(--border)',background:'var(--surface)',...hdrCtl}},
             h('span',{style:{width:8,height:8,background:srcColor,display:'inline-block'}}),
             h('span',{style:{color:'var(--fg)',fontWeight:600}},srcLabel)
           ),
-          h('button',{className:'btn',onClick:()=>this.setState(p=>({paused:!p.paused}))},paused?'▶ Tiếp tục':'❚❚ Tạm dừng'),
-          isSim&&h('button',{className:'btn btn-accent',onClick:()=>{const a=this.addAgent({});if(a)this.setState({sel:a.id});}},
+          h('button',{className:'btn',style:hdrCtl,onClick:()=>this.setState(p=>({paused:!p.paused}))},paused?'▶ Tiếp tục':'❚❚ Tạm dừng'),
+          isSim&&h('button',{className:'btn btn-accent',style:hdrCtl,onClick:()=>{const a=this.addAgent({});if(a)this.setState({sel:a.id});}},
             '+ Session')
         )
       ),
 
-      h('div',{style:{display:'flex',flexWrap:'wrap',gap:8,fontSize:11,alignItems:'center'}},
-        seasonInfo&&h('div',{className:'chip',style:{borderColor:seasonInfo.accent,gap:6}},
-          h('span',{style:{width:8,height:8,borderRadius:'50%',background:seasonInfo.accent,display:'inline-block',boxShadow:'0 0 4px '+seasonInfo.accent}}),
-          h('span',{style:{color:seasonInfo.accent,fontWeight:600}},seasonInfo.label)
-        ),
-        summary.map((c,i)=>h('div',{key:i,className:'chip'},
-          h('span',{style:{width:8,height:8,background:c.color,display:'inline-block'}}),
-          h('span',null,c.label),
-          h('strong',{style:{color:'#ffffff'}},c.n)
-        ))
-      ),
-
-      deptList.length>0&&h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8,fontSize:11}},
+      deptList.length>0&&h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,fontSize:11}},
         h('span',{style:{fontSize:10,color:'#5d6578'}},'PHÒNG BAN'),
-        deptList.map((d,i)=>h('div',{key:i,style:{display:'flex',alignItems:'center',gap:7,padding:'4px 10px 4px 4px',background:'var(--surface)',border:'1px solid #232a39'}},
-          h('span',{style:{padding:'2px 5px',background:d.color,color:'#ffffff',fontFamily:"'Pixelify Sans',monospace",fontWeight:600,fontSize:11}},d.short),
+        deptList.map((d,i)=>h('div',{key:i,style:{display:'flex',alignItems:'center',gap:6,padding:'2px 8px 2px 2px',background:'var(--surface)',border:'1px solid #232a39'}},
+          h('span',{style:{padding:'1px 5px',background:d.color,color:'#ffffff',fontFamily:"'Pixelify Sans',monospace",fontWeight:600,fontSize:11}},d.short),
           h('span',{style:{color:'#c9cfdc',whiteSpace:'nowrap'}},d.label),
           h('strong',{style:{color:'#ffffff'}},d.n)
         ))
@@ -755,7 +753,7 @@ class ClaudeOffice extends React.Component{
           h('div',{style:{position:'absolute',inset:0,pointerEvents:'none'}},bubbles)
         ),
 
-        selData&&h('div',{style:{position:'absolute',top:12,right:12,width:300,maxWidth:'calc(100% - 24px)',maxHeight:'calc(100% - 24px)',overflowY:'auto',boxSizing:'border-box',background:'var(--surface)',border:'3px solid var(--fg)',boxShadow:'6px 6px 0 rgba(0,0,0,0.45)',padding:14,display:'flex',flexDirection:'column',gap:12,fontSize:12}},
+        selData&&h('div',{style:{position:'absolute',top:12,right:12,width:300,maxWidth:'calc(100% - 24px)',maxHeight:'calc(100% - 68px)',overflowY:'auto',boxSizing:'border-box',background:'var(--surface)',border:'3px solid var(--fg)',boxShadow:'6px 6px 0 rgba(0,0,0,0.45)',padding:14,display:'flex',flexDirection:'column',gap:12,fontSize:12}},
           h('div',{style:{display:'flex',alignItems:'center',gap:10}},
             h('div',{style:{width:34,height:34,background:selData.deptColor,color:'#ffffff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Pixelify Sans',monospace",fontSize:13,fontWeight:700,flex:'none'}},selData.short),
             h('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:2}},
@@ -794,35 +792,33 @@ class ClaudeOffice extends React.Component{
               h('span',{style:{color:'#c9cfdc',wordBreak:'break-word'}},hh.text)
             ))
           )
-        )
-      ),
+        ),
 
-      h('div',{style:{fontSize:11,color:'#5d6578'}},'Click vào nhân viên để xem chi tiết session · Bánh răng ⚙ để đổi nguồn dữ liệu (mô phỏng / live)'),
+        h('button',{className:'settings-toggle','aria-label':'Cài đặt',title:'Cài đặt: nguồn dữ liệu, tốc độ, bubble text',onClick:()=>this.setState(p=>({showSettings:!p.showSettings}))},'⚙'),
 
-      h('button',{className:'settings-toggle',onClick:()=>this.setState(p=>({showSettings:!p.showSettings}))},'⚙'),
-
-      showSettings&&h('div',{className:'settings-panel'},
-        h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:14,fontWeight:600,color:'#ffffff',marginBottom:4}},'Cài đặt'),
-        h('label',null,'Nguồn dữ liệu',
-          h('select',{value:dataSource,onChange:e=>this.setState({dataSource:e.target.value})},
-            h('option',{value:'sim'},'Mô phỏng'),
-            h('option',{value:'live'},'Live (SSE)')
+        showSettings&&h('div',{className:'settings-panel'},
+          h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:14,fontWeight:600,color:'#ffffff',marginBottom:4}},'Cài đặt'),
+          h('label',null,'Nguồn dữ liệu',
+            h('select',{value:dataSource,onChange:e=>this.setState({dataSource:e.target.value})},
+              h('option',{value:'sim'},'Mô phỏng'),
+              h('option',{value:'live'},'Live (SSE)')
+            )
+          ),
+          isLive&&h('label',null,'Endpoint',
+            h('input',{type:'text',value:endpoint,onChange:e=>this.setState({endpoint:e.target.value})})
+          ),
+          isSim&&h('label',null,'Số agent: '+agentCount,
+            h('input',{type:'range',min:1,max:16,value:agentCount,onChange:e=>this.setState({agentCount:+e.target.value})})
+          ),
+          h('label',null,'Tốc độ: '+speed.toFixed(2)+'x',
+            h('input',{type:'range',min:0.5,max:3,step:0.25,value:speed,onChange:e=>this.setState({speed:+e.target.value})})
+          ),
+          h('label',null,'Bubble text',
+            h('input',{type:'checkbox',checked:showBubbles,onChange:e=>this.setState({showBubbles:e.target.checked})})
+          ),
+          isSim&&h('label',null,'Auto approve',
+            h('input',{type:'checkbox',checked:autoApprove,onChange:e=>this.setState({autoApprove:e.target.checked})})
           )
-        ),
-        isLive&&h('label',null,'Endpoint',
-          h('input',{type:'text',value:endpoint,onChange:e=>this.setState({endpoint:e.target.value})})
-        ),
-        isSim&&h('label',null,'Số agent: '+agentCount,
-          h('input',{type:'range',min:1,max:16,value:agentCount,onChange:e=>this.setState({agentCount:+e.target.value})})
-        ),
-        h('label',null,'Tốc độ: '+speed.toFixed(2)+'x',
-          h('input',{type:'range',min:0.5,max:3,step:0.25,value:speed,onChange:e=>this.setState({speed:+e.target.value})})
-        ),
-        h('label',null,'Bubble text',
-          h('input',{type:'checkbox',checked:showBubbles,onChange:e=>this.setState({showBubbles:e.target.checked})})
-        ),
-        isSim&&h('label',null,'Auto approve',
-          h('input',{type:'checkbox',checked:autoApprove,onChange:e=>this.setState({autoApprove:e.target.checked})})
         )
       )
     );
