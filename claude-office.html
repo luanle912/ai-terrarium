@@ -676,7 +676,20 @@ function roamCells(walk,{W,H,pond,avoid=[]}){
     if(avoid.some(r=>x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h))continue;
     out.add(k);
   }
-  return out;
+  // Keep only the largest connected piece (same moves as path()): a cell boxed in by a tree, a rock and the cliff
+  // would trap a dog that started or wandered there.
+  let best=new Set();const seen=new Set();
+  for(const k of out){
+    if(seen.has(k))continue;
+    const part=new Set([k]),q=[k.split(',').map(Number)];seen.add(k);
+    for(let i=0;i<q.length;i++){const[x,y]=q[i];
+      for(const[dx,dy]of N8){const c=key(x+dx,y+dy);
+        if(seen.has(c)||!out.has(c))continue;
+        if(dx&&dy&&(!out.has(key(x+dx,y))||!out.has(key(x,y+dy))))continue;
+        seen.add(c);part.add(c);q.push([x+dx,y+dy]);}}
+    if(part.size>best.size)best=part;
+  }
+  return best;
 }
 // Shortest path over roam cells, 8 directions, never cutting the corner of a cell the dog may not enter.
 function path(roam,from,to){
@@ -748,7 +761,8 @@ function rest(d,dogs,w){
 function drink(d,w){
   if(!w.drink.length)return wander(d,w);
   const s=[...w.drink].sort((a,b)=>Math.hypot(a.x-d.x,a.y-d.y)-Math.hypot(b.x-d.x,b.y-d.y))[fl(w.rand()*3)%w.drink.length];
-  d.act='drink';d.wag=false;d.spot=s;d.until=Infinity;goTo(d,w,[s.x,s.y],STROLL*LEGS[d.breed]);
+  d.act='drink';d.wag=false;d.spot=s;d.until=Infinity;
+  if(!goTo(d,w,[s.x,s.y],STROLL*LEGS[d.breed]))wander(d,w);
 }
 // Chase: the runner dashes off, stops to look back when it has room, the chaser closes in; a catch ends in a play
 // bow, then they swap. The chaser is always a little faster than the runner so every round ends.
@@ -796,8 +810,10 @@ function next(d,dogs,w){
 
 // A person out on the lawn (bathing in the pond, walking past) gets one dog trotting over to sit by them, wagging.
 const GREET_AGAIN=90;
+// Dogs keep away from the smoke: nobody greets a person smoking or heading to the smoking corner (act 'smoke').
+const greetable=w=>(w.agents||[]).filter(a=>a.act!=='smoke');
 function greet(dogs,w){
-  for(const a of w.agents||[]){
+  for(const a of greetable(w)){
     if(dogs.some(d=>d.greet===a.id&&(d.act==='greet'||d.act==='sit')))continue;
     if(dogs.some(d=>(d.greeted||{})[a.id]>w.now-GREET_AGAIN))continue;
     const cand=dogs.filter(d=>isFree(d)||(d.act==='rest'&&!d.path.length)).sort((p,q)=>Math.hypot(p.x-a.x,p.y-a.y)-Math.hypot(q.x-a.x,q.y-a.y))[0];
@@ -812,10 +828,12 @@ function greetSpot(d,a,w){
   const t=[fl(a.x),fl(a.y)];
   for(const r of[1,2]){
     const cands=[];
-    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++)if(Math.max(Math.abs(dx),Math.abs(dy))===r&&w.roam.has(key(t[0]+dx,t[1]+dy)))cands.push([t[0]+dx,t[1]+dy]);
+    // Ring 2 leaves out its far corners (2.8 tiles off) so the dog still sits close by.
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++)if(Math.max(Math.abs(dx),Math.abs(dy))===r&&Math.hypot(dx,dy)<2.3&&w.roam.has(key(t[0]+dx,t[1]+dy)))cands.push([t[0]+dx,t[1]+dy]);
     if(!cands.length)continue;
     const off=cands.filter(c=>settleable(w,c));
-    return(off.length?off:cands).sort((p,q)=>Math.hypot(p[0]+0.5-d.x,p[1]+0.5-d.y)-Math.hypot(q[0]+0.5-d.x,q[1]+0.5-d.y))[0];
+    // The viewer's side first (largest x+y), so furniture and the person never hide the dog; then the nearest.
+    return(off.length?off:cands).sort((p,q)=>(q[0]+q[1])-(p[0]+p[1])||Math.hypot(p[0]+0.5-d.x,p[1]+0.5-d.y)-Math.hypot(q[0]+0.5-d.x,q[1]+0.5-d.y))[0];
   }
   return null;
 }
@@ -864,13 +882,13 @@ function tick(d,dogs,w){
       if(d.lead&&d.playing&&done){const b=d.partner;d.playing=b.playing=false;idle(d,w,2,true);idle(b,w,2.5,true);}
       break;
     case'greet':{
-      const a=(w.agents||[]).find(o=>o.id===d.greet);
+      const a=greetable(w).find(o=>o.id===d.greet);
       if(!a||done){d.greet=null;idle(d,w,1);break;}
       // Re-aim once a second (the person may still be walking); sit once standing still on the chosen cell.
       if(w.now>=d.repath){d.repath=w.now+1;d.seat=greetSpot(d,a,w);if(d.seat&&(d.seat[0]!==fl(d.x)||d.seat[1]!==fl(d.y)))goTo(d,w,d.seat,RUN*0.75*LEGS[d.breed]);}
       if(still&&d.seat&&d.seat[0]===fl(d.x)&&d.seat[1]===fl(d.y)){d.act='sit';d.face=faceToward(d,a.x,a.y);d.until=w.now+8+w.rand()*5;d.since=w.now;}
       break;}
-    case'sit':{const a=(w.agents||[]).find(o=>o.id===d.greet);if(a)d.face=faceToward(d,a.x,a.y);if(!a||done){d.greet=null;idle(d,w,1.5,true);}break;}
+    case'sit':{const a=greetable(w).find(o=>o.id===d.greet);if(a)d.face=faceToward(d,a.x,a.y);if(!a||done){d.greet=null;idle(d,w,1.5,true);}break;}
   }
 }
 
@@ -2189,7 +2207,9 @@ class ClaudeOffice extends React.Component{
     const w=this.dogWorld,now=new Date();
     w.now+=dt;w.hour=now.getHours()+now.getMinutes()/60;w.snow=this.snowShown||0;w.calm=!!(this.env&&this.env.reduced);
     // People out on the lawn (down the stairs, bathing in the pond) are who the dogs run over to greet.
-    w.agents=this.agents.filter(a=>(a.x>=W||a.y>=H)&&LAWN_WALK.has(Math.floor(a.x)+','+Math.floor(a.y))).map(a=>({id:a.id,x:a.x,y:a.y}));
+    // `act` is what they are doing, or the idle spot they are walking to, so a smoker is left alone on the way too.
+    w.agents=this.agents.filter(a=>(a.x>=W||a.y>=H)&&LAWN_WALK.has(Math.floor(a.x)+','+Math.floor(a.y)))
+      .map(a=>({id:a.id,x:a.x,y:a.y,act:a.actNow||(a.status==='idle'&&a.idleSpot!=null&&IDLE_SPOTS[a.idleSpot]?IDLE_SPOTS[a.idleSpot].act:null)}));
     DogLogic.step(this.dogs,w,dt);
   }
   // A dog's frame baked once per light level and snow level (like the island), then stamped with one drawImage.

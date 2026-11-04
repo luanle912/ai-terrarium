@@ -54,6 +54,30 @@ test('over a long day no dog ever sets foot in the reserved area', () => {
   simulate(dogs, w, 600, ds => ds.forEach(d => { const x = Math.floor(d.x), y = Math.floor(d.y); assert.ok(!(x >= W + 1 && x < W + 4 && y >= 0 && y < 3), `${d.breed} in the reserved area`) }))
 })
 
+test('a lawn cell cut off from the rest (a tree, a rock and the cliff on all four sides) is not part of the dogs\' lawn', () => {
+  // (3, H+4) keeps its four diagonal neighbours, but every diagonal step would cut the corner of a blocked cell.
+  const walk2 = new Set(walk); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) walk2.delete(key(3 + dx, H + 4 + dy))
+  const roam2 = Dog.roamCells(walk2, { W, H, pond, avoid })
+  assert.ok(!roam2.has(key(3, H + 4)))
+  assert.equal(roam2.size, roam.size - 5)
+  // every remaining cell reaches every other one
+  const cells = [...roam2].map(k => k.split(',').map(Number))
+  for (const c of [cells[0], cells.at(-1)]) assert.ok(Dog.path(roam2, [W + 2, H + 2], c).length > 0, `${c} unreachable`)
+})
+
+test('a dog that cannot reach where it meant to go never stands there waiting forever', () => {
+  // Stranded on a cell with no way out (only possible if it was put there): it may idle, but never sits in
+  // 'drink' or 'rest' with an endless timer while nowhere near the water or a resting spot.
+  const walk2 = new Set(walk); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) walk2.delete(key(3 + dx, H + 4 + dy))
+  const roam2 = Dog.roamCells(walk2, { W, H, pond, avoid })
+  const w = world({ roam: roam2, roamList: [...roam2].map(k => k.split(',').map(Number)), rand: rng(41) }), dogs = Dog.create(w)
+  Object.assign(dogs[0], { x: 3.5, y: H + 4.5, path: [], act: 'idle', until: 0 })
+  simulate(dogs, w, 180, ds => {
+    const d = ds[0]
+    assert.ok(!(d.path.length === 0 && d.until === Infinity && (d.act === 'drink' || d.act === 'rest')), `stuck in ${d.act} forever`)
+  })
+})
+
 test('a path runs through roam cells only, one step at a time, and goes round the office corner', () => {
   const p = Dog.path(roam, [2, H + 1], [W + 2, 4])
   assert.deepEqual(p[0], [2, H + 1]); assert.deepEqual(p.at(-1), [W + 2, 4])
@@ -163,6 +187,31 @@ test('someone bathing in the middle of the pond gets a dog sitting at the neares
   assert.ok(sat, 'nobody sat down by the bather')
   assert.ok(Math.hypot(sat.x - 13.5, sat.y - 9.5) < 2.5)
   assert.ok(!pond3.has(key(Math.floor(sat.x), Math.floor(sat.y))))
+})
+
+test('nobody runs over to greet someone smoking, or on their way to smoke: dogs keep away from the smoke', () => {
+  const w = world({ agents: [{ id: 's', x: 13.5, y: 6.5, act: 'smoke' }] }), dogs = Dog.create(w)
+  simulate(dogs, w, 60, ds => ds.forEach(d => assert.ok(d.greet !== 's', `${d.breed} went to greet a smoker`)))
+})
+
+test('a dog already greeting someone leaves when they light up', () => {
+  const a = { id: 'p', x: 13.5, y: 6.5 }, w = world({ agents: [a] }), dogs = Dog.create(w)
+  let i = 0
+  for (; i < 40 * 30 && !dogs.some(d => d.act === 'sit' && d.greet === 'p'); i++) { w.now += 1 / 30; Dog.step(dogs, w, 1 / 30) }
+  assert.ok(i < 40 * 30, 'nobody came to say hello')
+  a.act = 'smoke'
+  simulate(dogs, w, 2)
+  assert.ok(dogs.every(d => d.greet !== 'p' && d.act !== 'sit'))
+})
+
+test('a greeting dog sits on the cell nearest the viewer (largest x+y) when several are free', () => {
+  const a = { x: 6.5, y: H + 3.5 }, t0 = [6, H + 3]
+  const free = [-1, 0, 1].flatMap(dx => [-1, 0, 1].map(dy => [t0[0] + dx, t0[1] + dy])).filter(c => (c[0] !== t0[0] || c[1] !== t0[1]) && roam.has(key(...c)) && !clear.has(key(...c)))
+  const best = Math.max(...free.map(c => c[0] + c[1]))
+  for (const from of [{ x: 2.5, y: H + 1.5 }, { x: 9.5, y: H + 5.5 }]) {
+    const s = Dog.greetSpot(from, a, world())
+    assert.equal(s[0] + s[1], best, `from ${from.x},${from.y} got ${s}`)
+  }
 })
 
 test('the greeting dog faces the person', () => {
