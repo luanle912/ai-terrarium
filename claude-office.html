@@ -314,7 +314,9 @@ globalThis.SkyLogic={stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLevel,PREVI
 // shown with transform translate(tx, ty) scale(z) from its top-left corner.
 (function(){
   // DRAG_SPEED < 1: the view moves slower than the mouse (asked for: a 1:1 drag felt like it travelled too far).
-  const ZOOM_MIN=1,ZOOM_MAX=4,DRAG_THRESHOLD=4,DRAG_SPEED=0.5;
+  // PAN_MARGIN_X: extra drag room left and right, as a share of the stage width. At 1× the island is usually exactly
+  // as wide as the stage, so without it there would be no horizontal drag at all.
+  const ZOOM_MIN=1,ZOOM_MAX=4,DRAG_THRESHOLD=4,DRAG_SPEED=0.5,PAN_MARGIN_X=0.1;
   const clampN=(v,a,b)=>Math.min(b,Math.max(a,v));
   // Same curve as d3-zoom: 100 px of wheel ≈ 15 %, a pinch (ctrlKey, small deltas) 10× faster per pixel.
   function wheelFactor(e){
@@ -322,10 +324,11 @@ globalThis.SkyLogic={stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLevel,PREVI
     return Math.pow(2,-e.deltaY*unit*(e.ctrlKey?10:1));
   }
   // Like a photo viewer, per axis: an island smaller than the stage stays whole on screen (it only slides within
-  // the empty sky around it); one larger than the stage always fills it, so no empty sky can be dragged into view.
-  function clampAxis(t,z,o,c,S){const s=z*c;return s<=S?clampN(t,-o,S-o-s):clampN(t,S-o-s,-o);}
+  // the empty sky around it); one larger than the stage fills it. Left and right there is PAN_MARGIN_X more room.
+  // m widens the range by m on both sides; it is continuous where the island grows past the stage (s = S).
+  function clampAxis(t,z,o,c,S,m){const s=z*c;return s<=S?clampN(t,-o-m,S-o-s+m):clampN(t,S-o-s-m,-o+m);}
   function clamp(cam,b){
-    return{z:cam.z,tx:clampAxis(cam.tx,cam.z,b.ox,b.cw,b.stageW),ty:clampAxis(cam.ty,cam.z,b.oy,b.ch,b.stageH)};
+    return{z:cam.z,tx:clampAxis(cam.tx,cam.z,b.ox,b.cw,b.stageW,b.stageW*PAN_MARGIN_X),ty:clampAxis(cam.ty,cam.z,b.oy,b.ch,b.stageH,0)};
   }
   // Zoom by factor f keeping the stage point (px, py) — the cursor — over the same spot of the island.
   function zoomAt(cam,px,py,f,b){
@@ -343,7 +346,7 @@ globalThis.SkyLogic={stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLevel,PREVI
     const base=clientW*dpr/LW;
     return clampN(z<=1?base:Math.ceil(base*z*2)/2,1,4);
   }
-  globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,wheelFactor,clamp,zoomAt,panBy,isDrag,dragOffset,renderScale};
+  globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,PAN_MARGIN_X,wheelFactor,clamp,zoomAt,panBy,isDrag,dragOffset,renderScale};
 })();
 </script>
 <script id="sky-render">
