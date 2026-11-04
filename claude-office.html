@@ -3,7 +3,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 :root{--bg:#0e1117;--fg:#e6e9ef;--muted:#8b93a7;--border:#2a3142;--surface:#151a24;--accent:#7fb2ff;--warn:#ffd166;color-scheme:dark}
-body{background:var(--bg);color:var(--fg);font-family:'JetBrains Mono',ui-monospace,monospace;-webkit-font-smoothing:antialiased;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:'JetBrains Mono',ui-monospace,monospace;-webkit-font-smoothing:antialiased;margin:0;overflow:hidden}
+.app{height:100vh;height:100dvh}
 a{color:var(--accent)}a:hover{color:#b8d4ff}
 button{font-family:inherit}
 *{box-sizing:border-box}
@@ -177,6 +178,7 @@ class ClaudeOffice extends React.Component{
       dataSource:'live',endpoint:ep,agentCount:6,speed:1,showBubbles:true,autoApprove:false,showSettings:false};
     this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';this.goneSids=new Set();this.depts=new Map();
     this.setCanvas=el=>{this.canvas=el;};
+    this.setStage=el=>{this.stageEl=el;this.stageBg=null;};
     this.onClick=e=>{const a=this.hit(e);this.setState({sel:a?a.id:null});};
     this.onMove=e=>{e.currentTarget.style.cursor=this.hit(e)?'pointer':'default';};
   }
@@ -398,6 +400,8 @@ class ClaudeOffice extends React.Component{
     const c=this.canvas;if(!c)return;const ctx=c.getContext('2d'),th=this.theme;
     const df=th._day!=null?th._day:1;
     ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;ctx.fillStyle=th.bg;ctx.fillRect(0,0,LW,LH);
+    // The canvas keeps its aspect ratio inside the stage; painting the stage with the floor's backdrop hides the bars.
+    if(this.stageEl&&this.stageBg!==th.bg){this.stageBg=th.bg;this.stageEl.style.background=th.bg;}
     const poly=(pts,fill,stroke)=>{ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(Math.round(p[0]),Math.round(p[1])):ctx.moveTo(Math.round(p[0]),Math.round(p[1])));ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill();}const s=stroke===undefined?th.stroke:stroke;if(s){ctx.strokeStyle=s;ctx.lineWidth=1;ctx.stroke();}};
     const box=(x,y,w,hh,z0,z1,top,l,r)=>{poly([P(x,y+hh,z0),P(x+w,y+hh,z0),P(x+w,y+hh,z1),P(x,y+hh,z1)],l||shade(top,-22));poly([P(x+w,y,z0),P(x+w,y+hh,z0),P(x+w,y+hh,z1),P(x+w,y,z1)],r||shade(top,-38));poly([P(x,y,z1),P(x+w,y,z1),P(x+w,y+hh,z1),P(x,y+hh,z1)],top);};
     const rect=(x,y,w,hh,col)=>{ctx.fillStyle=col;ctx.fillRect(Math.round(x),Math.round(y),w,hh);};
@@ -698,7 +702,7 @@ class ClaudeOffice extends React.Component{
 
     const pad={paddingLeft:'max(16px, env(safe-area-inset-left, 0px))',paddingRight:'max(16px, env(safe-area-inset-right, 0px))'};
 
-    return h('div',{style:{minHeight:'100vh',display:'flex',flexDirection:'column',gap:16,paddingTop:20,paddingBottom:28,boxSizing:'border-box',background:'var(--bg)',...pad}},
+    return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:16,paddingTop:20,paddingBottom:28,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
 
       h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'14px 24px'}},
         h('div',{style:{display:'flex',flexDirection:'column',gap:4,flex:'1 1 300px',minWidth:0}},
@@ -745,8 +749,8 @@ class ClaudeOffice extends React.Component{
         h('span',{style:{color:'var(--muted)',fontSize:11}},'Tip: add ?server=host:port to this URL to change the endpoint')
       ),
 
-      h('div',{style:{position:'relative',border:'3px solid #232a39',background:'#0b0e14',overflow:'hidden'}},
-        h('div',{style:{position:'relative',width:'100%'}},
+      h('div',{ref:this.setStage,style:{position:'relative',flex:'1 1 0',minHeight:0,border:'3px solid #232a39',overflow:'hidden',containerType:'size',display:'flex',alignItems:'center',justifyContent:'center'}},
+        h('div',{style:{position:'relative',width:'min(100cqw, calc(100cqh * '+LW+' / '+LH+'))',aspectRatio:LW+' / '+LH}},
           h('canvas',{ref:this.setCanvas,width:LW,height:LH,onClick:this.onClick,onMouseMove:this.onMove,style:{width:'100%',height:'auto',display:'block',imageRendering:'pixelated'}}),
           h('div',{style:{position:'absolute',inset:0,pointerEvents:'none'}},bubbles)
         ),
