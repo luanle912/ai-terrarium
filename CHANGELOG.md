@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-11-04
+
+### Changed
+
+- **Pantry layout** — The pantry is laid out like a modern office kitchen, in three zones joined by a walkway that stays clear from the door to both flights of stairs:
+  - **Kitchen wall** — Along the back wall, in the order it is used: fridge, coffee bar with cup shelves and a CAFE board, sink with a filtered-water tap, dishwasher, microwave (it lights up while someone heats food), drinks cooler and sorted bins. Only the fridge is tall, and it stands where the wall has no window
+  - **Island** — A bar-height island with three high stools, far enough from the counter for two people to pass, with fruit and snack jars instead of the vending machine
+  - **Seating** — A wooden bench with three tables for two, and a sky-view bar with three high stools on the open edge; the kitchen half has light tiles and the seating half wood planks
+  - **Planter divider** — The glass partition between the office and the pantry is now a concrete planter of bamboo over leafy plants; the doorway stays where it was
+  - **Seasonal tree** — Smaller, potted on a low stand in the front corner instead of the middle of the room
+- **Pantry activities** — Agents on a break can also heat food, sit down for a snack or watch the clouds from the bar; people on high stools sit higher than on chairs. The free-standing water cooler, the vending machine and the round table with four stools are gone
+
 ## [1.3.2] - 2026-11-04
 
 ### Added
@@ -195,6 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.3.3]: https://github.com/luanle912/ai-terrarium/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/luanle912/ai-terrarium/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/luanle912/ai-terrarium/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/luanle912/ai-terrarium/compare/v1.2.7...v1.3.0
