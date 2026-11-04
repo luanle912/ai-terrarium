@@ -156,6 +156,7 @@ const rnd=(a,b)=>a+Math.random()*(b-a);
 const clock=()=>new Date().toTimeString().slice(0,8);
 const fmtK=n=>n>=1000?(n/1000).toFixed(1)+'k':String(n);
 const shortOf=s=>(s||'???').replace(/[^a-z0-9]/gi,'').slice(0,3).toUpperCase()||'S';
+const cwdKey=s=>{if(!s||s==='—')return null;const p=s.replace(/\/+$/,'').split('/');return p[p.length-1]||null;};
 
 function bfs(from,to){
   const key=p=>p[0]+','+p[1], ok=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&!BLOCK.has(x+','+y);
@@ -240,7 +241,7 @@ class ClaudeOffice extends React.Component{
   addAgent({seated,parent,live,deptKey}){
     let dk;
     if(parent)dk=parent.dept;
-    else if(live){const p=live.parentId&&this.agents.find(x=>x.sid===live.parentId);dk=p?p.dept:this.dept(live.name||'khác').key;}
+    else if(live){const p=live.parentId&&this.agents.find(x=>x.sid===live.parentId);dk=p?p.dept:this.dept(cwdKey(live.cwd)||live.name||'khác').key;}
     else{dk=deptKey;if(!dk){const c=SIM_DEPTS.map(([k,l])=>[this.dept(k,l),this.agents.filter(a=>a.dept===k&&!a.leaving&&!a.parent).length]);const min=Math.min(...c.map(x=>x[1]));const pool=c.filter(x=>x[1]<=min+1);dk=pick(pool)[0].key;}}
     const Dp=this.dept(dk);
     const desk=parent?parent.desk:this.freeDeskFor(dk);if(desk<0)return null;
