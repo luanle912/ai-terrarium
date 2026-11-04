@@ -146,14 +146,17 @@ function buildIsland({W,H,lawn=LAWN,back=LAWN_BACK}){
 }
 
 // ---- walking outside the office ----
-// The only way between the raised office floor and the lawn: two steps on the pantry's east edge.
-const stairs=(W,H)=>({x:W,y:7,h:2});
+// The only ways between the raised office floor and the lawn: two flights of steps, one on the pantry's east edge
+// and one on its front edge. `x,y` is the first lawn tile at the foot; `len` tiles wide along the edge.
+const stairs=(W,H)=>[{side:'east',x:W,y:7,len:2},{side:'south',x:22,y:H,len:2}];
 const inRect=(x,y,W,H)=>x>=0&&x<W&&y>=0&&y<H;
 function canCross(a,b,W,H,st){
   const inA=inRect(a[0],a[1],W,H),inB=inRect(b[0],b[1],W,H);
   if(inA===inB)return true;
   const[o,l]=inA?[a,b]:[b,a];
-  return o[0]===W-1&&l[0]===W&&o[1]===l[1]&&l[1]>=st.y&&l[1]<st.y+st.h;
+  return st.some(s=>s.side==='east'
+    ?o[0]===W-1&&l[0]===W&&o[1]===l[1]&&l[1]>=s.y&&l[1]<s.y+s.len
+    :o[1]===H-1&&l[1]===H&&o[0]===l[0]&&l[0]>=s.x&&l[0]<s.x+s.len);
 }
 // Lawn cells agents can stand on: not water (except the bathing spots), not under a tree or rock.
 function lawnWalk(island,W,H){
@@ -164,7 +167,10 @@ function lawnWalk(island,W,H){
 const STAIR_RUN=0.6;
 function groundZ(x,y,W,H,st,floorZ){
   if(inRect(x,y,W,H))return floorZ;
-  if(x>=W&&x<W+STAIR_RUN&&y>=st.y&&y<st.y+st.h)return floorZ*(1-(x-W)/STAIR_RUN);
+  for(const s of st){
+    if(s.side==='east'&&x>=W&&x<W+STAIR_RUN&&y>=s.y&&y<s.y+s.len)return floorZ*(1-(x-W)/STAIR_RUN);
+    if(s.side==='south'&&y>=H&&y<H+STAIR_RUN&&x>=s.x&&x<s.x+s.len)return floorZ*(1-(y-H)/STAIR_RUN);
+  }
   return 0;
 }
 
@@ -603,7 +609,7 @@ const shade=(hh,p)=>{if(!hh||hh[0]!=='#'||hh.length!==7)return hh;const n=parseI
 const greyHex=(hh,sat,bri)=>{if(!hh||hh[0]!=='#'||hh.length!==7)return hh;const n=parseInt(hh.slice(1),16),r=(n>>16)&255,g=(n>>8)&255,b=n&255,l=0.299*r+0.587*g+0.114*b,c=v=>Math.max(0,Math.min(255,Math.round((v+(l-v)*sat)*bri)));return'#'+((1<<24)+(c(r)<<16)+(c(g)<<8)+c(b)).toString(16).slice(1);};
 const VACANT_CACHE=new Map();
 const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);if(v)return v;const sat=th.stroke?0.9:0.85,bri=th.stroke?1.08:0.7;v={};for(const k in th)v[k]=typeof th[k]==='string'?greyHex(th[k],sat,bri):th[k];v._metal=greyHex(th.stroke?'#ffffff':'#2d3142',sat,bri);v._mouse=greyHex(th.stroke?'#ffffff':'#d9dbe2',sat,bri);if(VACANT_CACHE.size>64)VACANT_CACHE.clear();VACANT_CACHE.set(key,v);return v;};
-const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','·':'000000010000000','/':'001001010100100','-':'000000111000000','_':'000000000000111','.':'000000000000010'};
+const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','·':'000000010000000','/':'001001010100100','%':'101001010100101','-':'000000111000000','_':'000000000000111','.':'000000000000010'};
 function text3(ctx,str,x,y,col){ctx.fillStyle=col;x=Math.round(x);y=Math.round(y);[...String(str).toUpperCase()].forEach((ch,i)=>{const f=FONT[ch];if(!f)return;for(let b=0;b<15;b++)if(f[b]==='1')ctx.fillRect(x+i*4+(b%3),y+Math.floor(b/3),1,1);});}
 const PANTS=['#2d3142','#3b4a6b','#4a3b2f','#22303a','#5a5f73'];
 const pick=a=>a[Math.floor(Math.random()*a.length)];
@@ -975,12 +981,16 @@ class ClaudeOffice extends React.Component{
       for(let x=2;x<W;x+=4)poly([PG(x,H,1),PG(x+0.06,H,1),PG(x+0.06,H,FLOOR_Z-1),PG(x,H,FLOOR_Z-1)],shade(stone,-32),null);
       for(let y=2;y<H;y+=4)poly([PG(W,y,1),PG(W,y+0.06,1),PG(W,y+0.06,FLOOR_Z-1),PG(W,y,FLOOR_Z-1)],shade(stone,-52),null);
       // Stairs down from the pantry: the floor, two stone steps, then the lawn (back step first so the front one overlaps it).
-      const s0=STAIRS.y,s1=STAIRS.y+STAIRS.h,run=SkyLogic.STAIR_RUN/3;
-      for(let i=0;i<2;i++){
-        const x0=W+i*run,x1=x0+run,zt=FLOOR_Z*(1-(i+1)/3),top=shade(stone,8-i*4);
-        poly([PG(x0,s1,0),PG(x1,s1,0),PG(x1,s1,zt),PG(x0,s1,zt)],shade(top,-20),null);
-        poly([PG(x1,s0,0),PG(x1,s1,0),PG(x1,s1,zt),PG(x1,s0,zt)],shade(top,-38),null);
-        poly([PG(x0,s0,zt),PG(x1,s0,zt),PG(x1,s1,zt),PG(x0,s1,zt)],top,null);
+      // Each step is a stone box; on the east flight steps march out along +x, on the front flight along +y.
+      const run=SkyLogic.STAIR_RUN/3;
+      const step=(x0,x1,y0,y1,zt,top)=>{
+        poly([PG(x0,y1,0),PG(x1,y1,0),PG(x1,y1,zt),PG(x0,y1,zt)],shade(top,-20),null);
+        poly([PG(x1,y0,0),PG(x1,y1,0),PG(x1,y1,zt),PG(x1,y0,zt)],shade(top,-38),null);
+        poly([PG(x0,y0,zt),PG(x1,y0,zt),PG(x1,y1,zt),PG(x0,y1,zt)],top,null);
+      };
+      for(const s of STAIRS)for(let i=0;i<2;i++){
+        const zt=FLOOR_Z*(1-(i+1)/3),top=shade(stone,8-i*4),a=i*run,b=a+run;
+        if(s.side==='east')step(W+a,W+b,s.y,s.y+s.len,zt,top);else step(s.x,s.x+s.len,H+a,H+b,zt,top);
       }
     }
     const box=(x,y,w,hh,z0,z1,top,l,r)=>{poly([P(x,y+hh,z0),P(x+w,y+hh,z0),P(x+w,y+hh,z1),P(x,y+hh,z1)],l||shade(top,-22));poly([P(x+w,y,z0),P(x+w,y+hh,z0),P(x+w,y+hh,z1),P(x+w,y,z1)],r||shade(top,-38));poly([P(x,y,z1),P(x+w,y,z1),P(x+w,y+hh,z1),P(x,y+hh,z1)],top);};
@@ -1018,34 +1028,49 @@ class ClaudeOffice extends React.Component{
     });
     poly([P(0,0.9,14),P(0,4.6,14),P(0,4.6,43),P(0,0.9,43)],th.trim);
     poly([P(0,1.02,16),P(0,4.48,16),P(0,4.48,41),P(0,1.02,41)],th.board);
+    // Things on the left wall (the x=wx plane) are drawn in that plane: text reads left to right on screen (toward -y)
+    // with letters hanging toward -z, so labels, signs and the clock face look painted on or hung on the wall.
+    const wallText=(str,y,zTop,col,wx=0)=>{const[px,py]=P(wx,y,zTop);ctx.save();ctx.translate(px,py);ctx.transform(1,-0.5,0,1,0,0);text3(ctx,str,0,0,col);ctx.restore();};
+    const wallTextLen=str=>(String(str).length*4-1)/16;
     {const u=this.usage||[];
       const u5h=u.find(x=>x.kind==='five_hour')||{pct:0};
       const u7d=u.find(x=>x.kind==='seven_day')||{pct:0};
-      const y0=1.15,y1=4.35;
+      // each row: label on the left, a bar filling left to right, the percentage on the right
       [[34,u5h.pct,'5H'],[22,u7d.pct,'7D']].forEach(([z,pct,label])=>{
-        const fill=Math.min(1,pct/100),fy=y0+(y1-y0)*fill;
+        const yL=4.36-wallTextLen(label)-0.12,yR=2.05,fill=Math.min(1,pct/100),fy=yL-(yL-yR)*fill;
         const barCol=pct>95?'#e5484d':pct>80?'#f5a524':'#3e8ed0';
-        poly([P(0,y0,z),P(0,y1,z),P(0,y1,z+4),P(0,y0,z+4)],'#e4e7ed',null);
-        if(fill>0.005)poly([P(0,y0,z),P(0,fy,z),P(0,fy,z+4),P(0,y0,z+4)],barCol,null);
-        const[lx,ly]=P(0,y0-0.15,z+0.5);text3(ctx,label,lx,ly,'#8b8fa3');
-        const[vx,vy]=P(0,y1+0.1,z+0.5);text3(ctx,String(pct)+'·',vx,vy,barCol);
+        wallText(label,4.36,z+4.5,'#8b8fa3');
+        poly([P(0,yL,z),P(0,yR,z),P(0,yR,z+4),P(0,yL,z+4)],'#e4e7ed',null);
+        if(fill>0.005)poly([P(0,yL,z),P(0,fy,z),P(0,fy,z+4),P(0,yL,z+4)],barCol,null);
+        wallText(String(Math.round(pct))+'%',1.98,z+4.5,barCol);
       });
     }
     [[1.3,2.5,18,'#c9cfdc'],[2.8,4.2,18,'#c9cfdc']].forEach(([a,b,z,col])=>{ctx.globalAlpha=0.3;poly([P(0,a,z),P(0,b,z),P(0,b,z+0.5),P(0,a,z+0.5)],col,null);ctx.globalAlpha=1;});
     box(0,9.6,0.28,2.4,20,22,shade(th.trim,-10));
     ['#e5484d','#3e8ed0','#f5a524','#46a758','#8e4ec6','#12a594','#e8e2d6','#5b5bd6'].forEach((col,k)=>{const hh=[8,6,9,7,8,5,7,9][k];box(0.03,9.68+k*0.27,0.2,0.2,22,22+hh,col);});
-    {const[cx,cy]=P(0,12.8,40);ctx.fillStyle='#f6f4ee';ctx.beginPath();ctx.ellipse(cx,cy,5,6,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#2d3142';ctx.lineWidth=1;ctx.stroke();
-      const d=new Date(),mA=(d.getMinutes()/60)*Math.PI*2-Math.PI/2,hA=((d.getHours()%12+d.getMinutes()/60)/12)*Math.PI*2-Math.PI/2;
-      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(mA)*4,cy+Math.sin(mA)*5);ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(hA)*2.5,cy+Math.sin(hA)*3);ctx.stroke();}
+    {// a wall clock: a disc in the wall plane standing slightly off the wall, its hands turning in that plane
+      const cy=12.8,cz=40,ry=0.36,rz=6,ring=(wx,k)=>{ctx.beginPath();for(let i=0;i<=24;i++){const a=i/24*Math.PI*2,[px,py]=P(wx,cy+Math.cos(a)*ry*k,cz+Math.sin(a)*rz*k);i?ctx.lineTo(px,py):ctx.moveTo(px,py);}ctx.closePath();};
+      ring(0,1.08);ctx.fillStyle='rgba(0,0,0,0.18)';ctx.fill();
+      ring(0.06,1);ctx.fillStyle='#f6f4ee';ctx.fill();ctx.strokeStyle='#2d3142';ctx.lineWidth=1;ctx.stroke();
+      const d=new Date(),hand=(turn,len)=>{const a=turn*Math.PI*2,c=P(0.06,cy,cz),e=P(0.06,cy-Math.sin(a)*ry*len,cz+Math.cos(a)*rz*len);ctx.beginPath();ctx.moveTo(c[0],c[1]);ctx.lineTo(e[0],e[1]);ctx.stroke();};
+      hand(d.getMinutes()/60,0.8);hand((d.getHours()%12+d.getMinutes()/60)/12,0.5);}
     poly([P(0,6.45,0),P(0,7.55,0),P(0,7.55,40),P(0,6.45,40)],shade(th.trim,-15));
     clipTo([P(0,6.55,0),P(0,7.45,0),P(0,7.45,38),P(0,6.55,38)]);
-    poly([P(-RD,6.55,0),P(-RD,7.45,0),P(-RD,7.45,38),P(-RD,6.55,38)],th.door);
+    {// a wooden door (it read as a black hole at night with the theme's near-black door colour), with two inset panels
+      const door=lerpHex('#4a3b3e','#9a6b45',df);
+      poly([P(-RD,6.55,0),P(-RD,7.45,0),P(-RD,7.45,38),P(-RD,6.55,38)],door);
+      poly([P(-RD,6.7,4),P(-RD,7.3,4),P(-RD,7.3,19),P(-RD,6.7,19)],shade(door,-16),null);}
     poly([P(-RD,6.75,24),P(-RD,7.25,24),P(-RD,7.25,34),P(-RD,6.75,34)],shade(th.glass,10),null);
     {const[hx,hy]=P(-RD,7.3,18);rect(hx-1,hy,2,2,'#ffd166');}
     poly([P(0,6.55,0),P(-RD,6.55,0),P(-RD,6.55,38),P(0,6.55,38)],shade(th.trim,-8),null);
     poly([P(0,6.55,0),P(0,7.45,0),P(-RD,7.45,0),P(-RD,6.55,0)],shade(th.trim,-30),null);
     ctx.restore();
-    {const[ex,ey]=P(0,7,46);rect(ex-9,ey-4,18,8,'#1f8a4c');text3(ctx,'EXIT',ex-7,ey-2,'#ffffff');}
+    {// the EXIT sign is a small green box mounted on the wall above the door, lettered on its face
+      const y0=6.42,y1=7.58,z0=42,z1=50,t=0.08,g=lerpHex('#16603a','#1f8a4c',Math.max(0.55,df));
+      poly([P(0,y1,z0),P(t,y1,z0),P(t,y1,z1),P(0,y1,z1)],shade(g,-25),null);
+      poly([P(0,y0,z1),P(t,y0,z1),P(t,y1,z1),P(0,y1,z1)],shade(g,25),null);
+      poly([P(t,y0,z0),P(t,y1,z0),P(t,y1,z1),P(t,y0,z1)],g,null);
+      wallText('EXIT',7+wallTextLen('EXIT')/2,48.5,'#ffffff',t);}
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){
       poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],(x+y)%2?th.fa:th.fb,th.stroke?'#dfe5ef':null);
       if(df>0.2){ctx.globalAlpha=df;poly([P(x,y+0.5),P(x+1,y+0.5),P(x+1,y+0.52),P(x,y+0.52)],shade(th.fa,-18),null);ctx.globalAlpha=1;}
@@ -1077,7 +1102,6 @@ class ClaudeOffice extends React.Component{
         paint(z.zx+3.12,z.zy+3+len/2,name,df>0.5?shade(col,-80):shade(col,10),FS,ALONG_Y);});
       paint(21.3,13.2,'PANTRY',df>0.5?'#8a5a2a':'#a8763e',2.5,ALONG_X);
     }
-    poly([P(-0.9,6.55),P(0,6.55),P(0,7.45),P(-0.9,7.45)],th.door,null);
     poly([P(0.05,6.4),P(0.9,6.4),P(0.9,7.6),P(0.05,7.6)],lerpHex('#3a2f55','#b5523b',df),null);
     [1.6,4.8,11.6,14.8,22.4,24.6].forEach(x=>{ctx.globalAlpha=0.07+(0.22-0.07)*df;poly([P(x+0.3,0.05),P(x+2.1,0.05),P(x+2.6,1.6),P(x+0.8,1.6)],lerpHex('#7fb2ff','#fff3c4',df),null);ctx.globalAlpha=1;});
     if(window.SeasonTree)this.seasonKey=window.SeasonTree.seasonFor(new Date());

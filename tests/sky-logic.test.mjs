@@ -324,8 +324,12 @@ test('the pond sits on the lawn, feeds the waterfall and has two bathing spots',
 })
 
 test('agents leave the office only by the stairs', () => {
-  assert.deepEqual(stairs, { x: W, y: 7, h: 2 })
+  assert.deepEqual(stairs, [{ side: 'east', x: W, y: 7, len: 2 }, { side: 'south', x: 22, y: H, len: 2 }])
   assert.equal(SkyLogic.canCross([W - 1, 7], [W, 7], W, H, stairs), true)
+  assert.equal(SkyLogic.canCross([22, H - 1], [22, H], W, H, stairs), true)
+  assert.equal(SkyLogic.canCross([23, H], [23, H - 1], W, H, stairs), true)
+  assert.equal(SkyLogic.canCross([21, H - 1], [21, H], W, H, stairs), false)
+  assert.equal(SkyLogic.canCross([24, H - 1], [24, H], W, H, stairs), false)
   assert.equal(SkyLogic.canCross([W, 8], [W - 1, 8], W, H, stairs), true)
   assert.equal(SkyLogic.canCross([W - 1, 6], [W, 6], W, H, stairs), false)
   assert.equal(SkyLogic.canCross([5, H - 1], [5, H], W, H, stairs), false)
@@ -339,7 +343,8 @@ test('the lawn walk avoids water, trees and rocks but reaches the bathing spots'
   for (const k of island.pond.cells) if (!island.pond.spots.some((s) => s.x + ',' + s.y === k)) assert.ok(!walk.has(k), `water cell ${k} is walkable`)
   for (const d of island.decor) if (d.kind !== 'flower') assert.ok(!walk.has(d.x + ',' + d.y), `${d.kind} at ${d.x},${d.y} is walkable`)
   assert.ok(!walk.has('5,5'), 'office cells are not lawn')
-  assert.ok(walk.has(W + ',7') && walk.has(W + ',8'), 'the foot of the stairs is walkable')
+  assert.ok(walk.has(W + ',7') && walk.has(W + ',8'), 'the foot of the east stairs is walkable')
+  assert.ok(walk.has('22,' + H) && walk.has('23,' + H), 'the foot of the south stairs is walkable')
 })
 
 test('ground height is the floor inside, the lawn outside, and steps down the stairs', () => {
@@ -350,6 +355,10 @@ test('ground height is the floor inside, the lawn outside, and steps down the st
   const mid = g(W + 0.3, 7.5)
   assert.ok(mid > 0 && mid < 8, `half way down the stairs is ${mid}`)
   assert.ok(g(W + 0.1, 7.5) >= g(W + 0.5, 7.5))
+  const south = g(22.5, H + 0.3)
+  assert.ok(south > 0 && south < 8, `half way down the south stairs is ${south}`)
+  assert.equal(g(22.5, H + 2), 0)
+  assert.equal(g(20.5, H + 0.3), 0)
 })
 
 test('the camera frames the island top, so the office is bigger than the whole-island fit', () => {
