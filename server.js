@@ -279,11 +279,22 @@ function listenWithRetry(server, port, host, { retryMs = 10000, log = console.lo
 
 async function main() {
   // Subcommands (status/share/private/leave/join) run before listening; null means "serve as usual".
-  const code = await require('./lib/terrarium-config.js').runCommand(process.argv.slice(2), {});
+  const cfgLib = require('./lib/terrarium-config.js'), pub = require('./lib/publisher.js');
+  const joinCmd = async (hub, { name }) => {
+    try { await pub.join(hub, { name, dir: cfgLib.configDir() }); return 0; }
+    catch (e) { console.log('join: ' + e.message); return 1; }
+  };
+  const code = await cfgLib.runCommand(process.argv.slice(2), { join: joinCmd });
   if (typeof code === 'number') process.exit(code);
   setInterval(() => { scan(); const data = 'data: ' + JSON.stringify(snapshot()) + '\n\n'; for (const r of clients) r.write(data); }, 1000);
-  listenWithRetry(http.createServer(createHandler()), PORT, '127.0.0.1')
-    .then(() => console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`));
+  let publisher = null;
+  const publicPreview = () => publisher ? Object.assign(publisher.state(), { view: publisher.view() }) : { state: 'off' };
+  listenWithRetry(http.createServer(createHandler({ publicPreview })), PORT, '127.0.0.1')
+    .then(() => {
+      console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`);
+      // Only the process that holds the port publishes.
+      publisher = pub.startPublisher({ getSnapshot: snapshot, dir: cfgLib.configDir(), log: console.log });
+    });
 }
 
 module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan };
