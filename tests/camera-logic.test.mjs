@@ -10,6 +10,8 @@ const close = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} ≈ $
 // centred, so 100 px of empty sky on every side at 1×.
 const box = { stageW: 1000, stageH: 600, ox: 100, oy: 100, cw: 800, ch: 400 }
 // Where a point of the wrapper (local, unscaled) lands on the stage.
+// Horizontal room to drag beyond the island's own limits, in stage px (10 % of the 1000 px stage).
+const margin = 100
 const onStage = (cam, qx, qy) => [box.ox + cam.tx + cam.z * qx, box.oy + cam.ty + cam.z * qy]
 
 // ---- wheel → zoom factor ----
@@ -100,19 +102,29 @@ test('the starting view is always allowed', () => {
   assert.deepEqual(Cam.clamp({ z: 1, tx: 0, ty: 0 }, box), { z: 1, tx: 0, ty: 0 })
 })
 
-test('at 1× the island stays whole on screen: it only slides within the empty sky around it', () => {
-  const far = Cam.clamp({ z: 1, tx: 5000, ty: -5000 }, box)
-  const [lx, ty] = onStage(far, 0, 0), [rx] = onStage(far, box.cw, 0)
-  close(rx, box.stageW) // pushed right until its right edge meets the stage edge, no further
-  close(ty, 0) // pushed up until its top meets the stage top
-  assert.ok(lx >= 0)
+test('the horizontal drag room is 10 % of the stage width', () => {
+  assert.equal(Cam.PAN_MARGIN_X, 0.1)
 })
 
-test('zoomed in past the stage, the island always fills it: no empty sky can be dragged into view', () => {
+test('at 1× the island slides within the sky around it, plus a little room left and right', () => {
+  const far = Cam.clamp({ z: 1, tx: 5000, ty: -5000 }, box)
+  const [, ty] = onStage(far, 0, 0), [rx] = onStage(far, box.cw, 0)
+  close(rx, box.stageW + margin) // its right edge may run past the stage edge by the margin, no further
+  close(ty, 0) // vertically no extra room: its top stops at the stage top
+})
+
+test('an island exactly as wide as the stage (the usual start) can still be dragged left and right', () => {
+  const tight = { stageW: 1000, stageH: 600, ox: 0, oy: 100, cw: 1000, ch: 400 }
+  assert.equal(Cam.clamp({ z: 1, tx: 500, ty: 0 }, tight).tx, margin)
+  assert.equal(Cam.clamp({ z: 1, tx: -500, ty: 0 }, tight).tx, -margin)
+  assert.equal(Cam.clamp({ z: 1, tx: 0, ty: 300 }, tight).ty, 100)
+})
+
+test('zoomed in past the stage, the island fills it except for the small side margin', () => {
   const far = Cam.clamp({ z: 3, tx: -1e6, ty: 1e6 }, box)
   const [lx, ty] = onStage(far, 0, 0), [rx, by] = onStage(far, box.cw, box.ch)
-  close(rx, box.stageW) // right edge stops at the stage's right edge
-  close(ty, 0) // top edge stops at the stage's top
+  close(rx, box.stageW - margin) // right edge stops one margin inside the stage's right edge
+  close(ty, 0) // vertically it still fills: the top edge stops at the stage's top
   assert.ok(lx <= 0 && by >= box.stageH)
 })
 
@@ -120,7 +132,7 @@ test('each axis is limited on its own: wider than the stage but not taller', () 
   // z = 1.3: 1040 px wide (> 1000) but 520 px tall (< 600)
   const c = Cam.clamp({ z: 1.3, tx: 1e6, ty: 1e6 }, box)
   const [lx, ty] = onStage(c, 0, 0), [, by] = onStage(c, 0, box.ch)
-  close(lx, 0) // horizontally it covers: left edge cannot come inside
+  close(lx, margin) // horizontally it covers: left edge comes in by the margin at most
   close(by, box.stageH) // vertically it is contained: bottom edge stops at the stage bottom
   assert.ok(ty >= 0)
 })
