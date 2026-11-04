@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-11-04
+
+### Added
+
+- **Sky island** — The office now stands on a floating island: a fixed, gently curving shore with 6 tiles of lawn in front and a thin 2-tile strip behind the walls, a deep earth-and-stone underside, hanging vines, a waterfall falling into the clouds, and a few trees, rocks and flowers. Three lawn spots are kept free for future outdoor areas
+- **Raised plinth** — The office floor sits on a stone plinth above the lawn, with a soft shadow on the grass around it
+- **Pond and bathing** — A small pond on the front-right lawn, sunk below the grass with earth banks and a ring of rim stones, open only where it spills over the shore. The waterfall is a sheet of water lying on the island's cliff face (it slants with the cliff, then falls on into the clouds) and dims at night. Idle agents can walk down new stone stairs on the pantry's east edge and bathe in the pond ("💦 tắm hồ"), shown up to the shoulders with ripples around them
+- **Sky that fills the whole view** — A sea of block clouds below the horizon, cloud layers that get smaller, hazier and slower with distance, a haze band on the horizon and distant islands; the sun moves with the hour, warm skies at dawn and dusk, stars and a moon at night
+- **Weather** — Clear, cloudy, rain, storm, snow and fog, blending over 30–60 s. Random mode changes every 20–40 min (mostly clear; snow only December–February, never the same weather twice in a row except clear). Rain runs down the windows, storms darken the office while lightning softly lights the sky behind the island, snow slowly whitens the lawn and ices the pond
+- **Weather settings** — The ⚙ panel picks Random, Real weather (city name looked up on Open-Meteo, refreshed every 15 min, falling back to Random with the reason shown if it fails or takes over 15 s) or Off, plus preview buttons that show a weather for one minute. The choice is remembered in the browser
+- **Tests** — `node --test "tests/*.test.mjs"` covers the island shape, weather scheduling, WMO code mapping, settings storage, the Open-Meteo client and sky colours (no dependencies)
+
+### Changed
+
+- The view is fitted to the island's top surface (the deep underside may run off the bottom), so the office keeps about 76% of its previous size on screen; scenery is drawn at the screen's exact resolution
+- "Reduce motion" in the OS turns off lightning flashes, thins rain and snow and slows the clouds
+- README: the privacy note now says the city name is sent to Open-Meteo when Real weather is on
+
+### Fixed
+
+- **Pantry floor at dusk** — The pantry floor no longer flashes white between day and night; it now blends smoothly
+
 ## [1.2.7] - 2026-11-04
 
 ### Changed
@@ -143,6 +165,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.3.0]: https://github.com/luanle912/ai-terrarium/compare/v1.2.7...v1.3.0
 [1.2.7]: https://github.com/luanle912/ai-terrarium/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/luanle912/ai-terrarium/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/luanle912/ai-terrarium/compare/v1.2.4...v1.2.5
