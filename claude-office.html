@@ -1219,8 +1219,11 @@ class ClaudeOffice extends React.Component{
       [22.32,22.56].forEach((x,k)=>{box(x,3.32,0.16,0.16,15,18.5,'#cfe6f5');box(x,3.32,0.16,0.16,18.5,19.2,wood);const[jx,jy]=P(x+0.08,3.48,16.5);rect(jx-1,jy-1,2,2,k?'#c79257':'#e07a5f');});}});
     [22.6,23.6,24.6].forEach(x=>items.push({z:x+4.5,f:()=>{box(x-0.04,4.51,0.08,0.08,0,10,metal);box(x-0.19,4.36,0.38,0.38,10,12,S?'#ffffff':th.chair);}}));
     // Slatted wooden bench built against the planter (the trough is its backrest), with three tables for two.
-    items.push({z:29.3,f:()=>{const bw=S?'#ffffff':'#c79a5e';box(20.3,9.0,0.6,3.9,0,7,bw,shade(bw,-25),shade(bw,-40));
-      for(let k=1;k<5;k++)poly([P(20.3+k*0.12,9.0,7),P(20.31+k*0.12,9.0,7),P(20.31+k*0.12,12.9,7),P(20.3+k*0.12,12.9,7)],shade(bw,-30),null);}});
+    // No single depth key fits the whole bench: it must come after the planter segment behind each tile (20.5+row)
+    // yet before anyone sitting on it (~21.3+row), so it is drawn one tile at a time; the boxes hide each other's seams.
+    [9,10,11,12].forEach(r=>items.push({z:20.7+r,f:()=>{const bw=S?'#ffffff':'#c79a5e',y0=Math.max(9.0,r),y1=Math.min(12.9,r+1);
+      box(20.3,y0,0.6,y1-y0,0,7,bw,shade(bw,-25),shade(bw,-40));
+      for(let k=1;k<5;k++)poly([P(20.3+k*0.12,y0,7),P(20.31+k*0.12,y0,7),P(20.31+k*0.12,y1,7),P(20.3+k*0.12,y1,7)],shade(bw,-30),null);}}));
     [9.2,10.5,11.8].forEach(y=>{
       items.push({z:21.45+y+0.4,f:()=>{box(21.41,y+0.36,0.08,0.08,0,10,metal);box(21.05,y,0.8,0.8,10,11,S?'#ffffff':'#f6f4ee');
         const[cx,cy]=P(21.3,y+0.4,11);rect(cx-1,cy-2,2,2,'#ffffff');rect(cx,cy-3,1,1,'#c79257');const[qx,qy]=P(21.62,y+0.45,11);rect(qx-2,qy-1,4,2,'#e8e2d6');rect(qx-1,qy-2,2,1,'#e5484d');}});
