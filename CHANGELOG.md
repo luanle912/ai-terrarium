@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.6] - 2026-11-04
+
+### Security
+
+- **Bind localhost only** — Server now listens on `127.0.0.1` instead of all interfaces, preventing network exposure
+- **CORS restriction** — Replaced wildcard `*` with localhost-only policy; custom origin via `ALLOWED_ORIGIN` env
+- **SSE client limit** — Max 20 concurrent SSE connections to prevent connection flooding
+- **File descriptor leak fix** — `readSync`/`closeSync` wrapped in try/finally
+- **Remove path disclosure** — Catch-all route no longer reveals the watched directory path
+
 ## [1.2.5] - 2026-11-04
 
 ### Added
@@ -118,6 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.2.6]: https://github.com/luanle912/ai-terrarium/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/luanle912/ai-terrarium/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/luanle912/ai-terrarium/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/luanle912/ai-terrarium/compare/v1.2.2...v1.2.3
