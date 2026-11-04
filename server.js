@@ -10,6 +10,8 @@ const PORT = +process.env.PORT || 4317;
 const ACTIVE_MS = (+process.env.ACTIVE_MIN || 120) * 60e3;
 const PERM_MS = (+process.env.PERM_SEC || 8) * 1e3;
 const PERM_TOOLS = new Set(['Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'WebFetch']);
+const MAX_CLIENTS = 20;
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 const USAGE_GLOB = path.join(os.homedir(), '.claude', 'plugins', 'store');
 let usageCache = []; let usageCacheTs = 0;
 function readUsage() {
@@ -93,7 +95,7 @@ function scan() {
     if (st.offset === 0 && remaining > MAX_CHUNK) { st.offset = Math.max(0, stat.size - MAX_CHUNK); st.rest = ''; }
     const toRead = Math.min(MAX_CHUNK, stat.size - st.offset);
     const fd = fs.openSync(f, 'r'); const buf = Buffer.alloc(toRead);
-    fs.readSync(fd, buf, 0, toRead, st.offset); fs.closeSync(fd); st.offset += toRead;
+    try { fs.readSync(fd, buf, 0, toRead, st.offset); } finally { fs.closeSync(fd); } st.offset += toRead;
     const lines = (st.rest + buf.toString('utf8')).split('\n'); st.rest = lines.pop();
     for (const l of lines) { if (!l.trim()) continue; try { ingest(st, JSON.parse(l), wasIncremental); } catch {} }
   }
@@ -187,8 +189,11 @@ const HTML_FILE = path.join(__dirname, 'claude-office.html');
 const clients = new Set();
 setInterval(() => { scan(); const data = 'data: ' + JSON.stringify(snapshot()) + '\n\n'; for (const r of clients) r.write(data); }, 1000);
 http.createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin || '';
+  const allowed = origin && (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || origin === ALLOWED_ORIGIN);
+  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'http://localhost');
   if (req.url.startsWith('/events')) {
+    if (clients.size >= MAX_CLIENTS) { res.writeHead(429); res.end('Too many connections'); return; }
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
     scan(); res.write('data: ' + JSON.stringify(snapshot()) + '\n\n'); clients.add(res); req.on('close', () => clients.delete(res));
   } else if (req.url.startsWith('/snapshot')) { scan(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(snapshot(), null, 2)); }
@@ -196,5 +201,5 @@ http.createServer((req, res) => {
     try { const html = fs.readFileSync(HTML_FILE, 'utf8'); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(html); }
     catch { res.writeHead(404); res.end('claude-office.html not found — place it next to this script'); }
   }
-  else { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('Claude Office · http://localhost:' + PORT + ' (UI) · /events (SSE) · /snapshot\nWatching ' + ROOT); }
-}).listen(PORT, () => console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`));
+  else { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('Claude Office · /events (SSE) · /snapshot'); }
+}).listen(PORT, '127.0.0.1', () => console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`));
