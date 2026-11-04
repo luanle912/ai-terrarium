@@ -362,10 +362,6 @@ class ClaudeOffice extends React.Component{
     return{key:'seat',tile:[d.gx,d.gy+1],pt:[d.gx+1,d.gy+1.45]};
   }
   updateAgent(a,dt){
-    if(a.status==='idle'&&a.seated&&!a.sleeping&&a.idleSpot==null){
-      const d=DESKS[a.desk];a.sleeping=true;a.seated=false;a.moving=false;a.path=[];
-      a.x=d.gx+0.75;a.y=d.gy+0.62;a.goalKey='sleep'+a.desk;return;
-    }
     if(a.status!=='idle'&&a.sleeping){
       const d=DESKS[a.desk];a.sleeping=false;a.x=d.gx+1;a.y=d.gy+1.45;a.seated=true;a.moving=false;a.path=[];a.goalKey='seat';
     }
@@ -694,8 +690,8 @@ class ClaudeOffice extends React.Component{
       if(!txt)return null;
       const[sx,sy]=this.headPos(a),c=(ST[a.status]||ST.working)[1];
       return h('div',{key:a.id,ref:el=>{if(el)this.bubbleEls[a.id]=el;else delete this.bubbleEls[a.id];},
-        style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%)',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:170,overflow:'hidden',textOverflow:'ellipsis'}},
-        h('b',{style:{color:c,fontFamily:"'Pixelify Sans',monospace",fontSize:11}},a.short),
+        style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%)',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:240,overflow:'hidden',textOverflow:'ellipsis'}},
+        h('b',{style:{color:c,fontFamily:"'Pixelify Sans',monospace",fontSize:11}},a.name),
         h('span',{style:{overflow:'hidden',textOverflow:'ellipsis'}},txt));
     });
 
