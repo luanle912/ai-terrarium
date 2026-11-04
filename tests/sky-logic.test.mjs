@@ -277,7 +277,7 @@ test('a preview lasts a minute, then the weather from before comes back', () => 
   const wx0 = SkyLogic.initialWeather('rain', 0)
   const r = SkyLogic.startPreview(wx0, null, 'storm', 1000)
   assert.equal(r.wx.to, 'storm')
-  assert.deepEqual(r.preview, { until: 1000 + SkyLogic.PREVIEW_MS, back: 'rain' })
+  assert.deepEqual(r.preview, { type: 'storm', until: 1000 + SkyLogic.PREVIEW_MS, back: 'rain' })
   const still = SkyLogic.stepPreview(r.wx, r.preview, 30_000)
   assert.equal(still.wx, r.wx)
   assert.equal(still.preview, r.preview)
@@ -291,7 +291,7 @@ test('a second preview keeps the weather to return to', () => {
   const first = SkyLogic.startPreview(SkyLogic.initialWeather('rain', 0), null, 'storm', 1000)
   const second = SkyLogic.startPreview(first.wx, first.preview, 'snow', 20_000)
   assert.equal(second.wx.to, 'snow')
-  assert.deepEqual(second.preview, { until: 20_000 + SkyLogic.PREVIEW_MS, back: 'rain' })
+  assert.deepEqual(second.preview, { type: 'snow', until: 20_000 + SkyLogic.PREVIEW_MS, back: 'rain' })
 })
 
 test('a lightning flash fades out instead of switching off', () => {
@@ -358,4 +358,27 @@ test('the camera frames the island top, so the office is bigger than the whole-i
   const fit = (lw, lh) => Math.min(1408 / lw, 813 / lh)
   const rel = fit(f.LW, f.FH) / fit(688, 414)
   assert.ok(rel >= 0.7 && rel <= 0.85, `office is ${(rel * 100).toFixed(1)}% of today's size`)
+})
+
+// ---- snow cover vs previews ----
+
+test('a preview remembers which weather it shows', () => {
+  const r = SkyLogic.startPreview(SkyLogic.initialWeather('clear', 0), null, 'snow', 0)
+  assert.equal(r.preview.type, 'snow')
+})
+
+test('previewing snow whitens the lawn only while the preview lasts', () => {
+  const during = SkyLogic.stepSnow(0, SkyLogic.FX.snow, { type: 'snow', back: 'clear', until: 60_000 }, 60_000)
+  assert.deepEqual(during, { cover: 0, shown: 1 })
+  const after = SkyLogic.stepSnow(during.cover, SkyLogic.FX.clear, null, 16)
+  assert.deepEqual(after, { cover: 0, shown: 0 })
+})
+
+test('a non-snow preview shows the real snow cover underneath, which keeps building', () => {
+  const r = SkyLogic.stepSnow(0.4, SkyLogic.FX.rain, { type: 'rain', back: 'snow', until: 60_000 }, 60_000)
+  assert.ok(Math.abs(r.cover - 0.5) < 1e-9 && r.shown === r.cover)
+})
+
+test('real snow still covers the lawn over about 10 minutes', () => {
+  assert.deepEqual(SkyLogic.stepSnow(0, SkyLogic.FX.snow, null, 600_000), { cover: 1, shown: 1 })
 })

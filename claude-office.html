@@ -241,7 +241,13 @@ const lightningFlashMs=r=>120+r*80;
 const flashLevel=(now,start,ms)=>now<start||now>=start+ms?0:(1-(now-start)/ms)**2;
 // A preview shows a weather for a minute, then returns to whatever the mode had on before the first preview.
 const PREVIEW_MS=60_000;
-const startPreview=(wx,preview,type,now)=>({wx:startTransition(wx,type,now,3000),preview:{until:now+PREVIEW_MS,back:preview?preview.back:wx.to}});
+const startPreview=(wx,preview,type,now)=>({wx:startTransition(wx,type,now,3000),preview:{type,until:now+PREVIEW_MS,back:preview?preview.back:wx.to}});
+// The lawn's real snow cover builds and melts from the mode's own weather, never from a preview;
+// a snow preview only shows a white lawn while it lasts, so nothing is left behind afterwards.
+function stepSnow(cover,fx,preview,dtMs){
+  const next=snowCover(cover,preview?FX[preview.back].snow:fx.snow,dtMs);
+  return{cover:next,shown:preview&&preview.type==='snow'?1:next};
+}
 function stepPreview(wx,preview,now){
   if(!preview||now<preview.until)return{wx,preview};
   return{wx:startTransition(wx,preview.back,now,5000),preview:null};
@@ -304,7 +310,7 @@ function skyColors(df,hour,fx){
   return out;
 }
 
-globalThis.SkyLogic={stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLevel,PREVIEW_MS,startPreview,stepPreview,LAWN_BACK,mixHex,skyColors,WEATHER_KEY,loadWeatherSettings,saveWeatherSettings,geocodeUrl,forecastUrl,fetchRealWeather,LAWN,WATERFALL_LEN,DECOR_TOP,outdoorSpots,buildIsland,sceneFrame,
+globalThis.SkyLogic={stepSnow,stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLevel,PREVIEW_MS,startPreview,stepPreview,LAWN_BACK,mixHex,skyColors,WEATHER_KEY,loadWeatherSettings,saveWeatherSettings,geocodeUrl,forecastUrl,fetchRealWeather,LAWN,WATERFALL_LEN,DECOR_TOP,outdoorSpots,buildIsland,sceneFrame,
   WEATHERS,WEIGHTS,FX,pickNextWeather,changeDelayMs,transitionMs,wmoToWeather,initialWeather,weatherFx,startTransition,stepRandom,snowCover,lightningDelayMs,lightningFlashMs};
 })();
 </script>
@@ -635,7 +641,7 @@ class ClaudeOffice extends React.Component{
     this.setBack=el=>{this.backCanvas=el;};this.setFront=el=>{this.frontCanvas=el;};this.setWrap=el=>{this.wrapEl=el;};
     // Weather: this.wx is the SkyLogic transition state; snow (lawn cover) and flash (lightning) are 0..1.
     this.wx={...SkyLogic.initialWeather('clear',Date.now()),nextAt:Date.now()+SkyLogic.changeDelayMs(Math.random())};
-    this.snow=0;this.flash=0;this.flashStart=0;this.flashMs=0;this.nextFlashAt=0;this.preview=null;this.lastSky=Date.now();
+    this.snow=0;this.snowShown=0;this.flash=0;this.flashStart=0;this.flashMs=0;this.nextFlashAt=0;this.preview=null;this.lastSky=Date.now();
     this.reducedMq=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
     // Camera: drag pans, wheel/pinch zooms about the cursor (CameraLogic). kZoom is the zoom the canvas resolution
     // follows; it catches up 150 ms after the last wheel tick so the island bitmap is not re-baked on every tick.
@@ -668,7 +674,7 @@ class ClaudeOffice extends React.Component{
     setTimeout(()=>this.frame(performance.now()),0);
     const loop=t=>{this.lastFrame=performance.now();this.frame(t);this.raf=requestAnimationFrame(loop);};
     this.raf=requestAnimationFrame(loop);
-    window.__sky={preview:type=>this.previewWeather(type),state:()=>({to:this.wx.to,fx:SkyLogic.weatherFx(this.wx,Date.now()),snow:this.snow,flash:this.flash})};
+    window.__sky={preview:type=>this.previewWeather(type),state:()=>({to:this.wx.to,fx:SkyLogic.weatherFx(this.wx,Date.now()),snow:this.snow,snowShown:this.snowShown,flash:this.flash})};
     if(this.state.weatherMode==='real')this.refreshReal();
     this.realTimer=setInterval(()=>{if(this.state.weatherMode==='real')this.refreshReal();},REAL_WEATHER_EVERY_MS);
   }
@@ -904,12 +910,11 @@ class ClaudeOffice extends React.Component{
     this.drawSky(ts/1000);
     for(const a of this.agents){const el=this.bubbleEls[a.id];if(!el)continue;const[sx,sy]=this.headPos(a);el.style.left=Math.min(92,Math.max(8,sx/LW*100))+'%';el.style.top=((sy-12)/LH*100)+'%';}
   }
-  // Preview buttons show a weather within 3 s for a minute, then the mode's own weather returns.
-  // A snow preview also whitens the lawn at once instead of over 10 minutes.
+  // Preview buttons show a weather within 3 s for a minute, then the mode's own weather returns
+  // (a snow preview shows a white lawn only while it lasts, see SkyLogic.stepSnow).
   previewWeather(type){
     if(!SkyLogic.FX[type])return;
     const r=SkyLogic.startPreview(this.wx,this.preview,type,Date.now());this.wx=r.wx;this.preview=r.preview;
-    if(type==='snow')this.snow=1;
   }
   // Everything the sky, the island and the office need to agree on for this frame.
   envNow(){
@@ -917,7 +922,7 @@ class ClaudeOffice extends React.Component{
     if(this.preview){const r=SkyLogic.stepPreview(this.wx,this.preview,now);this.wx=r.wx;this.preview=r.preview;}
     else this.stepWeather(now);
     const reduced=!!(this.reducedMq&&this.reducedMq.matches),fx=SkyLogic.weatherFx(this.wx,now),df=dayFactor();
-    this.snow=SkyLogic.snowCover(this.snow,fx.snow,dtMs);
+    {const sn=SkyLogic.stepSnow(this.snow,fx,this.preview,dtMs);this.snow=sn.cover;this.snowShown=sn.shown;}
     if(fx.storm>0.5&&!reduced){if(now>=this.nextFlashAt){this.flashStart=now;this.flashMs=SkyLogic.lightningFlashMs(Math.random());this.nextFlashAt=now+SkyLogic.lightningDelayMs(Math.random());}}
     else this.nextFlashAt=now+2000;
     this.flash=reduced?0:SkyLogic.flashLevel(now,this.flashStart||0,this.flashMs||0);
@@ -954,7 +959,7 @@ class ClaudeOffice extends React.Component{
     ctx.setTransform(k,0,0,k,0,0);
     ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;ctx.clearRect(0,0,LW,LH);
     // The island is baked once per resolution / light level / snow level and stamped under the office.
-    const snow=this.snow||0,ic=this.islandCache,dfB=Math.round(df*10),snB=Math.round(snow*10);
+    const snow=this.snowShown||0,ic=this.islandCache,dfB=Math.round(df*10),snB=Math.round(snow*10);
     if(!ic||ic.k!==k||ic.df!==dfB||ic.sn!==snB)this.islandCache={img:SkyRender.renderIsland(ISLAND,{LW,LH,OX,OY},k,{df:dfB/10,snow:snB/10}),k,df:dfB,sn:snB};
     ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(this.islandCache.img,0,0);ctx.restore();
     SkyRender.drawPond(ctx,ISLAND,PG,t,df);
