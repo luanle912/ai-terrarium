@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-11-04
+
+### Added
+
+- **Front stairs** — A second flight of stone steps on the pantry's front edge, in front of the PANTRY sign; agents use whichever stairs is closer to reach the pond
+
+### Changed
+
+- **Wall fixtures sit on the wall** — The whiteboard labels and percentages, the EXIT sign and the clock are drawn in the wall's plane: the board reads label, bar filling left to right, then the percentage; the EXIT sign is a small green box mounted above the door; the clock is a disc standing slightly off the wall with its hands turning in that plane
+
+### Fixed
+
+- **EXIT door** — A leftover dark patch outside the door was painted over the wall base, and at night the door was almost black, so the doorway looked like a hole; the patch is gone and the door is a wooden door with an inset panel, day and night
+
 ## [1.3.1] - 2026-11-04
 
 ### Added
@@ -179,6 +193,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.3.2]: https://github.com/luanle912/ai-terrarium/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/luanle912/ai-terrarium/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/luanle912/ai-terrarium/compare/v1.2.7...v1.3.0
 [1.2.7]: https://github.com/luanle912/ai-terrarium/compare/v1.2.6...v1.2.7
