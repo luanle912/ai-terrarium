@@ -225,20 +225,63 @@ function snapshot() {
 }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');
+const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || '').split(',').map(h => h.trim()).filter(Boolean);
 const clients = new Set();
-setInterval(() => { scan(); const data = 'data: ' + JSON.stringify(snapshot()) + '\n\n'; for (const r of clients) r.write(data); }, 1000);
-http.createServer((req, res) => {
-  const origin = req.headers.origin || '';
-  const allowed = origin && (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || origin === ALLOWED_ORIGIN);
-  res.setHeader('Access-Control-Allow-Origin', allowed ? origin : 'http://localhost');
-  if (req.url.startsWith('/events')) {
-    if (clients.size >= MAX_CLIENTS) { res.writeHead(429); res.end('Too many connections'); return; }
-    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    scan(); res.write('data: ' + JSON.stringify(snapshot()) + '\n\n'); clients.add(res); req.on('close', () => clients.delete(res));
-  } else if (req.url.startsWith('/snapshot')) { scan(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(snapshot(), null, 2)); }
-  else if (req.url === '/' || req.url === '/index.html') {
-    try { const html = fs.readFileSync(HTML_FILE, 'utf8'); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(html); }
-    catch { res.writeHead(404); res.end('claude-office.html not found — place it next to this script'); }
-  }
-  else { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('Claude Office · /events (SSE) · /snapshot'); }
-}).listen(PORT, '127.0.0.1', () => console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`));
+
+// DNS-rebinding guard: only loopback names on our own port (plus ALLOWED_HOSTS) may talk to us.
+function hostAllowed(host, port, extra = []) {
+  if (!host) return false;
+  const h = String(host).toLowerCase();
+  return ['localhost', '127.0.0.1', '[::1]'].some(n => h === n + ':' + port) || extra.some(e => String(e).toLowerCase() === h);
+}
+// CORS: echo only the one configured origin; everything else gets no CORS header at all.
+function corsOrigin(origin, allowedOrigin) { return origin && allowedOrigin && origin === allowedOrigin ? origin : null; }
+
+function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }) } = {}) {
+  return (req, res) => {
+    if (!hostAllowed(req.headers.host, port, allowedHosts)) { res.writeHead(403); res.end('Forbidden'); return; }
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); res.end('Method Not Allowed'); return; }
+    const co = corsOrigin(req.headers.origin, allowedOrigin);
+    if (co) { res.setHeader('Access-Control-Allow-Origin', co); res.setHeader('Vary', 'Origin'); }
+    const route = (req.url || '').split('?')[0];
+    if (route === '/events') {
+      if (clients.size >= MAX_CLIENTS) { res.writeHead(429); res.end('Too many connections'); return; }
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+      doScan(); res.write('data: ' + JSON.stringify(snap()) + '\n\n'); clients.add(res); req.on('close', () => clients.delete(res));
+    } else if (route === '/snapshot') { doScan(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(snap(), null, 2)); }
+    else if (route === '/api/public-preview') {
+      Promise.resolve().then(() => publicPreview()).then(j => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(j)); })
+        .catch(() => { res.writeHead(500); res.end('error'); });
+    }
+    else if (route === '/' || route === '/index.html') {
+      try { const html = fs.readFileSync(htmlFile, 'utf8'); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(html); }
+      catch { res.writeHead(404); res.end('claude-office.html not found — place it next to this script'); }
+    }
+    else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); }
+  };
+}
+
+// Several Claude Code sessions each spawn this server; the losers wait quietly and take over when the port frees up.
+function listenWithRetry(server, port, host, { retryMs = 10000, log = console.log } = {}) {
+  return new Promise((resolve, reject) => {
+    let warned = false;
+    const attempt = () => server.listen(port, host);
+    const onError = err => {
+      if (err.code !== 'EADDRINUSE') { server.off('listening', onListening); server.off('error', onError); reject(err); return; }
+      if (!warned) { warned = true; log(`Port ${port} is busy — another Claude Office is running; retrying every ${retryMs}ms`); }
+      setTimeout(attempt, retryMs);
+    };
+    const onListening = () => { server.off('error', onError); resolve(); };
+    server.on('error', onError); server.once('listening', onListening);
+    attempt();
+  });
+}
+
+function main() {
+  setInterval(() => { scan(); const data = 'data: ' + JSON.stringify(snapshot()) + '\n\n'; for (const r of clients) r.write(data); }, 1000);
+  listenWithRetry(http.createServer(createHandler()), PORT, '127.0.0.1')
+    .then(() => console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`));
+}
+
+module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan };
+if (require.main === module) main();
