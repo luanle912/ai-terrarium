@@ -23,12 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Pan and zoom** — Drag to pan, scroll or pinch to zoom the island 1×–4× about the cursor; a press only becomes a drag after 4 px so clicking an agent still selects it, bubbles keep their size and the sky stays put
+- **Pan and zoom** — Drag to pan, scroll or pinch to zoom the island 1×–4× about the cursor; a press only becomes a drag after 4 px so clicking an agent still selects it, bubbles keep their size and the sky stays put. The view moves at half the mouse speed, and zoomed in the island always fills the view except for a small margin left and right
 - **Vacant desks and empty departments** — Unclaimed desks drop their papers, lamp, plant and mug and look greyed out; a zone no department owns gets a darker floor and an EMPTY label
 
 ### Fixed
 
-- **Only live sessions** — Who is in the office now comes from the live Claude Code process registry (`~/.claude/sessions/<pid>.json`), with the old time-based filter as a fallback; departments are grouped by repo
+- **Only live sessions** — Who is in the office now comes from the live Claude Code process registry (`~/.claude/sessions/<pid>.json`), with the old time-based filter as a fallback; departments are grouped by repo. Sessions get desks first (up to 16) and sub-agents have their own cap of 12, so they can no longer push sessions out of the office
+- **Finished sub-agents** — Workflow sub-agents that hand in their result (`StructuredOutput`, `SubagentHandback`) leave after 30 s instead of showing "thinking" for 10 more minutes; workflow `journal.jsonl` files are no longer read as agents, and workflow sub-agents are attached to their real session
+- **Interrupted sessions** — Tool calls left over from an interrupted turn no longer keep a session on "waiting for permission"
 - **Horizontal drag at 1×** — Some left-right drag is allowed when the island exactly fits the stage width
 - **Vacant-desk performance** — Greyed-out desks use a palette instead of `ctx.filter`, back to 60 FPS at 2× DPR
 - **Lawn stuck white or grey after a snow preview** — Previewing *Tuyết* used to write straight into the lawn's real snow cover, which takes 20 minutes to melt, so after switching weathers the lawn stayed white (grey at night). A preview now only shows a snowy lawn while it lasts; real snow still builds over about 10 minutes and melts over about 20
