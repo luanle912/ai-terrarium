@@ -5,18 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.4] - 2026-11-04
+
+### Fixed
+
+- **Ghost session cleanup** — Server now prunes in-memory entries for transcript files that were deleted on disk, so stale fork/scratchpad agents no longer persist as phantoms in the office
+
 ## [1.2.3] - 2026-11-04
 
 ### Changed
 
-- **Compact header** — Title, status chips and LIVE/pause controls share one row, the department row is tighter, and the subtitle moved into the title's tooltip, giving the office canvas about 22% more width and height at 1440×900
-- **Settings button inside the office** — The ⚙ button and its panel now sit over the bottom-right corner of the office view; the footer hint line is removed
+- **Compact header** — Summary bar condensed to a single row for more office viewport space
 
 ## [1.2.2] - 2026-11-04
 
 ### Changed
 
-- **Full-window layout** — The page now fills the browser window without scrolling; the office canvas scales to the largest size that fits (keeping its proportions), and the space around it takes the floor's day/night backdrop color
+- **Full-window layout** — Office canvas fills the viewport without page scroll
 
 ## [1.2.1] - 2026-11-04
 
@@ -103,6 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.2.4]: https://github.com/luanle912/ai-terrarium/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/luanle912/ai-terrarium/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/luanle912/ai-terrarium/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/luanle912/ai-terrarium/compare/v1.2.0...v1.2.1
