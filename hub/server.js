@@ -64,6 +64,7 @@ function createHub(config, deps = {}) {
 function main() {
   let config;
   try { config = loadConfig(process.env); } catch (e) { console.error(e.message); process.exit(1); }
+  process.on('unhandledRejection', (e) => console.error('unhandled rejection ' + ((e && e.name) || 'Error')));
   const hub = createHub(config);
   hub.server.on('error', (e) => { console.error('hub failed to listen: ' + e.code); process.exit(1); });
   hub.server.listen(config.port, config.host, () => console.log(`hub listening on ${config.host}:${hub.server.address().port} (${config.origin})`));

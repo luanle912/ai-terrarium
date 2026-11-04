@@ -9,7 +9,7 @@ import http from 'node:http';
 const require = createRequire(import.meta.url);
 const { loadConfig } = require('../hub/config.js');
 const { openDb } = require('../hub/db.js');
-const { clientIp, parseCookies, readBody, send } = require('../hub/http.js');
+const { HttpError, clientIp, parseCookies, readBody, send } = require('../hub/http.js');
 const { createLimiter } = require('../hub/limits.js');
 const { createHub } = require('../hub/server.js');
 
@@ -184,6 +184,30 @@ test('extra route modules plug in and errors map to status', async () => {
     const e = await req(port, { path: '/boom' });
     assert.equal(e.status, 500);
     assert.ok(!e.body.includes('secret detail'));
+  }, { routeModules: [mod] });
+});
+
+test('dev login rejects tricky hosts', () => {
+  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ...dev } = OK;
+  for (const u of ['http://localhost:4318@evil.com', 'http://localhost.evil.com', 'https://localhost', 'http://user:p@localhost'])
+    assert.throws(() => loadConfig({ ...dev, HUB_DEV_LOGIN: '1', HUB_PUBLIC_URL: u }), /HUB_DEV_LOGIN/, u);
+});
+
+test('foreign errors are a bare 500 and never kill the hub', async () => {
+  const mod = () => [
+    { method: 'GET', path: '/up', handler: () => { throw Object.assign(new Error('secret upstream'), { status: 502 }); } },
+    { method: 'GET', path: '/upa', handler: async () => { throw Object.assign(new Error('secret upstream'), { status: 502 }); } },
+    { method: 'GET', path: '/bad', handler: async () => { throw new HttpError(1000, 'secret range'); } },
+    { method: 'GET', path: '/ok', handler: (rq, rs) => send(rs, 200, 'ok') },
+  ];
+  await withHub(async ({ port, logs }) => {
+    for (const p of ['/up', '/upa', '/bad']) {
+      const r = await req(port, { path: p });
+      assert.equal(r.status, 500, p);
+      assert.ok(!r.body.includes('secret'), p);
+    }
+    assert.equal((await req(port, { path: '/ok' })).body, 'ok');
+    assert.ok(!logs.join('\n').includes('secret'));
   }, { routeModules: [mod] });
 });
 
