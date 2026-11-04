@@ -32,9 +32,14 @@ function loadConfig(env = process.env) {
   const ownerEmails = list(env.HUB_OWNER_EMAILS);
   if (!ownerEmails.length) need('HUB_OWNER_EMAILS', 'required (comma-separated owner emails)');
 
-  // S20: dev login is only allowed on a local public URL.
-  if (devLogin && publicUrl && !/^http:\/\/(localhost|127\.0\.0\.1)(?=[:/]|$)/.test(publicUrl)) {
-    need('HUB_DEV_LOGIN', 'HUB_DEV_LOGIN=1 is only allowed when HUB_PUBLIC_URL starts with http://localhost or http://127.0.0.1');
+  // S20: dev login is only allowed on a local public URL (parsed, so http://localhost@evil.com fails).
+  if (devLogin && publicUrl) {
+    let local = false;
+    try {
+      const u = new URL(publicUrl);
+      local = u.protocol === 'http:' && !u.username && !u.password && (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
+    } catch { /* invalid URL is reported above */ }
+    if (!local) need('HUB_DEV_LOGIN', 'HUB_DEV_LOGIN=1 is only allowed when HUB_PUBLIC_URL is http://localhost or http://127.0.0.1');
   }
 
   const googleClientId = String(env.GOOGLE_CLIENT_ID || '');

@@ -89,9 +89,14 @@ function createRouter(routes, { log = () => {}, now = Date.now } = {}) {
       if (req._tooLarge) req.destroy();
     });
     const fail = (e) => {
-      const status = e && Number.isInteger(e.status) ? e.status : 500;
-      const headers = status === 413 ? { Connection: 'close' } : {};
-      send(res, status, status === 500 ? 'internal error' : (e.message || ''), { 'Content-Type': 'text/plain; charset=utf-8', ...headers });
+      try {
+        // Only our own HttpError (status 400-599) may choose status/message; anything else is a bare 500.
+        const ok = e instanceof HttpError && Number.isInteger(e.status) && e.status >= 400 && e.status <= 599;
+        const status = ok ? e.status : 500;
+        if (status === 500) { try { log(`handler error ${(e && e.name) || 'Error'} ${pathname}`); } catch { /* ignore */ } }
+        const headers = status === 413 ? { Connection: 'close' } : {};
+        send(res, status, status === 500 ? 'internal error' : (e.message || ''), { 'Content-Type': 'text/plain; charset=utf-8', ...headers });
+      } catch { try { res.destroy(); } catch { /* ignore */ } }
     };
     if (!url) return fail(new HttpError(400, 'bad request'));
     let route = null;
