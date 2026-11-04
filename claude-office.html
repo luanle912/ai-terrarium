@@ -95,13 +95,36 @@ window.SeasonTree={seasonFor,drawSeasonTree,SEASONS,ORDER};
 "use strict";
 const h=React.createElement;
 
-const W=16,H=13,TW=16,TH=8,WALL=56;
+const W=27,H=14,TW=16,TH=8,WALL=56;
 const LW=(W+H)*TW+32, LH=(W+H)*TH+WALL+30;
 const OX=H*TW+16, OY=WALL+16;
 const P=(x,y,z=0)=>[OX+(x-y)*TW, OY+(x+y)*TH-z];
-const DESKS=[]; for(let r=0;r<3;r++)for(let c=0;c<4;c++)DESKS.push({gx:1+c*4,gy:1+r*4});
-const BLOCK=new Set(); DESKS.forEach(d=>{BLOCK.add(d.gx+','+d.gy);BLOCK.add((d.gx+1)+','+d.gy);}); ['0,0','15,0','15,12','8,0'].forEach(k=>BLOCK.add(k));
-const DOOR={tile:[0,12],pt:[-0.9,12.5]};
+const ZONES=[{zx:0,zy:0},{zx:10,zy:0},{zx:0,zy:8},{zx:10,zy:8}];
+const DESKS=[]; ZONES.forEach((z,zi)=>[[1,1],[5,1],[1,4],[5,4]].forEach(([dx,dy])=>DESKS.push({gx:z.zx+dx,gy:z.zy+dy,zone:zi})));
+const BLOCK=new Set(); DESKS.forEach(d=>{BLOCK.add(d.gx+','+d.gy);BLOCK.add((d.gx+1)+','+d.gy);}); ['23,6','22,6','24,6','23,5','23,7','8,0','9,0','8,13','19,13','18,0','21,0','22,0','23,0','26,2','26,4','23,10','26,12','20,13'].forEach(k=>BLOCK.add(k));
+const IDLE_SPOTS=[
+ {act:'phone',tile:[25,6],pt:[25.5,6.5],front:true},{act:'stretch',tile:[21,6],pt:[21.5,6.4],front:true},
+ {act:'table',tile:[22,10],pt:[22.3,10.5],stool:1,front:true},{act:'table',tile:[23,9],pt:[23.5,9.4],stool:1,front:true},
+ {act:'table',tile:[23,11],pt:[23.5,11.5],stool:1,front:false},{act:'table',tile:[24,10],pt:[24.6,10.5],stool:1,front:false},
+ {act:'coffee',tile:[21,1],pt:[21.45,1.25],front:false},{act:'coffee',tile:[22,1],pt:[22.6,1.25],front:false},
+ {act:'fridge',tile:[25,2],pt:[25.55,2.5],front:true},{act:'water',tile:[25,4],pt:[25.55,4.5],front:true},
+ {act:'vending',tile:[25,12],pt:[25.5,12.45],front:true},{act:'phone',tile:[21,3],pt:[21.5,3.5],front:true},
+ {act:'phone',tile:[21,12],pt:[21.5,12.4],front:true},{act:'stretch',tile:[25,8],pt:[25.5,8.3],front:true}];
+const ACT_TXT={table:'nhâm nhi cà phê',coffee:'pha cà phê',fridge:'lục tủ lạnh',water:'lấy nước',vending:'chọn snack',phone:'lướt điện thoại',stretch:'vươn vai'};
+const SEGS=[], EDGE=new Set();
+const addV=(zi,X,y)=>{SEGS.push({zi,v:true,X,y});EDGE.add((X-1)+','+y+'|'+X+','+y);EDGE.add(X+','+y+'|'+(X-1)+','+y);};
+const addH=(zi,Y,x)=>{SEGS.push({zi,v:false,Y,x});EDGE.add(x+','+(Y-1)+'|'+x+','+Y);EDGE.add(x+','+Y+'|'+x+','+(Y-1));};
+ZONES.forEach((z,zi)=>{const Y=z.zy===0?6:8;
+  (z.zx===0?[8]:[10,18]).forEach(X=>{for(let y=z.zy;y<=z.zy+5;y++)if(y!==z.zy+3)addV(zi,X,y);});
+  for(let x=z.zx;x<=z.zx+7;x++)if(x!==z.zx+3&&x!==z.zx+4)addH(zi,Y,x);
+});
+for(let y=0;y<H;y++)if(y!==6&&y!==7)addV(4,20,y);
+const zoneAt=(x,y)=>{if(x>=20)return 4;for(let i=0;i<4;i++){const z=ZONES[i];if(x>=z.zx&&x<=z.zx+7&&y>=z.zy&&y<=z.zy+5)return i;}return -1;};
+const mix=(a,b,p)=>{if(!a||a[0]!=='#')return b;const A=parseInt(a.slice(1),16),B=parseInt(b.slice(1),16),f=(s)=>Math.round(((A>>s)&255)*(1-p)+((B>>s)&255)*p);return'#'+((1<<24)+(f(16)<<16)+(f(8)<<8)+f(0)).toString(16).slice(1);};
+const DOOR={tile:[0,7],pt:[-0.9,7]};
+const DEPT_PAL=['#3e8ed0','#e5484d','#46a758','#8e4ec6','#f5a524','#12a594','#e93d82','#5b5bd6'];
+const SIM_DEPTS=[['newera-web','WEB'],['api-gateway','API'],['mobile-app','MOB'],['infra-tf','INF']];
+const colOf=i=>DESKS[i].zone;
 
 const THEMES={
   night:{label:'Night shift',bg:'#0b0e14',fa:'#1b2233',fb:'#1f2740',wl:'#262f48',wr:'#2e3856',trim:'#3d4970',glass:'#16294a',glassHi:'#2f5d9a',door:'#151a27',board:'#d9dee8',dt:'#7a5a40',dl:'#5c4330',dr:'#4a3626',mon:'#15161c',on:'#5ef2ff',off:'#262d3d',chair:'#3b4058',kb:'#2b2f3c',plant:'#3fa36b',pot:'#a5573b',stroke:null,shadow:'rgba(0,0,0,0.45)'},
@@ -114,7 +137,6 @@ function lerpTheme(f){const n=THEMES.night,d=THEMES.day,o={_day:f};for(const k i
 const SKIN=['#f2c9a0','#d9a273','#a86b45','#f5d7bd','#c68a5e'];
 const HAIR=['#2b1d14','#5a3a22','#d9a441','#1a1a1a','#8a3b2a','#e8e2d6','#3c3c52'];
 const SHIRT=['#e5484d','#3e8ed0','#46a758','#f5a524','#8e4ec6','#12a594','#e93d82','#5b5bd6','#ff8b3d','#2f9ab8','#9b7b4f','#6a7bd8'];
-const PROJ=[['newera-web','WEB'],['api-gateway','API'],['mobile-app','MOB'],['data-pipeline','DAT'],['infra-tf','INF'],['docs-site','DOC'],['auth-service','AUT'],['billing','BIL'],['design-tokens','TOK'],['ml-eval','EVL'],['chat-bot','BOT'],['cli-tools','CLI']];
 const TOOLS=[['Read','Header.tsx'],['Edit','routes.ts'],['Bash','npm test'],['Grep','useSession'],['Write','CHANGELOG.md'],['Bash','git diff'],['Glob','**/*.test.ts'],['WebFetch','docs.anthropic.com'],['TodoWrite','4 tasks'],['Edit','package.json'],['Bash','tsc --noEmit'],['Read','schema.prisma']];
 const TALK=['hỏi schema API','chia sẻ types','thống nhất naming','nhờ review diff','báo lỗi build'];
 const PERM=['Bash: rm -rf dist','Bash: git push','Write: .env','Bash: npm publish'];
@@ -126,9 +148,8 @@ const ICON={
   waiting:['#####','.###.','..#..','.###.','#####'], talking:['#####','#...#','#####','.#...','....#']
 };
 const shade=(hh,p)=>{if(!hh||hh[0]!=='#'||hh.length!==7)return hh;const n=parseInt(hh.slice(1),16),c=v=>Math.max(0,Math.min(255,v));return'#'+((1<<24)+(c((n>>16)+p)<<16)+(c(((n>>8)&255)+p)<<8)+c((n&255)+p)).toString(16).slice(1);};
-const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','·':'000000010000000'};
+const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','·':'000000010000000','/':'001001010100100'};
 function text3(ctx,str,x,y,col){ctx.fillStyle=col;x=Math.round(x);y=Math.round(y);[...String(str).toUpperCase()].forEach((ch,i)=>{const f=FONT[ch];if(!f)return;for(let b=0;b<15;b++)if(f[b]==='1')ctx.fillRect(x+i*4+(b%3),y+Math.floor(b/3),1,1);});}
-function wallText3(ctx,str,y0,z0,col,sy=0.055,sz=1){ctx.fillStyle=col;[...String(str).toUpperCase()].forEach((ch,ci)=>{const f=FONT[ch];if(!f)return;for(let b=0;b<15;b++)if(f[b]==='1'){const[sx2,sy2]=P(0,y0+(ci*4+(b%3))*sy,z0-Math.floor(b/3)*sz);ctx.fillRect(Math.round(sx2),Math.round(sy2),1,1);}});}
 const PANTS=['#2d3142','#3b4a6b','#4a3b2f','#22303a','#5a5f73'];
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 const rnd=(a,b)=>a+Math.random()*(b-a);
@@ -140,8 +161,7 @@ function bfs(from,to){
   const key=p=>p[0]+','+p[1], ok=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&!BLOCK.has(x+','+y);
   const prev=new Map([[key(from),null]]), q=[from];
   while(q.length){const c=q.shift(); if(c[0]===to[0]&&c[1]===to[1])break;
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n=[c[0]+dx,c[1]+dy],k=key(n); if(!prev.has(k)&&(ok(n[0],n[1])||(n[0]===to[0]&&n[1]===to[1]))){prev.set(k,c);q.push(n);}}
-  }
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n=[c[0]+dx,c[1]+dy],k=key(n); if(!prev.has(k)&&!EDGE.has(key(c)+'|'+k)&&(ok(n[0],n[1])||(n[0]===to[0]&&n[1]===to[1]))){prev.set(k,c);q.push(n);}}}
   if(!prev.has(key(to)))return[];
   const out=[];let c=to;while(c&&key(c)!==key(from)){out.unshift(c);c=prev.get(key(c));}return out;
 }
@@ -154,7 +174,7 @@ class ClaudeOffice extends React.Component{
     const ep=srv.includes('/events')?srv:(srv.startsWith('http')?srv:('http://'+srv))+'/events';
     this.state={sel:null,paused:false,tick:0,live:'off',
       dataSource:'live',endpoint:ep,agentCount:6,speed:1,showBubbles:true,autoApprove:false,showSettings:false};
-    this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';this.goneSids=new Set();
+    this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';this.goneSids=new Set();this.depts=new Map();
     this.setCanvas=el=>{this.canvas=el;};
     this.onClick=e=>{const a=this.hit(e);this.setState({sel:a?a.id:null});};
     this.onMove=e=>{e.currentTarget.style.cursor=this.hit(e)?'pointer':'default';};
@@ -180,10 +200,12 @@ class ClaudeOffice extends React.Component{
   }
   get isLive(){return this.state.dataSource==='live';}
   get speed(){return this.state.speed||1;}
+  get season(){return this.seasonKey&&this.seasonKey!=='default'?this.seasonKey:(window.SeasonTree?window.SeasonTree.seasonFor():'default');}
+  get treeOn(){return this.season!=='default';}
   get theme(){const f=dayFactor();if(f<=0)return Object.assign({_day:0},THEMES.night);if(f>=1)return Object.assign({_day:1},THEMES.day);return lerpTheme(f);}
 
   startSource(){
-    this.es&&this.es.close();this.es=null;this.agents=[];this.goneSids=new Set();this.firstSnap=true;
+    this.es&&this.es.close();this.es=null;this.agents=[];this.goneSids=new Set();this.depts=new Map();this.firstSnap=true;
     if(this.isLive){
       const url=this.state.endpoint||'http://localhost:4317/events';
       this.setState({live:'connecting',sel:null});
@@ -199,23 +221,43 @@ class ClaudeOffice extends React.Component{
     }
   }
 
-  get hasEvent(){return this.seasonKey&&this.seasonKey!=='default';}
-  freeDesk(){const used=new Set(this.agents.filter(a=>!a.parent).map(a=>a.desk));for(let i=0;i<12;i++){if(i===0&&this.hasEvent)continue;if(!used.has(i))return i;}return -1;}
-  addAgent({seated,parent,live}){
-    const isSub=!!parent;
-    const desk=isSub?parent.desk:this.freeDesk();if(desk<0)return null;
+  dept(key,label){
+    if(!this.depts.has(key))this.depts.set(key,{key,label:label||shortOf(key),color:DEPT_PAL[this.depts.size%DEPT_PAL.length],n:0});
+    return this.depts.get(key);
+  }
+  colOwners(){
+    const cnt=[{},{},{},{}];
+    this.agents.forEach(a=>{if(a.gone||a.leaving)return;const c=colOf(a.desk);if(c<4)cnt[c][a.dept]=(cnt[c][a.dept]||0)+1;});
+    return cnt.map(o=>{let best=null,b=0;for(const k in o)if(o[k]>b){b=o[k];best=k;}return best;});
+  }
+  freeDeskFor(dk){
+    const used=new Set(this.agents.map(a=>a.desk)), own=this.colOwners();
+    const free=DESKS.map((_,i)=>i).filter(i=>!used.has(i));
+    return free.find(i=>own[colOf(i)]===dk) ?? free.find(i=>own[colOf(i)]==null) ?? free[0] ?? -1;
+  }
+  freeDesk(){const used=new Set(this.agents.map(a=>a.desk));for(let i=0;i<DESKS.length;i++)if(!used.has(i))return i;return -1;}
+
+  addAgent({seated,parent,live,deptKey}){
+    let dk;
+    if(parent)dk=parent.dept;
+    else if(live){const p=live.parentId&&this.agents.find(x=>x.sid===live.parentId);dk=p?p.dept:this.dept(live.name||'khác').key;}
+    else{dk=deptKey;if(!dk){const c=SIM_DEPTS.map(([k,l])=>[this.dept(k,l),this.agents.filter(a=>a.dept===k&&!a.leaving&&!a.parent).length]);const min=Math.min(...c.map(x=>x[1]));const pool=c.filter(x=>x[1]<=min+1);dk=pick(pool)[0].key;}}
+    const Dp=this.dept(dk);
+    const desk=parent?parent.desk:this.freeDeskFor(dk);if(desk<0)return null;
+    const num=parent?0:++Dp.n;
     const d=DESKS[desk],id=++this.seq,now=Date.now(),k=this.usedLooks++;
     const a={id,desk,parent:parent?parent.id:null,
-      name:live?live.name:(isSub?parent.short.toLowerCase()+'-subagent':PROJ[desk][0]),
-      short:live?shortOf(live.name):(isSub?parent.short.slice(0,2)+'·':PROJ[desk][1]),
-      skin:SKIN[k%SKIN.length],hair:HAIR[(k*3)%HAIR.length],hs:k%4,acc:k%5===2?'glasses':k%5===4?'headset':null,pants:PANTS[k%PANTS.length],shirt:SHIRT[(desk*5+k)%SHIRT.length],
+      dept:dk,name:live?(live.name||dk)+(parent||live.parentId?' · sub-agent':''):(parent?parent.short.toLowerCase()+'-subagent':dk+' #'+num),
+      short:parent?parent.short.slice(0,3)+'·':Dp.label+(num||''),
+      skin:SKIN[k%SKIN.length],hair:HAIR[(k*3)%HAIR.length],hs:k%4,acc:k%5===2?'glasses':k%5===4?'headset':null,pants:PANTS[k%PANTS.length],shirt:Dp.color,
       sid:live?live.id:'sess_'+Math.random().toString(36).slice(2,10),
       model:live?(live.model||'—'):(Math.random()<0.6?'claude-sonnet':'claude-opus'),
-      cwd:live?(live.cwd||'—'):'~/code/'+(isSub?parent.name:PROJ[desk][0]),
-      status:(seated&&!isSub)?'working':'entering',tool:pick(TOOLS),msg:'',target:null,
+      cwd:live?(live.cwd||'—'):'~/code/'+dk,
+      status:(seated&&!parent)?'working':'entering',tool:pick(TOOLS),msg:'',target:null,
       tokens:Math.floor(rnd(2000,40000)),hist:[],until:now+rnd(500,4000),
-      jobs:isSub?Math.floor(rnd(2,5)):0,leaving:false,sleeping:false,
-      x:(seated&&!isSub)?d.gx+1:DOOR.pt[0],y:(seated&&!isSub)?d.gy+1.45:DOOR.pt[1],path:[],goalKey:(seated&&!isSub)?'seat':null,moving:false,dirFront:true,seated:!isSub&&!!seated};
+      jobs:parent?Math.floor(rnd(2,5)):0,leaving:false,sleeping:false,
+      x:(seated&&!parent)?d.gx+1:DOOR.pt[0],y:(seated&&!parent)?d.gy+1.45:DOOR.pt[1],path:[],goalKey:(seated&&!parent)?'seat':null,moving:false,dirFront:true,seated:!parent&&!!seated,
+      idleSpot:null,stool:false,actNow:null};
     this.agents.push(a);
     this.log(a,parent?'Sub-agent được spawn bởi '+parent.short:(seated?'Đang chạy':'Session mới khởi động'));
     return a;
@@ -242,7 +284,8 @@ class ClaudeOffice extends React.Component{
         if(s==='done'){this.leave(a);continue;}
         if(--a.jobs<=0){a.status='done';a.until=now+2200/sp;this.log(a,'Hoàn thành, báo cáo về '+(this.byId(a.parent)||{}).short);continue;}
       }
-      const others=this.agents.filter(o=>o!==a&&!o.leaving&&o.status!=='entering');
+      const all=this.agents.filter(o=>o!==a&&!o.leaving&&o.status!=='entering'), mates=all.filter(o=>o.dept===a.dept);
+      const others=mates.length&&Math.random()<0.55?mates:all;
       const r=Math.random();
       if(r<0.36)this.setWork(a);
       else if(r<0.48){a.status='thinking';a.until=now+rnd(2000,4000)/sp;}
@@ -250,9 +293,9 @@ class ClaudeOffice extends React.Component{
       else if(r<0.68&&others.length&&!a.parent){const t=pick(others);a.status='waiting';a.target=t.id;a.msg='đợi output của '+t.short;a.until=now+rnd(8000,12000)/sp;this.log(a,'Sang đợi '+t.short);}
       else if(r<0.75){a.status='permission';a.msg=pick(PERM);a.until=now+(this.state.autoApprove?2500:14000)/sp;this.log(a,'Xin quyền · '+a.msg);}
       else if(r<0.81){a.status='error';a.msg=pick(ERRS);a.until=now+2600/sp;this.log(a,'Lỗi · '+a.msg);}
-      else if(r<0.87){a.status='idle';a.until=now+rnd(3000,6000)/sp;}
+      else if(r<0.87){a.status='idle';a.until=now+rnd(9000,15000)/sp;}
       else if(r<0.92){a.status='done';a.until=now+2500/sp;this.log(a,'Hoàn thành task');}
-      else if(!a.parent&&this.agents.filter(o=>o.parent&&!o.leaving).length<3)this.spawnSub(a);
+      else if(!a.parent&&this.agents.filter(o=>o.parent&&!o.leaving).length<3&&this.freeDesk()>=0)this.spawnSub(a);
       else this.setWork(a);
     }
   }
@@ -282,7 +325,6 @@ class ClaudeOffice extends React.Component{
       a.target=t?t.id:null;
       if(a.status==='talking'&&s.talkingTo){const tgt=this.agents.find(x=>!x.leaving&&(x.name===s.talkingTo||x.short===s.talkingTo||x.sid===s.talkingTo));if(tgt)a.target=tgt.id;}
       if(a.status==='waiting'&&!a.target)a.status='working';
-      // Sub-agent done → đánh dấu thời điểm, leave sau 3s
       if(a.parent&&s.status==='done'){if(!a.doneAt)a.doneAt=Date.now();else if(Date.now()-a.doneAt>3000)this.leave(a);}else a.doneAt=0;
     }
     this.agents.forEach(a=>{if(!seen.has(a.sid))this.leave(a);});
@@ -305,17 +347,22 @@ class ClaudeOffice extends React.Component{
     if(t&&!t.leaving&&t.parent!==a.id){
       const d=DESKS[t.desk];
       const visitors=this.agents.filter(o=>!o.leaving&&o.target===t.id&&(o.status==='talking'||o.status==='waiting')&&o.parent!==t.id);
-      const slot=Math.max(0,visitors.indexOf(a));
-      const baseSpots=[[[d.gx-0.5,d.gy+1],[d.gx,d.gy+1.5]],[[d.gx+0.5,d.gy+2.8],[d.gx+1,d.gy+3.2]],[[d.gx-0.5,d.gy+2.5],[d.gx,d.gy+2.9]],[[d.gx+1.8,d.gy+2.8],[d.gx+2.3,d.gy+3.2]],[[d.gx-0.5,d.gy+3.5],[d.gx,d.gy+3.9]]];
-      const si=slot%baseSpots.length,row=Math.floor(slot/baseSpots.length);
-      const s=baseSpots[si];
-      return{key:'visit'+t.id+'-'+slot,tile:[s[0][0],s[0][1]+row*1.5],pt:[s[1][0],s[1][1]+row*1.5]};
+      const slot=Math.max(0,visitors.indexOf(a))%3;
+      const spots=[[[d.gx+2,d.gy],[d.gx+2.45,d.gy+0.55]],[[d.gx+2,d.gy+1],[d.gx+2.45,d.gy+1.5]],[[d.gx+2,d.gy+2],[d.gx+2.4,d.gy+2.3]]];
+      return{key:'visit'+t.id+'-'+slot,tile:spots[slot][0],pt:spots[slot][1]};
     }
     const d=DESKS[a.desk];
+    if(a.status!=='idle')a.idleSpot=null;
+    else if(!a.leaving){
+      const taken=new Set(this.agents.filter(o=>o!==a&&!o.leaving&&o.status==='idle'&&o.idleSpot!=null).map(o=>o.idleSpot));
+      if(a.idleSpot==null||taken.has(a.idleSpot)){const free=IDLE_SPOTS.map((_,i)=>i).filter(i=>!taken.has(i));a.idleSpot=free.length?pick(free):null;}
+      if(a.idleSpot!=null){const sp=IDLE_SPOTS[a.idleSpot];return{key:'idle'+a.idleSpot,tile:sp.tile,pt:sp.pt,stool:!!sp.stool,spot:sp};}
+    }
+    if(a.status==='idle')return{key:'sleep',tile:[d.gx,d.gy+1],pt:[d.gx+0.75,d.gy+0.62]};
     return{key:'seat',tile:[d.gx,d.gy+1],pt:[d.gx+1,d.gy+1.45]};
   }
   updateAgent(a,dt){
-    if(a.status==='idle'&&a.seated&&!a.sleeping){
+    if(a.status==='idle'&&a.seated&&!a.sleeping&&a.idleSpot==null){
       const d=DESKS[a.desk];a.sleeping=true;a.seated=false;a.moving=false;a.path=[];
       a.x=d.gx+0.75;a.y=d.gy+0.62;a.goalKey='sleep'+a.desk;return;
     }
@@ -325,7 +372,7 @@ class ClaudeOffice extends React.Component{
     if(a.sleeping)return;
     const g=this.goalFor(a);
     if(g.key!==a.goalKey){
-      a.goalKey=g.key;a.seated=false;
+      a.goalKey=g.key;a.seated=false;a.sleeping=false;a.stool=false;a.actNow=null;
       const cur=[Math.min(W-1,Math.max(0,Math.floor(a.x))),Math.min(H-1,Math.max(0,Math.floor(a.y)))];
       a.path=bfs(cur,g.tile).map(p=>[p[0]+0.5,p[1]+0.5]).concat([g.pt]);
       if(g.key==='seat'&&a.path.length>1)a.path.splice(a.path.length-2,1);
@@ -337,7 +384,7 @@ class ClaudeOffice extends React.Component{
         if(dist>0.001)a.dirFront=(dx+dy)>0.0001?true:((dx+dy)<-0.0001?false:a.dirFront);
         if(dist<=step){a.x=tx;a.y=ty;a.path.shift();step-=dist;}else{a.x+=dx/dist*step;a.y+=dy/dist*step;step=0;}
       }
-      if(!a.path.length){a.moving=false;if(g.key==='seat')a.seated=true;if(g.key==='exit')a.gone=true;a.dirFront=false;}
+      if(!a.path.length){a.moving=false;if(g.key==='seat')a.seated=true;if(g.key==='sleep')a.sleeping=true;if(g.stool)a.stool=true;if(g.key==='exit')a.gone=true;a.dirFront=g.spot?g.spot.front:false;if(g.spot)a.actNow=g.spot.act;}
     }
   }
 
@@ -348,22 +395,22 @@ class ClaudeOffice extends React.Component{
     this.draw(ts/1000);
     for(const a of this.agents){const el=this.bubbleEls[a.id];if(!el)continue;const[sx,sy]=this.headPos(a);el.style.left=Math.min(92,Math.max(8,sx/LW*100))+'%';el.style.top=((sy-12)/LH*100)+'%';}
   }
-  headPos(a){if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=P(a.x,a.y);return[sx,sy-(a.seated?23:21)];}
+  headPos(a){if(a.stool&&!a.moving){const[sx,sy]=P(a.x,a.y);return[sx,sy-25];}if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=P(a.x,a.y);return[sx,sy-(a.seated?23:21)];}
 
   draw(t){
     const c=this.canvas;if(!c)return;const ctx=c.getContext('2d'),th=this.theme;
+    const df=th._day!=null?th._day:1;
     ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;ctx.fillStyle=th.bg;ctx.fillRect(0,0,LW,LH);
     const poly=(pts,fill,stroke)=>{ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(Math.round(p[0]),Math.round(p[1])):ctx.moveTo(Math.round(p[0]),Math.round(p[1])));ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill();}const s=stroke===undefined?th.stroke:stroke;if(s){ctx.strokeStyle=s;ctx.lineWidth=1;ctx.stroke();}};
     const box=(x,y,w,hh,z0,z1,top,l,r)=>{poly([P(x,y+hh,z0),P(x+w,y+hh,z0),P(x+w,y+hh,z1),P(x,y+hh,z1)],l||shade(top,-22));poly([P(x+w,y,z0),P(x+w,y+hh,z0),P(x+w,y+hh,z1),P(x+w,y,z1)],r||shade(top,-38));poly([P(x,y,z1),P(x+w,y,z1),P(x+w,y+hh,z1),P(x,y+hh,z1)],top);};
     const rect=(x,y,w,hh,col)=>{ctx.fillStyle=col;ctx.fillRect(Math.round(x),Math.round(y),w,hh);};
-    const df=th._day!=null?th._day:1;
     const G={ctx,poly,box,rect,th,t,df};
     poly([P(0,0,0),P(W,0,0),P(W,0,WALL),P(0,0,WALL)],th.wr);
     poly([P(0,0,0),P(0,H,0),P(0,H,WALL),P(0,0,WALL)],th.wl);
     poly([P(0,0,WALL),P(W,0,WALL),P(W,0,WALL+3),P(0,0,WALL+3)],th.trim);
     poly([P(0,0,WALL),P(0,H,WALL),P(0,H,WALL+3),P(0,0,WALL+3)],th.trim);
     poly([P(0,0,0),P(W,0,0),P(W,0,4),P(0,0,4)],th.trim);poly([P(0,0,0),P(0,H,0),P(0,H,4),P(0,0,4)],th.trim);
-    [1.5,5.2,8.9,12.6].forEach((x,wi)=>{
+    [1.6,4.8,11.6,14.8,22.4,24.6].forEach((x,wi)=>{
       poly([P(x,0,16),P(x+1.8,0,16),P(x+1.8,0,47),P(x,0,47)],th.trim);
       poly([P(x+0.12,0,18),P(x+1.68,0,18),P(x+1.68,0,45),P(x+0.12,0,45)],th.glass);
       if(df<0.95){ctx.globalAlpha=Math.min(1,(1-df)*1.2);[[0.4,40],[1.1,36],[0.7,30],[1.45,42],[0.25,24]].forEach(([dx,z],k)=>{const[px,py]=P(x+dx,0,z);rect(px,py,1,1,(Math.floor(t*1.5+k+wi)%5)?'#cfe3ff':'#4a6fa8');});if(wi===2){const[mx,my]=P(x+1.25,0,40);rect(mx-2,my-2,4,4,'#f3f0d0');rect(mx,my-2,2,2,th.glass);}ctx.globalAlpha=1;}
@@ -373,54 +420,93 @@ class ClaudeOffice extends React.Component{
       poly([P(x+0.12,0,31),P(x+1.68,0,31),P(x+1.68,0,32),P(x+0.12,0,32)],th.trim,null);
       poly([P(x-0.05,0,47),P(x+1.85,0,47),P(x+1.85,0,50),P(x-0.05,0,50)],shade(th.trim,-25),null);
     });
-    poly([P(0,2.8,14),P(0,5.8,14),P(0,5.8,43),P(0,2.8,43)],th.trim);
-    poly([P(0,2.92,16),P(0,5.68,16),P(0,5.68,41),P(0,2.92,41)],th.board);
-    {// Whiteboard: real usage from Claude API
-      const u=this.usage||[];
+    poly([P(0,0.9,14),P(0,4.6,14),P(0,4.6,43),P(0,0.9,43)],th.trim);
+    poly([P(0,1.02,16),P(0,4.48,16),P(0,4.48,41),P(0,1.02,41)],th.board);
+    {const u=this.usage||[];
       const u5h=u.find(x=>x.kind==='five_hour')||{pct:0};
       const u7d=u.find(x=>x.kind==='seven_day')||{pct:0};
-      const y0=3.05,y1=5.55;
+      const y0=1.15,y1=4.35;
       [[34,u5h.pct,'5H'],[22,u7d.pct,'7D']].forEach(([z,pct,label])=>{
         const fill=Math.min(1,pct/100),fy=y0+(y1-y0)*fill;
-        const warn=pct>80,crit=pct>95;
-        const barCol=crit?'#e5484d':warn?'#f5a524':'#3e8ed0';
+        const barCol=pct>95?'#e5484d':pct>80?'#f5a524':'#3e8ed0';
         poly([P(0,y0,z),P(0,y1,z),P(0,y1,z+4),P(0,y0,z+4)],'#e4e7ed',null);
         if(fill>0.005)poly([P(0,y0,z),P(0,fy,z),P(0,fy,z+4),P(0,y0,z+4)],barCol,null);
         const[lx,ly]=P(0,y0-0.15,z+0.5);text3(ctx,label,lx,ly,'#8b8fa3');
         const[vx,vy]=P(0,y1+0.1,z+0.5);text3(ctx,String(pct)+'·',vx,vy,barCol);
       });
     }
-    box(0,7.5,0.28,2.0,20,22,shade(th.trim,-10));
-    ['#e5484d','#3e8ed0','#f5a524','#46a758','#8e4ec6','#12a594','#e8e2d6','#5b5bd6'].forEach((col,k)=>{const hh=[8,6,9,7,8,5,7,9][k];box(0.03,7.58+k*0.22,0.2,0.2,22,22+hh,col);});
-    {const[cx,cy]=P(0,8.5,40);ctx.fillStyle='#f6f4ee';ctx.beginPath();ctx.ellipse(cx,cy,5,6,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#2d3142';ctx.lineWidth=1;ctx.stroke();
+    [[1.4,3.4,35,'#5b8def'],[1.4,2.6,31,'#5b8def'],[1.4,3.9,27,'#e5484d'],[1.4,2.2,22,'#46a758']].forEach(([a,b,z,col])=>poly([P(0,a,z),P(0,b,z),P(0,b,z+1.4),P(0,a,z+1.4)],col,null));
+    [[3.8,36,'#f5a524'],[4.1,30,'#ffd166'],[3.75,24,'#e93d82']].forEach(([y0,z,col])=>poly([P(0,y0,z),P(0,y0+0.3,z),P(0,y0+0.3,z+4),P(0,y0,z+4)],col,null));
+    box(0,9.6,0.28,2.4,20,22,shade(th.trim,-10));
+    ['#e5484d','#3e8ed0','#f5a524','#46a758','#8e4ec6','#12a594','#e8e2d6','#5b5bd6'].forEach((col,k)=>{const hh=[8,6,9,7,8,5,7,9][k];box(0.03,9.68+k*0.27,0.2,0.2,22,22+hh,col);});
+    {const[cx,cy]=P(0,12.8,40);ctx.fillStyle='#f6f4ee';ctx.beginPath();ctx.ellipse(cx,cy,5,6,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#2d3142';ctx.lineWidth=1;ctx.stroke();
       const d=new Date(),mA=(d.getMinutes()/60)*Math.PI*2-Math.PI/2,hA=((d.getHours()%12+d.getMinutes()/60)/12)*Math.PI*2-Math.PI/2;
       ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(mA)*4,cy+Math.sin(mA)*5);ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(hA)*2.5,cy+Math.sin(hA)*3);ctx.stroke();}
-    poly([P(0,11.4,0),P(0,12.5,0),P(0,12.5,40),P(0,11.4,40)],shade(th.trim,-15));
-    poly([P(0,11.55,0),P(0,12.45,0),P(0,12.45,38),P(0,11.55,38)],th.door);
-    poly([P(0,11.75,24),P(0,12.15,24),P(0,12.15,34),P(0,11.75,34)],shade(th.glass,10),null);
-    {const[hx,hy]=P(0,12.3,18);rect(hx-1,hy,2,2,'#ffd166');}
-    {const[ex,ey]=P(0,12.5,46);rect(ex-9,ey-4,18,8,'#1f8a4c');text3(ctx,'EXIT',ex-7,ey-2,'#ffffff');}
+    poly([P(0,6.45,0),P(0,7.55,0),P(0,7.55,40),P(0,6.45,40)],shade(th.trim,-15));
+    poly([P(0,6.55,0),P(0,7.45,0),P(0,7.45,38),P(0,6.55,38)],th.door);
+    poly([P(0,6.75,24),P(0,7.25,24),P(0,7.25,34),P(0,6.75,34)],shade(th.glass,10),null);
+    {const[hx,hy]=P(0,7.3,18);rect(hx-1,hy,2,2,'#ffd166');}
+    {const[ex,ey]=P(0,7,46);rect(ex-9,ey-4,18,8,'#1f8a4c');text3(ctx,'EXIT',ex-7,ey-2,'#ffffff');}
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){
       poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],(x+y)%2?th.fa:th.fb,th.stroke?'#dfe5ef':null);
       if(df>0.2){ctx.globalAlpha=df;poly([P(x,y+0.5),P(x+1,y+0.5),P(x+1,y+0.52),P(x,y+0.52)],shade(th.fa,-18),null);ctx.globalAlpha=1;}
       if(df<0.8&&(x*7+y*3)%5===0){ctx.globalAlpha=1-df;const[px,py]=P(x+0.5,y+0.5);rect(px,py,1,1,shade(th.fa,14));ctx.globalAlpha=1;}
     }
-    poly([P(-0.9,11.55),P(0,11.55),P(0,12.45),P(-0.9,12.45)],th.door,null);
-    poly([P(0.15,11.4),P(1,11.4),P(1,12.5),P(0.15,12.5)],lerpHex('#3a2f55','#b5523b',df),null);
-    [1.5,5.2,8.9,12.6].forEach(x=>{ctx.globalAlpha=0.07+(0.22-0.07)*df;poly([P(x+0.3,0.05),P(x+2.1,0.05),P(x+2.6,1.6),P(x+0.8,1.6)],lerpHex('#7fb2ff','#fff3c4',df),null);ctx.globalAlpha=1;});
+    {const own=this.colOwners();
+      for(let y=0;y<H;y++)for(let x=0;x<W;x++){const zi=zoneAt(x,y);let col;
+        if(zi===4)col=(x+y)%2?(df<0.5?'#2c2a3a':df>0.8?'#e9d3a8':'#ffffff'):(df<0.5?'#262433':df>0.8?'#dfc597':'#f6f8fb');
+        else if(zi<0)col=mix((x+y)%2?th.fa:th.fb,'#000000',th.stroke?0.03:0.14);
+        else{const dk=own[zi];if(!dk)continue;col=mix((x+y)%2?th.fa:th.fb,this.depts.get(dk).color,th.stroke?0.14:df<0.5?0.3:0.34);}
+        poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],col,th.stroke?'#dfe5ef':null);}
+      ctx.strokeStyle=th.stroke?'#c9d3e3':(df>0.5?'#c9a77a':'#3a4462');ctx.lineWidth=1;
+      [[9,0,9,H],[0,7,20,7],[19,0,19,H]].forEach(([a,b,c,d])=>{const L=Math.max(c-a,d-b)*2;for(let k=0;k<L;k+=2){const p0=P(a+(c-a)*k/L,b+(d-b)*k/L),p1=P(a+(c-a)*(k+0.8)/L,b+(d-b)*(k+0.8)/L);ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);ctx.stroke();}});
+    }
+    {const own=this.colOwners();
+      const paint=(x,y,txt,c)=>{const[px,py]=P(x,y);ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.transform(1,0.5,-1,0.5,0,0);ctx.globalAlpha=th.stroke?0.55:0.45;text3(ctx,txt,0,0,c);ctx.restore();ctx.globalAlpha=1;};
+      ZONES.forEach((z,zi)=>{const dk=own[zi];if(!dk)return;const Dp=this.depts.get(dk);paint(z.zx+0.25,z.zy+5.15,(Dp.label+' '+dk).toUpperCase().slice(0,22),shade(Dp.color,df<0.5?40:-30));});
+      paint(20.3,13.2,'PANTRY',df>0.5?'#8a5a2a':'#a8763e');}
+    poly([P(-0.9,6.55),P(0,6.55),P(0,7.45),P(-0.9,7.45)],th.door,null);
+    poly([P(0.05,6.4),P(0.9,6.4),P(0.9,7.6),P(0.05,7.6)],lerpHex('#3a2f55','#b5523b',df),null);
+    [1.6,4.8,11.6,14.8,22.4,24.6].forEach(x=>{ctx.globalAlpha=0.07+(0.22-0.07)*df;poly([P(x+0.3,0.05),P(x+2.1,0.05),P(x+2.6,1.6),P(x+0.8,1.6)],lerpHex('#7fb2ff','#fff3c4',df),null);ctx.globalAlpha=1;});
     if(window.SeasonTree)this.seasonKey=window.SeasonTree.seasonFor(new Date());
-    if(this.hasEvent){const occ=this.agents.find(a=>a.desk===0&&!a.parent&&!a.leaving);if(occ){const nd=this.freeDesk();if(nd>=0){occ.desk=nd;occ.goalKey=null;occ.seated=false;}}}
     const items=[];
-    DESKS.forEach((d,i)=>{if(i===0&&this.hasEvent)items.push({z:d.gx+d.gy+1.5,f:()=>this.drawEventTree(G,d)});else items.push({z:d.gx+d.gy+1.5,f:()=>this.drawDesk(G,d,i)});});
-    items.push({z:15.6,f:()=>{box(15.3,0.3,0.4,0.4,0,7,th.pot);const[px,py]=P(15.5,0.5,7);[[-5,-8,10,8,0],[-3,-14,6,6,1],[-7,-5,4,4,1],[3,-6,4,4,0],[-1,-17,3,4,0]].forEach(([a,b,w,hh,v])=>rect(px+a,py+b,w,hh,v?shade(th.plant,-25):th.plant));}});
-    items.push({z:8,f:()=>{box(7.55,0.05,0.9,0.4,0,42,shade(th.trim,-5));[10,20,30,40].forEach(z=>box(7.58,0.06,0.84,0.38,z,z+1,shade(th.trim,-30)));
-      [[12,'#e5484d','#3e8ed0','#f5a524'],[22,'#46a758','#e8e2d6','#8e4ec6'],[32,'#12a594','#5b5bd6','#e93d82']].forEach(([z,...cs])=>cs.forEach((col,k)=>box(7.65+k*0.24,0.12,0.16,0.28,z,z+7-(k%2)*2,col)));}});
-    items.push({z:1,f:()=>{box(0.25,0.25,0.5,0.5,0,16,th.board,th.dl,th.dr);ctx.globalAlpha=0.85;box(0.33,0.33,0.34,0.34,16,27,'#9fd3ff','#7fbbea','#6aa8da');ctx.globalAlpha=1;rect(...P(0.5,0.75,8),2,2,'#3e8ed0');}});
-    items.push({z:27.5,f:()=>{box(15.08,11.88,0.84,0.84,0,14,th.dt,th.dl,th.dr);box(15.2,12.0,0.4,0.36,14,26,'#2d3142');const[lx,ly]=P(15.4,12.36,22);rect(lx-1,ly,2,1,Math.floor(t*2)%2?'#e5484d':'#5a1a1d');
-      [[15.48,12.05],[15.5,12.4]].forEach(([x,y])=>box(x,y,0.14,0.14,14,18,'#ffffff'));
-      if(Math.floor(t)%6<3)for(let k=0;k<3;k++){const ph=(t*1.2+k*0.33)%1;const[sx,sy]=P(15.55,12.12,20+ph*10);ctx.globalAlpha=1-ph;rect(sx+(k%2),sy,1,2,'#e6e9ef');ctx.globalAlpha=1;}}});
-    this.agents.forEach(a=>{if(a.sleeping){const d=DESKS[a.desk];items.push({z:d.gx+d.gy+0.5,f:()=>this.drawSleeper(G,a)});items.push({z:d.gx+d.gy+2,f:()=>{const[hx,hy]=this.headPos(a);for(let k=0;k<3;k++){const p=(t*0.5+k*0.33)%1;ctx.globalAlpha=Math.min(1,(1-p)*1.4);text3(ctx,'Z',hx-2+p*8+Math.sin(p*6)*2,hy-4-p*22,th.stroke?'#33415c':'#e6e9ef');ctx.globalAlpha=1;}}});}else{items.push({z:a.x+a.y+(a.seated?0.2:0),f:()=>this.drawPerson(G,a)});}});
+    DESKS.forEach((d,i)=>{items.push({z:d.gx+d.gy+1.5,f:()=>this.drawDesk(G,d,i)});});
+    {const own=this.colOwners();SEGS.forEach(sg=>items.push({z:sg.v?sg.X+sg.y+0.5:sg.x+0.5+sg.Y,f:()=>this.drawSeg(G,sg,own)}));}
+    this.pantryItems(G,items);
+    [[8.5,13.5],[19.5,13.5],[18.5,0.5]].forEach(([x,y])=>items.push({z:x+y,f:()=>{box(x-0.2,y-0.2,0.4,0.4,0,7,th.pot);const[px,py]=P(x,y,7);[[-5,-8,10,8,0],[-3,-14,6,6,1],[-7,-5,4,4,1],[3,-6,4,4,0],[-1,-17,3,4,0]].forEach(([a,b,w,hh,v])=>rect(px+a,py+b,w,hh,v?shade(th.plant,-25):th.plant));}}));
+    items.push({z:9,f:()=>{box(8.55,0.05,0.9,0.4,0,42,shade(th.trim,-5));[10,20,30,40].forEach(z=>box(8.58,0.06,0.84,0.38,z,z+1,shade(th.trim,-30)));
+      [[12,'#e5484d','#3e8ed0','#f5a524'],[22,'#46a758','#e8e2d6','#8e4ec6'],[32,'#12a594','#5b5bd6','#e93d82']].forEach(([z,...cs])=>cs.forEach((col,k)=>box(8.65+k*0.24,0.12,0.16,0.28,z,z+7-(k%2)*2,col)));}});
+    if(this.treeOn)items.push({z:30.2,f:()=>{const ST_=window.SeasonTree;if(!ST_)return;const[bx,by]=P(23.5,6.7);ctx.save();ctx.translate(Math.round(bx),Math.round(by));ctx.scale(1.8,1.8);ST_.drawSeasonTree(ctx,0,0,this.season,t);ctx.restore();}});
+    this.agents.forEach(a=>{if(a.sleeping){const d=DESKS[a.desk];items.push({z:d.gx+d.gy+0.5,f:()=>this.drawSleeper(G,a)});items.push({z:d.gx+d.gy+2,f:()=>{const[hx,hy]=this.headPos(a);for(let k=0;k<3;k++){const p=(t*0.5+k*0.33)%1;ctx.globalAlpha=Math.min(1,(1-p)*1.4);text3(ctx,'Z',hx-2+p*8+Math.sin(p*6)*2,hy-4-p*22,th.stroke?'#33415c':'#e6e9ef');ctx.globalAlpha=1;}}});}else{items.push({z:a.x+a.y+(a.seated?0.2:a.stool?0.1:0),f:()=>this.drawPerson(G,a)});}});
     items.sort((p,q)=>p.z-q.z).forEach(it=>it.f());
+  }
+
+  drawSeg(G,sg,own){
+    const{ctx,box,th}=G, dk=sg.zi<4?own[sg.zi]:null, col=sg.zi===4?'#a8763e':dk?this.depts.get(dk).color:shade(th.trim,10), base=th.stroke?'#ffffff':shade(th.trim,-20);
+    const[x,y,w,hh]=sg.v?[sg.X-0.06,sg.y,0.12,1]:[sg.x,sg.Y-0.06,1,0.12];
+    box(x,y,w,hh,0,4,base);
+    ctx.globalAlpha=th.stroke?0.5:0.3;box(sg.v?x+0.02:x,sg.v?y:y+0.02,sg.v?0.08:1,sg.v?1:0.08,4,11,'#bfe3ff','#9fd3ff','#7fbbea');ctx.globalAlpha=1;
+    box(x,y,w,hh,11,12.5,col);
+  }
+  pantryItems(G,items){
+    const{ctx,box,rect,poly,th,t}=G, metal=th.stroke?'#ffffff':'#2d3142', wood=th.stroke?'#ffffff':'#a8763e', top=th.stroke?'#ffffff':'#e8e2d6';
+    items.push({z:21.9,f:()=>{box(21.08,0.08,0.84,0.84,0,14,th.dt,th.dl,th.dr);box(21.2,0.2,0.4,0.36,14,26,'#2d3142');const[lx,ly]=P(21.4,0.56,22);rect(lx-1,ly,2,1,Math.floor(t*2)%2?'#e5484d':'#5a1a1d');
+      [[21.68,0.25],[21.7,0.6]].forEach(([x,y])=>box(x,y,0.14,0.14,14,18,'#ffffff'));
+      if(Math.floor(t)%6<3)for(let k=0;k<3;k++){const ph=(t*1.2+k*0.33)%1;const[sx,sy]=P(21.75,0.32,20+ph*10);ctx.globalAlpha=1-ph;rect(sx+(k%2),sy,1,2,'#e6e9ef');ctx.globalAlpha=1;}}});
+    items.push({z:23.6,f:()=>{box(21.95,0.1,2.0,0.8,0,12,top,wood,shade(wood,-20));
+      for(let k=0;k<2;k++)poly([P(22.05+k,0.9,3),P(22.85+k,0.9,3),P(22.85+k,0.9,10),P(22.05+k,0.9,10)],null,shade(wood,-35));
+      box(22.1,0.2,0.6,0.45,12,19,metal);const[mx,my]=P(22.4,0.65,16);rect(mx-2,my-1,4,2,'#5ef2ff');
+      box(23.2,0.25,0.5,0.4,12,12.5,'#9aa6bd');box(23.42,0.25,0.06,0.06,12.5,17,'#c9d3e3');}});
+    items.push({z:28.8,f:()=>{box(26.1,2.1,0.8,0.8,0,30,th.stroke?'#ffffff':'#e6e9ef','#c9cfdc','#aab2c5');poly([P(26.1,2.9,18),P(26.9,2.9,18),P(26.9,2.9,18.6),P(26.1,2.9,18.6)],'#8b93a7',null);box(26.15,2.86,0.06,0.04,20,26,'#8b93a7');}});
+    items.push({z:30.6,f:()=>{box(26.25,4.25,0.5,0.5,0,16,th.board,th.dl,th.dr);ctx.globalAlpha=0.85;box(26.33,4.33,0.34,0.34,16,27,'#9fd3ff','#7fbbea','#6aa8da');ctx.globalAlpha=1;rect(...P(26.5,4.75,8),2,2,'#3e8ed0');}});
+    [[23.5,10.5]].forEach(([cx,cy])=>{
+      [[cx-1.2,cy],[cx,cy-1.1],[cx,cy+1],[cx+1.1,cy]].forEach(([x,y])=>items.push({z:x+y-0.05,f:()=>{box(x-0.04,y-0.04,0.08,0.08,0,4,metal);box(x-0.17,y-0.17,0.34,0.34,4,7,th.stroke?'#ffffff':'#e07a5f');}}));
+      items.push({z:cx+cy+0.5,f:()=>{box(cx-0.05,cy-0.05,0.1,0.1,0,9,metal);ctx.fillStyle=th.stroke?'#ffffff':'#f6f4ee';const[tx,ty]=P(cx,cy,10);ctx.beginPath();ctx.ellipse(tx,ty,14,7,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle=th.stroke||shade('#f6f4ee',-40);ctx.lineWidth=1;ctx.stroke();
+        rect(tx-3,ty-2,6,2,'#e5484d');rect(tx-2,ty-3,4,1,'#ffd166');rect(tx+5,ty,2,3,'#ffffff');}});
+    });
+    items.push({z:38.9,f:()=>{box(26.08,12.1,0.84,0.8,0,34,th.stroke?'#ffffff':'#e5484d');poly([P(26.15,12.9,14),P(26.7,12.9,14),P(26.7,12.9,31),P(26.15,12.9,31)],th.stroke?'#e9eefc':'#1a2a44',null);
+      ['#ffd166','#46a758','#5ec8ff','#ff8b3d'].forEach((c,k)=>{for(let r=0;r<3;r++){const[vx,vy]=P(26.22+(k%2)*0.24,12.9,28-r*5-Math.floor(k/2)*2);rect(vx,vy,2,2,c);}});}});
+    items.push({z:33.6,f:()=>{box(20.3,13.3,0.4,0.4,0,7,th.pot);const[px,py]=P(20.5,13.5,7);[[-5,-8,10,8,0],[-3,-14,6,6,1],[-7,-5,4,4,1],[3,-6,4,4,0]].forEach(([a,b,w,hh,v])=>rect(px+a,py+b,w,hh,v?shade(th.plant,-25):th.plant));}});
   }
 
   drawDesk(G,d,i){
@@ -465,13 +551,15 @@ class ClaudeOffice extends React.Component{
     if(at&&(st==='working'||st==='thinking'))for(let k=0;k<2;k++){const ph=(t*0.9+k*0.5+i*0.1)%1;const[sx,sy]=P(gx+1.7,gy+0.42,17+ph*9);ctx.globalAlpha=0.7*(1-ph);rect(sx+(Math.floor(ph*4)%2),sy,1,2,'#e6e9ef');ctx.globalAlpha=1;}
   }
 
-  drawEventTree(G,d){
-    const{ctx,rect,t,th}=G,S=window.SeasonTree;if(!S)return;
-    const sc=1.8,inv=1/sc;
-    const[bx,by]=P(d.gx+1,d.gy+0.8);
-    ctx.save();ctx.translate(bx,by);ctx.scale(sc,sc);
-    S.drawSeasonTree(ctx,0,0,this.seasonKey,t);
-    ctx.restore();
+  actArms(R,act,sx,by,t,sh,shD,sk){
+    const ph=Math.floor(t*2)%2, L=()=>{R(sx-5,by-11,1,5,shD);R(sx-5,by-6,1,1,sk);};
+    if(act==='coffee'){L();R(sx+4,by-14-ph,1,5,shD);R(sx+4,by-15-ph,1,1,sk);}
+    else if(act==='fridge'){L();R(sx+4,by-11,3,1,shD);R(sx+7,by-11,1,1,sk);}
+    else if(act==='water'){L();const up=Math.floor(t*0.7)%3===0;R(sx+4,by-11,1,up?2:4,shD);R(sx+3,by-(up?14:9),2,3,'#ffffff');}
+    else if(act==='vending'){L();R(sx+4,by-10,3,1,shD);R(sx+7,by-10-(Math.floor(t*3)%2),1,1,sk);}
+    else if(act==='phone'){R(sx-5,by-11,1,4,shD);R(sx+4,by-11,1,4,shD);R(sx-4,by-8,8,1,sk);R(sx-1,by-11,3,4,'#1a1a1a');R(sx,by-10,1,2,ph?'#5ef2ff':'#8be0b4');}
+    else if(act==='stretch'){const p=Math.floor(t*1.5)%2;R(sx-6,by-17+p*2,2,7,sh);R(sx+4,by-17+(1-p)*2,2,7,sh);R(sx-6,by-18+p*2,2,1,sk);R(sx+4,by-18+(1-p)*2,2,1,sk);}
+    else L();
   }
 
   drawPerson(G,a){
@@ -489,7 +577,7 @@ class ClaudeOffice extends React.Component{
       if(st==='done'){R(sx-6,by-19,2,8,sh);R(sx+4,by-19,2,8,sh);R(sx-6,by-21,2,2,sk);R(sx+4,by-21,2,2,sk);}
       else{R(sx-6,by-10-ph,2,5,sh);R(sx+4,by-11+ph,2,5,shD);}
       if(st==='thinking'){R(sx+4,by-16,2,6,shD);R(sx+3,by-17,3,2,sk);}
-      if(st==='permission'){R(sx-6,by-15,2,5,sh);R(sx-5,by-16,2,2,sk);}
+      if(st==='permission'||st==='idle'){R(sx-6,by-15,2,5,sh);R(sx-5,by-16,2,2,sk);}
       R(sx-1,by-12,2,1,skD);
       {const d=DESKS[a.desk];box(d.gx+0.97,d.gy+1.62,0.06,0.06,3,7,th.stroke?'#ffffff':'#2d3142');box(d.gx+0.7,d.gy+1.6,0.6,0.09,7,13,th.chair);}
       const hy=by-18;
@@ -499,14 +587,18 @@ class ClaudeOffice extends React.Component{
       if(a.parent){R(sx-3,hy-1,6,2,'#ffd166');R(sx,hy-4,1,3,'#ffd166');R(sx-1,hy-5,3,1,'#ffffff');}
       if(th.stroke){ctx.strokeStyle='#33415c';ctx.strokeRect(sx-4.5,hy-0.5,9,15);}
     }else{
-      const walk=a.moving?Math.floor(t*9+a.id)%2:0,tap=st==='waiting'&&!a.moving?Math.floor(t*5)%2:0,by=sy-(a.moving&&walk?1:0);
+      const sit=a.stool&&!a.moving;
+      const walk=a.moving?Math.floor(t*9+a.id)%2:0,tap=st==='waiting'&&!a.moving?Math.floor(t*5)%2:0,by=sy-(a.moving&&walk?1:0)-(sit?4:0);
       const l1=walk?1:0,l2=walk?0:(tap?1:0);
-      R(sx-3,by-5+l1,2,5-l1,pants);R(sx+1,by-5+l2,2,5-l2,shade(pants,-15));
-      R(sx-3,by-1,2,1,'#141414');R(sx+1,by-1-l2,2,1,'#141414');
+      if(sit){R(sx-3,by-5,2,3,pants);R(sx+1,by-5,2,3,shade(pants,-15));R(sx-3,by-2,2,5,pants);R(sx+1,by-2,2,5,shade(pants,-15));R(sx-3,by+3,2,1,'#141414');R(sx+1,by+3,2,1,'#141414');}
+      else{R(sx-3,by-5+l1,2,5-l1,pants);R(sx+1,by-5+l2,2,5-l2,shade(pants,-15));
+      R(sx-3,by-1,2,1,'#141414');R(sx+1,by-1-l2,2,1,'#141414');}
       R(sx-4,by-11,8,7,sh);R(sx+2,by-11,2,7,shD);R(sx-4,by-11,1,7,shL);
       if(a.dirFront){R(sx-1,by-11,2,2,'#ffffff');R(sx-4,by-6,8,1,shade(pants,-20));}
       const sw=a.moving?(walk?1:-1):0,wave=st==='talking'&&!a.moving?Math.floor(t*4)%2:0,up=st==='done'&&!a.moving;
-      if(up){R(sx-6,by-17,2,7,sh);R(sx+4,by-17,2,7,sh);R(sx-6,by-18,2,2,sk);R(sx+4,by-18,2,2,sk);}
+      const act=!a.moving&&st==='idle'?a.actNow:null;
+      if(act&&act!=='table'){this.actArms(R,act,sx,by,t,sh,shD,sk);}
+      else if(up){R(sx-6,by-17,2,7,sh);R(sx+4,by-17,2,7,sh);R(sx-6,by-18,2,2,sk);R(sx+4,by-18,2,2,sk);}
       else{R(sx-5,by-11+sw,1,5,shD);R(sx-5,by-6+sw,1,1,sk);
         if(st==='waiting'&&!a.moving){R(sx+4,by-10,1,3,shD);R(sx+3,by-7,1,1,sk);}
         else{R(sx+4,by-11-sw-(wave?3:0),1,5,shD);R(sx+4,by-6-sw-(wave?3:0),1,1,sk);}}
@@ -526,13 +618,14 @@ class ClaudeOffice extends React.Component{
         if(hs===1)R(sx-3,hy+5,6,3,hr);if(hs===2)R(sx-1,hy-3,3,2,hr);if(hs===3){R(sx-3,hy-2,6,2,cap);}
       }
       if(a.acc==='headset'){R(sx-3,hy-2,6,1,'#1a1a1a');R(sx-4,hy+1,1,3,'#1a1a1a');R(sx+3,hy+1,1,3,'#1a1a1a');}
+      if(st==='idle'&&!a.moving&&a.actNow==='table'){R(sx+4,by-9,2,3,'#ffffff');R(sx+6,by-8,1,1,'#ffffff');if(Math.floor(t*2+a.id)%2)R(sx+4,by-12,1,2,'#c9cfdc');}
       if(a.parent){R(sx-3,hy-2,6,2,'#ffd166');R(sx,hy-5,1,3,'#ffd166');R(sx-1,hy-6,3,1,'#ffffff');}
       if(st==='talking'&&!a.moving){for(let k=0;k<3;k++){if((Math.floor(t*4)+k)%3===0)continue;R(sx-8-k*2,hy+2-k,1,1+k,'#ffffff');}}
       if(th.stroke){ctx.strokeStyle='#33415c';ctx.strokeRect(sx-4.5,hy-1.5,9,19);}
     }
     const[hx,hy]=this.headPos(a),col=(ST[st]||ST.working)[1];
     if(st==='thinking'){const n=Math.floor(t*3)%4;R(hx-6,hy-8,13,6,'#ffffff');R(hx-7,hy-7,15,4,'#ffffff');R(hx-2,hy-1,2,2,'#ffffff');for(let k=0;k<3;k++)R(hx-4+k*4,hy-6,2,2,k<n?'#5b8def':'#c8d2e6');}
-    else if(st==='idle'){for(let k=0;k<2;k++){const p=(t*0.6+k*0.5)%1;ctx.globalAlpha=1-p;text3(ctx,'Z',hx+2+p*6,hy-6-p*12,th.stroke?'#33415c':'#e6e9ef');ctx.globalAlpha=1;}}
+    else if(st==='idle'&&!a.actNow){for(let k=0;k<2;k++){const p=(t*0.6+k*0.5)%1;ctx.globalAlpha=1-p;text3(ctx,'Z',hx+2+p*6,hy-6-p*12,th.stroke?'#33415c':'#e6e9ef');ctx.globalAlpha=1;}}
     else if(st==='done'){const cc=['#e5484d','#ffd166','#46a758','#3e8ed0','#e93d82'];for(let k=0;k<7;k++){const p=(t*0.8+k*0.17)%1;R(hx-9+((k*7+a.id*3)%18),hy-14+p*16,1,1,cc[k%5]);}R(hx-4,hy-9,9,9,col);ICON.done.forEach((row,ry)=>[...row].forEach((ch,rx)=>{if(ch==='#')R(hx-2+rx,hy-7+ry,1,1,'#ffffff');}));}
     else if(ICON[st]&&st!=='talking'&&!(st==='permission'&&Math.floor(t*3)%2)){
       R(hx-4,hy-9,9,9,col);R(hx-1,hy,3,1,col);ICON[st].forEach((row,ry)=>[...row].forEach((ch,rx)=>{if(ch==='#')R(hx-2+rx,hy-7+ry,1,1,'#ffffff');}));
@@ -559,7 +652,7 @@ class ClaudeOffice extends React.Component{
   hit(e){
     const r=e.currentTarget.getBoundingClientRect(),lx=(e.clientX-r.left)/r.width*LW,ly=(e.clientY-r.top)/r.height*LH;
     let best=null,bd=1e9;
-    for(const a of this.agents){const[sx,sy]=P(a.x,a.y);if(lx>sx-7&&lx<sx+7&&ly>sy-24&&ly<sy+3){const d=Math.abs(lx-sx)+Math.abs(ly-sy+10);if(d<bd){bd=d;best=a;}}}
+    for(const a of this.agents){const[sx,sy]=a.sleeping?P(a.x,a.y,-4):P(a.x,a.y);const hw=a.sleeping?14:7;if(lx>sx-hw&&lx<sx+hw&&ly>sy-(a.sleeping?10:24)&&ly<sy+(a.sleeping?8:3)){const d=Math.abs(lx-sx)+Math.abs(ly-sy+10);if(d<bd){bd=d;best=a;}}}
     return best;
   }
   bubbleText(a){
@@ -573,7 +666,7 @@ class ClaudeOffice extends React.Component{
       case 'waiting':return a.waitSub?'chờ sub-agent '+(t?t.name:''):'chờ '+(t?t.name:'?');
       case 'done':return 'xong task ✓';
       case 'entering':return a.parent?'sub-agent vào ca':'session mới';
-      case 'idle':return 'idle 💤';
+      case 'idle':return '☕ '+(ACT_TXT[a.actNow]||'ra pantry giải lao');
       case 'leaving':return 'rời đi…';
       default:return null;
     }
@@ -583,13 +676,16 @@ class ClaudeOffice extends React.Component{
     const{sel,paused,live,dataSource,endpoint,showBubbles,autoApprove,agentCount,speed,showSettings}=this.state;
     const isLive=dataSource==='live',isSim=!isLive,ls=live;
     const cnt=k=>this.agents.filter(a=>!a.leaving&&k.includes(a.status)).length;
-    const seasonInfo=window.SeasonTree&&this.hasEvent?window.SeasonTree.SEASONS[this.seasonKey]:null;
+    const seasonInfo=window.SeasonTree&&this.treeOn?window.SeasonTree.SEASONS[this.seasonKey]:null;
     const summary=[['Đang gõ',['working'],'#3e8ed0'],['Suy nghĩ',['thinking'],'#5b8def'],['Trao đổi / chờ',['talking','waiting'],'#12a594'],['Chờ duyệt',['permission'],'#f5a524'],['Lỗi',['error'],'#e5484d'],['Idle / xong',['idle','done'],'#8b8fa3'],['Sub-agent',null,'#ffd166']]
       .map(([label,ks,color])=>({label,color,n:ks?cnt(ks):this.agents.filter(a=>a.parent&&!a.leaving).length}));
+    const deptList=[...this.depts.values()].map(Dp=>({label:Dp.key,short:Dp.label,color:Dp.color,n:this.agents.filter(a=>a.dept===Dp.key&&!a.leaving).length})).filter(d=>d.n>0);
     const s=sel&&this.byId(sel);
     const par=s&&s.parent&&this.byId(s.parent);
+    const selDept=s?this.depts.get(s.dept):null;
     const selData=s?{name:s.name,short:s.short,sid:s.sid,color:s.shirt,statusLabel:(ST[s.status]||ST.working)[0],statusColor:(ST[s.status]||ST.working)[1],
       activity:this.bubbleText(s)||'—',cwd:s.cwd,model:s.model,tokens:fmtK(s.tokens),role:par?'Sub-agent của '+par.short:'Main session',
+      dept:s.dept,deptColor:selDept?selDept.color:'#8b8fa3',
       canApprove:!isLive&&s.status==='permission',hist:(s.liveHist||s.hist).slice(0,7)}:null;
     const srcLabel=isLive?(ls==='ok'?'LIVE · ~/.claude':ls==='error'?'LIVE · mất kết nối':'LIVE · đang kết nối'):'MÔ PHỎNG';
     const srcColor=isLive?(ls==='ok'?'#46a758':ls==='error'?'#e5484d':'#f5a524'):'#ffd166';
@@ -599,7 +695,7 @@ class ClaudeOffice extends React.Component{
       const[sx,sy]=this.headPos(a),c=(ST[a.status]||ST.working)[1];
       return h('div',{key:a.id,ref:el=>{if(el)this.bubbleEls[a.id]=el;else delete this.bubbleEls[a.id];},
         style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%)',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:170,overflow:'hidden',textOverflow:'ellipsis'}},
-        h('b',{style:{color:c,fontFamily:"'Pixelify Sans',monospace",fontSize:11}},a.name),
+        h('b',{style:{color:c,fontFamily:"'Pixelify Sans',monospace",fontSize:11}},a.short),
         h('span',{style:{overflow:'hidden',textOverflow:'ellipsis'}},txt));
     });
 
@@ -607,7 +703,6 @@ class ClaudeOffice extends React.Component{
 
     return h('div',{style:{minHeight:'100vh',display:'flex',flexDirection:'column',gap:16,paddingTop:20,paddingBottom:28,boxSizing:'border-box',background:'var(--bg)',...pad}},
 
-      // Header
       h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'14px 24px'}},
         h('div',{style:{display:'flex',flexDirection:'column',gap:4,flex:'1 1 300px',minWidth:0}},
           h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:28,fontWeight:700,letterSpacing:'0.02em',color:'#ffffff'}},'CLAUDE CO.'),
@@ -624,7 +719,6 @@ class ClaudeOffice extends React.Component{
         )
       ),
 
-      // Summary chips
       h('div',{style:{display:'flex',flexWrap:'wrap',gap:8,fontSize:11,alignItems:'center'}},
         seasonInfo&&h('div',{className:'chip',style:{borderColor:seasonInfo.accent,gap:6}},
           h('span',{style:{width:8,height:8,borderRadius:'50%',background:seasonInfo.accent,display:'inline-block',boxShadow:'0 0 4px '+seasonInfo.accent}}),
@@ -637,7 +731,15 @@ class ClaudeOffice extends React.Component{
         ))
       ),
 
-      // Error banner
+      deptList.length>0&&h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8,fontSize:11}},
+        h('span',{style:{fontSize:10,color:'#5d6578'}},'PHÒNG BAN'),
+        deptList.map((d,i)=>h('div',{key:i,style:{display:'flex',alignItems:'center',gap:7,padding:'4px 10px 4px 4px',background:'var(--surface)',border:'1px solid #232a39'}},
+          h('span',{style:{padding:'2px 5px',background:d.color,color:'#ffffff',fontFamily:"'Pixelify Sans',monospace",fontWeight:600,fontSize:11}},d.short),
+          h('span',{style:{color:'#c9cfdc',whiteSpace:'nowrap'}},d.label),
+          h('strong',{style:{color:'#ffffff'}},d.n)
+        ))
+      ),
+
       isLive&&ls==='error'&&h('div',{style:{display:'flex',flexDirection:'column',gap:8,padding:'14px 16px',border:'2px solid #e5484d',background:'#2a1418',fontSize:12,lineHeight:1.6,color:'#ffd7d9'}},
         h('strong',{style:{color:'#ffffff',fontSize:13}},'Claude Office needs a local server'),
         h('span',null,'This page visualizes your Claude Code sessions. To connect, run on your machine:'),
@@ -646,44 +748,44 @@ class ClaudeOffice extends React.Component{
         h('span',{style:{color:'var(--muted)',fontSize:11}},'Tip: add ?server=host:port to this URL to change the endpoint')
       ),
 
-      // Canvas area
       h('div',{style:{position:'relative',border:'3px solid #232a39',background:'#0b0e14',overflow:'hidden'}},
         h('div',{style:{position:'relative',width:'100%'}},
           h('canvas',{ref:this.setCanvas,width:LW,height:LH,onClick:this.onClick,onMouseMove:this.onMove,style:{width:'100%',height:'auto',display:'block',imageRendering:'pixelated'}}),
           h('div',{style:{position:'absolute',inset:0,pointerEvents:'none'}},bubbles)
         ),
 
-        // Detail panel
         selData&&h('div',{style:{position:'absolute',top:12,right:12,width:300,maxWidth:'calc(100% - 24px)',maxHeight:'calc(100% - 24px)',overflowY:'auto',boxSizing:'border-box',background:'var(--surface)',border:'3px solid var(--fg)',boxShadow:'6px 6px 0 rgba(0,0,0,0.45)',padding:14,display:'flex',flexDirection:'column',gap:12,fontSize:12}},
-          // Header row
           h('div',{style:{display:'flex',alignItems:'center',gap:10}},
-            h('div',{style:{width:34,height:34,background:selData.color,color:'#ffffff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Pixelify Sans',monospace",fontSize:13,fontWeight:700,flex:'none'}},selData.short),
+            h('div',{style:{width:34,height:34,background:selData.deptColor,color:'#ffffff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Pixelify Sans',monospace",fontSize:13,fontWeight:700,flex:'none'}},selData.short),
             h('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:2}},
               h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:17,fontWeight:600,color:'#ffffff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},selData.name),
               h('div',{style:{fontSize:10,color:'var(--muted)'}},selData.sid)
             ),
             h('button',{className:'btn',onClick:()=>this.setState({sel:null}),style:{width:28,height:28,padding:0,flex:'none'}},'×')
           ),
-          // Status block
           h('div',{style:{display:'flex',flexDirection:'column',gap:4,padding:10,background:'var(--bg)',borderLeft:'4px solid '+selData.statusColor}},
             h('span',{style:{fontWeight:600,color:selData.statusColor}},selData.statusLabel),
             h('span',{style:{color:'var(--fg)',wordBreak:'break-all'}},selData.activity)
           ),
-          // Approve/deny
           selData.canApprove&&h('div',{style:{display:'flex',gap:8}},
             h('button',{onClick:()=>{if(s){this.log(s,'Đã cho phép · '+s.msg);s.status='working';s.tool=[s.msg.split(':')[0],s.msg.split(':')[1]||''];s.until=Date.now()+3000/this.speed;this.forceUpdate();}},style:{flex:1,border:'2px solid #46a758',background:'#46a758',color:'#06140a',padding:9,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}},'Cho phép'),
             h('button',{className:'btn',onClick:()=>{if(s){this.log(s,'Bị từ chối · '+s.msg);s.status='error';s.msg='user từ chối';s.until=Date.now()+2000/this.speed;this.forceUpdate();}},style:{flex:1,padding:9}},'Từ chối')
           ),
-          // Info grid
           h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:'10px 14px'}},
             [['THƯ MỤC',selData.cwd],['MODEL',selData.model],['TOKENS',selData.tokens],['VAI TRÒ',selData.role]].map(([label,val],i)=>
               h('div',{key:i,style:{display:'flex',flexDirection:'column',gap:2,minWidth:0}},
                 h('span',{style:{fontSize:10,color:'var(--muted)'}},label),
                 h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},val)
               )
+            ),
+            h('div',{key:'dept',style:{display:'flex',flexDirection:'column',gap:2,minWidth:0,gridColumn:'1 / -1'}},
+              h('span',{style:{fontSize:10,color:'var(--muted)'}},'PHÒNG BAN (theo cwd)'),
+              h('span',{style:{display:'flex',alignItems:'center',gap:6}},
+                h('span',{style:{width:8,height:8,background:selData.deptColor,display:'inline-block'}}),
+                selData.dept
+              )
             )
           ),
-          // History
           h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
             h('span',{style:{fontSize:10,color:'var(--muted)'}},'HOẠT ĐỘNG GẦN ĐÂY'),
             selData.hist.map((hh,i)=>h('div',{key:i,style:{display:'flex',gap:8,lineHeight:1.45}},
@@ -694,13 +796,10 @@ class ClaudeOffice extends React.Component{
         )
       ),
 
-      // Footer
       h('div',{style:{fontSize:11,color:'#5d6578'}},'Click vào nhân viên để xem chi tiết session · Bánh răng ⚙ để đổi nguồn dữ liệu (mô phỏng / live)'),
 
-      // Settings toggle
       h('button',{className:'settings-toggle',onClick:()=>this.setState(p=>({showSettings:!p.showSettings}))},'⚙'),
 
-      // Settings panel
       showSettings&&h('div',{className:'settings-panel'},
         h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:14,fontWeight:600,color:'#ffffff',marginBottom:4}},'Cài đặt'),
         h('label',null,'Nguồn dữ liệu',
@@ -713,7 +812,7 @@ class ClaudeOffice extends React.Component{
           h('input',{type:'text',value:endpoint,onChange:e=>this.setState({endpoint:e.target.value})})
         ),
         isSim&&h('label',null,'Số agent: '+agentCount,
-          h('input',{type:'range',min:1,max:12,value:agentCount,onChange:e=>this.setState({agentCount:+e.target.value})})
+          h('input',{type:'range',min:1,max:16,value:agentCount,onChange:e=>this.setState({agentCount:+e.target.value})})
         ),
         h('label',null,'Tốc độ: '+speed.toFixed(2)+'x',
           h('input',{type:'range',min:0.5,max:3,step:0.25,value:speed,onChange:e=>this.setState({speed:+e.target.value})})

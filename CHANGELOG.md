@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-04
+
+### Added
+
+- **Department system** — Sessions are grouped into departments based on working folder (`cwd`). Each department gets a unique color, and agents prefer desks in the same zone as their department mates
+- **4 department zones** — Office is divided into 4 quadrants (top-left, top-right, bottom-left, bottom-right), each can be "owned" by a department via majority count. Floor tiles are tinted with the department's color
+- **Glass partition walls** — Zones are separated by translucent glass segments with department-colored caps, using edge-based BFS collision to prevent walking through them
+- **Pantry area** — Right side of the office (columns 20–26) is a dedicated break area with:
+  - Coffee counter with espresso machine and sink
+  - Printer/scanner
+  - Fridge and water cooler
+  - Round table with 4 stools
+  - Vending machine
+  - Decorative plants
+- **Idle pantry behavior** — Idle agents now walk to the pantry and perform activities (pha cà phê, lục tủ lạnh, lấy nước, chọn snack, lướt điện thoại, vươn vai, nhâm nhi cà phê) instead of only sleeping at their desk
+- **Activity arm animations** — Each pantry activity has unique arm/hand animations (phone screen glow, coffee cup raise, fridge door reach, water bottle tilt, vending button press, stretching)
+- **Stool sitting** — Agents at the round table sit on stools with adjusted leg and body positioning
+- **Department chips** — "PHÒNG BAN" row in the UI shows each department's short label, full name, color badge, and agent count
+- **Zone labels** — Department name and key painted on the floor in isometric text per zone
+- **Dashed zone dividers** — Visual dashed lines separating the 4 work zones and the pantry corridor
+
+### Changed
+
+- **Expanded office layout** — Map grows from 16×13 to 27×14 tiles, with 16 desks (up from 12) arranged in 4 zones of 4 desks each
+- **Door repositioned** — Entrance moved to left wall center (y=7) to accommodate the taller office
+- **Event tree relocated** — Seasonal tree now appears in the pantry area at P(23.5, 6.7) instead of replacing desk #1, so no desk reservation is needed
+- **Whiteboard repositioned** — API usage bars adjusted to fit the new wall layout (y: 1.15–4.35)
+- **Desk accessories** — Each desk now has one of: desk lamp, potted plant, or photo frame (cycling by desk index)
+- **Simulation departments** — Simulated agents are distributed across 4 departments: WEB, API, MOB, INF
+
 ## [1.1.0] - 2026-11-04
 
 ### Added
@@ -46,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.2.0]: https://github.com/luanle912/ai-terrarium/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/luanle912/ai-terrarium/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/luanle912/ai-terrarium/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/luanle912/ai-terrarium/releases/tag/v1.0.0
