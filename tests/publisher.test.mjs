@@ -7,7 +7,7 @@ import path from 'node:path';
 import { startDevHub, devLogin, postDeviceForm } from './hub-helpers.mjs';
 
 const require = createRequire(import.meta.url);
-const { startPublisher, join } = require('../lib/publisher.js');
+const { startPublisher, join, makeOpenBrowser } = require('../lib/publisher.js');
 const { writeConfig, readConfig } = require('../lib/terrarium-config.js');
 
 const SALT = 'ab'.repeat(32);
@@ -237,4 +237,25 @@ test('integration: join + approve + publisher shows up in the viewer stream', as
     ac.abort();
     await h.close();
   }
+});
+
+test('join opens only same-origin verification links', async () => {
+  for (const [uri, expectOpen] of [['https://evil.example/device', false], ['https://hub.example/device?x&calc', true], ['not a url', false]]) {
+    const opened = [];
+    const h = fakeHub((n, j) => j(200, { token: 'trd_x', device_id: 'd', island_id: 'i' }));
+    const f = async (url, o) => { const r = await h.fetch(url, o); if (url.endsWith('/start')) { const b = await r.json(); b.verification_uri = uri; return { status: 200, json: async () => b }; } return r; };
+    await join('https://hub.example', { dir: path.join(tmp(), 'c'), fetch: f, log() {}, openBrowser: (u) => opened.push(u), sleep: async () => {} });
+    assert.equal(opened.length, expectOpen ? 1 : 0, uri);
+  }
+});
+
+test('default openBrowser: no shell, refuses metacharacters', () => {
+  const run = (platform, url) => { const calls = []; const ok = makeOpenBrowser({ platform, spawn: (c, a) => { calls.push([c, a]); return { on() {}, unref() {} }; } })(url); return { ok, calls }; };
+  let r = run('win32', 'https://hub.example/device?x&calc');
+  assert.equal(r.ok, false); assert.equal(r.calls.length, 0);
+  for (const bad of ['https://h/a|b', 'https://h/a^b', 'https://h/a"b', 'https://h/%41', 'https://h/a b', 'file:///etc/passwd']) assert.equal(run('win32', bad).ok, false, bad);
+  r = run('win32', 'https://hub.example/device');
+  assert.deepEqual(r.calls, [['rundll32', ['url.dll,FileProtocolHandler', 'https://hub.example/device']]]);
+  assert.deepEqual(run('darwin', 'https://hub.example/device').calls, [['open', ['https://hub.example/device']]]);
+  assert.deepEqual(run('linux', 'https://hub.example/device').calls, [['xdg-open', ['https://hub.example/device']]]);
 });
