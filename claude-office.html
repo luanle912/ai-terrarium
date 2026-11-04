@@ -156,7 +156,7 @@ const rnd=(a,b)=>a+Math.random()*(b-a);
 const clock=()=>new Date().toTimeString().slice(0,8);
 const fmtK=n=>n>=1000?(n/1000).toFixed(1)+'k':String(n);
 const shortOf=s=>(s||'???').replace(/[^a-z0-9]/gi,'').slice(0,3).toUpperCase()||'S';
-const cwdKey=s=>{if(!s||s==='—')return null;const p=s.replace(/\/+$/,'').split('/');return p[p.length-1]||null;};
+const cwdKey=s=>{if(!s||s==='—')return null;const p=s.replace(/\/+$/,'').split('/');const last=p[p.length-1];if(last==='scratchpad'||s.includes('/tmp/claude-')){const m=s.match(/tmp\/claude-\d+\/-([^/]+)/);if(m){const parts=m[1].split('-');return parts[parts.length-1]||null;}return null;}return last||null;};
 
 function bfs(from,to){
   const key=p=>p[0]+','+p[1], ok=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&!BLOCK.has(x+','+y);
