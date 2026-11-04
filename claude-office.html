@@ -465,8 +465,11 @@ class ClaudeOffice extends React.Component{
 
   drawEventTree(G,d){
     const{ctx,rect,t,th}=G,S=window.SeasonTree;if(!S)return;
+    const sc=1.8,inv=1/sc;
     const[bx,by]=P(d.gx+1,d.gy+0.8);
-    S.drawSeasonTree(ctx,bx,by,this.seasonKey,t);
+    ctx.save();ctx.translate(bx,by);ctx.scale(sc,sc);
+    S.drawSeasonTree(ctx,0,0,this.seasonKey,t);
+    ctx.restore();
   }
 
   drawPerson(G,a){
