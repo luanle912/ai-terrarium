@@ -555,18 +555,29 @@ const WEATHER_LABEL={clear:'Trời quang',cloudy:'Nhiều mây',rain:'Mưa',stor
 const WEATHER_PREVIEW=[['clear','Quang'],['cloudy','Mây'],['rain','Mưa'],['storm','Giông'],['snow','Tuyết'],['fog','Sương']];
 const ZONES=[{zx:0,zy:0},{zx:10,zy:0},{zx:0,zy:8},{zx:10,zy:8}];
 const DESKS=[]; ZONES.forEach((z,zi)=>[[1,1],[5,1],[1,4],[5,4]].forEach(([dx,dy])=>DESKS.push({gx:z.zx+dx,gy:z.zy+dy,zone:zi})));
-const BLOCK=new Set(); DESKS.forEach(d=>{BLOCK.add(d.gx+','+d.gy);BLOCK.add((d.gx+1)+','+d.gy);}); ['23,6','22,6','24,6','23,5','23,7','8,0','9,0','8,13','19,13','18,0','21,0','22,0','23,0','26,2','26,4','23,10','26,12','20,13'].forEach(k=>BLOCK.add(k));
+const BLOCK=new Set(); DESKS.forEach(d=>{BLOCK.add(d.gx+','+d.gy);BLOCK.add((d.gx+1)+','+d.gy);}); ['8,0','9,0','8,13','19,13','18,0','26,13'].forEach(k=>BLOCK.add(k));
+// Pantry furniture: the kitchen wall (row 0), the island (row 3), the tables by the bench and the sky-view bar.
+for(let x=20;x<W;x++)BLOCK.add(x+',0'); for(let x=21;x<=25;x++)BLOCK.add(x+',3'); for(let y=9;y<=12;y++){BLOCK.add('21,'+y);BLOCK.add('26,'+y);}
 const IDLE_SPOTS=[
+ // kitchen wall, used in this order: fridge, coffee bar, sink with the filtered-water tap, microwave
+ {act:'fridge',tile:[20,1],pt:[20.72,1.45],front:false},
+ {act:'coffee',tile:[21,1],pt:[21.5,1.3],front:false},{act:'coffee',tile:[22,1],pt:[22.2,1.3],front:false},
+ {act:'water',tile:[23,1],pt:[23.35,1.3],front:false},{act:'microwave',tile:[25,1],pt:[25.25,1.3],front:false},
+ // bar-height island: snacks on the end nearest the door, three high stools facing the kitchen
+ {act:'snack',tile:[20,3],pt:[20.95,3.55],front:true},
+ {act:'table',tile:[22,4],pt:[22.6,4.55],stool:2,front:false},{act:'table',tile:[23,4],pt:[23.6,4.55],stool:2,front:false},
+ {act:'table',tile:[24,4],pt:[24.6,4.55],stool:2,front:false},
+ // wooden bench along the planter with three tables for two, and the sky-view bar on the open edge
+ {act:'meal',tile:[20,9],pt:[20.6,9.6],stool:1,front:true},{act:'meal',tile:[20,10],pt:[20.6,10.9],stool:1,front:true},
+ {act:'meal',tile:[20,12],pt:[20.6,12.2],stool:1,front:true},{act:'meal',tile:[22,9],pt:[22.2,9.6],stool:1,front:false},
+ {act:'meal',tile:[22,10],pt:[22.2,10.9],stool:1,front:false},{act:'meal',tile:[22,12],pt:[22.2,12.2],stool:1,front:false},
+ {act:'sky',tile:[25,9],pt:[25.7,9.7],stool:2,front:true},{act:'sky',tile:[25,10],pt:[25.7,10.9],stool:2,front:true},
+ {act:'sky',tile:[25,12],pt:[25.7,12.1],stool:2,front:true},
  {act:'phone',tile:[25,6],pt:[25.5,6.5],front:true},{act:'stretch',tile:[21,6],pt:[21.5,6.4],front:true},
- {act:'table',tile:[22,10],pt:[22.3,10.5],stool:1,front:true},{act:'table',tile:[23,9],pt:[23.5,9.4],stool:1,front:true},
- {act:'table',tile:[23,11],pt:[23.5,11.5],stool:1,front:false},{act:'table',tile:[24,10],pt:[24.6,10.5],stool:1,front:false},
- {act:'coffee',tile:[21,1],pt:[21.45,1.25],front:false},{act:'coffee',tile:[22,1],pt:[22.6,1.25],front:false},
- {act:'fridge',tile:[25,2],pt:[25.55,2.5],front:true},{act:'water',tile:[25,4],pt:[25.55,4.5],front:true},
- {act:'vending',tile:[25,12],pt:[25.5,12.45],front:true},{act:'phone',tile:[21,3],pt:[21.5,3.5],front:true},
- {act:'phone',tile:[21,12],pt:[21.5,12.4],front:true},{act:'stretch',tile:[25,8],pt:[25.5,8.3],front:true},
+ {act:'stretch',tile:[25,8],pt:[25.5,8.3],front:true},{act:'phone',tile:[24,12],pt:[24.5,12.5],front:true},
  // bathing in the pond out on the lawn, reached down the pantry stairs
  ...ISLAND.pond.spots.map(s=>({act:'bath',tile:[s.x,s.y],pt:[s.x+0.5,s.y+0.5],front:true}))];
-const ACT_TXT={table:'nhâm nhi cà phê',coffee:'pha cà phê',fridge:'lục tủ lạnh',water:'lấy nước',vending:'chọn snack',phone:'lướt điện thoại',stretch:'vươn vai',bath:'tắm hồ'};
+const ACT_TXT={table:'nhâm nhi cà phê',meal:'ngồi ăn nhẹ',sky:'ngắm mây',coffee:'pha cà phê',fridge:'lục tủ lạnh',water:'lấy nước',microwave:'hâm đồ ăn',snack:'chọn snack',phone:'lướt điện thoại',stretch:'vươn vai',bath:'tắm hồ'};
 const SEGS=[], EDGE=new Set();
 const addV=(zi,X,y)=>{SEGS.push({zi,v:true,X,y});EDGE.add((X-1)+','+y+'|'+X+','+y);EDGE.add(X+','+y+'|'+(X-1)+','+y);};
 const addH=(zi,Y,x)=>{SEGS.push({zi,v:false,Y,x});EDGE.add(x+','+(Y-1)+'|'+x+','+Y);EDGE.add(x+','+Y+'|'+x+','+(Y-1));};
@@ -877,7 +888,7 @@ class ClaudeOffice extends React.Component{
     else if(!a.leaving){
       const taken=new Set(this.agents.filter(o=>o!==a&&!o.leaving&&o.status==='idle'&&o.idleSpot!=null).map(o=>o.idleSpot));
       if(a.idleSpot==null||taken.has(a.idleSpot)){const free=IDLE_SPOTS.map((_,i)=>i).filter(i=>!taken.has(i));a.idleSpot=free.length?pick(free):null;}
-      if(a.idleSpot!=null){const sp=IDLE_SPOTS[a.idleSpot];return{key:'idle'+a.idleSpot,tile:sp.tile,pt:sp.pt,stool:!!sp.stool,spot:sp};}
+      if(a.idleSpot!=null){const sp=IDLE_SPOTS[a.idleSpot];return{key:'idle'+a.idleSpot,tile:sp.tile,pt:sp.pt,stool:sp.stool||0,spot:sp};}
     }
     if(a.status==='idle')return{key:'sleep',tile:[d.gx,d.gy+1],pt:[d.gx+0.75,d.gy+0.62]};
     return{key:'seat',tile:[d.gx,d.gy+1],pt:[d.gx+1,d.gy+1.45]};
@@ -903,7 +914,7 @@ class ClaudeOffice extends React.Component{
         if(dist>0.001)a.dirFront=(dx+dy)>0.0001?true:((dx+dy)<-0.0001?false:a.dirFront);
         if(dist<=step){a.x=tx;a.y=ty;a.path.shift();step-=dist;}else{a.x+=dx/dist*step;a.y+=dy/dist*step;step=0;}
       }
-      if(!a.path.length){a.moving=false;if(g.key==='seat')a.seated=true;if(g.key==='sleep')a.sleeping=true;if(g.stool)a.stool=true;if(g.key==='exit')a.gone=true;a.dirFront=g.spot?g.spot.front:false;if(g.spot)a.actNow=g.spot.act;}
+      if(!a.path.length){a.moving=false;if(g.key==='seat')a.seated=true;if(g.key==='sleep')a.sleeping=true;if(g.stool)a.stool=g.stool;if(g.key==='exit')a.gone=true;a.dirFront=g.spot?g.spot.front:false;if(g.spot)a.actNow=g.spot.act;}
     }
   }
 
@@ -952,7 +963,7 @@ class ClaudeOffice extends React.Component{
   setCam(cam){if(cam.z===this.cam.z&&cam.tx===this.cam.tx&&cam.ty===this.cam.ty)return;this.cam=cam;const w=this.wrapEl;
     if(w){w.style.transform=cam.z===1&&!cam.tx&&!cam.ty?'':'translate('+cam.tx+'px,'+cam.ty+'px) scale('+cam.z+')';w.style.setProperty('--cam-inv',String(1/cam.z));}
     if(cam.z!==this.kZoom){clearTimeout(this.kTimer);this.kTimer=setTimeout(()=>{this.kZoom=this.cam.z;},150);}}
-  headPos(a){if(a.stool&&!a.moving){const[sx,sy]=P(a.x,a.y);return[sx,sy-25];}if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=PA(a.x,a.y);if(a.actNow==="bath"&&!a.moving)return[sx,sy-11];return[sx,sy-(a.seated?23:21)];}
+  headPos(a){if(a.stool&&!a.moving){const[sx,sy]=P(a.x,a.y);return[sx,sy-(a.stool===2?30:25)];}if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=PA(a.x,a.y);if(a.actNow==="bath"&&!a.moving)return[sx,sy-11];return[sx,sy-(a.seated?23:21)];}
 
   draw(t){
     const c=this.canvas;if(!c)return;const ctx=c.getContext('2d'),th=this.theme,env=this.env;
@@ -1078,7 +1089,10 @@ class ClaudeOffice extends React.Component{
     }
     {const own=this.colOwners();
       for(let y=0;y<H;y++)for(let x=0;x<W;x++){const zi=zoneAt(x,y);let col;
-        if(zi===4)col=(x+y)%2?lerpHex('#2c2a3a','#e9d3a8',df):lerpHex('#262433','#dfc597',df);
+        if(zi===4){// pantry: light washable tiles on the kitchen side, warm wood planks where people sit
+          if(y>=9){col=y%2?lerpHex('#3a2d2b','#c99862',df):lerpHex('#332725','#c18f59',df);poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],col,th.stroke?'#dfe5ef':null);
+            const sm=shade(col,-16),jx=x+(y%2?0.3:0.7);poly([P(x,y+0.5),P(x+1,y+0.5),P(x+1,y+0.53),P(x,y+0.53)],sm,null);poly([P(jx,y),P(jx+0.03,y),P(jx+0.03,y+0.5),P(jx,y+0.5)],sm,null);continue;}
+          col=(x+y)%2?lerpHex('#2e2d3a','#ebe7dd',df):lerpHex('#282734','#dfdace',df);}
         else if(zi<0)col=mix((x+y)%2?th.fa:th.fb,'#000000',th.stroke?0.03:0.14);
         else{const dk=own[zi];if(!dk){col=mix((x+y)%2?th.fa:th.fb,'#000000',th.stroke?0.06:0.24);poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],col,th.stroke?'#dfe5ef':null);continue;}col=mix((x+y)%2?th.fa:th.fb,this.depts.get(dk).color,th.stroke?0.14:df<0.5?0.3:0.34);}
         poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],col,th.stroke?'#dfe5ef':null);}
@@ -1114,7 +1128,7 @@ class ClaudeOffice extends React.Component{
     [[8.5,13.5],[19.5,13.5],[18.5,0.5]].forEach(([x,y])=>items.push({z:x+y,f:()=>{box(x-0.2,y-0.2,0.4,0.4,0,7,th.pot);const[px,py]=P(x,y,7);[[-5,-8,10,8,0],[-3,-14,6,6,1],[-7,-5,4,4,1],[3,-6,4,4,0],[-1,-17,3,4,0]].forEach(([a,b,w,hh,v])=>rect(px+a,py+b,w,hh,v?shade(th.plant,-25):th.plant));}}));
     items.push({z:9,f:()=>{box(8.55,0.05,0.9,0.4,0,42,shade(th.trim,-5));[10,20,30,40].forEach(z=>box(8.58,0.06,0.84,0.38,z,z+1,shade(th.trim,-30)));
       [[12,'#e5484d','#3e8ed0','#f5a524'],[22,'#46a758','#e8e2d6','#8e4ec6'],[32,'#12a594','#5b5bd6','#e93d82']].forEach(([z,...cs])=>cs.forEach((col,k)=>box(8.65+k*0.24,0.12,0.16,0.28,z,z+7-(k%2)*2,col)));}});
-    if(this.treeOn)items.push({z:30.2,f:()=>{const ST_=window.SeasonTree;if(!ST_)return;const[bx,by]=P(23.5,6.7);ctx.save();ctx.translate(Math.round(bx),Math.round(by));ctx.scale(1.8,1.8);ST_.drawSeasonTree(ctx,0,0,this.season,t);ctx.restore();}});
+    if(this.treeOn)items.push({z:39.55,f:()=>{const ST_=window.SeasonTree;if(!ST_)return;box(25.82,12.97,0.76,0.76,0,4,th.stroke?'#ffffff':lerpHex('#454b5c','#c2beb3',df));const[bx,by]=P(26.2,13.35,4);ctx.save();ctx.translate(Math.round(bx),Math.round(by));ST_.drawSeasonTree(ctx,0,0,this.season,t);ctx.restore();}});
     this.agents.forEach(a=>{if(a.sleeping){const d=DESKS[a.desk];items.push({z:d.gx+d.gy+0.5,f:()=>this.drawSleeper(G,a)});items.push({z:d.gx+d.gy+2,f:()=>{const[hx,hy]=this.headPos(a);for(let k=0;k<3;k++){const p=(t*0.5+k*0.33)%1;ctx.globalAlpha=Math.min(1,(1-p)*1.4);text3(ctx,'Z',hx-2+p*8+Math.sin(p*6)*2,hy-4-p*22,th.stroke?'#33415c':'#e6e9ef');ctx.globalAlpha=1;}}});}else{items.push({z:a.x+a.y+(a.seated?0.2:a.stool?0.1:0),f:()=>this.drawPerson(G,a)});}});
     items.sort((p,q)=>p.z-q.z).forEach(it=>it.f());
     // A storm darkens the island and office; source-atop only tints what is already drawn, never the sky behind.
@@ -1122,31 +1136,75 @@ class ClaudeOffice extends React.Component{
   }
 
   drawSeg(G,sg,own){
+    if(sg.zi===4)return this.drawPlanter(G,sg);
     const{ctx,box,th}=G, dk=sg.zi<4?own[sg.zi]:null, col=sg.zi===4?'#a8763e':dk?this.depts.get(dk).color:shade(th.trim,10), base=th.stroke?'#ffffff':shade(th.trim,-20);
     const[x,y,w,hh]=sg.v?[sg.X-0.06,sg.y,0.12,1]:[sg.x,sg.Y-0.06,1,0.12];
     box(x,y,w,hh,0,4,base);
     ctx.globalAlpha=th.stroke?0.5:0.3;box(sg.v?x+0.02:x,sg.v?y:y+0.02,sg.v?0.08:1,sg.v?1:0.08,4,11,'#bfe3ff','#9fd3ff','#7fbbea');ctx.globalAlpha=1;
     box(x,y,w,hh,11,12.5,col);
   }
+  // The pantry is screened from the office by a concrete planter: bamboo rising over a bed of leafy plants.
+  drawPlanter(G,sg){
+    const{box,rect,th,df}=G,y=sg.y,S=th.stroke;
+    box(19.72,y,0.56,1,0,10,S?'#ffffff':lerpHex('#454b5c','#c2beb3',df));
+    if(S)return;
+    box(19.8,y+(y===0||y===8?0.06:0),0.4,1-(y===0||y===8?0.06:0)-(y===5||y===13?0.06:0),9.5,10,'#4a3527');
+    const g=th.plant,gD=shade(g,-30),gL=shade(g,25),bam=mix(g,'#c9d46a',0.5),n=k=>((y*7+k*5)%9)/9;
+    for(let k=0;k<4;k++){const yy=y+0.14+k*0.24,xx=19.84+((y*3+k)%4)*0.1,top=34+Math.round(n(k)*16);
+      const[bx,b0]=P(xx,yy,10),b1=P(xx,yy,top)[1];rect(bx,b1,1,b0-b1,k%2?bam:shade(bam,-28));
+      for(let z=16;z<top-2;z+=7)rect(bx,P(xx,yy,z)[1],1,1,shade(bam,-50));
+      for(let z=top-20;z<=top+1;z+=3){const ly=P(xx,yy,z)[1],c=(z+k)%3?g:gL;if(((z>>1)+k)%2){rect(bx+1,ly,3,1,c);rect(bx+3,ly+1,2,1,gD);}else{rect(bx-3,ly,3,1,c);rect(bx-4,ly+1,2,1,gD);}}}
+    const[px,py]=P(20,y+0.5,10);
+    [[-8,-5,6,5,gD],[-4,-8,7,7,g],[2,-6,6,6,gL],[-1,-11,4,4,g],[5,-9,4,4,gD]].forEach(([a,b,w,hh,c])=>rect(px+a,py+b,w,hh,c));
+    if(y%2===0){rect(px-6,py-17,2,9,gD);rect(px-9,py-20,5,5,gL);rect(px+4,py-15,2,7,g);rect(px+4,py-19,5,5,g);}
+  }
   pantryItems(G,items){
-    const{ctx,box,rect,poly,th,t}=G, metal=th.stroke?'#ffffff':'#2d3142', wood=th.stroke?'#ffffff':'#a8763e', top=th.stroke?'#ffffff':'#e8e2d6';
-    items.push({z:21.9,f:()=>{box(21.08,0.08,0.84,0.84,0,14,th.dt,th.dl,th.dr);box(21.2,0.2,0.4,0.36,14,26,'#2d3142');const[lx,ly]=P(21.4,0.56,22);rect(lx-1,ly,2,1,Math.floor(t*2)%2?'#e5484d':'#5a1a1d');
-      [[21.68,0.25],[21.7,0.6]].forEach(([x,y])=>box(x,y,0.14,0.14,14,18,'#ffffff'));
-      if(Math.floor(t)%6<3)for(let k=0;k<3;k++){const ph=(t*1.2+k*0.33)%1;const[sx,sy]=P(21.75,0.32,20+ph*10);ctx.globalAlpha=1-ph;rect(sx+(k%2),sy,1,2,'#e6e9ef');ctx.globalAlpha=1;}}});
-    items.push({z:23.6,f:()=>{box(21.95,0.1,2.0,0.8,0,12,top,wood,shade(wood,-20));
-      for(let k=0;k<2;k++)poly([P(22.05+k,0.9,3),P(22.85+k,0.9,3),P(22.85+k,0.9,10),P(22.05+k,0.9,10)],null,shade(wood,-35));
-      box(22.1,0.2,0.6,0.45,12,19,metal);const[mx,my]=P(22.4,0.65,16);rect(mx-2,my-1,4,2,'#5ef2ff');
-      box(23.2,0.25,0.5,0.4,12,12.5,'#9aa6bd');box(23.42,0.25,0.06,0.06,12.5,17,'#c9d3e3');}});
-    items.push({z:28.8,f:()=>{box(26.1,2.1,0.8,0.8,0,30,th.stroke?'#ffffff':'#e6e9ef','#c9cfdc','#aab2c5');poly([P(26.1,2.9,18),P(26.9,2.9,18),P(26.9,2.9,18.6),P(26.1,2.9,18.6)],'#8b93a7',null);box(26.15,2.86,0.06,0.04,20,26,'#8b93a7');}});
-    items.push({z:30.6,f:()=>{box(26.25,4.25,0.5,0.5,0,16,th.board,th.dl,th.dr);ctx.globalAlpha=0.85;box(26.33,4.33,0.34,0.34,16,27,'#9fd3ff','#7fbbea','#6aa8da');ctx.globalAlpha=1;rect(...P(26.5,4.75,8),2,2,'#3e8ed0');}});
-    [[23.5,10.5]].forEach(([cx,cy])=>{
-      [[cx-1.2,cy],[cx,cy-1.1],[cx,cy+1],[cx+1.1,cy]].forEach(([x,y])=>items.push({z:x+y-0.05,f:()=>{box(x-0.04,y-0.04,0.08,0.08,0,4,metal);box(x-0.17,y-0.17,0.34,0.34,4,7,th.stroke?'#ffffff':'#e07a5f');}}));
-      items.push({z:cx+cy+0.5,f:()=>{box(cx-0.05,cy-0.05,0.1,0.1,0,9,metal);ctx.fillStyle=th.stroke?'#ffffff':'#f6f4ee';const[tx,ty]=P(cx,cy,10);ctx.beginPath();ctx.ellipse(tx,ty,14,7,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle=th.stroke||shade('#f6f4ee',-40);ctx.lineWidth=1;ctx.stroke();
-        rect(tx-3,ty-2,6,2,'#e5484d');rect(tx-2,ty-3,4,1,'#ffd166');rect(tx+5,ty,2,3,'#ffffff');}});
-    });
-    items.push({z:38.9,f:()=>{box(26.08,12.1,0.84,0.8,0,34,th.stroke?'#ffffff':'#e5484d');poly([P(26.15,12.9,14),P(26.7,12.9,14),P(26.7,12.9,31),P(26.15,12.9,31)],th.stroke?'#e9eefc':'#1a2a44',null);
-      ['#ffd166','#46a758','#5ec8ff','#ff8b3d'].forEach((c,k)=>{for(let r=0;r<3;r++){const[vx,vy]=P(26.22+(k%2)*0.24,12.9,28-r*5-Math.floor(k/2)*2);rect(vx,vy,2,2,c);}});}});
-    items.push({z:33.6,f:()=>{box(20.3,13.3,0.4,0.4,0,7,th.pot);const[px,py]=P(20.5,13.5,7);[[-5,-8,10,8,0],[-3,-14,6,6,1],[-7,-5,4,4,1],[3,-6,4,4,0]].forEach(([a,b,w,hh,v])=>rect(px+a,py+b,w,hh,v?shade(th.plant,-25):th.plant));}});
+    const{ctx,box,rect,poly,th,t,df}=G,S=th.stroke,metal=S?'#ffffff':'#2d3142',wood=S?'#ffffff':'#a8763e',top=S?'#ffffff':'#e8e2d6',
+      used=act=>this.agents.some(a=>!a.moving&&a.status==='idle'&&a.actNow===act),
+      front=(x0,x1,z0,z1,fill,line)=>poly([P(x0,0.9,z0),P(x1,0.9,z0),P(x1,0.9,z1),P(x0,0.9,z1)],fill,line===undefined?null:line),
+      backText=(str,x,zTop,col)=>{const[px,py]=P(x,0.01,zTop);ctx.save();ctx.translate(px,py);ctx.transform(1,0.5,0,1,0,0);text3(ctx,str,0,0,col);ctx.restore();};
+    // Kitchen wall, in the order it is used: fridge, coffee bar, sink with a filtered-water tap, dishwasher, microwave,
+    // drinks cooler, sorted bins. Only the fridge is tall, and it stands on the stretch of wall with no window.
+    items.push({z:20.7,f:()=>{box(20.32,0.1,0.8,0.8,0,32,S?'#ffffff':'#e6e9ef','#c9cfdc','#aab2c5');
+      front(20.32,21.12,20,20.6,'#8b93a7');box(21.0,0.9,0.05,0.04,22,29,'#8b93a7');box(21.0,0.9,0.05,0.04,11,18,'#8b93a7');}});
+    items.push({z:21.2,f:()=>{// coffee menu board and cup shelves on the wall above the coffee bar
+      poly([P(21.2,0.01,41),P(22.3,0.01,41),P(22.3,0.01,51),P(21.2,0.01,51)],S?'#ffffff':'#2f3a35',null);
+      poly([P(21.2,0.01,41),P(22.3,0.01,41),P(22.3,0.01,41.8),P(21.2,0.01,41.8)],wood,null);
+      backText('CAFE',21.28,48.5,S?'#7d8aa3':'#f3efe2');
+      [30,37].forEach(z=>{box(21.15,0,1.2,0.22,z,z+1,wood);[0,0.3,0.6,0.9].forEach((dx,k)=>{if(z===37&&k===3)return;box(21.22+dx,0.04,0.16,0.14,z+1,z+(k%2?3.5:4),k%2?'#f6f4ee':'#e07a5f');});});}});
+    items.push({z:21.5,f:()=>{box(21.15,0.1,5.75,0.8,0,12,top,wood,shade(wood,-20));
+      [[21.25,21.95],[22.05,22.75],[22.85,23.7],[24.5,25.5]].forEach(([a,b])=>front(a,b,2,10.5,null,shade(wood,-35)));
+      front(23.8,24.4,1,10.5,S?'#ffffff':'#d7dbe3');front(23.85,24.35,9,9.4,'#8b93a7');
+      front(25.62,26.2,1,10.5,S?'#ffffff':'#9fd3ff');[3,6.5].forEach(z=>['#e5484d','#46a758','#f5a524'].forEach((c,k)=>{const[bx,by]=P(25.72+k*0.17,0.9,z+3);rect(bx,by,1,3,c);}));
+      [['#3e8ed0',26.3],['#f5a524',26.49],['#8b93a7',26.68]].forEach(([c,x])=>{front(x,x+0.17,1,10.5,shade(wood,-10),shade(wood,-35));front(x,x+0.17,8.6,10.5,S?'#ffffff':c);});
+      // coffee machine, grinder and cups
+      box(21.25,0.2,0.55,0.45,12,20,metal);{const[lx,ly]=P(21.5,0.65,17);rect(lx-1,ly,2,1,Math.floor(t*2)%2?'#e5484d':'#5a1a1d');}
+      box(21.4,0.55,0.2,0.12,12,12.8,'#8b93a7');box(21.88,0.28,0.24,0.28,12,17,'#5b4636');box(21.9,0.3,0.2,0.24,17,19.5,'#c9a27a');
+      [[22.2,0.3],[22.2,0.56]].forEach(([x,y])=>box(x,y,0.14,0.14,12,15,'#ffffff'));
+      if(Math.floor(t)%6<3)for(let k=0;k<3;k++){const ph=(t*1.2+k*0.33)%1;const[sx,sy]=P(21.5,0.42,20+ph*10);ctx.globalAlpha=1-ph;rect(sx+(k%2),sy,1,2,'#e6e9ef');ctx.globalAlpha=1;}
+      // sink under the first window, gooseneck tap plus a blue chilled-water tap
+      box(23.0,0.25,0.7,0.5,12,12.4,'#9aa6bd');box(23.06,0.31,0.58,0.38,12.2,12.4,'#7d889c');
+      box(23.32,0.16,0.06,0.06,12.4,18.5,'#c9d3e3');box(23.32,0.16,0.06,0.26,18,18.5,'#c9d3e3');box(23.48,0.16,0.05,0.05,12.4,14.5,'#3e8ed0');
+      // microwave under the second window; it lights up while someone heats food
+      const mw=used('microwave');box(24.95,0.2,0.62,0.48,12,16.5,S?'#ffffff':'#3a3f4f');
+      poly([P(25.0,0.68,12.6),P(25.4,0.68,12.6),P(25.4,0.68,15.9),P(25.0,0.68,15.9)],mw?'#ffd166':'#1a1d26',null);
+      {const[dx,dy]=P(25.48,0.68,15.2);rect(dx,dy,1,1,mw?'#5ef2ff':'#2a3a44');}}});
+    // Bar-height island, 2.2 tiles clear of the counter so two people can pass; fruit and snack jars on the end by the door.
+    items.push({z:26.9,f:()=>{box(21.6,3.1,3.8,0.9,0,15,S?'#ffffff':'#f6f4ee',S?'#ffffff':'#3e5c76',S?'#ffffff':'#2f4a61');
+      box(21.75,3.3,0.42,0.42,15,16.2,'#e8e2d6');{const[fx,fy]=P(21.96,3.51,16.2);rect(fx-3,fy-2,3,2,'#f5a524');rect(fx,fy-3,3,3,'#e5484d');rect(fx-1,fy,3,2,'#46a758');}
+      [22.32,22.56].forEach((x,k)=>{box(x,3.32,0.16,0.16,15,18.5,'#cfe6f5');box(x,3.32,0.16,0.16,18.5,19.2,wood);const[jx,jy]=P(x+0.08,3.48,16.5);rect(jx-1,jy-1,2,2,k?'#c79257':'#e07a5f');});}});
+    [22.6,23.6,24.6].forEach(x=>items.push({z:x+4.5,f:()=>{box(x-0.04,4.51,0.08,0.08,0,10,metal);box(x-0.19,4.36,0.38,0.38,10,12,S?'#ffffff':th.chair);}}));
+    // Slatted wooden bench built against the planter (the trough is its backrest), with three tables for two.
+    items.push({z:29.3,f:()=>{const bw=S?'#ffffff':'#c79a5e';box(20.3,9.0,0.6,3.9,0,7,bw,shade(bw,-25),shade(bw,-40));
+      for(let k=1;k<5;k++)poly([P(20.3+k*0.12,9.0,7),P(20.31+k*0.12,9.0,7),P(20.31+k*0.12,12.9,7),P(20.3+k*0.12,12.9,7)],shade(bw,-30),null);}});
+    [9.2,10.5,11.8].forEach(y=>{
+      items.push({z:21.45+y+0.4,f:()=>{box(21.41,y+0.36,0.08,0.08,0,10,metal);box(21.05,y,0.8,0.8,10,11,S?'#ffffff':'#f6f4ee');
+        const[cx,cy]=P(21.3,y+0.4,11);rect(cx-1,cy-2,2,2,'#ffffff');rect(cx,cy-3,1,1,'#c79257');const[qx,qy]=P(21.62,y+0.45,11);rect(qx-2,qy-1,4,2,'#e8e2d6');rect(qx-1,qy-2,2,1,'#e5484d');}});
+      items.push({z:22.2+y+0.35,f:()=>box(21.98,y+0.18,0.42,0.42,0,7,S?'#ffffff':th.chair)});
+      items.push({z:22.2+y+0.6,f:()=>box(22.32,y+0.18,0.08,0.42,7,11.5,S?'#ffffff':th.chair)});});
+    // Sky-view bar along the open east edge: three high stools looking out over the island.
+    [9.7,10.9,12.1].forEach(y=>items.push({z:25.7+y-0.05,f:()=>{box(25.66,y-0.04,0.08,0.08,0,10,metal);box(25.51,y-0.19,0.38,0.38,10,12,S?'#ffffff':th.chair);}}));
+    items.push({z:38,f:()=>box(26.25,9.2,0.65,3.4,0,15,top,wood,shade(wood,-20))});
   }
 
   drawDesk(G,d,i){
@@ -1200,7 +1258,8 @@ class ClaudeOffice extends React.Component{
     if(act==='coffee'){L();R(sx+4,by-14-ph,1,5,shD);R(sx+4,by-15-ph,1,1,sk);}
     else if(act==='fridge'){L();R(sx+4,by-11,3,1,shD);R(sx+7,by-11,1,1,sk);}
     else if(act==='water'){L();const up=Math.floor(t*0.7)%3===0;R(sx+4,by-11,1,up?2:4,shD);R(sx+3,by-(up?14:9),2,3,'#ffffff');}
-    else if(act==='vending'){L();R(sx+4,by-10,3,1,shD);R(sx+7,by-10-(Math.floor(t*3)%2),1,1,sk);}
+    else if(act==='snack'){L();R(sx+4,by-10,3,1,shD);R(sx+7,by-10-(Math.floor(t*3)%2),1,1,sk);}
+    else if(act==='microwave'){L();R(sx+4,by-13,1,5,shD);R(sx+4,by-14,1,1,sk);}
     else if(act==='phone'){R(sx-5,by-11,1,4,shD);R(sx+4,by-11,1,4,shD);R(sx-4,by-8,8,1,sk);R(sx-1,by-11,3,4,'#1a1a1a');R(sx,by-10,1,2,ph?'#5ef2ff':'#8be0b4');}
     else if(act==='stretch'){const p=Math.floor(t*1.5)%2;R(sx-6,by-17+p*2,2,7,sh);R(sx+4,by-17+(1-p)*2,2,7,sh);R(sx-6,by-18+p*2,2,1,sk);R(sx+4,by-18+(1-p)*2,2,1,sk);}
     else L();
@@ -1242,7 +1301,7 @@ class ClaudeOffice extends React.Component{
       if(th.stroke){ctx.strokeStyle='#33415c';ctx.strokeRect(sx-4.5,hy-0.5,9,15);}
     }else{
       const sit=a.stool&&!a.moving;
-      const walk=a.moving?Math.floor(t*9+a.id)%2:0,tap=st==='waiting'&&!a.moving?Math.floor(t*5)%2:0,by=sy-(a.moving&&walk?1:0)-(sit?4:0);
+      const walk=a.moving?Math.floor(t*9+a.id)%2:0,tap=st==='waiting'&&!a.moving?Math.floor(t*5)%2:0,by=sy-(a.moving&&walk?1:0)-(sit?(a.stool===2?9:4):0);
       const l1=walk?1:0,l2=walk?0:(tap?1:0);
       if(sit){R(sx-3,by-5,2,3,pants);R(sx+1,by-5,2,3,shade(pants,-15));R(sx-3,by-2,2,5,pants);R(sx+1,by-2,2,5,shade(pants,-15));R(sx-3,by+3,2,1,'#141414');R(sx+1,by+3,2,1,'#141414');}
       else{R(sx-3,by-5+l1,2,5-l1,pants);R(sx+1,by-5+l2,2,5-l2,shade(pants,-15));
@@ -1251,7 +1310,7 @@ class ClaudeOffice extends React.Component{
       if(a.dirFront){R(sx-1,by-11,2,2,'#ffffff');R(sx-4,by-6,8,1,shade(pants,-20));}
       const sw=a.moving?(walk?1:-1):0,wave=st==='talking'&&!a.moving?Math.floor(t*4)%2:0,up=st==='done'&&!a.moving;
       const act=!a.moving&&st==='idle'?a.actNow:null;
-      if(act&&act!=='table'){this.actArms(R,act,sx,by,t,sh,shD,sk);}
+      if(act&&!sit){this.actArms(R,act,sx,by,t,sh,shD,sk);}
       else if(up){R(sx-6,by-17,2,7,sh);R(sx+4,by-17,2,7,sh);R(sx-6,by-18,2,2,sk);R(sx+4,by-18,2,2,sk);}
       else{R(sx-5,by-11+sw,1,5,shD);R(sx-5,by-6+sw,1,1,sk);
         if(st==='waiting'&&!a.moving){R(sx+4,by-10,1,3,shD);R(sx+3,by-7,1,1,sk);}
@@ -1320,7 +1379,7 @@ class ClaudeOffice extends React.Component{
       case 'waiting':return a.waitSub?'chờ sub-agent '+(t?t.name:''):'chờ '+(t?t.name:'?');
       case 'done':return 'xong task ✓';
       case 'entering':return a.parent?'sub-agent vào ca':'session mới';
-      case 'idle':return (a.actNow==='bath'?'💦 ':'☕ ')+(ACT_TXT[a.actNow]||'ra pantry giải lao');
+      case 'idle':return ({bath:'💦 ',sky:'☁️ ',microwave:'🍱 ',meal:'🍪 ',snack:'🍪 '}[a.actNow]||'☕ ')+(ACT_TXT[a.actNow]||'ra pantry giải lao');
       case 'leaving':return 'rời đi…';
       default:return null;
     }
