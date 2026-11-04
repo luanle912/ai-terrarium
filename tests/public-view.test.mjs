@@ -1,0 +1,123 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const { createPublicView, kindOf, STATUSES, KINDS, MAX_SESSIONS } = require('../lib/public-view.js')
+
+const SALT = 'a1'.repeat(16)
+const mk = (o = {}) => ({
+  id: 'real-id-1', parentId: null, name: 'secret-session-name', project: 'ai-terrarium', cwd: '/Users/victim/secret',
+  model: 'claude-opus-4-5', tokens: 123, status: 'working', tool: 'Bash',
+  detail: 'curl -H "Authorization: Bearer XYZ" sk-ant-api03-SECRET', talkingTo: '', _sendTo: { name: 'x' },
+  recent: [{ t: '10:00:00', text: 'sk-ant-api03-SECRET' }], updatedAt: 1000, ...o,
+})
+const snap = (sessions) => ({ at: 1, sessions, usage: { token: 'sk-ant-api03-SECRET' }, version: '1.3.4' })
+const opts = (o = {}) => ({ share: 'kin', projects: [], private: false, ...o })
+
+test('no secret leaves the machine', () => {
+  const s = snap([mk(), mk({ id: 'real-id-2', parentId: 'real-id-1', name: 'reviewer', talkingTo: 'secret-session-name' })])
+  for (const share of ['kin', 'co-ban']) {
+    const json = JSON.stringify(createPublicView(SALT)(s, opts({ share, projects: ['ai-terrarium'] })))
+    for (const bad of ['SECRET', 'victim', 'Bearer', 'secret-session-name', 'real-id', 'usage', 'cwd', '_sendTo', 'recent', 'detail']) {
+      assert.ok(!json.includes(bad), `${share} leaked ${bad}`)
+    }
+  }
+})
+
+test('ids are stable, salted and 12 hex', () => {
+  const s = snap([mk()])
+  const a = createPublicView(SALT)(s, opts()).sessions[0].id
+  const b = createPublicView(SALT)(s, opts()).sessions[0].id
+  const c = createPublicView('b2'.repeat(16))(s, opts()).sessions[0].id
+  assert.equal(a, b)
+  assert.notEqual(a, c)
+  assert.match(a, /^[0-9a-f]{12}$/)
+})
+
+test('kin hides project names', () => {
+  const view = createPublicView(SALT)
+  const s1 = snap([mk({ id: '1', project: 'alpha' }), mk({ id: '2', project: 'beta' })])
+  const o1 = view(s1, opts()).sessions
+  assert.deepEqual(o1.map(x => x.dept), ['A', 'B'])
+  const s2 = snap([mk({ id: '2', project: 'beta' }), mk({ id: '1', project: 'alpha' })])
+  assert.deepEqual(view(s2, opts()).sessions.map(x => x.dept), ['B', 'A'])
+})
+
+test('co-ban shows only allowed projects', () => {
+  const view = createPublicView(SALT)
+  const s = snap([mk({ id: '1', project: 'ai-terrarium' }), mk({ id: '2', project: 'other' })])
+  const out = view(s, opts({ share: 'co-ban', projects: ['ai-terrarium'] })).sessions
+  assert.equal(out[0].dept, 'ai-terrarium')
+  assert.match(out[1].dept, /^[A-P]$/)
+})
+
+test('tool and model only at co-ban', () => {
+  const view = createPublicView(SALT)
+  const s = snap([mk({ id: '1' }), mk({ id: '2', tool: 'mcp__github__create_issue', model: 'gpt-4' })])
+  const kin = view(s, opts()).sessions
+  assert.ok(!('tool' in kin[0]) && !('model' in kin[0]))
+  const cb = view(s, opts({ share: 'co-ban' })).sessions
+  assert.equal(cb[0].tool, 'Bash')
+  assert.equal(cb[0].model, 'claude-opus-4-5')
+  assert.equal(cb[1].tool, 'mcp__github')
+  assert.equal(cb[1].kind, 'mcp')
+  assert.ok(!('model' in cb[1]))
+})
+
+test('kindOf', () => {
+  assert.equal(kindOf('Bash'), 'shell')
+  assert.equal(kindOf('Edit'), 'edit')
+  assert.equal(kindOf('Grep'), 'read')
+  assert.equal(kindOf('WebFetch'), 'web')
+  assert.equal(kindOf('Agent'), 'agent')
+  assert.equal(kindOf(''), 'none')
+  assert.equal(kindOf('Foo'), 'other')
+  assert.equal(kindOf('mcp__x__y'), 'mcp')
+  assert.ok(KINDS.includes('mcp') && STATUSES.includes('permission'))
+})
+
+test('talkingTo by name becomes the hashed id', () => {
+  const view = createPublicView(SALT)
+  const s = snap([
+    mk({ id: 'a', talkingTo: 'reviewer' }),
+    mk({ id: 'b', name: 'reviewer', parentId: 'a', talkingTo: 'ghost' }),
+  ])
+  const out = view(s, opts()).sessions
+  assert.equal(out[0].talkingTo, out[1].id)
+  assert.equal(out[1].talkingTo, null)
+  assert.equal(out[1].parent, out[0].id)
+  assert.equal(out[0].parent, null)
+})
+
+test('waitingOn is hashed like id', () => {
+  const s = snap([mk({ id: 'a', status: 'waiting', waitingOn: 'b' }), mk({ id: 'b' })])
+  const out = createPublicView(SALT)(s, opts()).sessions
+  assert.equal(out[0].waitingOn, out[1].id)
+})
+
+test('unknown status becomes working', () => {
+  const out = createPublicView(SALT)(snap([mk({ status: 'exploding' })]), opts()).sessions
+  assert.equal(out[0].status, 'working')
+})
+
+test('private sends no sessions', () => {
+  assert.deepEqual(createPublicView(SALT)(snap([mk()]), opts({ private: true })), { private: true, sessions: [] })
+})
+
+test('caps at 32, roots first', () => {
+  const list = []
+  for (let i = 0; i < 35; i++) list.push(mk({ id: 'k' + i, parentId: 'r0', updatedAt: 5000 + i }))
+  for (let i = 0; i < 5; i++) list.push(mk({ id: 'r' + i, updatedAt: i }))
+  const out = createPublicView(SALT)(snap(list), opts()).sessions
+  assert.equal(out.length, MAX_SESSIONS)
+  assert.equal(out.filter(x => x.parent === null).length, 5)
+})
+
+test('output keys are exactly the allowlist', () => {
+  const view = createPublicView(SALT)
+  const s = snap([mk({ id: 'a', status: 'waiting', waitingOn: 'b' }), mk({ id: 'b', parentId: 'a' })])
+  const base = ['id', 'parent', 'status', 'waitingOn', 'talkingTo', 'dept', 'kind']
+  for (const x of view(s, opts()).sessions) for (const k of Object.keys(x)) assert.ok(base.includes(k), k)
+  for (const x of view(s, opts({ share: 'co-ban' })).sessions) for (const k of Object.keys(x)) assert.ok([...base, 'tool', 'model'].includes(k), k)
+})
