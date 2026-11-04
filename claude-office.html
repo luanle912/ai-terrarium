@@ -149,7 +149,7 @@ const ICON={
   waiting:['#####','.###.','..#..','.###.','#####'], talking:['#####','#...#','#####','.#...','....#']
 };
 const shade=(hh,p)=>{if(!hh||hh[0]!=='#'||hh.length!==7)return hh;const n=parseInt(hh.slice(1),16),c=v=>Math.max(0,Math.min(255,v));return'#'+((1<<24)+(c((n>>16)+p)<<16)+(c(((n>>8)&255)+p)<<8)+c((n&255)+p)).toString(16).slice(1);};
-const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','·':'000000010000000','/':'001001010100100'};
+const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','·':'000000010000000','/':'001001010100100','-':'000000111000000','_':'000000000000111','.':'000000000000010'};
 function text3(ctx,str,x,y,col){ctx.fillStyle=col;x=Math.round(x);y=Math.round(y);[...String(str).toUpperCase()].forEach((ch,i)=>{const f=FONT[ch];if(!f)return;for(let b=0;b<15;b++)if(f[b]==='1')ctx.fillRect(x+i*4+(b%3),y+Math.floor(b/3),1,1);});}
 const PANTS=['#2d3142','#3b4a6b','#4a3b2f','#22303a','#5a5f73'];
 const pick=a=>a[Math.floor(Math.random()*a.length)];
@@ -399,6 +399,11 @@ class ClaudeOffice extends React.Component{
   draw(t){
     const c=this.canvas;if(!c)return;const ctx=c.getContext('2d'),th=this.theme;
     const df=th._day!=null?th._day:1;
+    // Draw at the screen's own resolution (an integer multiple of the LW×LH scene) so slanted edges stay sharp when the
+    // canvas is shown large; pixel sprites still land on whole multiples, so they keep their blocky look.
+    const k=Math.max(1,Math.min(4,Math.round(c.clientWidth*(window.devicePixelRatio||1)/LW)));
+    if(this.k!==k){this.k=k;c.width=LW*k;c.height=LH*k;}
+    ctx.setTransform(k,0,0,k,0,0);
     ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;ctx.fillStyle=th.bg;ctx.fillRect(0,0,LW,LH);
     // The canvas keeps its aspect ratio inside the stage; painting the stage with the floor's backdrop hides the bars.
     if(this.stageEl&&this.stageBg!==th.bg){this.stageBg=th.bg;this.stageEl.style.background=th.bg;}
@@ -406,19 +411,33 @@ class ClaudeOffice extends React.Component{
     const box=(x,y,w,hh,z0,z1,top,l,r)=>{poly([P(x,y+hh,z0),P(x+w,y+hh,z0),P(x+w,y+hh,z1),P(x,y+hh,z1)],l||shade(top,-22));poly([P(x+w,y,z0),P(x+w,y+hh,z0),P(x+w,y+hh,z1),P(x+w,y,z1)],r||shade(top,-38));poly([P(x,y,z1),P(x+w,y,z1),P(x+w,y+hh,z1),P(x,y+hh,z1)],top);};
     const rect=(x,y,w,hh,col)=>{ctx.fillStyle=col;ctx.fillRect(Math.round(x),Math.round(y),w,hh);};
     const G={ctx,poly,box,rect,th,t,df};
+    // Walls are WT tiles thick and the floor is a SLAB-high slab, so their cut edges show; openings sit RD deep in the wall.
+    const WT=0.35,ZT=WALL+3,SLAB=6,RD=0.18;
+    const clipTo=pts=>{ctx.save();ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(Math.round(p[0]),Math.round(p[1])):ctx.moveTo(Math.round(p[0]),Math.round(p[1])));ctx.closePath();ctx.clip();};
+    poly([P(-WT,H,0),P(W,H,0),P(W,H,-SLAB),P(-WT,H,-SLAB)],shade(th.trim,-22),null);
+    poly([P(W,-WT,0),P(W,H,0),P(W,H,-SLAB),P(W,-WT,-SLAB)],shade(th.trim,-42),null);
     poly([P(0,0,0),P(W,0,0),P(W,0,WALL),P(0,0,WALL)],th.wr);
     poly([P(0,0,0),P(0,H,0),P(0,H,WALL),P(0,0,WALL)],th.wl);
     poly([P(0,0,WALL),P(W,0,WALL),P(W,0,WALL+3),P(0,0,WALL+3)],th.trim);
     poly([P(0,0,WALL),P(0,H,WALL),P(0,H,WALL+3),P(0,0,WALL+3)],th.trim);
     poly([P(0,0,0),P(W,0,0),P(W,0,4),P(0,0,4)],th.trim);poly([P(0,0,0),P(0,H,0),P(0,H,4),P(0,0,4)],th.trim);
+    poly([P(-WT,-WT,ZT),P(W,-WT,ZT),P(W,0,ZT),P(0,0,ZT)],shade(th.trim,18),null);
+    poly([P(-WT,-WT,ZT),P(0,0,ZT),P(0,H,ZT),P(-WT,H,ZT)],shade(th.trim,18),null);
+    poly([P(W,-WT,0),P(W,0,0),P(W,0,ZT),P(W,-WT,ZT)],shade(th.wr,-34),null);
+    poly([P(-WT,H,0),P(0,H,0),P(0,H,ZT),P(-WT,H,ZT)],shade(th.wl,-20),null);
     [1.6,4.8,11.6,14.8,22.4,24.6].forEach((x,wi)=>{
       poly([P(x,0,16),P(x+1.8,0,16),P(x+1.8,0,47),P(x,0,47)],th.trim);
-      poly([P(x+0.12,0,18),P(x+1.68,0,18),P(x+1.68,0,45),P(x+0.12,0,45)],th.glass);
-      if(df<0.95){ctx.globalAlpha=Math.min(1,(1-df)*1.2);[[0.4,40],[1.1,36],[0.7,30],[1.45,42],[0.25,24]].forEach(([dx,z],k)=>{const[px,py]=P(x+dx,0,z);rect(px,py,1,1,(Math.floor(t*1.5+k+wi)%5)?'#cfe3ff':'#4a6fa8');});if(wi===2){const[mx,my]=P(x+1.25,0,40);rect(mx-2,my-2,4,4,'#f3f0d0');rect(mx,my-2,2,2,th.glass);}ctx.globalAlpha=1;}
-      if(df>0.05){ctx.globalAlpha=df;const off=((t*0.06+wi*0.3)%1)*1.4;const[cx,cy]=P(x+0.2+off,0,38);rect(cx,cy,7,2,'#ffffff');rect(cx+2,cy-2,4,2,'#ffffff');ctx.globalAlpha=1;}
-      poly([P(x+0.3,0,28),P(x+0.6,0,28),P(x+0.85,0,42),P(x+0.55,0,42)],th.glassHi,null);
-      poly([P(x+0.88,0,18),P(x+0.92,0,18),P(x+0.92,0,45),P(x+0.88,0,45)],th.trim,null);
-      poly([P(x+0.12,0,31),P(x+1.68,0,31),P(x+1.68,0,32),P(x+0.12,0,32)],th.trim,null);
+      // Everything seen through the opening is clipped to it, so clouds drift behind the frame instead of over it.
+      clipTo([P(x+0.12,0,18),P(x+1.68,0,18),P(x+1.68,0,45),P(x+0.12,0,45)]);
+      poly([P(x+0.12,-RD,18),P(x+1.68,-RD,18),P(x+1.68,-RD,45),P(x+0.12,-RD,45)],th.glass);
+      if(df<0.95){ctx.globalAlpha=Math.min(1,(1-df)*1.2);[[0.4,40],[1.1,36],[0.7,30],[1.45,42],[0.25,24]].forEach(([dx,z],k)=>{const[px,py]=P(x+dx,-RD,z);rect(px,py,1,1,(Math.floor(t*1.5+k+wi)%5)?'#cfe3ff':'#4a6fa8');});if(wi===2){const[mx,my]=P(x+1.25,-RD,40);rect(mx-2,my-2,4,4,'#f3f0d0');rect(mx,my-2,2,2,th.glass);}ctx.globalAlpha=1;}
+      if(df>0.05){ctx.globalAlpha=df;const off=((t*0.06+wi*0.3)%1)*2.2;const[cx,cy]=P(x-0.4+off,-RD,38);rect(cx,cy,7,2,'#ffffff');rect(cx+2,cy-2,4,2,'#ffffff');ctx.globalAlpha=1;}
+      poly([P(x+0.3,-RD,28),P(x+0.6,-RD,28),P(x+0.85,-RD,42),P(x+0.55,-RD,42)],th.glassHi,null);
+      poly([P(x+0.88,-RD,18),P(x+0.92,-RD,18),P(x+0.92,-RD,45),P(x+0.88,-RD,45)],th.trim,null);
+      poly([P(x+0.12,-RD,31),P(x+1.68,-RD,31),P(x+1.68,-RD,32),P(x+0.12,-RD,32)],th.trim,null);
+      poly([P(x+0.12,0,18),P(x+0.12,-RD,18),P(x+0.12,-RD,45),P(x+0.12,0,45)],shade(th.trim,-30),null);
+      poly([P(x+0.12,0,18),P(x+1.68,0,18),P(x+1.68,-RD,18),P(x+0.12,-RD,18)],shade(th.trim,15),null);
+      ctx.restore();
       poly([P(x-0.05,0,47),P(x+1.85,0,47),P(x+1.85,0,50),P(x-0.05,0,50)],shade(th.trim,-25),null);
     });
     poly([P(0,0.9,14),P(0,4.6,14),P(0,4.6,43),P(0,0.9,43)],th.trim);
@@ -443,9 +462,13 @@ class ClaudeOffice extends React.Component{
       const d=new Date(),mA=(d.getMinutes()/60)*Math.PI*2-Math.PI/2,hA=((d.getHours()%12+d.getMinutes()/60)/12)*Math.PI*2-Math.PI/2;
       ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(mA)*4,cy+Math.sin(mA)*5);ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(hA)*2.5,cy+Math.sin(hA)*3);ctx.stroke();}
     poly([P(0,6.45,0),P(0,7.55,0),P(0,7.55,40),P(0,6.45,40)],shade(th.trim,-15));
-    poly([P(0,6.55,0),P(0,7.45,0),P(0,7.45,38),P(0,6.55,38)],th.door);
-    poly([P(0,6.75,24),P(0,7.25,24),P(0,7.25,34),P(0,6.75,34)],shade(th.glass,10),null);
-    {const[hx,hy]=P(0,7.3,18);rect(hx-1,hy,2,2,'#ffd166');}
+    clipTo([P(0,6.55,0),P(0,7.45,0),P(0,7.45,38),P(0,6.55,38)]);
+    poly([P(-RD,6.55,0),P(-RD,7.45,0),P(-RD,7.45,38),P(-RD,6.55,38)],th.door);
+    poly([P(-RD,6.75,24),P(-RD,7.25,24),P(-RD,7.25,34),P(-RD,6.75,34)],shade(th.glass,10),null);
+    {const[hx,hy]=P(-RD,7.3,18);rect(hx-1,hy,2,2,'#ffd166');}
+    poly([P(0,6.55,0),P(-RD,6.55,0),P(-RD,6.55,38),P(0,6.55,38)],shade(th.trim,-8),null);
+    poly([P(0,6.55,0),P(0,7.45,0),P(-RD,7.45,0),P(-RD,6.55,0)],shade(th.trim,-30),null);
+    ctx.restore();
     {const[ex,ey]=P(0,7,46);rect(ex-9,ey-4,18,8,'#1f8a4c');text3(ctx,'EXIT',ex-7,ey-2,'#ffffff');}
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){
       poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],(x+y)%2?th.fa:th.fb,th.stroke?'#dfe5ef':null);
@@ -460,19 +483,28 @@ class ClaudeOffice extends React.Component{
         poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],col,th.stroke?'#dfe5ef':null);}
       ctx.strokeStyle=th.stroke?'#c9d3e3':(df>0.5?'#c9a77a':'#3a4462');ctx.lineWidth=1;
       [[9,0,9,H],[0,7,20,7],[19,0,19,H]].forEach(([a,b,c,d])=>{const L=Math.max(c-a,d-b)*2;for(let k=0;k<L;k+=2){const p0=P(a+(c-a)*k/L,b+(d-b)*k/L),p1=P(a+(c-a)*(k+0.8)/L,b+(d-b)*(k+0.8)/L);ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);ctx.stroke();}});
+      // Soft contact shadow where the walls meet the floor.
+      [[0.45,0.06],[0.22,0.1]].forEach(([b,a])=>{const sh='rgba(0,0,0,'+a+')';poly([P(0,0),P(W,0),P(W,b),P(b,b)],sh,null);poly([P(0,0),P(b,b),P(b,H),P(0,H)],sh,null);});
+      // Floor paint: (a,b,c,d) is the text's reading and downward direction on screen; (x,y) is its top-left corner on the floor.
+      const paint=(x,y,txt,col,s,m)=>{const[px,py]=P(x,y);ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.transform(...m,0,0);ctx.scale(s,s);ctx.globalAlpha=th.stroke?0.7:0.6;text3(ctx,txt,0,0,col);ctx.restore();ctx.globalAlpha=1;};
+      const ALONG_X=[1,0.5,-1,0.5],ALONG_Y=[1,-0.5,1,0.5];
+      // Department names run along the zone's middle aisle (between the two desk columns), the only floor strip no desk hides.
+      // All names share one size, so they are capped at MAXC characters: a longer name drops its leading words first
+      // (core-payment-merchant → MERCHANT) so sibling projects stay distinguishable, then is cut.
+      const MAXC=12,FS=2;
+      ZONES.forEach((z,zi)=>{const dk=own[zi];if(!dk)return;const col=this.depts.get(dk).color;
+        let name=dk.toUpperCase();while(name.length>MAXC&&/[-_.]/.test(name))name=name.replace(/^[^-_.]*[-_.]/,'');name=name.slice(0,MAXC);
+        const len=(name.length*4-1)*FS/16;
+        paint(z.zx+3.12,z.zy+3+len/2,name,df>0.5?shade(col,-80):shade(col,10),FS,ALONG_Y);});
+      paint(21.3,13.2,'PANTRY',df>0.5?'#8a5a2a':'#a8763e',2.5,ALONG_X);
     }
-    {const paint=(x,y,txt,c)=>{const[px,py]=P(x,y);ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.transform(1,0.5,-1,0.5,0,0);ctx.scale(2.5,2.5);ctx.globalAlpha=th.stroke?0.7:0.6;text3(ctx,txt,0,0,c);ctx.restore();ctx.globalAlpha=1;};
-      paint(20.3,13.2,'PANTRY',df>0.5?'#8a5a2a':'#a8763e');}
     poly([P(-0.9,6.55),P(0,6.55),P(0,7.45),P(-0.9,7.45)],th.door,null);
     poly([P(0.05,6.4),P(0.9,6.4),P(0.9,7.6),P(0.05,7.6)],lerpHex('#3a2f55','#b5523b',df),null);
     [1.6,4.8,11.6,14.8,22.4,24.6].forEach(x=>{ctx.globalAlpha=0.07+(0.22-0.07)*df;poly([P(x+0.3,0.05),P(x+2.1,0.05),P(x+2.6,1.6),P(x+0.8,1.6)],lerpHex('#7fb2ff','#fff3c4',df),null);ctx.globalAlpha=1;});
     if(window.SeasonTree)this.seasonKey=window.SeasonTree.seasonFor(new Date());
     const items=[];
     DESKS.forEach((d,i)=>{items.push({z:d.gx+d.gy+1.5,f:()=>this.drawDesk(G,d,i)});});
-    {const own=this.colOwners();SEGS.forEach(sg=>items.push({z:sg.v?sg.X+sg.y+0.5:sg.x+0.5+sg.Y,f:()=>this.drawSeg(G,sg,own)}));
-      const LP=[[1.5,6],[11.5,6],[1.5,8],[11.5,8]];
-      ZONES.forEach((z,zi)=>{const dk=own[zi];if(!dk)return;const Dp=this.depts.get(dk);const[mx,my]=LP[zi];
-        items.push({z:mx+my+0.5,f:()=>{const label=dk.toUpperCase().slice(0,12);const[px,py]=P(mx,my,16);ctx.save();ctx.font="bold 9px 'JetBrains Mono',monospace";const tw=ctx.measureText(label).width;ctx.globalAlpha=0.92;ctx.fillStyle=Dp.color;const bx=px-tw/2-5,by=py-7;ctx.fillRect(bx,by,tw+10,14);ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,px,py);ctx.globalAlpha=1;ctx.restore();}});});}
+    {const own=this.colOwners();SEGS.forEach(sg=>items.push({z:sg.v?sg.X+sg.y+0.5:sg.x+0.5+sg.Y,f:()=>this.drawSeg(G,sg,own)}));}
     this.pantryItems(G,items);
     [[8.5,13.5],[19.5,13.5],[18.5,0.5]].forEach(([x,y])=>items.push({z:x+y,f:()=>{box(x-0.2,y-0.2,0.4,0.4,0,7,th.pot);const[px,py]=P(x,y,7);[[-5,-8,10,8,0],[-3,-14,6,6,1],[-7,-5,4,4,1],[3,-6,4,4,0],[-1,-17,3,4,0]].forEach(([a,b,w,hh,v])=>rect(px+a,py+b,w,hh,v?shade(th.plant,-25):th.plant));}}));
     items.push({z:9,f:()=>{box(8.55,0.05,0.9,0.4,0,42,shade(th.trim,-5));[10,20,30,40].forEach(z=>box(8.58,0.06,0.84,0.38,z,z+1,shade(th.trim,-30)));
