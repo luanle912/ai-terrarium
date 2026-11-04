@@ -2004,8 +2004,9 @@ class ClaudeOffice extends React.Component{
     // would cross the people on the bench; at this depth every beam and rafter projects above their heads, so drawing
     // it first never hides a face, and the floating status badges stay on top of it.
     // Posts: two at the back, one at the front on the pantry side; the front-right corner is held by a knee brace, since
-    // a post there would stand right in front of the end seat.
-    [1.0,3.83].forEach(x=>items.push({z:Z+2.05,f:()=>gbox(X+x,Y,0.12,0.12,0,38,wood)}));
+    // a post there would stand right in front of the end seat. A back post sorts by its own near corner: a dog sitting
+    // on the lawn just behind it (y = Y-1) must be drawn first, and nobody on the bench stands in its column.
+    [1.0,3.83].forEach(x=>items.push({z:X+x+Y+0.12,f:()=>gbox(X+x,Y,0.12,0.12,0,38,wood)}));
     items.push({z:Z+2.08,f:()=>{gbox(X+1.0,Y+1.0,0.12,0.12,0,38,wood);
       // a trellis between the two pantry-side posts, with the vine climbing it and both posts
       const tx=X+1.06,bar=(y0,y1,z0,z1)=>poly([PG(tx,y0,z0),PG(tx,y1,z1),PG(tx,y1,z1+1),PG(tx,y0,z0+1)],shade(wood,-12),null);
