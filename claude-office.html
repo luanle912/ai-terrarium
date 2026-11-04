@@ -17,7 +17,7 @@ button{font-family:inherit}
 /* a single-row strip that scrolls sideways on small screens, without a visible scrollbar */
 .hscroll{scrollbar-width:none;overscroll-behavior-x:contain}.hscroll::-webkit-scrollbar{display:none}
 /* On a phone the island is ~350 px wide, so full-size bubbles would cover the office; same query as narrowMq */
-@media (max-width: 640px), (max-height: 520px){.app{--bubble-k:0.7}}
+@media (max-width: 640px), (max-height: 520px){.app{--bubble-k:0.7;--bubble-w:150px}}
 .chip{display:flex;align-items:center;gap:6px;padding:3px 8px;background:var(--surface);border:1px solid #232a39;color:#aab2c5;white-space:nowrap;flex:none;font-size:11px}
 .settings-toggle{position:absolute;bottom:12px;right:12px;z-index:100;width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--surface);color:var(--fg);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px}
 .settings-toggle:hover{background:#1d2433}
@@ -2282,7 +2282,7 @@ class ClaudeOffice extends React.Component{
       if(!txt)return null;
       const[sx,sy]=this.headPos(a),c=(ST[a.status]||ST.working)[1];
       return h('div',{key:a.id,ref:el=>{if(el)this.bubbleEls[a.id]=el;else delete this.bubbleEls[a.id];},
-        style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%) scale(calc(var(--cam-inv,1) * var(--bubble-k,1)))',transformOrigin:'50% 100%',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:240,overflow:'hidden',textOverflow:'ellipsis'}},
+        style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%) scale(calc(var(--cam-inv,1) * var(--bubble-k,1)))',transformOrigin:'50% 100%',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:'var(--bubble-w,240px)',overflow:'hidden',textOverflow:'ellipsis'}},
         h('b',{style:{color:c,fontFamily:"'Pixelify Sans',monospace",fontSize:11}},a.name),
         h('span',{style:{overflow:'hidden',textOverflow:'ellipsis'}},txt));
     });
