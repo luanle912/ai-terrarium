@@ -1,6 +1,6 @@
 {
   "name": "ai-terrarium",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "description": "Watch your AI agents work in a pixel-art isometric office — each Claude Code session becomes a character at a desk, typing away in real time",
   "author": { "name": "LuanLD" },
   "license": "MIT"

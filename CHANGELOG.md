@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.7] - 2026-11-04
+
+### Changed
+
+- **Department names on the floor** — Each zone's folder name is painted on its floor along the middle aisle, all in one size and up to 12 characters, replacing the floating badges. A longer name drops its leading words first (`core-payment-merchant` → MERCHANT, `core-payment-fe` → PAYMENT-FE), so sibling projects no longer all read "CORE-PAYMENT"
+- **Walls and floor with real thickness** — Walls show their top edge and cut ends, the floor is a slab with visible front edges, a soft shadow runs along the wall base, and windows and the door sit recessed in the wall
+- **Sharper scenery** — The office is drawn at the screen's resolution (up to 4× the base scene), so furniture, walls and glass edges are as crisp as the characters on high-DPI screens
+- **Version label** — The server version from 1.2.5 now sits next to the title in the compact header
+
+### Fixed
+
+- **Restored 1.2.2 and 1.2.3 layout** — 1.2.4 accidentally shipped an older copy of the page, which brought back page scrolling, the tall header and the footer hint; the full-window layout, compact header and in-office ⚙ button are back
+- **Clouds stay inside windows** — Clouds drift behind the window frame instead of over the frame and wall
+- **PANTRY floor label** — Moved one tile right so the entrance plant no longer covers it
+
 ## [1.2.6] - 2026-11-04
 
 ### Security
@@ -128,6 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.2.7]: https://github.com/luanle912/ai-terrarium/compare/v1.2.6...v1.2.7
 [1.2.6]: https://github.com/luanle912/ai-terrarium/compare/v1.2.5...v1.2.6
 [1.2.5]: https://github.com/luanle912/ai-terrarium/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/luanle912/ai-terrarium/compare/v1.2.3...v1.2.4
