@@ -234,6 +234,6 @@ test('body over the limit is 413 without reading it all', async () => {
 test('createHub exposes db and world and closes cleanly', async () => {
   await withHub(async ({ hub }) => {
     assert.equal(typeof hub.db.upsertUser, 'function');
-    assert.ok(hub.world.islands instanceof Map);
+    assert.equal(typeof hub.world.publish, "function");
   });
 });

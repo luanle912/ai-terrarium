@@ -13,8 +13,9 @@ const { loadConfig } = require('./config.js');
 const { openDb } = require('./db.js');
 const { createRouter, clientIp, readBody, send, sendJson, parseCookies, HttpError } = require('./http.js');
 const { createLimiter } = require('./limits.js');
+const { createWorld } = require('./world.js');
 
-const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes]; // later: require('./publish.js').routes
+const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes, require('./publish.js').routes];
 
 const HOUR = 3600 * 1000;
 
@@ -25,8 +26,9 @@ function createHub(config, deps = {}) {
     log: deps.log || ((line) => console.log(line)),
   };
   const db = openDb(config.dbPath);
-  // In-memory world: island snapshots never touch disk or logs. Task 7 fills it.
-  const world = { islands: new Map(), streams: new Set() };
+  // In-memory world: island snapshots never touch disk or logs. publish.js listens through ctx.onWorldChange.
+  const ctx = { config, db, deps: d, limiters: null, world: null, closers: [], onWorldChange: null, helpers: null };
+  const world = createWorld({ now: d.now, onChange: (e) => { if (ctx.onWorldChange) ctx.onWorldChange(e); } });
   // Token buckets per spec S14 (rate is tokens/second). Keys are chosen by the route that uses them.
   const limiters = {
     deviceStart: createLimiter({ rate: 10 / 3600, burst: 10 }), // key: IP
@@ -34,10 +36,9 @@ function createHub(config, deps = {}) {
     publish: createLimiter({ rate: 4, burst: 8 }), // key: device id
     login: createLimiter({ rate: 30 / 3600, burst: 30 }), // key: IP
   };
-  const ctx = {
-    config, db, deps: d, limiters, world,
-    helpers: { readBody, send, sendJson, parseCookies, clientIp: (req) => clientIp(req, config.trustProxy), HttpError },
-  };
+  ctx.limiters = limiters;
+  ctx.world = world;
+  ctx.helpers = { readBody, send, sendJson, parseCookies, clientIp: (req) => clientIp(req, config.trustProxy), HttpError };
 
   const routes = [...ROUTE_MODULES, ...(deps.routeModules || [])].flatMap((m) => m(ctx));
   const server = http.createServer(createRouter(routes, { log: d.log, now: d.now }));
@@ -50,7 +51,7 @@ function createHub(config, deps = {}) {
     if (closed) return;
     closed = true;
     clearInterval(sweep);
-    for (const s of world.streams) { try { s.end(); } catch { /* ignore */ } }
+    for (const fn of ctx.closers) { try { fn(); } catch { /* ignore */ } }
     await new Promise((resolve) => {
       if (!server.listening) return resolve();
       server.close(() => resolve());

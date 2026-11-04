@@ -12,7 +12,7 @@
 // Pure exports: routes, checkClaims, decodeJwtPayload, sha256hex.
 
 const crypto = require('node:crypto');
-const { HttpError, send, sendJson, parseCookies } = require('./http.js');
+const { HttpError, send, sendJson, parseCookies, readBody } = require('./http.js');
 
 const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
@@ -189,12 +189,18 @@ function routes(ctx) {
 
   list.push({
     method: 'POST', path: '/auth/logout',
-    handler(req, res) {
+    async handler(req, res) {
       const s = requireSession(req);
       if (!s) throw new HttpError(401, 'not signed in');
-      if (!requireCsrf(req, s.session)) throw new HttpError(403, 'forbidden');
+      // The /me page posts a plain form (csrf field, redirect back); scripts send X-CSRF-Token and get JSON.
+      const isForm = /^application\/x-www-form-urlencoded/i.test(req.headers['content-type'] || '');
+      let field = '';
+      if (isForm) field = new URLSearchParams((await readBody(req, 4096)).toString('utf8')).get('csrf') || '';
+      if (!requireCsrf(req, s.session, field)) throw new HttpError(403, 'forbidden');
       endSession(s.session.token_hash, s.user.id, 'logout');
-      sendJson(res, 200, { ok: true }, { 'Set-Cookie': cookie(sessName, '', 0) });
+      const clear = cookie(sessName, '', 0);
+      if (isForm) return send(res, 302, '', { Location: '/auth/login', ...noStore, 'Set-Cookie': clear });
+      sendJson(res, 200, { ok: true }, { 'Set-Cookie': clear });
     },
   });
 
