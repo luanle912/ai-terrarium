@@ -347,6 +347,156 @@ test('the lawn walk avoids water, trees and rocks but reaches the bathing spots'
   assert.ok(walk.has('22,' + H) && walk.has('23,' + H), 'the foot of the south stairs is walkable')
 })
 
+// ---- garden paths ----
+
+const inSpotId = (id, x, y) => island.spots.some((s) => s.id === id && x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h)
+const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+// Breadth-first search that may only step on the given cell set.
+const reachWithin = (cells, from, to) => {
+  const seen = new Set([from + '']), q = [from]
+  while (q.length) {
+    const [x, y] = q.shift()
+    if (x === to[0] && y === to[1]) return true
+    for (const [a, b] of N4) { const k = (x + a) + ',' + (y + b); if (cells.has(k) && !seen.has(k)) { seen.add(k); q.push([x + a, y + b]) } }
+  }
+  return false
+}
+
+test('garden paths are the same on every machine', () => {
+  const again = SkyLogic.buildIsland({ W, H, lawn: 6, back: 2 })
+  assert.deepEqual([...again.paths.cells].sort(), [...island.paths.cells].sort())
+  assert.deepEqual(again.paths.lines, island.paths.lines)
+})
+
+test('garden paths lie on walkable lawn, off the water and the reserved spots', () => {
+  const walk = SkyLogic.lawnWalk(island, W, H)
+  assert.ok(island.paths.cells.size > 0)
+  for (const k of island.paths.cells) {
+    const [x, y] = k.split(',').map(Number)
+    assert.ok(walk.has(k), `path cell ${k} is not walkable`)
+    assert.ok(!inOffice(x, y), `path cell ${k} is inside the office`)
+    assert.ok(!island.pond.cells.has(k), `path cell ${k} is in the pond`)
+    assert.ok(!island.spots.some((s) => x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h), `path cell ${k} is on a reserved spot`)
+  }
+  for (const d of island.decor) assert.ok(!island.paths.cells.has(d.x + ',' + d.y), `${d.kind} at ${d.x},${d.y} sits on the path`)
+})
+
+test('garden paths join both stairs to the pond and the east stairs to the smoking area edge', () => {
+  const cells = island.paths.cells
+  const bath = island.pond.spots.reduce((a, b) => (b.y < a.y ? b : a))
+  const entry = [bath.x, bath.y - 1]
+  assert.ok(cells.has(entry + ''), 'the path ends right next to a bathing spot')
+  assert.ok(reachWithin(cells, [W, 8], entry), 'east stairs → pond')
+  assert.ok(reachWithin(cells, [23, H], entry), 'south stairs → pond')
+  assert.ok(reachWithin(cells, [W, 7], [W + 1, 6]), 'east stairs → smoking area edge')
+  assert.ok(inSpotId('east-back', W + 1, 5), 'the spur stops right below the east-back spot')
+})
+
+test('garden paths keep the big lawn in front of the office whole', () => {
+  for (const k of island.paths.cells) {
+    const [x, y] = k.split(',').map(Number)
+    assert.ok(x >= 22, `path cell ${k} cuts into the front lawn`)
+    assert.ok(y <= H + 2 || x >= island.pond.spots[0].x - 1, `path cell ${k} wanders into the open lawn`)
+  }
+})
+
+test('path lines start at the stair feet and run through the path cells', () => {
+  for (const line of island.paths.lines) {
+    assert.ok(line.length >= 2)
+    for (const [x, y] of line.slice(1)) assert.ok(island.paths.cells.has(Math.floor(x) + ',' + Math.floor(y)), `line point ${x},${y} is off the path`)
+  }
+})
+
+test('stepping stones keep off the reserved spots, the pond and the office', () => {
+  const { stones } = island.paths
+  assert.ok(stones.length > 10)
+  for (const st of stones) {
+    assert.equal(st.outline.length, 8)
+    for (const [x, y] of st.outline) {
+      const at = `stone at ${st.x.toFixed(2)},${st.y.toFixed(2)} reaches ${x.toFixed(2)},${y.toFixed(2)}`
+      for (const s of island.spots) assert.ok(!(x > s.x && x < s.x + s.w && y > s.y && y < s.y + s.h), `${at}, inside spot ${s.id}`)
+      assert.ok(!island.pond.cells.has(Math.floor(x) + ',' + Math.floor(y)), `${at}, in the pond`)
+      assert.ok(!inOffice(x, y), `${at}, on the office floor`)
+      assert.ok(has(Math.floor(x), Math.floor(y)), `${at}, off the island`)
+    }
+  }
+})
+
+test('stepping stones are laid about one stride apart', () => {
+  const { stones } = island.paths
+  for (const a of stones) {
+    const near = Math.min(...stones.filter((b) => b !== a).map((b) => Math.hypot(a.x - b.x, a.y - b.y)))
+    assert.ok(near >= 0.6 && near <= 1.0, `stone at ${a.x.toFixed(2)},${a.y.toFixed(2)} has its nearest neighbour ${near.toFixed(2)} tiles away`)
+  }
+})
+
+test('the smoking-area spur ends on the lawn just below the east-back spot', () => {
+  const spot = island.spots.find((s) => s.id === 'east-back')
+  const end = island.paths.stones.reduce((a, b) => (b.y < a.y ? b : a))
+  assert.ok(end.x >= spot.x && end.x < spot.x + 2, `the last stone is at x ${end.x}, outside the spot's entrance x ${spot.x}–${spot.x + 1}`)
+  const top = Math.min(...end.outline.map(([, y]) => y))
+  assert.ok(top >= spot.y + spot.h && top < spot.y + spot.h + 0.5, `the last stone reaches up to y ${top.toFixed(2)}`)
+})
+
+// ---- cheapest route on the grid ----
+
+const grid = (w, h) => (a, b) => b[0] >= 0 && b[1] >= 0 && b[0] < w && b[1] < h
+
+test('with even costs the cheapest route is a shortest route', () => {
+  const route = SkyLogic.cheapestPath([0, 0], [4, 3], grid(6, 6), () => 1)
+  assert.equal(route.length, 7)
+  assert.deepEqual(route[route.length - 1], [4, 3])
+})
+
+test('the cheapest route takes a short detour along cheap cells', () => {
+  // a cheap lane along y = 2; walking straight across the expensive grass would be 2 steps shorter
+  const lane = (c) => (c[1] === 2 ? 1 : 3)
+  const route = SkyLogic.cheapestPath([0, 2], [5, 1], grid(6, 6), lane)
+  assert.deepEqual(route.slice(0, 4), [[1, 2], [2, 2], [3, 2], [4, 2]])
+})
+
+test('the cheapest route cuts across expensive cells when the detour is too long', () => {
+  const lane = (c) => (c[1] === 0 ? 1 : 2)
+  const route = SkyLogic.cheapestPath([0, 0], [0, 5], grid(6, 6), lane)
+  assert.equal(route.length, 5)
+  assert.ok(route.every(([x]) => x === 0))
+})
+
+test('the cheapest route respects blocked steps and reports unreachable goals', () => {
+  const wall = (a, b) => grid(5, 5)(a, b) && b[0] !== 2
+  assert.deepEqual(SkyLogic.cheapestPath([0, 0], [4, 4], wall, () => 1), [])
+  assert.deepEqual(SkyLogic.cheapestPath([1, 1], [1, 1], wall, () => 1), [])
+})
+
+test('agents walking out to the pond keep to the garden path', () => {
+  const walk = SkyLogic.lawnWalk(island, W, H)
+  const cells = island.paths.cells
+  const bath = island.pond.spots.reduce((a, b) => (b.y < a.y ? b : a))
+  const step = (a, b) => SkyLogic.canCross(a, b, W, H, stairs) && !inOffice(b[0], b[1]) && walk.has(b + '')
+  const cost = (c) => (cells.has(c + '') ? 1 : SkyLogic.GRASS_COST)
+  for (const from of [[W, 8], [23, H]]) {
+    const route = SkyLogic.cheapestPath(from, [bath.x, bath.y], step, cost)
+    assert.ok(route.length > 0, `no way from ${from} to the pond`)
+    for (const c of route.slice(0, -1)) assert.ok(cells.has(c + ''), `from ${from} the walk leaves the path at ${c}`)
+  }
+  const smoke = SkyLogic.cheapestPath([W, 7], [W + 1, 6], step, cost)
+  assert.deepEqual(smoke, [[W + 1, 7], [W + 1, 6]], 'east stairs → smoking area edge along the spur')
+})
+
+test('agents still reach lawn goals off the path, and not by a long detour', () => {
+  const walk = SkyLogic.lawnWalk(island, W, H)
+  const step = (a, b) => SkyLogic.canCross(a, b, W, H, stairs) && !inOffice(b[0], b[1]) && walk.has(b + '')
+  const cost = (c) => (island.paths.cells.has(c + '') ? 1 : SkyLogic.GRASS_COST)
+  const spot = (id) => island.spots.find((s) => s.id === id)
+  for (const [from, s] of [[[W, 8], spot('east-front')], [[23, H], spot('south-left')], [[W, 7], spot('east-back')]]) {
+    const goal = [s.x + 1, s.y + 1]
+    const route = SkyLogic.cheapestPath(from, goal, step, cost), shortest = SkyLogic.cheapestPath(from, goal, step, () => 1)
+    assert.ok(route.length > 0, `no way from ${from} to ${s.id}`)
+    assert.deepEqual(route[route.length - 1], goal)
+    assert.ok(route.length <= shortest.length + 4, `to ${s.id} the walk is ${route.length} steps, the shortest ${shortest.length}`)
+  }
+})
+
 test('ground height is the floor inside, the lawn outside, and steps down the stairs', () => {
   const g = (x, y) => SkyLogic.groundZ(x, y, W, H, stairs, 8)
   assert.equal(g(10, 5), 8)
