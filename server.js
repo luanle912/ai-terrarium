@@ -4,6 +4,8 @@
 // Env: PORT (4317), CLAUDE_DIR (~/.claude/projects), ACTIVE_MIN (10), PERM_SEC (8)
 const fs = require('fs'), path = require('path'), os = require('os'), http = require('http'), { execSync } = require('child_process');
 const ROOT = process.env.CLAUDE_DIR || path.join(os.homedir(), '.claude', 'projects');
+const PKG = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, '.claude-plugin', 'plugin.json'), 'utf8')); } catch { return {}; } })();
+const VERSION = PKG.version || 'dev';
 const PORT = +process.env.PORT || 4317;
 const ACTIVE_MS = (+process.env.ACTIVE_MIN || 120) * 60e3;
 const PERM_MS = (+process.env.PERM_SEC || 8) * 1e3;
@@ -148,7 +150,7 @@ function snapshot() {
       if (par && (par.status === 'idle' || par.status === 'done')) s.status = 'done';
     }
   }
-  return { at: now, sessions: out.slice(0, 12), usage: readUsage() };
+  return { at: now, sessions: out.slice(0, 12), usage: readUsage(), version: VERSION };
 }
 
 const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions');
