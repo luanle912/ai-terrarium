@@ -369,6 +369,61 @@ globalThis.SkyLogic={stepSnow,stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLe
   globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,PAN_MARGIN_X,wheelFactor,clamp,zoomAt,panBy,pinch,isDrag,dragOffset,renderScale};
 })();
 </script>
+<script id="world-logic">
+// Several islands in one sky: layout, level of detail and the world camera, DOM-free so tests/world-logic.test.mjs can run it.
+// World units: one island's width = 1. cam = {x, y, z}: (x, y) is the world point at the stage centre, z is screen px per unit.
+globalThis.WorldLogic = (() => {
+  const SPACING = 1.15        // minimum centre distance, in island widths
+  const ISLAND_ASPECT = 0.62  // island height / width
+  const GOLDEN = 2.399963229728653
+  // My island at (0,0), the others in array order along a spiral, each at the first spot clear of those already placed.
+  function layout(islands, meId) {
+    const out = new Map()
+    const placed = []
+    const mine = islands.find((i) => i.id === meId)
+    if (mine) { out.set(mine.id, { x: 0, y: 0 }); placed.push({ x: 0, y: 0 }) }
+    else placed.push({ x: 0, y: 0 }) // keep the centre free when my island is not (yet) in the list
+    let k = 1
+    for (const isl of islands) {
+      if (isl === mine || out.has(isl.id)) continue
+      for (;; k++) {
+        const r = 0.6 * Math.sqrt(k), a = k * GOLDEN
+        const p = { x: r * Math.cos(a), y: r * Math.sin(a) }
+        if (placed.every((q) => Math.hypot(q.x - p.x, q.y - p.y) >= SPACING - 1e-9)) {
+          out.set(isl.id, p); placed.push(p); k++
+          break
+        }
+      }
+    }
+    return out
+  }
+  // Level of detail from an island's on-screen width.
+  const lodFor = (screenW, stageW) => (screenW >= 0.5 * stageW ? 'full' : screenW >= 120 ? 'mid' : 'thumb')
+  // rect = {x, y, w, h} in stage px; true when any part is on the stage.
+  const visible = (r, stageW, stageH) => r.x + r.w > 0 && r.y + r.h > 0 && r.x < stageW && r.y < stageH
+  const toScreen = (cam, wx, wy, stageW, stageH) => ({ x: (wx - cam.x) * cam.z + stageW / 2, y: (wy - cam.y) * cam.z + stageH / 2 })
+  const toWorld = (cam, px, py, stageW, stageH) => ({ x: (px - stageW / 2) / cam.z + cam.x, y: (py - stageH / 2) / cam.z + cam.y })
+  // Camera showing every island with a little sky around, never closer than a single focused island.
+  function fitAll(positions, stageW, stageH) {
+    const ps = [...positions.values()]
+    if (!ps.length) return focusOn({ x: 0, y: 0 }, stageW, stageH)
+    const x0 = Math.min(...ps.map((p) => p.x)) - 0.5, x1 = Math.max(...ps.map((p) => p.x)) + 0.5
+    const y0 = Math.min(...ps.map((p) => p.y)) - ISLAND_ASPECT / 2, y1 = Math.max(...ps.map((p) => p.y)) + ISLAND_ASPECT / 2
+    const z = Math.min(0.9 * stageW / (x1 - x0), 0.9 * stageH / (y1 - y0), focusOn({ x: 0, y: 0 }, stageW, stageH).z)
+    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z }
+  }
+  // Camera with one island centred and filling most of the stage.
+  const focusOn = (pos, stageW, stageH) => ({ x: pos.x, y: pos.y, z: Math.min(0.7 * stageW, 0.8 * stageH / ISLAND_ASPECT) })
+  // One frame of exponential approach to goal (~99 % of the way in 0.4 s), snapping once within half a pixel.
+  function camStep(cam, goal, dt) {
+    const k = 1 - Math.exp(-11.5 * dt)
+    const n = { x: cam.x + (goal.x - cam.x) * k, y: cam.y + (goal.y - cam.y) * k, z: cam.z + (goal.z - cam.z) * k }
+    const close = Math.abs(goal.z - n.z) < 0.5 && Math.hypot(goal.x - n.x, goal.y - n.y) * goal.z < 0.5
+    return close ? { x: goal.x, y: goal.y, z: goal.z } : n
+  }
+  return { SPACING, ISLAND_ASPECT, layout, lodFor, visible, fitAll, focusOn, camStep, toWorld, toScreen }
+})()
+</script>
 <script id="sky-render">
 // Drawing for the sky island: the island itself (pre-rendered once per resolution), trees and the waterfall.
 (function(){
