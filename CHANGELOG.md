@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2026-11-04
+
+### Added
+
+- **Version display** — Server version shown next to "CLAUDE CO." title in the header, read from `plugin.json`
+
+### Fixed
+
+- **SSE auto-connect** — Web UI now uses `location.host` as default SSE endpoint instead of hardcoded `localhost:4317`, so it works on any port
+
 ## [1.2.4] - 2026-11-04
 
 ### Fixed
@@ -108,6 +118,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.2.5]: https://github.com/luanle912/ai-terrarium/compare/v1.2.4...v1.2.5
 [1.2.4]: https://github.com/luanle912/ai-terrarium/compare/v1.2.3...v1.2.4
 [1.2.3]: https://github.com/luanle912/ai-terrarium/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/luanle912/ai-terrarium/compare/v1.2.1...v1.2.2

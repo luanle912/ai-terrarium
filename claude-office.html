@@ -171,7 +171,7 @@ class ClaudeOffice extends React.Component{
   constructor(props){
     super(props);
     const params=new URLSearchParams(location.search);
-    const srv=params.get('server')||'localhost:4317';
+    const srv=params.get('server')||location.host||'localhost:4317';
     const ep=srv.includes('/events')?srv:(srv.startsWith('http')?srv:('http://'+srv))+'/events';
     this.state={sel:null,paused:false,tick:0,live:'off',
       dataSource:'live',endpoint:ep,agentCount:6,speed:1,showBubbles:true,autoApprove:false,showSettings:false};
@@ -306,7 +306,7 @@ class ClaudeOffice extends React.Component{
     this.log(a,'Task → spawn sub-agent');
   }
 
-  syncLive(snap){if(snap.usage)this.usage=snap.usage;
+  syncLive(snap){if(snap.usage)this.usage=snap.usage;if(snap.version)this.serverVersion=snap.version;
     const list=((snap&&snap.sessions)||[]).slice().sort((a,b)=>(!a.parentId?0:1)-(!b.parentId?0:1));
     const seen=new Set();
     for(const s of list){
@@ -702,7 +702,10 @@ class ClaudeOffice extends React.Component{
 
       h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'14px 24px'}},
         h('div',{style:{display:'flex',flexDirection:'column',gap:4,flex:'1 1 300px',minWidth:0}},
-          h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:28,fontWeight:700,letterSpacing:'0.02em',color:'#ffffff'}},'CLAUDE CO.'),
+          h('div',{style:{display:'flex',alignItems:'baseline',gap:10}},
+            h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:28,fontWeight:700,letterSpacing:'0.02em',color:'#ffffff'}},'CLAUDE CO.'),
+            this.serverVersion&&h('span',{style:{fontSize:10,color:'var(--muted)',fontFamily:"'JetBrains Mono',monospace",opacity:0.6}},'v'+this.serverVersion)
+          ),
           h('div',{style:{fontSize:12,color:'var(--muted)'}},'Mỗi nhân viên là một Claude session đang chạy trên máy bạn')
         ),
         h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:10}},
