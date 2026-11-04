@@ -308,6 +308,44 @@ globalThis.SkyLogic={stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLevel,PREVI
   WEATHERS,WEIGHTS,FX,pickNextWeather,changeDelayMs,transitionMs,wmoToWeather,initialWeather,weatherFx,startTransition,stepRandom,snowCover,lightningDelayMs,lightningFlashMs};
 })();
 </script>
+<script id="camera-logic">
+// Pan & zoom maths for the island view, kept DOM-free so tests/camera-logic.test.mjs can run it.
+// The view is the island wrapper laid out at (ox, oy) on the stage, cw × ch for its focus box (the island top),
+// shown with transform translate(tx, ty) scale(z) from its top-left corner.
+(function(){
+  // DRAG_SPEED < 1: the view moves slower than the mouse (asked for: a 1:1 drag felt like it travelled too far).
+  const ZOOM_MIN=1,ZOOM_MAX=4,DRAG_THRESHOLD=4,DRAG_SPEED=0.5;
+  const clampN=(v,a,b)=>Math.min(b,Math.max(a,v));
+  // Same curve as d3-zoom: 100 px of wheel ≈ 15 %, a pinch (ctrlKey, small deltas) 10× faster per pixel.
+  function wheelFactor(e){
+    const unit=e.deltaMode===1?0.05:e.deltaMode===2?1:0.002;
+    return Math.pow(2,-e.deltaY*unit*(e.ctrlKey?10:1));
+  }
+  // Like a photo viewer, per axis: an island smaller than the stage stays whole on screen (it only slides within
+  // the empty sky around it); one larger than the stage always fills it, so no empty sky can be dragged into view.
+  function clampAxis(t,z,o,c,S){const s=z*c;return s<=S?clampN(t,-o,S-o-s):clampN(t,S-o-s,-o);}
+  function clamp(cam,b){
+    return{z:cam.z,tx:clampAxis(cam.tx,cam.z,b.ox,b.cw,b.stageW),ty:clampAxis(cam.ty,cam.z,b.oy,b.ch,b.stageH)};
+  }
+  // Zoom by factor f keeping the stage point (px, py) — the cursor — over the same spot of the island.
+  function zoomAt(cam,px,py,f,b){
+    const z=clampN(cam.z*f,ZOOM_MIN,ZOOM_MAX);
+    if(z===cam.z)return cam;
+    const qx=(px-b.ox-cam.tx)/cam.z,qy=(py-b.oy-cam.ty)/cam.z;
+    return clamp({z,tx:px-b.ox-z*qx,ty:py-b.oy-z*qy},b);
+  }
+  function panBy(cam,dx,dy,b){return clamp({z:cam.z,tx:cam.tx+dx,ty:cam.ty+dy},b);}
+  const isDrag=(dx,dy)=>Math.hypot(dx,dy)>=DRAG_THRESHOLD;
+  const dragOffset=(dx,dy)=>[dx*DRAG_SPEED,dy*DRAG_SPEED];
+  // Canvas pixels per scene pixel. At 1× it is exactly the screen's (as before zoom existed); zoomed in it follows
+  // the zoom in half steps (so the island bitmap is not re-baked on every wheel tick), capped at 4 like before.
+  function renderScale(clientW,dpr,z,LW){
+    const base=clientW*dpr/LW;
+    return clampN(z<=1?base:Math.ceil(base*z*2)/2,1,4);
+  }
+  globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,wheelFactor,clamp,zoomAt,panBy,isDrag,dragOffset,renderScale};
+})();
+</script>
 <script id="sky-render">
 // Drawing for the sky island: the island itself (pre-rendered once per resolution), trees and the waterfall.
 (function(){
@@ -551,6 +589,11 @@ const ICON={
   waiting:['#####','.###.','..#..','.###.','#####'], talking:['#####','#...#','#####','.#...','....#']
 };
 const shade=(hh,p)=>{if(!hh||hh[0]!=='#'||hh.length!==7)return hh;const n=parseInt(hh.slice(1),16),c=v=>Math.max(0,Math.min(255,v));return'#'+((1<<24)+(c((n>>16)+p)<<16)+(c(((n>>8)&255)+p)<<8)+c((n&255)+p)).toString(16).slice(1);};
+// Màu của bàn trống: khử bão hoà rồi chỉnh độ sáng. Tính sẵn bằng màu thay cho ctx.filter — filter trên canvas
+// bắt Chrome dựng một layer riêng cho từng lệnh vẽ và kéo cả trang xuống ~1 FPS.
+const greyHex=(hh,sat,bri)=>{if(!hh||hh[0]!=='#'||hh.length!==7)return hh;const n=parseInt(hh.slice(1),16),r=(n>>16)&255,g=(n>>8)&255,b=n&255,l=0.299*r+0.587*g+0.114*b,c=v=>Math.max(0,Math.min(255,Math.round((v+(l-v)*sat)*bri)));return'#'+((1<<24)+(c(r)<<16)+(c(g)<<8)+c(b)).toString(16).slice(1);};
+const VACANT_CACHE=new Map();
+const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);if(v)return v;const sat=th.stroke?0.9:0.85,bri=th.stroke?1.08:0.7;v={};for(const k in th)v[k]=typeof th[k]==='string'?greyHex(th[k],sat,bri):th[k];v._metal=greyHex(th.stroke?'#ffffff':'#2d3142',sat,bri);v._mouse=greyHex(th.stroke?'#ffffff':'#d9dbe2',sat,bri);if(VACANT_CACHE.size>64)VACANT_CACHE.clear();VACANT_CACHE.set(key,v);return v;};
 const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','·':'000000010000000','/':'001001010100100','-':'000000111000000','_':'000000000000111','.':'000000000000010'};
 function text3(ctx,str,x,y,col){ctx.fillStyle=col;x=Math.round(x);y=Math.round(y);[...String(str).toUpperCase()].forEach((ch,i)=>{const f=FONT[ch];if(!f)return;for(let b=0;b<15;b++)if(f[b]==='1')ctx.fillRect(x+i*4+(b%3),y+Math.floor(b/3),1,1);});}
 const PANTS=['#2d3142','#3b4a6b','#4a3b2f','#22303a','#5a5f73'];
@@ -589,19 +632,33 @@ class ClaudeOffice extends React.Component{
     this.setBack=el=>{this.backCanvas=el;};this.setFront=el=>{this.frontCanvas=el;};this.setWrap=el=>{this.wrapEl=el;};
     // Weather: this.wx is the SkyLogic transition state; snow (lawn cover) and flash (lightning) are 0..1.
     this.wx={...SkyLogic.initialWeather('clear',Date.now()),nextAt:Date.now()+SkyLogic.changeDelayMs(Math.random())};
-// Màu của bàn trống: khử bão hoà rồi chỉnh độ sáng. Tính sẵn bằng màu thay cho ctx.filter — filter trên canvas
-// bắt Chrome dựng một layer riêng cho từng lệnh vẽ và kéo cả trang xuống ~1 FPS.
-const greyHex=(hh,sat,bri)=>{if(!hh||hh[0]!=='#'||hh.length!==7)return hh;const n=parseInt(hh.slice(1),16),r=(n>>16)&255,g=(n>>8)&255,b=n&255,l=0.299*r+0.587*g+0.114*b,c=v=>Math.max(0,Math.min(255,Math.round((v+(l-v)*sat)*bri)));return'#'+((1<<24)+(c(r)<<16)+(c(g)<<8)+c(b)).toString(16).slice(1);};
-const VACANT_CACHE=new Map();
-const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);if(v)return v;const sat=th.stroke?0.9:0.85,bri=th.stroke?1.08:0.7;v={};for(const k in th)v[k]=typeof th[k]==='string'?greyHex(th[k],sat,bri):th[k];v._metal=greyHex(th.stroke?'#ffffff':'#2d3142',sat,bri);v._mouse=greyHex(th.stroke?'#ffffff':'#d9dbe2',sat,bri);if(VACANT_CACHE.size>64)VACANT_CACHE.clear();VACANT_CACHE.set(key,v);return v;};
     this.snow=0;this.flash=0;this.flashStart=0;this.flashMs=0;this.nextFlashAt=0;this.preview=null;this.lastSky=Date.now();
     this.reducedMq=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
-    this.onClick=e=>{const a=this.hit(e);this.setState({sel:a?a.id:null});};
-    this.onMove=e=>{e.currentTarget.style.cursor=this.hit(e)?'pointer':'default';};
+    // Camera: drag pans, wheel/pinch zooms about the cursor (CameraLogic). kZoom is the zoom the canvas resolution
+    // follows; it catches up 150 ms after the last wheel tick so the island bitmap is not re-baked on every tick.
+    this.cam={z:1,tx:0,ty:0};this.kZoom=1;this.drag=null;this.dragged=false;
+    this.onClick=e=>{if(this.dragged){this.dragged=false;return;}const a=this.hit(e);this.setState({sel:a?a.id:null});};
+    this.onMove=e=>{if(!this.drag)e.currentTarget.style.cursor=this.hit(e)?'pointer':'grab';};
+    // Only the island and the open sky react; panels, buttons and the settings form keep their own wheel and clicks.
+    this.onScene=e=>e.target===this.stageEl||e.target===this.backCanvas||(this.wrapEl&&this.wrapEl.contains(e.target));
+    this.onWheel=e=>{if(!this.onScene(e)||!e.deltaY)return;e.preventDefault();
+      const r=this.stageEl.getBoundingClientRect(),b=this.camBox();if(!b)return;
+      this.setCam(CameraLogic.zoomAt(this.cam,e.clientX-r.left,e.clientY-r.top,CameraLogic.wheelFactor(e),b));};
+    this.onDown=e=>{if(e.button!==0||!this.onScene(e))return;this.dragged=false;this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,tx:this.cam.tx,ty:this.cam.ty,on:false};};
+    this.onDrag=e=>{const d=this.drag;if(!d||e.pointerId!==d.id)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;
+      if(!d.on){if(!CameraLogic.isDrag(dx,dy))return;d.on=true;try{this.stageEl.setPointerCapture(d.id);}catch(_){}this.setDragCursor('grabbing');}
+      const b=this.camBox(),[ox,oy]=CameraLogic.dragOffset(dx,dy);if(b)this.setCam(CameraLogic.panBy({z:this.cam.z,tx:d.tx,ty:d.ty},ox,oy,b));};
+    this.onUp=e=>{const d=this.drag;if(!d||e.pointerId!==d.id)return;this.drag=null;
+      if(d.on){this.dragged=true;setTimeout(()=>{this.dragged=false;},0);this.setDragCursor('grab');}};
+    this.setDragCursor=c=>{for(const el of[this.canvas,this.backCanvas])if(el)el.style.cursor=c;};
   }
 
   componentDidMount(){
     this.startSource();
+    const st=this.stageEl;if(st){st.addEventListener('wheel',this.onWheel,{passive:false});st.addEventListener('pointerdown',this.onDown);
+      st.addEventListener('pointermove',this.onDrag);st.addEventListener('pointerup',this.onUp);st.addEventListener('pointercancel',this.onUp);
+      // A resized window changes the fitted layout; pull the view back inside the new limits.
+      if(window.ResizeObserver){this.ro=new ResizeObserver(()=>{const b=this.camBox();if(b)this.setCam(CameraLogic.clamp(this.cam,b));});this.ro.observe(st);}}
     this.simTimer=setInterval(()=>this.simTick(),250);
     this.uiTimer=setInterval(()=>{if(performance.now()-(this.lastFrame||0)>200)this.frame(performance.now());this.setState(s=>({tick:s.tick+1}));},300);
     this.last=performance.now();
@@ -612,7 +669,8 @@ const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);
     if(this.state.weatherMode==='real')this.refreshReal();
     this.realTimer=setInterval(()=>{if(this.state.weatherMode==='real')this.refreshReal();},REAL_WEATHER_EVERY_MS);
   }
-  componentWillUnmount(){clearInterval(this.simTimer);clearInterval(this.uiTimer);clearInterval(this.realTimer);cancelAnimationFrame(this.raf);this.es&&this.es.close();}
+  componentWillUnmount(){const st=this.stageEl;if(st){st.removeEventListener('wheel',this.onWheel);st.removeEventListener('pointerdown',this.onDown);st.removeEventListener('pointermove',this.onDrag);st.removeEventListener('pointerup',this.onUp);st.removeEventListener('pointercancel',this.onUp);}
+    this.ro&&this.ro.disconnect();clearTimeout(this.kTimer);clearInterval(this.simTimer);clearInterval(this.uiTimer);clearInterval(this.realTimer);cancelAnimationFrame(this.raf);this.es&&this.es.close();}
   // ---- weather settings ----
   setWeather(patch){
     this.setState(patch,()=>{
@@ -874,6 +932,12 @@ const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);
     // The island bobs a few pixels; moving the wrapper (not a transform) keeps bubbles, clicks and layering intact.
     if(this.wrapEl){const top=env.reduced?0:Math.round(Math.sin(t*0.7)*3);if(this.wrapTop!==top){this.wrapTop=top;this.wrapEl.style.top=top+'px';}}
   }
+  // The wrapper's place and focus box on the stage, in stage pixels (layout, before the camera transform).
+  camBox(){const st=this.stageEl,w=this.wrapEl;if(!st||!w)return null;
+    return{stageW:st.clientWidth,stageH:st.clientHeight,ox:w.offsetLeft,oy:w.offsetTop-(this.wrapTop||0),cw:w.offsetWidth,ch:w.offsetHeight*FH/LH};}
+  setCam(cam){if(cam.z===this.cam.z&&cam.tx===this.cam.tx&&cam.ty===this.cam.ty)return;this.cam=cam;const w=this.wrapEl;
+    if(w){w.style.transform=cam.z===1&&!cam.tx&&!cam.ty?'':'translate('+cam.tx+'px,'+cam.ty+'px) scale('+cam.z+')';w.style.setProperty('--cam-inv',String(1/cam.z));}
+    if(cam.z!==this.kZoom){clearTimeout(this.kTimer);this.kTimer=setTimeout(()=>{this.kZoom=this.cam.z;},150);}}
   headPos(a){if(a.stool&&!a.moving){const[sx,sy]=P(a.x,a.y);return[sx,sy-25];}if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=PA(a.x,a.y);if(a.actNow==="bath"&&!a.moving)return[sx,sy-11];return[sx,sy-(a.seated?23:21)];}
 
   draw(t){
@@ -881,7 +945,8 @@ const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);
     const df=th._day!=null?th._day:1;
     // Draw at the screen's own resolution so edges stay sharp when the canvas is shown large. k is not rounded:
     // with the island-sized scene a whole-number k would make the browser shrink the bitmap and drop pixel rows.
-    const k=Math.max(1,Math.min(4,c.clientWidth*(window.devicePixelRatio||1)/LW));
+    // Zoomed in, the resolution follows the zoom (CameraLogic.renderScale); past 4× the browser scales it up pixelated.
+    const k=CameraLogic.renderScale(c.clientWidth,window.devicePixelRatio||1,this.kZoom,LW);
     if(this.k!==k){this.k=k;c.width=Math.round(LW*k);c.height=Math.round(LH*k);}
     ctx.setTransform(k,0,0,k,0,0);
     ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;ctx.clearRect(0,0,LW,LH);
@@ -1251,7 +1316,7 @@ const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);
       if(!txt)return null;
       const[sx,sy]=this.headPos(a),c=(ST[a.status]||ST.working)[1];
       return h('div',{key:a.id,ref:el=>{if(el)this.bubbleEls[a.id]=el;else delete this.bubbleEls[a.id];},
-        style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%)',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:240,overflow:'hidden',textOverflow:'ellipsis'}},
+        style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%) scale(var(--cam-inv,1))',transformOrigin:'50% 100%',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:240,overflow:'hidden',textOverflow:'ellipsis'}},
         h('b',{style:{color:c,fontFamily:"'Pixelify Sans',monospace",fontSize:11}},a.name),
         h('span',{style:{overflow:'hidden',textOverflow:'ellipsis'}},txt));
     });
@@ -1307,10 +1372,10 @@ const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);
       ),
 
       h('div',{ref:this.setStage,style:{position:'relative',flex:'1 1 0',minHeight:0,border:'3px solid #232a39',overflow:'hidden',containerType:'size',display:'flex',alignItems:'center',justifyContent:'center'}},
-        h('canvas',{ref:this.setBack,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:0,display:'block'}}),
+        h('canvas',{ref:this.setBack,style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:0,display:'block'}}),
         // The view is fitted to the island top (FH tall), not the whole scene: the deep underside may run off the bottom.
-        h('div',{ref:this.setWrap,style:{position:'relative',alignSelf:'flex-start',width:'min(100cqw, calc(100cqh * '+LW+' / '+FH+'))',aspectRatio:LW+' / '+LH,marginTop:'calc((100cqh - min(100cqw * '+FH+' / '+LW+', 100cqh)) / 2)'}},
-          h('canvas',{ref:this.setCanvas,width:LW,height:LH,onClick:this.onClick,onMouseMove:this.onMove,style:{position:'relative',zIndex:1,width:'100%',height:'auto',display:'block'}}),
+        h('div',{ref:this.setWrap,style:{position:'relative',alignSelf:'flex-start',transformOrigin:'0 0',willChange:'transform',touchAction:'none',userSelect:'none',width:'min(100cqw, calc(100cqh * '+LW+' / '+FH+'))',aspectRatio:LW+' / '+LH,marginTop:'calc((100cqh - min(100cqw * '+FH+' / '+LW+', 100cqh)) / 2)'}},
+          h('canvas',{ref:this.setCanvas,width:LW,height:LH,onClick:this.onClick,onMouseMove:this.onMove,style:{position:'relative',zIndex:1,width:'100%',height:'auto',display:'block',imageRendering:'pixelated',touchAction:'none'}}),
           h('div',{style:{position:'absolute',inset:0,pointerEvents:'none',zIndex:3}},bubbles)
         ),
         h('canvas',{ref:this.setFront,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:2,pointerEvents:'none',display:'block'}}),
