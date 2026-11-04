@@ -661,6 +661,10 @@ const key=(x,y)=>x+','+y,fl=Math.floor;
 const STROLL=1.1,RUN=3.2,LEGS={corgi:0.88,husky:1.06,dalmatian:1.12};
 const N8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const isNight=h=>h>=22||h<6;
+// How far a dog's colours blend toward the night blue (#0d1322): half of what the lawn gets (SkyRender.night uses
+// (1-df)*0.6). The dogs are characters, like the people (who are not dimmed at all), so they must stay readable at
+// night while still looking lit by the same moon.
+const nightMix=df=>(1-df)*0.3;
 
 // Lawn cells a dog may stand on: the walkable lawn minus water and reserved areas, and only in front of or beside
 // the office. Behind the walls (x<0 or y<0) a dog would be drawn over the wall, since it sorts with the office items.
@@ -918,7 +922,7 @@ function pose(d,t){
   return{frame,dy,flip:d.face<0};
 }
 
-globalThis.DogLogic={BREEDS,STROLL,RUN,isNight,roamCells,path,drinkSpots,denCells,faceToward,create,step,pose,startChase,startPlay,wander,greetSpot};
+globalThis.DogLogic={BREEDS,STROLL,RUN,isNight,nightMix,roamCells,path,drinkSpots,denCells,faceToward,create,step,pose,startChase,startPlay,wander,greetSpot};
 })();
 </script>
 <script id="dog-sprites">
@@ -2198,7 +2202,7 @@ class ClaudeOffice extends React.Component{
       if(ch==='.')return;let col=pal[ch];
       // Snow settles on whatever faces the sky: the top pixel of each column (back, head, ears, tail).
       if(snB>=3&&top[x]===y)col=SkyRender.mix(col,'#eef3f7',snB/10*0.75);
-      c.fillStyle=SkyRender.night(col,dfB/10);c.fillRect(x,y,1,1);
+      c.fillStyle=SkyRender.mix(col,'#0d1322',DogLogic.nightMix(dfB/10));c.fillRect(x,y,1,1);
     }));
     this.dogSprites.set(k,cv);return cv;
   }
