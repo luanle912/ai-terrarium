@@ -977,7 +977,7 @@ class ClaudeOffice extends React.Component{
       for(let y=0;y<H;y++)for(let x=0;x<W;x++){const zi=zoneAt(x,y);let col;
         if(zi===4)col=(x+y)%2?lerpHex('#2c2a3a','#e9d3a8',df):lerpHex('#262433','#dfc597',df);
         else if(zi<0)col=mix((x+y)%2?th.fa:th.fb,'#000000',th.stroke?0.03:0.14);
-        else{const dk=own[zi];if(!dk)continue;col=mix((x+y)%2?th.fa:th.fb,this.depts.get(dk).color,th.stroke?0.14:df<0.5?0.3:0.34);}
+        else{const dk=own[zi];if(!dk){col=mix((x+y)%2?th.fa:th.fb,'#000000',th.stroke?0.06:0.24);poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],col,th.stroke?'#dfe5ef':null);continue;}col=mix((x+y)%2?th.fa:th.fb,this.depts.get(dk).color,th.stroke?0.14:df<0.5?0.3:0.34);}
         poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],col,th.stroke?'#dfe5ef':null);}
       ctx.strokeStyle=th.stroke?'#c9d3e3':(df>0.5?'#c9a77a':'#3a4462');ctx.lineWidth=1;
       [[9,0,9,H],[0,7,20,7],[19,0,19,H]].forEach(([a,b,c,d])=>{const L=Math.max(c-a,d-b)*2;for(let k=0;k<L;k+=2){const p0=P(a+(c-a)*k/L,b+(d-b)*k/L),p1=P(a+(c-a)*(k+0.8)/L,b+(d-b)*(k+0.8)/L);ctx.beginPath();ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);ctx.stroke();}});
@@ -990,7 +990,10 @@ class ClaudeOffice extends React.Component{
       // All names share one size, so they are capped at MAXC characters: a longer name drops its leading words first
       // (core-payment-merchant → MERCHANT) so sibling projects stay distinguishable, then is cut.
       const MAXC=12,FS=2;
-      ZONES.forEach((z,zi)=>{const dk=own[zi];if(!dk)return;const col=this.depts.get(dk).color;
+      ZONES.forEach((z,zi)=>{const dk=own[zi];
+        // Phòng chưa có session nào: in EMPTY bằng màu xám thay cho tên phòng.
+        if(!dk){const name='EMPTY',len=(name.length*4-1)*FS/16;paint(z.zx+3.12,z.zy+3+len/2,name,th.stroke?'#9aa3b5':df>0.5?shade(th.fa,-45):shade(th.fa,30),FS,ALONG_Y);return;}
+        const col=this.depts.get(dk).color;
         let name=dk.toUpperCase();while(name.length>MAXC&&/[-_.]/.test(name))name=name.replace(/^[^-_.]*[-_.]/,'');name=name.slice(0,MAXC);
         const len=(name.length*4-1)*FS/16;
         paint(z.zx+3.12,z.zy+3+len/2,name,df>0.5?shade(col,-80):shade(col,10),FS,ALONG_Y);});
@@ -1047,20 +1050,24 @@ class ClaudeOffice extends React.Component{
   drawDesk(G,d,i){
     const{ctx,poly,box,rect,th,t,df}=G,{gx,gy}=d,owner=this.agents.find(a=>a.desk===i&&!a.leaving&&!a.parent);
     const at=owner&&owner.seated,st=owner&&owner.status;
+    // Bàn chưa ai nhận (khác bàn có chủ đang ra pantry): dọn trống, ghế đẩy vào, màu xám tối.
+    const vacant=!owner,co=vacant?-0.2:0;
+    ctx.save();if(vacant)ctx.filter=th.stroke?'grayscale(0.9) opacity(0.75)':'grayscale(0.85) brightness(0.7)';
     let scr=th.off;
     if(at)scr={error:'#e5484d',permission:'#f5a524',done:'#46a758',idle:shade(th.off,10)}[st]||(df<0.5?'#0f2233':th.stroke?'#2f5bff':'#203040');
     if(at&&df<0.7&&st!=='idle'){ctx.globalAlpha=0.16*(1-df);poly([P(gx+0.3,gy+0.9),P(gx+1.7,gy+0.9),P(gx+1.7,gy+2),P(gx+0.3,gy+2)],scr==='#0f2233'?th.on:scr,null);ctx.globalAlpha=1;}
     const metal=th.stroke?'#ffffff':'#2d3142';
-    box(gx+0.92,gy+1.36,0.16,0.16,0,3,metal);
-    [[-0.22,0],[0.22,0],[0,-0.2],[0,0.22]].forEach(([dx,dy])=>{const[wx,wy]=P(gx+1+dx,gy+1.44+dy);rect(wx-1,wy-1,2,2,th.stroke||'#1a1a1a');});
-    box(gx+0.66,gy+1.18,0.68,0.5,3,6,th.chair);
-    if(!at){box(gx+0.97,gy+1.62,0.06,0.06,3,7,metal);box(gx+0.7,gy+1.6,0.6,0.09,7,13,th.chair);}
+    box(gx+0.92,gy+1.36+co,0.16,0.16,0,3,metal);
+    [[-0.22,0],[0.22,0],[0,-0.2],[0,0.22]].forEach(([dx,dy])=>{const[wx,wy]=P(gx+1+dx,gy+1.44+co+dy);rect(wx-1,wy-1,2,2,th.stroke||'#1a1a1a');});
+    box(gx+0.66,gy+1.18+co,0.68,0.5,3,6,th.chair);
+    if(!at){box(gx+0.97,gy+1.62+co,0.06,0.06,3,7,metal);box(gx+0.7,gy+1.6+co,0.6,0.09,7,13,th.chair);}
     [[0.1,0.15],[1.82,0.15]].forEach(([x,y])=>box(gx+x,gy+y,0.08,0.08,0,9,th.dl));
     box(gx+1.35,gy+0.2,0.55,0.66,0,9,th.dt,th.dl,th.dr);
     poly([P(gx+1.45,gy+0.86,6),P(gx+1.8,gy+0.86,6),P(gx+1.8,gy+0.86,6.8),P(gx+1.45,gy+0.86,6.8)],shade(th.dl,-30),null);
     poly([P(gx+1.45,gy+0.86,2.5),P(gx+1.8,gy+0.86,2.5),P(gx+1.8,gy+0.86,3.3),P(gx+1.45,gy+0.86,3.3)],shade(th.dl,-30),null);
     box(gx+0.1,gy+0.8,0.08,0.08,0,9,th.dl);
     box(gx+0.05,gy+0.12,1.9,0.78,9,11,th.dt,th.dl,th.dr);
+    if(!vacant){
     box(gx+0.18,gy+0.3,0.34,0.42,11,12,'#fbfbf7','#dcdcd4','#c9c9c0');
     box(gx+0.22,gy+0.26,0.34,0.42,12,12.6,'#ffffff','#e4e4dc','#d0d0c8');
     [0,1,2].forEach(k=>poly([P(gx+0.27,gy+0.36+k*0.09,12.6),P(gx+0.5,gy+0.36+k*0.09,12.6),P(gx+0.5,gy+0.38+k*0.09,12.6),P(gx+0.27,gy+0.38+k*0.09,12.6)],'#b9c4d6',null));
@@ -1068,6 +1075,7 @@ class ClaudeOffice extends React.Component{
     if(acc===0){box(gx+0.12,gy+0.74,0.06,0.06,11,22,metal);box(gx+0.06,gy+0.66,0.22,0.16,21,24,'#ffd166');if(df<0.7&&at){ctx.globalAlpha=0.12*(1-df);poly([P(gx,gy+0.4,11),P(gx+0.6,gy+0.4,11),P(gx+0.6,gy+0.9,11),P(gx,gy+0.9,11)],'#ffd166',null);ctx.globalAlpha=1;}}
     else if(acc===1){box(gx+0.6,gy+0.18,0.14,0.14,11,14,th.pot);const[cx,cy]=P(gx+0.67,gy+0.25,14);rect(cx-1,cy-5,3,5,th.plant);rect(cx-3,cy-3,2,2,th.plant);}
     else{box(gx+0.6,gy+0.2,0.06,0.2,11,17,metal);poly([P(gx+0.66,gy+0.22,12),P(gx+0.66,gy+0.38,12),P(gx+0.66,gy+0.38,16),P(gx+0.66,gy+0.22,16)],'#9fd3ff',null);}
+    }
     box(gx+0.85,gy+0.24,0.3,0.2,11,12,metal);box(gx+0.96,gy+0.28,0.08,0.06,12,15,metal);
     box(gx+0.6,gy+0.2,0.8,0.12,14,28,th.mon);
     const S=(x0,x1,z0,z1,col)=>poly([P(gx+x0,gy+0.33,z0),P(gx+x1,gy+0.33,z0),P(gx+x1,gy+0.33,z1),P(gx+x0,gy+0.33,z1)],col,null);
@@ -1082,8 +1090,9 @@ class ClaudeOffice extends React.Component{
     for(let k=0;k<6;k++)for(let r=0;r<2;r++){const[kx,ky]=P(gx+0.73+k*0.09,gy+0.62+r*0.07,12);const hot=at&&st==='working'&&((Math.floor(t*12)+k*3+r)%7===0);rect(kx,ky,1,1,hot?'#ffffff':shade(th.kb,20));}
     box(gx+1.36,gy+0.6,0.08,0.13,11,12.5,th.stroke?'#ffffff':'#d9dbe2');
     const mug=['#e5484d','#3e8ed0','#f5a524','#46a758','#8e4ec6','#ffffff'][i%6];
-    box(gx+1.62,gy+0.34,0.16,0.16,11,15.5,mug);
+    if(!vacant)box(gx+1.62,gy+0.34,0.16,0.16,11,15.5,mug);
     if(at&&(st==='working'||st==='thinking'))for(let k=0;k<2;k++){const ph=(t*0.9+k*0.5+i*0.1)%1;const[sx,sy]=P(gx+1.7,gy+0.42,17+ph*9);ctx.globalAlpha=0.7*(1-ph);rect(sx+(Math.floor(ph*4)%2),sy,1,2,'#e6e9ef');ctx.globalAlpha=1;}
+    ctx.restore();
   }
 
   actArms(R,act,sx,by,t,sh,shD,sk){
