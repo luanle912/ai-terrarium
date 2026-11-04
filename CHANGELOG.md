@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-11-05
+
+### Fixed
+
+- **Pantry bench** — The planter behind the wooden bench was drawn over it, so only a thin strip of the seat and its two ends showed; the bench is now drawn one tile at a time in front of the planter, with the whole seat and its slats visible, and people sitting on it still drawn on top
+
 ## [1.3.4] - 2026-11-04
 
 ### Fixed
@@ -213,6 +219,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.3.5]: https://github.com/luanle912/ai-terrarium/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/luanle912/ai-terrarium/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/luanle912/ai-terrarium/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/luanle912/ai-terrarium/compare/v1.3.1...v1.3.2
