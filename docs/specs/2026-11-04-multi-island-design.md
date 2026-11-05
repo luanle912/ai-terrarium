@@ -596,8 +596,8 @@ audit(id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER, action TEXT
 | Đảo | Cách vẽ |
 |---|---|
 | Đang xem (bề ngang trên màn hình ≥ 50% stage) | Đầy đủ, mọi khung, độ phân giải theo `renderScale` hiện có |
-| Thấy được, bề ngang ≥ 120px | `k = 1`, vẽ lại tối đa 10 lần/giây, ảnh đảo tĩnh dùng cache sẵn có |
-| Bề ngang < 120px | Ảnh thu nhỏ vẽ lại mỗi 2 giây, kèm nhãn |
+| Thấy được, bề ngang ≥ 130px | `k = 1`, vẽ lại tối đa 10 lần/giây, ảnh đảo tĩnh dùng cache sẵn có |
+| Bề ngang < 130px | Ảnh thu nhỏ vẽ lại mỗi 2 giây, kèm nhãn |
 | Ngoài màn hình | Không vẽ, vẫn mô phỏng di chuyển với `dt` lớn (tối đa 4 lần/giây) |
 
 Mục tiêu: với 10 đảo × 6 nhân vật, **JS mỗi khung p95 ≤ 8ms** trên máy anh Kiet, đo bằng cùng cách đã đo hôm nay.
@@ -606,6 +606,21 @@ GĐ2: đo GĐ1 bằng render phần mềm cho khoảng 9ms ở "Toàn cảnh" 10
 trên được phép chỉnh (tối đa 5 lần/giây và 160px) để đạt mục tiêu; giá trị chốt ghi lại vào đây khi đo xong. Không hạ
 chất lượng đảo đang xem. Canvas `mid` và `thumb` được giữ lại khi đảo rời khỏi khung (chỉ canvas `full` bị trả), và
 đảo chưa có canvas cũng phải xếp hàng theo ngân sách vẽ mỗi khung, để chuyển "Của tôi" → "Toàn cảnh" không bị giật.
+
+**Số chốt GĐ2** (2026-11-05, Chrome headless `--disable-gpu`, 1280×800, 10 đảo × 6 session, "Toàn cảnh"; JS mỗi khung
+đo 10 giây; cú đổi = khung dài nhất trong 500ms sau "Của tôi" → "Toàn cảnh", 5 lần mỗi lượt đo):
+
+| | `MID_MS` | `THUMB_PX` | p95 JS mỗi khung | Khung dài nhất sau khi đổi |
+|---|---|---|---|---|
+| Trước (GĐ1) | 100 | 120 | 7,7–13,7ms (trung vị 7,9) | 9,5–18,6ms; đổi không chờ camera: ~40ms |
+| Chốt | **100** | **130** | 0,4–0,8ms | 8,2–16,0ms; đổi không chờ camera: ~7ms |
+
+- `MID_MS` giữ 100: lên 150 hay 200 không hạ p95 (các lần vẽ `mid` đến theo cặp, p95 vẫn là khung có 2 lần vẽ).
+- `THUMB_PX` = 130: 10 đảo ở 1280×800 rộng 125px, nên mọi giá trị 126–160 cho cùng kết quả; 130 chừa chút lề cho
+  stage rộng hơn vài px. Đảo `mid` (5 đảo, 192px) vẫn vẽ lại sau tối đa ~118ms (`MID_MS` + một khung).
+- Thêm một luật: khi camera đang chạy (đổi chế độ, bay tới đảo, cuộn zoom), đảo `mid`/`thumb` đã có canvas giữ nguyên
+  mức chi tiết đang có (vẫn vẽ lại theo hạn), đổi mức khi camera dừng. Không có luật này, đảo đi qua `thumb` → `mid`
+  → `thumb` trong lúc camera chạy và khung lúc đổi lên 16–20ms. Đảo đang xem vẫn vẽ `full` mọi khung.
 
 ### 12.4 Trang local
 
