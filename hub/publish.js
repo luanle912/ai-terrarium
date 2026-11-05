@@ -33,6 +33,13 @@ function routes(ctx) {
   const streams = new Set(); // {res, userId, tokenHash}
   const lastSent = new Map(); // island id -> ms (real clock, throttle only)
   const pending = new Map(); // island id -> timer
+  // island id -> slot of every island that has one, so island events never read the DB. Slots only change when an
+  // island is claimed (its first publish emits `world` before `island`) or deleted (a `remove`); every read of the
+  // slotted list (each `world` payload, each removal, hub start) refreshes it.
+  const slots = new Map();
+  const setSlots = (rows) => { slots.clear(); for (const r of rows) slots.set(r.id, r.slot); return rows; };
+  const slottedRows = () => setSlots(db.listSlottedIslands());
+  slottedRows();
   let closing = false;
 
   function write(s, text) {
@@ -49,7 +56,7 @@ function routes(ctx) {
   const worldPayload = () => {
     const live = new Map(world.islands().map((m) => [m.id, m]));
     return {
-      islands: db.listSlottedIslands().map((row) => {
+      islands: slottedRows().map((row) => {
         const m = live.get(row.id);
         return {
           id: row.id, name: row.name, color: row.color, slot: row.slot,
@@ -61,7 +68,7 @@ function routes(ctx) {
     };
   };
   const islandPayload = (id) => ({ id, sessions: world.snapshotFor(id) });
-  const isSlotted = (id) => { const row = db.getIsland(id); return !!row && row.slot != null; };
+  const isSlotted = (id) => slots.has(id);
 
   function sendIsland(id) {
     if (!isSlotted(id)) return; // hidden islands are never sent
@@ -82,19 +89,23 @@ function routes(ctx) {
         return broadcast('world', worldPayload());
       }
       broadcast('remove', { id: e.id });
-      // A freed slot may promote a hidden island whose `island` events were dropped while hidden: send every live one.
-      for (const r of db.listSlottedIslands()) if (world.snapshotFor(r.id).length > 0) sendIsland(r.id);
+      // A freed slot may promote a hidden island whose `island` events were dropped while hidden: send just that one,
+      // through the throttle like any island event (the other islands' viewers already have their state).
+      const before = new Set(slots.keys());
+      for (const r of slottedRows()) if (!before.has(r.id) && world.snapshotFor(r.id).length > 0) queueIsland(r.id);
       return;
     }
-    if (e.type === 'island') {
-      if (!isSlotted(e.id)) return;
-      if (pending.has(e.id)) return; // the trailing send will carry the newest state
-      const wait = ISLAND_EVERY_MS - (Date.now() - (lastSent.get(e.id) || 0));
-      if (wait <= 0) return sendIsland(e.id);
-      const t = setTimeout(() => { pending.delete(e.id); if (!closing) sendIsland(e.id); }, wait);
-      t.unref();
-      pending.set(e.id, t);
-    }
+    if (e.type === 'island') queueIsland(e.id);
+  }
+  // At most one `island` event per ISLAND_EVERY_MS per island; a trailing send carries the newest state.
+  function queueIsland(id) {
+    if (!isSlotted(id)) return;
+    if (pending.has(id)) return; // the trailing send will carry the newest state
+    const wait = ISLAND_EVERY_MS - (Date.now() - (lastSent.get(id) || 0));
+    if (wait <= 0) return sendIsland(id);
+    const t = setTimeout(() => { pending.delete(id); if (!closing) sendIsland(id); }, wait);
+    t.unref();
+    pending.set(id, t);
   }
   ctx.onWorldChange = onChange;
 
@@ -201,8 +212,9 @@ function routes(ctx) {
       streams.add(stream);
       res.on('close', () => { if (streams.delete(stream) && !closing) broadcast('world', worldPayload()); });
       res.write('retry: 3000\n\n');
-      broadcast('world', worldPayload()); // everybody learns the new viewer count; the newcomer gets its first world
-      for (const row of db.listSlottedIslands()) write(stream, frame('island', islandPayload(row.id)));
+      const wp = worldPayload();
+      broadcast('world', wp); // everybody learns the new viewer count; the newcomer gets its first world
+      for (const i of wp.islands) write(stream, frame('island', islandPayload(i.id)));
     },
   });
 

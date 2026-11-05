@@ -339,6 +339,10 @@ test('a ninth island is refused on the device page and the CLI gets hub_full', a
     assert.equal(r.status, 400);
     assert.ok((await r.text()).includes(HUB_FULL_MSG));
     assert.equal(HUB_FULL_MSG, 'Hub đã đủ 8 đảo, nhờ owner xoá bớt.');
+    assert.equal(auditOf(h, 'pair_refused_full').length, 0, 'a lookup only warns');
+    const ap = await postDeviceForm(h.url, login, { user_code: s.user_code, action: 'approve' });
+    assert.equal(ap.status, 400);
+    assert.ok((await ap.text()).includes(HUB_FULL_MSG));
     h.clock.advance(5000);
     const t = await poll(h, s.device_code);
     assert.equal(t.status, 403);
@@ -354,6 +358,31 @@ test('a ninth island is refused on the device page and the CLI gets hub_full', a
     }
     const bad = await postDeviceForm(h.url, login, { user_code: 'BBBB-CCCC', action: 'approve' });
     assert.equal(bad.status, 400, 'not locked (429)');
+  } finally { await h.close(); }
+});
+
+test('a lookup on a full hub does not burn the code: once a slot frees, approve works with it', async () => {
+  const h = await startDevHub();
+  try {
+    fillIslands(h, 8);
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const s = await start(h);
+    const r = await postDeviceForm(h.url, login, { user_code: s.user_code, action: 'lookup' });
+    assert.equal(r.status, 400);
+    assert.ok((await r.text()).includes(HUB_FULL_MSG));
+    const row = h.hub.db.getDeviceCodeByUserCode(s.user_code);
+    assert.ok(!row.denied, 'the code is still usable');
+    h.clock.advance(5000);
+    assert.equal((await poll(h, s.device_code)).status, 428);
+    h.hub.db.deleteIslandByUser(h.hub.db.getIsland('0000000000000003').user_id);
+    const ap = await postDeviceForm(h.url, login, { user_code: s.user_code, action: 'approve' });
+    assert.equal(ap.status, 200);
+    h.clock.advance(5000);
+    const t = await poll(h, s.device_code);
+    assert.equal(t.status, 200);
+    const island = h.hub.db.getIsland((await t.json()).island_id);
+    assert.equal(island.slot, 3);
+    assert.equal(auditOf(h, 'pair_refused_full').length, 0);
   } finally { await h.close(); }
 });
 

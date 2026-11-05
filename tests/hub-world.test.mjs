@@ -429,7 +429,43 @@ test('a promoted hidden island that was already publishing sends its sessions on
     assert.equal(r.status, 200);
     const isl = await st.until((e) => e.event === 'island' && e.data.id === ids[7] && e.data.sessions.length === 2);
     assert.ok(isl, 'the promoted island sends its live sessions');
+    await new Promise((res) => setTimeout(res, 700)); // past the island throttle
+    assert.equal(st.events.filter((e) => e.event === 'island' && e.data.id === ids[7]).length, 1, 'sent once');
   } finally { st && st.close(); await h.close(); }
+});
+
+test('removing an island does not re-send the other live islands', async () => {
+  const h = await startDevHub();
+  let st;
+  try {
+    const boss = await devLogin(h.url, 'boss@newera.inc', 'Boss');
+    const devs = [];
+    for (let i = 0; i < 3; i++) devs.push(await pairDevice(h.url, await devLogin(h.url, `u${i}@newera.inc`, 'U' + i), 'M' + i));
+    for (const [i, d] of devs.slice(0, 2).entries()) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i + 1)]), bearer(d.token))).status, 204);
+    st = await openStream(h.url, boss.cookie);
+    for (const d of devs.slice(0, 2)) assert.ok(await st.until((e) => e.event === 'island' && e.data.id === d.island_id && e.data.sessions.length === 1));
+    const count = (id) => st.events.filter((e) => e.event === 'island' && e.data.id === id).length;
+    const before = devs.slice(0, 2).map((d) => count(d.island_id));
+    const r = await postJson(h.url, `/api/owner/islands/${devs[2].island_id}/remove`, {}, { cookie: boss.cookie, origin: h.url, 'x-csrf-token': boss.csrf });
+    assert.equal(r.status, 200);
+    assert.ok(await st.until((e) => e.event === 'remove' && e.data.id === devs[2].island_id));
+    await new Promise((res) => setTimeout(res, 700)); // past the island throttle
+    assert.deepEqual(devs.slice(0, 2).map((d) => count(d.island_id)), before);
+  } finally { st && st.close(); await h.close(); }
+});
+
+test('island events do not read the island row from the DB', async () => {
+  const { h, dev } = await setup();
+  try {
+    let reads = 0;
+    const orig = h.hub.db.getIsland;
+    h.hub.db.getIsland = (...a) => { reads++; return orig(...a); };
+    try {
+      for (let i = 1; i <= 3; i++) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i)], { seq: i }), bearer(dev.token))).status, 204);
+      await new Promise((res) => setTimeout(res, 600)); // let a trailing send run
+    } finally { h.hub.db.getIsland = orig; }
+    assert.equal(reads, 0);
+  } finally { await h.close(); }
 });
 
 test('owner removal still sends remove for an island that is offline', async () => {
