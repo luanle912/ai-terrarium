@@ -23,12 +23,12 @@ Thiếu hoặc sai biến thì hub từ chối khởi động và in ra **mọi*
 
 | Biến | Bắt buộc | Mặc định | Ý nghĩa |
 |---|---|---|---|
-| `HUB_PUBLIC_URL` | ✔ | | URL công khai của hub, ví dụ `https://terrarium.newera.inc` |
+| `HUB_PUBLIC_URL` | ✔ | | URL công khai của hub, ví dụ `https://terrarium.newera.inc`. Phải là `https://`; `http://` chỉ được dùng với localhost |
 | `HUB_ALLOWED_DOMAINS` | ✔ | | Tên miền email được đăng nhập, cách nhau bằng dấu phẩy, ví dụ `newera.inc` |
 | `HUB_OWNER_EMAILS` | ✔ | | Email chủ hub (quản trị), cách nhau bằng dấu phẩy |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | ✔ (trừ khi `HUB_DEV_LOGIN=1`) | | OAuth client ở mục 1 |
 | `HUB_PORT` | | `4318` | Cổng hub nghe |
-| `HUB_HOST` | | `127.0.0.1` | Địa chỉ hub nghe. Chỉ đặt `0.0.0.0` khi thật sự cần |
+| `HUB_HOST` | | `127.0.0.1` | Địa chỉ hub nghe. Chỉ đặt `0.0.0.0` khi thật sự cần. Khi bật `HUB_DEV_LOGIN` thì bắt buộc là địa chỉ loopback |
 | `HUB_DB` | | `./data/hub.sqlite` | Đường dẫn file SQLite |
 | `HUB_TRUST_PROXY` | | tắt | `1` khi đứng sau proxy: hub lấy IP người dùng từ mục cuối của `X-Forwarded-For` để giới hạn tần suất. Không bật thì mọi người dùng chung IP của proxy và chung một hạn mức. Không bật khi hub lộ thẳng ra mạng, vì header này giả được |
 | `HUB_DEV_LOGIN` | | tắt | `1` bật đăng nhập giả, **chỉ để phát triển trên máy local** |
