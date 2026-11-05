@@ -238,6 +238,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.4.1]: https://github.com/luanle912/ai-terrarium/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/luanle912/ai-terrarium/compare/v1.3.5...v1.4.0
 [1.3.5]: https://github.com/luanle912/ai-terrarium/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/luanle912/ai-terrarium/compare/v1.3.3...v1.3.4
