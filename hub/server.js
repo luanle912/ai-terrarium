@@ -17,6 +17,7 @@ const { createWorld } = require('./world.js');
 const { createJwks } = require('./jwt.js');
 const { createAccounts } = require('./accounts.js');
 const { createGoogleCheck } = require('./google-check.js');
+const { sha256hex } = require('./auth.js');
 
 const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes, require('./publish.js').routes, require('./me.js').routes];
 
@@ -48,17 +49,40 @@ function createHub(config, deps = {}) {
   ctx.accounts = createAccounts(ctx);
   ctx.googleCheck = createGoogleCheck(ctx);
 
-  // Routes with their own limiter (ownLimit) are exempt; every other route shares the per-IP general bucket.
+  // Routes with their own limiter (ownLimit) are exempt; every other route shares the general bucket, keyed by
+  // the signed-in user (`u:<id>`, from a valid session cookie or Bearer device token) or else by IP, so people
+  // behind one NAT do not share 120 a minute. ctx.helpers.requireSession is memoised per request (see below), so
+  // handlers that call it (me, pairing, publish) cost no second DB read; auth.js's own /api/config and /auth/logout
+  // call its local copy and read the session once more.
+  function generalKey(req) {
+    const m = /^Bearer (\S{1,200})$/.exec(String(req.headers.authorization || ''));
+    if (m) {
+      const device = db.getDeviceByTokenHash(sha256hex(m[1]));
+      if (device && device.revoked_at == null) return 'u:' + device.user_id;
+    } else if (req.headers.cookie) {
+      const s = ctx.helpers.requireSession(req);
+      if (s) return 'u:' + s.user.id;
+    }
+    return ctx.helpers.clientIp(req);
+  }
   const limitGeneral = (r) => (r.ownLimit ? r : {
     ...r,
     handler(req, res, rc) {
-      if (!limiters.general.take(ctx.helpers.clientIp(req), d.now())) {
+      if (!limiters.general.take(generalKey(req), d.now())) {
         return send(res, 429, 'too many requests', { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' });
       }
       return r.handler(req, res, rc);
     },
   });
   const routes = [...ROUTE_MODULES, ...(deps.routeModules || [])].flatMap((m) => m(ctx)).map(limitGeneral);
+  // auth.js installs requireSession while the routes are built; memoise it per request so the limiter key and
+  // the handler share one lookup. A request is short-lived, so the WeakMap entry dies with it.
+  const lookup = ctx.helpers.requireSession;
+  const seen = new WeakMap();
+  ctx.helpers.requireSession = (req) => {
+    if (!seen.has(req)) seen.set(req, lookup(req));
+    return seen.get(req);
+  };
   const server = http.createServer(createRouter(routes, { log: d.log, now: d.now, hsts: config.secure }));
 
   const setTimer = deps.setInterval || setInterval; // injectable so tests can check unref/clear

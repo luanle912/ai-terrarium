@@ -3246,15 +3246,22 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
   const TITLE={fontFamily:"'Pixelify Sans',monospace",fontSize:17,fontWeight:600,color:'#ffffff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'};
   const MUTED={fontSize:10,color:'var(--muted)'};
   const field=(label,val,key)=>h('div',{key:key||label,style:{display:'flex',flexDirection:'column',gap:2,minWidth:0}},h('span',{style:MUTED},label),h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},val));
-  const ME_EVERY_MS=10000,STALL_MS=10000,HEX_ID=/^[0-9a-f]{16}$/;
+  // "Của tôi" refreshes every 30 s ±20 % while the tab is visible: the hub's general limit is 120 a minute per
+  // user (per IP when signed out), shared with everything else the page asks.
+  const ME_EVERY_MS=30000,ME_JITTER=0.2,STALL_MS=10000,MAX_STALLS=2,REMOVE_WAIT_MS=5000,PROBE_MS=8000,RETRY_CAP_S=60,HEX_ID=/^[0-9a-f]{16}$/;
   const SEND_LABEL=new Map([['sending',['Đang gửi','#46a758']],['private',['Riêng tư','#8b8fa3']],['offline',['Mất kết nối','#e5484d']],['revoked',['Đã thu hồi','#8b8fa3']]]);
   const NAME_ERR='Tên 1–24 ký tự: chữ, số, khoảng trắng, - _ .';
   const LINK={color:'#9fd3ff'};
   const isJson=r=>/^application\/json\b/i.test(r.headers.get('content-type')||'');
-  // What /api/config says now: 'world' (with cfg), 'signedout' (401), 'other' (200 JSON, not world mode) or 'down'
-  // (network error, any other status, or not JSON).
-  const probeConfig=()=>fetch('/api/config',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}})
-    .then(r=>{if(r.status===401)return{kind:'signedout'};if(r.status!==200||!isJson(r))return{kind:'down'};
+  // Retry-After (seconds or an HTTP date) in whole seconds, 0..RETRY_CAP_S; 0 when absent or unreadable.
+  const retryAfterS=v=>{if(!v)return 0;let s=/^\d+$/.test(v.trim())?Number(v):(Date.parse(v)-Date.now())/1000;
+    return Number.isFinite(s)?Math.min(RETRY_CAP_S,Math.max(0,Math.ceil(s))):0;};
+  // What /api/config says now: 'world' (with cfg), 'signedout' (401), 'busy' (429, with retryS), 'other' (200 JSON,
+  // not world mode) or 'down' (network error, no answer within PROBE_MS, any other status, or not JSON).
+  const probeConfig=()=>fetch('/api/config',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'},
+    signal:typeof AbortSignal!=='undefined'&&AbortSignal.timeout?AbortSignal.timeout(PROBE_MS):undefined})
+    .then(r=>{if(r.status===401)return{kind:'signedout'};if(r.status===429)return{kind:'busy',retryS:retryAfterS(r.headers.get('retry-after'))};
+      if(r.status!==200||!isJson(r))return{kind:'down'};
       return r.json().then(cfg=>cfg&&cfg.mode==='world'&&cfg.me&&typeof cfg.me==='object'?{kind:'world',cfg}:{kind:'other'});})
     .catch(()=>({kind:'down'}));
   const when=ms=>{const d=new Date(ms);return Number.isFinite(ms)?d.toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'—';};
@@ -3298,7 +3305,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
 
     startWorld(cfg){
       let view='all';try{const v=this.storage&&this.storage.getItem(VIEW_KEY);if(v==='mine'||v==='all')view=v;}catch(_){}
-      if(this.world)clearInterval(this.world.meTimer);// "Thử lại" starts a fresh world
+      if(this.world){clearTimeout(this.world.meTimer);clearTimeout(this.world.waitTimer);}// "Thử lại" starts a fresh world
       this.world={me:cfg.me,csrf:typeof cfg.csrf==='string'?cfg.csrf:'',islands:[],scenes:new Map(),pos:new Map(),viewers:0,conn:'connecting',view,cam:null,goal:null,user:false,zoomAt:0,sw:0,sh:0,mmAt:0,
         dead:false,errAt:0,mine:null,meErr:false,meSeq:0,draft:null,confirm:null};
       this.setState({sel:null,selIsland:null,live:'off'});
@@ -3312,7 +3319,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       this.setWorldCanvas=el=>{this.worldCanvas=el;};this.setMinimap=el=>{this.minimapEl=el;};
       const w=this.world,parse=e=>{try{const d=JSON.parse(e.data);return d&&typeof d==='object'?d:null;}catch(_){return null;}};
       const es=new EventSource('/api/world/stream');w.es=es;
-      es.onopen=()=>{if(!w.dead){w.conn='ok';w.errAt=0;}};
+      es.onopen=()=>{if(!w.dead){w.conn='ok';w.errAt=0;this.worldStalls=0;}};
       // A dropped connection retries by itself; a refused one (401/403 signed out or banned, 429/503 too many streams)
       // closes for good. Retrying that keeps failing for STALL_MS also ends the stream, so a stopped hub is told apart.
       es.onerror=()=>{if(w.dead)return;
@@ -3324,41 +3331,86 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
         if(w.metaSeen&&!w.islands.some(i=>i.id===d.id))return;// not (or no longer) in the world list
         let sc=w.scenes.get(d.id);if(!sc){sc=new IslandScene(this,d.id);w.scenes.set(d.id,sc);}
         sc.sync(Array.isArray(d.sessions)?d.sessions.filter(s=>s&&typeof s.id==='string'):[]);});
-      es.addEventListener('remove',e=>{const d=parse(e);if(!d||typeof d.id!=='string')return;
-        w.scenes.delete(d.id);w.islands=w.islands.filter(i=>i.id!==d.id);this.relayout();
-        if(this.state.selIsland===d.id)this.setState({sel:null,selIsland:null});
-        if(w.confirm&&w.confirm.id===d.id)w.confirm=null;});
-      w.meTimer=setInterval(()=>{if(this.world===w&&w.view==='mine'&&!w.dead)this.loadMe();},ME_EVERY_MS);
+      es.addEventListener('remove',e=>{const d=parse(e);if(!d||typeof d.id!=='string'||w.dead)return;
+        const sc=w.scenes.get(d.id);if(sc)releaseCanvas(sc);
+        w.scenes.delete(d.id);w.islands=w.islands.filter(i=>i.id!==d.id);
+        // The island in focus went away (an owner removed it): back to the whole sky, so a neighbour does not
+        // slide into its place.
+        if(this.state.selIsland===d.id)w.user=false;
+        this.relayout();this.dropGone();});
+      // "Của tôi" polls only while the tab is visible, and refreshes once when it becomes visible again.
+      const tick=()=>{if(this.world!==w)return;
+        if(w.view==='mine'&&!w.dead&&document.visibilityState==='visible')this.loadMe();
+        w.meTimer=setTimeout(tick,ME_EVERY_MS*(1-ME_JITTER+Math.random()*2*ME_JITTER));};
+      w.meTimer=setTimeout(tick,ME_EVERY_MS*(1-ME_JITTER+Math.random()*2*ME_JITTER));
+      if(!this.onWorldVisible){this.onWorldVisible=()=>{const x=this.world;
+        if(x&&!x.dead&&x.view==='mine'&&document.visibilityState==='visible')this.loadMe();};
+        document.addEventListener('visibilitychange',this.onWorldVisible);}
+      // Phones (<= 480 px) fold the "Máy mới" notices into one line and use a 16 px name field (no zoom on focus).
+      if(!this.phoneMq&&window.matchMedia){this.phoneMq=window.matchMedia('(max-width: 480px)');
+        const re=()=>{if(this.world)this.forceUpdate();};
+        if(this.phoneMq.addEventListener)this.phoneMq.addEventListener('change',re);else if(this.phoneMq.addListener)this.phoneMq.addListener(re);}
       if(view==='mine')this.loadMe();
+    },
+    // Forget a selection or an owner's "Xoá đảo" question whose island is no longer in the world.
+    dropGone(){
+      const w=this.world,has=id=>w.islands.some(i=>i.id===id);
+      if(w.confirm&&w.confirm.kind==='remove'&&!has(w.confirm.id)){clearTimeout(w.confirm.timer);w.confirm=null;this.forceUpdate();}
+      if(this.state.selIsland!=null&&!has(this.state.selIsland))this.setState({sel:null,selIsland:null});
     },
     worldMeta(d){
       const w=this.world;
       w.islands=(Array.isArray(d.islands)?d.islands:[]).filter(i=>i&&typeof i.id==='string');
-      w.viewers=Number.isFinite(d.viewers)?d.viewers:0;w.metaSeen=true;
+      w.viewers=Number.isFinite(d.viewers)?d.viewers:0;
       const ids=new Set(w.islands.map(i=>i.id));
-      for(const id of[...w.scenes.keys()])if(!ids.has(id))w.scenes.delete(id);
+      for(const[id,sc]of[...w.scenes])if(!ids.has(id)){releaseCanvas(sc);w.scenes.delete(id);}
       for(const i of w.islands)if(!w.scenes.has(i.id))w.scenes.set(i.id,new IslandScene(this,i.id));
-      this.relayout();
+      const selGone=this.state.selIsland!=null&&!ids.has(this.state.selIsland);
+      if(selGone)w.user=false;
+      this.relayout();this.dropGone();
+      // My island's name, colour or sending state changed (a rename from /me, a device going offline...): the
+      // "Của tôi" panel asks /api/me again rather than wait for the next poll.
+      const m=this.myIsland(),sig=m?JSON.stringify([m.name,m.color,m.online,m.private,m.share]):'';
+      const changed=w.metaSeen&&sig!==w.mineSig;w.mineSig=sig;w.metaSeen=true;
+      if(changed&&w.view==='mine'&&document.visibilityState==='visible')this.loadMe();
     },
     // The stream is gone (refused: closed by the hub's answer; else it kept failing): drop everything shown and ask
     // /api/config why. Signed out → reload (the hub sends the login page); still world mode → the hub refused the
     // stream (too many tabs) or, for a stalled one, came back; no answer → unreachable. Both get "Thử lại".
+    // A stalled stream is restarted by itself at most MAX_STALLS times in a row without an onopen; then the page
+    // stops and offers "Thử lại". 429 from /api/config (the hub's request limit) is 'busy', with "Thử lại" held
+    // until its Retry-After.
     worldEnded(refused){
       const w=this.world;if(w.dead)return;
-      w.dead=true;w.es&&w.es.close();w.scenes.clear();w.islands=[];w.pos=new Map();w.viewers=0;w.confirm=null;
+      w.dead=true;w.es&&w.es.close();for(const sc of w.scenes.values())releaseCanvas(sc);
+      w.scenes.clear();w.islands=[];w.pos=new Map();w.viewers=0;
+      if(w.confirm)clearTimeout(w.confirm.timer);w.confirm=null;
       this.setState({sel:null,selIsland:null});
       probeConfig().then(x=>{if(this.world!==w)return;
         if(x.kind==='signedout')return location.reload();
         if(x.kind==='other'){w.conn='ended';this.forceUpdate();return location.reload();}
-        if(x.kind==='world'&&!refused)return this.startWorld(x.cfg);
-        w.conn=x.kind==='world'?'refused':'unreachable';this.forceUpdate();});
+        if(x.kind==='world'&&!refused){
+          if((this.worldStalls||0)<MAX_STALLS){this.worldStalls=(this.worldStalls||0)+1;return this.startWorld(x.cfg);}
+          w.conn='unreachable';return this.forceUpdate();}
+        this.worldStopped(w,x);});
+    },
+    // Shows why the world stays down: refused (the hub answers but would not stream), busy or unreachable.
+    worldStopped(w,x){
+      clearTimeout(w.waitTimer);w.retryAt=0;
+      w.conn=x.kind==='world'?'refused':x.kind==='busy'?'busy':'unreachable';
+      if(x.kind==='busy'&&x.retryS>0){w.retryAt=performance.now()+x.retryS*1000;
+        const count=()=>{if(this.world!==w)return;this.forceUpdate();
+          if(performance.now()<w.retryAt)w.waitTimer=setTimeout(count,Math.min(1000,w.retryAt-performance.now()+20));else w.retryAt=0;};
+        w.waitTimer=setTimeout(count,1000);}
+      this.forceUpdate();
     },
     retryWorld(){
-      const w=this.world;if(w.retrying)return;
+      const w=this.world;if(w.retrying||(w.retryAt&&performance.now()<w.retryAt))return;
       w.retrying=true;w.es&&w.es.close();this.forceUpdate();
       probeConfig().then(x=>{if(this.world!==w)return;w.retrying=false;
         if(x.kind==='signedout')return location.reload();
-        if(x.kind==='world')return this.startWorld(x.cfg);
+        if(x.kind==='world'){this.worldStalls=0;return this.startWorld(x.cfg);}
+        if(x.kind==='busy'||x.kind==='down')return this.worldStopped(w,x);
         this.forceUpdate();});// still failing: keep the state, the button works again
     },
     // ---- "Của tôi": my island, colours and devices from GET /api/me ----
@@ -3386,9 +3438,12 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     saveIsland(){
       const w=this.world,d=w.draft;if(!d||w.saving)return;
       w.saving=true;w.saveMsg=null;this.forceUpdate();
-      this.postJson('/api/me/island',{name:d.name,color:d.color}).then(({status,data})=>{if(this.world!==w)return;w.saving=false;
+      const sent={name:d.name,color:d.color};
+      this.postJson('/api/me/island',sent).then(({status,data})=>{if(this.world!==w)return;w.saving=false;
         const i=status===200&&data&&data.island;
-        if(i){w.draft={name:String(i.name||''),color:i.color,dirty:false};w.saveMsg={ok:true,text:'Đã lưu.'};}
+        // Typing went on while the save was in flight: keep what is in the field (still unsaved).
+        const same=w.draft===d&&d.name===sent.name&&d.color===sent.color;
+        if(i){if(same)w.draft={name:String(i.name||''),color:i.color,dirty:false};w.saveMsg={ok:true,text:'Đã lưu.'};}
         else w.saveMsg={ok:false,text:status===400?NAME_ERR:status===404?'Bạn chưa có đảo.':'Không lưu được, thử lại sau.'};
         this.loadMe();});
     },
@@ -3405,7 +3460,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const w=this.world,c=w.confirm;if(!c||c.busy||!HEX_ID.test(id))return;
       c.busy=true;c.err=null;this.forceUpdate();
       this.postJson('/api/owner/islands/'+id+'/remove').then(({status,data})=>{if(this.world!==w||w.confirm!==c)return;
-        if(status===200)return;// stays "Đang gửi…" until the 'remove' event
+        // Stays "Đang gửi…" until the 'remove' event; if that is lost, the question closes after REMOVE_WAIT_MS anyway.
+        if(status===200){c.timer=setTimeout(()=>{if(this.world===w&&w.confirm===c){w.confirm=null;this.forceUpdate();}},REMOVE_WAIT_MS);return;}
         c.busy=false;c.err=status===403&&data&&data.error==='owner_island'?'Không xoá được đảo của owner.':'Không xoá được đảo.';
         this.forceUpdate();});
     },
@@ -3601,8 +3657,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const w=this.world,{showSettings}=this.state,mine=this.myIsland(),online=w.islands.filter(i=>i.online!==false).length;
       const pad={paddingLeft:'max(16px, env(safe-area-inset-left, 0px))',paddingRight:'max(16px, env(safe-area-inset-right, 0px))'};
       const hdrCtl={padding:'4px 10px',fontSize:11};
-      const connCol=w.conn==='ok'?'#46a758':w.conn==='connecting'?'#f5a524':'#e5484d';
-      const connText={ok:'Đã kết nối',error:'Mất kết nối, đang thử lại',ended:'Phiên đã hết',refused:'Hub từ chối luồng xem',unreachable:'Không liên lạc được hub'}[w.conn]||'Đang kết nối';
+      const connCol=w.conn==='ok'?'#46a758':w.conn==='connecting'||w.conn==='busy'?'#f5a524':'#e5484d';
+      const connText={ok:'Đã kết nối',error:'Mất kết nối, đang thử lại',ended:'Phiên đã hết',refused:'Hub từ chối luồng xem',busy:'Hub đang bận',unreachable:'Không liên lạc được hub'}[w.conn]||'Đang kết nối';
       const tab=(v,label)=>h('button',{key:v,className:'btn'+(w.view===v?' btn-active':''),style:hdrCtl,'aria-pressed':w.view===v,onClick:()=>this.setView(v)},label);
       return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:8,paddingTop:12,paddingBottom:12,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
         h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'8px 16px'}},
@@ -3630,11 +3686,15 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     worldPanel(mine){
       const w=this.world,{sel,selIsland}=this.state;
       if(w.dead){
-        if(w.conn==='refused'||w.conn==='unreachable'){const refused=w.conn==='refused';
+        if(w.conn==='refused'||w.conn==='busy'||w.conn==='unreachable'){
+          const[title,text]={refused:['Không mở được luồng xem','Hub từ chối luồng xem (có thể đang mở quá 5 tab, hoặc hub đang bận).'],
+            busy:['Hub đang bận','Hub đang bận, thử lại sau ít giây.'],unreachable:['Mất kết nối','Không liên lạc được hub.']}[w.conn];
+          const waitS=w.retryAt?Math.ceil((w.retryAt-performance.now())/1000):0;
           return h('div',{style:PANEL},
-            h('div',{style:TITLE},refused?'Không mở được luồng xem':'Mất kết nối'),
-            h('span',{role:'alert',style:{lineHeight:1.5}},refused?'Hub từ chối luồng xem (có thể đang mở quá 5 tab).':'Không liên lạc được hub.'),
-            h('button',{className:'btn btn-accent',disabled:!!w.retrying,onClick:()=>this.retryWorld()},w.retrying?'Đang thử…':'Thử lại'));}
+            h('div',{style:TITLE},title),
+            h('span',{role:'alert',style:{lineHeight:1.5}},text),
+            h('button',{className:'btn btn-accent',disabled:!!w.retrying||waitS>0,onClick:()=>this.retryWorld()},
+              w.retrying?'Đang thử…':waitS>0?'Thử lại ('+waitS+' giây)':'Thử lại'));}
         if(w.conn==='ended')return h('div',{style:PANEL},
           h('div',{style:TITLE},'Phiên đã hết'),
           h('span',{style:{lineHeight:1.5}},'Hub đã ngắt luồng dữ liệu (đăng xuất, hết hạn hoặc bị chặn).'),
@@ -3703,6 +3763,9 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       }
       const devs=w.mine?w.mine.devices:[],colors=w.mine?w.mine.colors:[],d=w.draft,sending=mine&&mine.online!==false;
       const asking=(x,where)=>{const c=w.confirm;return c&&c.kind==='revoke'&&c.id===x.id&&c.where===where?c:null;};
+      const phone=!!(this.phoneMq&&this.phoneMq.matches),fresh=devs.filter(x=>x.isNew&&x.send!=='revoked');
+      // On a phone several "Máy mới" notices fold into one "N máy mới" line (open while one of them is being revoked).
+      const fold=phone&&fresh.length>1&&!w.newOpen&&!fresh.some(x=>asking(x,'new'));
       const askRevoke=(x,where)=>h('button',{className:'btn',style:SMALL_BTN,onClick:()=>{w.confirm={kind:'revoke',id:x.id,where};this.forceUpdate();}},'Thu hồi');
       const revokeAsk=(x,c)=>confirmRow('Thu hồi '+(clip(x.name,40)||'máy này')+'?','Thu hồi',c,()=>this.revokeDevice(x.id),()=>{w.confirm=null;this.forceUpdate();});
       const edit=patch=>{const dr=w.draft;if(!dr)return;Object.assign(dr,patch,{dirty:true});w.saveMsg=null;this.forceUpdate();};
@@ -3711,16 +3774,21 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
           h('span',{style:{width:14,height:14,background:okColor(mine?mine.color:isl&&isl.color),flex:'none'}}),
           h('div',{style:{...TITLE,flex:1,minWidth:0}},(mine?mine.name:isl&&isl.name)||'Đảo của tôi')),
         // A device paired in the last 7 days: say so, in case it was not this person.
-        devs.filter(x=>x.isNew&&x.send!=='revoked').map(x=>{const c=asking(x,'new');
+        fold?h('div',{key:'new-fold',style:{display:'flex',alignItems:'center',gap:8,padding:8,background:'var(--bg)',borderLeft:'4px solid #ffd166'}},
+          h('span',{style:{flex:1,minWidth:0,lineHeight:1.4}},fresh.length+' máy mới'),
+          h('button',{className:'btn',style:SMALL_BTN,'aria-expanded':false,onClick:()=>{w.newOpen=true;this.forceUpdate();}},'Xem')):
+        fresh.map(x=>{const c=asking(x,'new');
           return h('div',{key:'new-'+x.id,style:{display:'flex',flexDirection:'column',gap:6,padding:8,background:'var(--bg)',borderLeft:'4px solid #ffd166'}},
             h('div',{style:{display:'flex',alignItems:'center',gap:8}},
               h('span',{style:{flex:1,minWidth:0,lineHeight:1.4,overflowWrap:'anywhere'}},'Máy mới: '+(clip(x.name,40)||'—')+', lúc '+when(x.createdAt)),
               !c&&askRevoke(x,'new')),
             c&&revokeAsk(x,c));}),
+        phone&&fresh.length>1&&!fold&&h('button',{key:'new-less',className:'btn',style:{...SMALL_BTN,alignSelf:'flex-start'},'aria-expanded':true,
+          onClick:()=>{w.newOpen=false;this.forceUpdate();}},'Thu gọn'),
         d&&h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
           h('span',{style:MUTED},'TÊN VÀ MÀU ĐẢO'),
           h('div',{style:{display:'flex',gap:6}},
-            h('input',{type:'text','aria-label':'Tên đảo',maxLength:24,value:d.name,style:INPUT,
+            h('input',{type:'text','aria-label':'Tên đảo',maxLength:24,value:d.name,style:phone?{...INPUT,fontSize:16}:INPUT,
               onChange:e=>edit({name:e.target.value}),onKeyDown:e=>{if(e.key==='Enter')this.saveIsland();}}),
             h('button',{className:'btn',disabled:!!w.saving,style:SMALL_BTN,onClick:()=>this.saveIsland()},w.saving?'Đang lưu…':'Lưu')),
           colors.length>0&&h('div',{role:'group','aria-label':'Màu đảo',style:{display:'flex',flexWrap:'wrap',gap:6}},
