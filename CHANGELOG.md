@@ -13,10 +13,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **World view** — The hub page has two modes: "Toàn cảnh" (the whole sky) and "Của tôi" (your own island); the local page shows a "Thế giới" chip once the machine has joined a hub
 - **Publisher commands** — `node server.js join <hub>`, `share kin|co-ban`, `private on|off`, `status` and `leave`; only an allow-list of fields leaves the machine, and `private on` shows the island as private within 3 seconds
 - **Device management** — Devices can be removed at `/me` on the hub; a removed machine's publisher logs `revoked` and stops sending
+- **Self-service island** — Rename and recolour your island, see each device's sending state in "Của tôi" and at `/me`, get a "Máy mới" notice for 7 days after a new device, and leave the hub from `/me/leave` (removes island, devices and sessions and revokes the Google token)
+- **"Xoá đảo" for owners** — Owners (emails in `HUB_OWNER_EMAILS`, checked on every request) can remove a member's island from the world view; there is no manual ban
+- **"Xem như người khác"** — A setting on the local page that draws exactly what others would see, usable before the machine has joined a hub
+- **Automatic access loss** — The hub asks Google for offline access (`access_type=offline`, scope still `openid email profile`), stores the refresh token encrypted, checks it hourly and bans anyone whose Google access was revoked or who left the allowed domain; people without a refresh token are cut after 24 hours until they sign in again
+- **Audit log** — An `audit` table in the hub DB records bans, island removals, renames, device pairing and revocation, and leaving
 
 ### Changed
 
+- **`HUB_SECRET_KEY` is required** — 32 random bytes in base64, even with dev login; it encrypts stored refresh tokens. Changing it drops all stored refresh tokens, so everyone falls back to the 24-hour rule until they sign in again
+- **Hub security** — ID tokens are verified against Google's JWKS; the world page is served with a hash-based CSP and SRI for React; HSTS on `https://` and `Cross-Origin-Opener-Policy: same-origin`; full per-route rate limits and SSE stream caps (5 per user, 300 total)
+- **Upgrading from GĐ1** — The hub DB upgrades in place (`PRAGMA user_version` 2); stop the hub, back up `hub.sqlite`, set `HUB_SECRET_KEY`, start the new version; everyone signs in again within 24 hours so their machines keep sending
+- **`leave` revokes on the hub** — `node server.js leave` now revokes the device on the hub before removing the local config; `join` again also revokes the old token
 - **Local server hardening** — The local server only trusts loopback host names on its own port (extra names via `ALLOWED_HOSTS`) and no longer answers cross-origin requests unless `ALLOWED_ORIGIN` is set
+
+### Fixed
+
+- **Items deferred from GĐ1 review** — `?server=` is ignored when the local page is served over `https:`; device-code approval only succeeds for a code that is pending and unexpired; a signing-in browser's old session is ended; a publisher that gets 401 no longer marks a newer config as revoked; departments with more than 16 projects no longer repeat letters; the hub page offers "Thử lại" when `/api/config` fails transiently
 
 ## [1.4.0] - 2026-11-05
 

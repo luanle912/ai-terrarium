@@ -124,7 +124,13 @@ node server.js join https://terrarium.newera.inc   # ghép máy, duyệt mã tr�
 node server.js share kin|co-ban                    # mức chia sẻ
 node server.js private on|off                      # ẩn nhân viên khỏi người khác
 node server.js status
+node server.js leave                               # thu hồi máy này trên hub và xoá cấu hình local
 ```
+
+Trên trang của hub, ở chế độ **Của tôi** và trang `/me`, bạn tự đổi tên và màu đảo, xem và thu hồi từng máy, và rời hub
+(xoá đảo, máy, phiên). Trang local có công tắc **Xem như người khác** trong Cài đặt để xem đúng phần người khác thấy,
+kể cả khi chưa ghép máy. Owner của hub có thêm quyền "Xoá đảo" của một member. Người nghỉ việc mất quyền trong vòng
+24 giờ, tự động (hub dùng quyền truy cập offline của Google, nên lần đăng nhập đầu có màn hình đồng ý).
 
 Hướng dẫn dựng hub và biến môi trường: [docs/hub-setup.md](docs/hub-setup.md).
 
