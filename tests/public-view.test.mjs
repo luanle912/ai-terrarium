@@ -158,3 +158,13 @@ test('createPublicView rejects a salt that is not 64 hex chars', () => {
     assert.throws(() => createPublicView(bad), /salt/, String(bad));
   assert.doesNotThrow(() => createPublicView('AB'.repeat(32)));
 });
+
+test('the 17th project shares the last room instead of wrapping to A', () => {
+  const v = createPublicView(SALT)
+  const sessions = Array.from({ length: 20 }, (_, i) => mk({ id: 'id-' + i, project: 'proj-' + i }))
+  const out = v(snap(sessions), opts()).sessions
+  const depts = out.map((s) => s.dept)
+  assert.equal(depts[0], 'A'); assert.equal(depts[15], 'P')
+  for (const d of depts.slice(16)) assert.equal(d, 'P')
+  assert.equal(depts.filter((d) => d === 'A').length, 1)
+})

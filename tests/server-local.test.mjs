@@ -59,3 +59,22 @@ test('a second server waits for the port and takes over', async () => {
   assert.equal(logs.length, 1, 'logs the busy port once');
   await close(b);
 });
+
+test('preview works before joining', () => {
+  const { makePublicPreview } = require('../server.js');
+  const snapshot = { at: 1, usage: {}, version: 'x', sessions: [{ id: 'real-session-1', name: 'my-secret-name', project: 'secret-proj', cwd: '/Users/me/secret', status: 'working', tool: 'Bash', parentId: null, updatedAt: 1 }] };
+  const salt = 'cd'.repeat(32);
+  const preview = makePublicPreview({ publisher: null, getSnapshot: () => snapshot, salt });
+  const a = preview(), b = preview();
+  assert.equal(a.state, 'off');
+  assert.match(a.view.sessions[0].id, /^[0-9a-f]{12}$/);
+  const json = JSON.stringify(a);
+  assert.ok(!json.includes('cwd') && !json.includes('my-secret-name') && !json.includes('secret-proj'));
+  assert.equal(b.view.sessions[0].id, a.view.sessions[0].id);
+  // a publisher without a view falls back to the preview view but keeps its own state
+  const p2 = makePublicPreview({ publisher: { state: () => ({ state: 'offline' }), view: () => null }, getSnapshot: () => snapshot, salt })();
+  assert.equal(p2.state, 'offline'); assert.ok(p2.view);
+  const mine = { sessions: [] };
+  const p3 = makePublicPreview({ publisher: { state: () => ({ state: 'sending', share: 'kin' }), view: () => mine }, getSnapshot: () => snapshot, salt })();
+  assert.equal(p3.view, mine); assert.equal(p3.share, 'kin');
+});

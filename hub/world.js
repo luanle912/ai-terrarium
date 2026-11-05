@@ -6,7 +6,9 @@
 //   devicesOf(islandId) -> [{deviceId, online, share, private}]   setIslandMeta(id, {name, color})
 
 const OFFLINE_MS = 90 * 1000;
-const LETTERS = 'ABCDEFGHIJKLMNOP';
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+// Room label for the n-th (machine, letter) pair: A..Z, then A2..Z2, A3.. (never wraps back to A).
+const roomLabel = (n) => LETTERS[n % 26] + (n >= 26 ? String(Math.floor(n / 26) + 1) : '');
 const LETTER_RE = /^[A-P]$/;
 
 function createWorld({ now = Date.now, onChange = () => {} } = {}) {
@@ -33,7 +35,7 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
     let n = 0;
     for (const [id, d] of devs) {
       const used = [...new Set(d.sessions.filter((s) => LETTER_RE.test(s.dept)).map((s) => s.dept))].sort();
-      for (const l of used) label.set(id + '|' + l, LETTERS[n++ % LETTERS.length]);
+      for (const l of used) label.set(id + '|' + l, roomLabel(n++));
     }
     const seen = new Set();
     const out = [];
@@ -113,4 +115,4 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
   };
 }
 
-module.exports = { createWorld, OFFLINE_MS };
+module.exports = { createWorld, OFFLINE_MS, roomLabel };
