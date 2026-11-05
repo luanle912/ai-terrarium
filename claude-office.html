@@ -759,7 +759,7 @@ class ClaudeOffice extends React.Component{
   }
 
   componentDidMount(){
-    this.startSource();
+    this.boot();
     const st=this.stageEl;if(st){st.addEventListener('wheel',this.onWheel,{passive:false});st.addEventListener('pointerdown',this.onDown);
       st.addEventListener('pointermove',this.onDrag);st.addEventListener('pointerup',this.onUp);st.addEventListener('pointercancel',this.onUp);
       // A resized window changes the fitted layout; pull the view back inside the new limits.
@@ -775,7 +775,8 @@ class ClaudeOffice extends React.Component{
     this.realTimer=setInterval(()=>{if(this.state.weatherMode==='real')this.refreshReal();},REAL_WEATHER_EVERY_MS);
   }
   componentWillUnmount(){const st=this.stageEl;if(st){st.removeEventListener('wheel',this.onWheel);st.removeEventListener('pointerdown',this.onDown);st.removeEventListener('pointermove',this.onDrag);st.removeEventListener('pointerup',this.onUp);st.removeEventListener('pointercancel',this.onUp);}
-    this.ro&&this.ro.disconnect();clearTimeout(this.kTimer);clearInterval(this.simTimer);clearInterval(this.uiTimer);clearInterval(this.realTimer);cancelAnimationFrame(this.raf);this.es&&this.es.close();}
+    this.ro&&this.ro.disconnect();clearTimeout(this.kTimer);clearInterval(this.simTimer);clearInterval(this.uiTimer);clearInterval(this.realTimer);cancelAnimationFrame(this.raf);this.es&&this.es.close();
+    clearInterval(this.previewTimer);this.world&&this.world.es&&this.world.es.close();}
   // ---- weather settings ----
   setWeather(patch){
     this.setState(patch,()=>{
@@ -837,7 +838,7 @@ class ClaudeOffice extends React.Component{
     return this.depts.get(key);
   }
   colOwners(){
-    const cnt=[{},{},{},{}];
+    const cnt=[0,1,2,3].map(()=>Object.create(null));// keys are project names, possibly other people's ("__proto__")
     this.agents.forEach(a=>{if(a.gone||a.leaving)return;const c=colOf(a.desk);if(c<4)cnt[c][a.dept]=(cnt[c][a.dept]||0)+1;});
     return cnt.map(o=>{let best=null,b=0;for(const k in o)if(o[k]>b){b=o[k];best=k;}return best;});
   }
@@ -998,6 +999,7 @@ class ClaudeOffice extends React.Component{
   }
 
   frame(ts){
+    if(this.world)return this.worldFrame(ts);
     const dt=Math.min(0.05,(ts-this.last)/1000);this.last=ts;
     if(!this.state.paused){this.agents.forEach(a=>this.updateAgent(a,dt));
       if(this.agents.some(a=>a.gone)){const goneA=this.agents.filter(a=>a.gone);goneA.forEach(a=>this.goneSids.add(a.sid));const goneIds=goneA.map(a=>a.id);this.agents=this.agents.filter(a=>!a.gone);if(goneIds.includes(this.state.sel))this.setState({sel:null});}}
@@ -1044,13 +1046,14 @@ class ClaudeOffice extends React.Component{
     if(cam.z!==this.kZoom){clearTimeout(this.kTimer);this.kTimer=setTimeout(()=>{this.kZoom=this.cam.z;},150);}}
   headPos(a){if(a.stool&&!a.moving){const[sx,sy]=P(a.x,a.y);return[sx,sy-(a.stool===2?30:25)];}if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=PA(a.x,a.y);if(a.actNow==="bath"&&!a.moving)return[sx,sy-11];return[sx,sy-(a.seated?23:21)];}
 
+  renderK(){return CameraLogic.renderScale(this.canvas.clientWidth,window.devicePixelRatio||1,this.kZoom,LW);}
   draw(t){
     const c=this.canvas;if(!c)return;const ctx=c.getContext('2d'),th=this.theme,env=this.env;
     const df=th._day!=null?th._day:1;
     // Draw at the screen's own resolution so edges stay sharp when the canvas is shown large. k is not rounded:
     // with the island-sized scene a whole-number k would make the browser shrink the bitmap and drop pixel rows.
     // Zoomed in, the resolution follows the zoom (CameraLogic.renderScale); past 4× the browser scales it up pixelated.
-    const k=CameraLogic.renderScale(c.clientWidth,window.devicePixelRatio||1,this.kZoom,LW);
+    const k=this.renderK();
     if(this.k!==k){this.k=k;c.width=Math.round(LW*k);c.height=Math.round(LH*k);}
     ctx.setTransform(k,0,0,k,0,0);
     ctx.imageSmoothingEnabled=false;ctx.globalAlpha=1;ctx.clearRect(0,0,LW,LH);
@@ -1468,6 +1471,7 @@ class ClaudeOffice extends React.Component{
   }
 
   render(){
+    if(this.world)return this.renderWorld();
     const{sel,paused,live,dataSource,endpoint,showBubbles,autoApprove,agentCount,speed,showSettings}=this.state;
     const isLive=dataSource==='live',isSim=!isLive,ls=live;
     const cnt=k=>this.agents.filter(a=>!a.leaving&&k.includes(a.status)).length;
@@ -1510,6 +1514,7 @@ class ClaudeOffice extends React.Component{
             h('span',{style:{width:8,height:8,borderRadius:'50%',background:seasonInfo.accent,display:'inline-block',boxShadow:'0 0 4px '+seasonInfo.accent}}),
             h('span',{style:{color:seasonInfo.accent,fontWeight:600}},seasonInfo.label)
           ),
+          this.worldChip(),
           summary.map((c,i)=>h('div',{key:i,className:'chip'},
             h('span',{style:{width:8,height:8,background:c.color,display:'inline-block'}}),
             h('span',null,c.label),
@@ -1647,6 +1652,413 @@ class ClaudeOffice extends React.Component{
     );
   }
 }
+
+</script>
+<script id="island-scene">
+// One island of the world view (several islands in one sky). Its simulation and drawing are the component's own
+// methods, borrowed rather than copied, so every island in the world looks and moves exactly like the local page.
+// What belongs to one island lives here; the sky, light, speed and selection come from the host component.
+const SCENE_METHODS=['syncLive','addAgent','dept','colOwners','freeDeskFor','freeDesk','log','byId','leave','goalFor','updateAgent',
+  'draw','drawSeg','drawPlanter','pantryItems','drawDesk','actArms','drawPerson','drawSleeper','headPos','hit'];
+// Every island bakes the same ground for a given resolution, light and snow, so one bake per k serves them all.
+const SCENE_ISLAND_CACHE=new Map();
+class IslandScene{
+  constructor(host,id){
+    this.host=host;this.id=id;
+    this.agents=[];this.seq=0;this.usedLooks=0;this.goneSids=new Set();this.depts=new Map();this.firstSnap=true;this.seasonKey='default';
+    this.canvas=document.createElement('canvas');this.k=null;this.lodK=1;this.lod=null;this.drawnAt=-1e9;this.simAt=0;
+    this.state={sel:null};// the host's selected agent, when it is on this island
+    this.raw=new Map();// session id -> the session as the hub sent it (kind, tool, model for the detail panel)
+  }
+  get theme(){return this.host.frameTheme||this.host.theme;}
+  get env(){return this.host.env;}
+  get speed(){return this.host.speed;}
+  get snowShown(){return this.host.snowShown;}
+  get islandCache(){return SCENE_ISLAND_CACHE.get(this.k);}
+  set islandCache(v){if(SCENE_ISLAND_CACHE.size>=6&&!SCENE_ISLAND_CACHE.has(v.k))SCENE_ISLAND_CACHE.clear();SCENE_ISLAND_CACHE.set(v.k,v);}
+  renderK(){return this.lodK;}// canvas px per scene px, chosen by the world view from the island's level of detail
+  sync(sessions){this.raw=new Map(sessions.map(s=>[s.id,s]));this.syncLive({sessions});}
+  frame(dt){
+    this.agents.forEach(a=>this.updateAgent(a,dt));
+    if(this.agents.some(a=>a.gone)){const gone=this.agents.filter(a=>a.gone);gone.forEach(a=>this.goneSids.add(a.sid));this.agents=this.agents.filter(a=>!a.gone);
+      const h_=this.host;if(h_.state.selIsland===this.id&&gone.some(a=>a.id===h_.state.sel))h_.setState({sel:null});}
+  }
+}
+for(const m of SCENE_METHODS)IslandScene.prototype[m]=ClaudeOffice.prototype[m];
+for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,Object.getOwnPropertyDescriptor(ClaudeOffice.prototype,g));
+</script>
+<script id="world-view">
+// World mode: the page is served by a hub (GET /api/config says mode 'world'). Every island is an IslandScene fed by
+// /api/world/stream and drawn into its own canvas at a level of detail (WorldLogic.lodFor), then stamped onto one
+// stage-sized canvas between the sky and the weather. "Toàn cảnh" shows every island, "Của tôi" only mine.
+(function(){
+  const VIEW_KEY='ai-terrarium.view';
+  const MID_MS=100,THUMB_MS=2000,OFF_MS=250,REDRAWS_PER_FRAME=2,THUMB_K=0.25,MID_K=1,OFFLINE_ALPHA=0.65;
+  const KIND_LABEL=new Map([['shell','Chạy lệnh'],['edit','Sửa code'],['read','Đọc code'],['web','Tra web'],['agent','Giao sub-agent'],['mcp','Công cụ MCP'],['other','Việc khác'],['none','—']]);
+  const SHARE_LABEL=new Map([['kin','Kín'],['co-ban','Cơ bản']]);
+  const BUSY=new Set(['working','thinking','talking']);
+  const okColor=c=>typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c)?c:'#8b8fa3';
+  const clip=(s,n)=>{s=String(s==null?'':s);return s.length>n?s.slice(0,n-1)+'…':s;};
+  const zFit=(sw,sh)=>Math.min(sw,sh*LW/FH);// island top fills the stage, like the local page
+  const PANEL={position:'absolute',zIndex:10,top:12,right:12,width:300,maxWidth:'calc(100% - 24px)',maxHeight:'calc(100% - 68px)',overflowY:'auto',boxSizing:'border-box',background:'var(--surface)',border:'3px solid var(--fg)',boxShadow:'6px 6px 0 rgba(0,0,0,0.45)',padding:14,display:'flex',flexDirection:'column',gap:12,fontSize:12};
+  const TITLE={fontFamily:"'Pixelify Sans',monospace",fontSize:17,fontWeight:600,color:'#ffffff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'};
+  const MUTED={fontSize:10,color:'var(--muted)'};
+  const field=(label,val,key)=>h('div',{key:key||label,style:{display:'flex',flexDirection:'column',gap:2,minWidth:0}},h('span',{style:MUTED},label),h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},val));
+
+  Object.assign(ClaudeOffice.prototype,{
+    // Decide the mode once, before any data source opens: world only on a 200 JSON answer saying so (the local
+    // server answers 404, a file:// page cannot fetch). ?server= is never read in world mode (B9).
+    boot(){
+      let done=false;
+      const local=()=>{if(done)return;done=true;this.startSource();this.pollPreview();};
+      const timer=setTimeout(local,3000);
+      fetch('/api/config',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}})
+        .then(r=>r.status===200&&/^application\/json\b/i.test(r.headers.get('content-type')||'')?r.json():null)
+        .then(cfg=>{if(done)return;clearTimeout(timer);
+          if(cfg&&cfg.mode==='world'&&cfg.me&&typeof cfg.me==='object'){done=true;this.startWorld(cfg);}else local();})
+        .catch(()=>{clearTimeout(timer);local();});
+    },
+    // Local page: the "Thế giới" chip follows the publisher every 5 s; hidden while it is off.
+    pollPreview(){
+      const tick=()=>fetch('/api/public-preview',{cache:'no-store'}).then(r=>r.ok?r.json():null).catch(()=>null).then(d=>{
+        const v=d&&typeof d.state==='string'&&d.state!=='off'?{state:d.state,share:d.share==='co-ban'?'co-ban':'kin'}:null,c=this.state.worldChip||null;
+        if(!v!==!c||(v&&(v.state!==c.state||v.share!==c.share)))this.setState({worldChip:v});});
+      tick();this.previewTimer=setInterval(tick,5000);
+    },
+    worldChip(){
+      const c=this.state.worldChip;if(!c)return null;
+      const[text,col]={sending:['đang gửi · mức '+SHARE_LABEL.get(c.share),'#46a758'],private:['riêng tư','#8b8fa3'],offline:['mất kết nối','#e5484d'],revoked:['bị thu hồi','#e5484d']}[c.state]||['…','#8b8fa3'];
+      return h('div',{className:'chip',title:'Trạng thái gửi đảo của máy này lên thế giới',style:{borderColor:col}},
+        h('span',{style:{width:8,height:8,borderRadius:'50%',background:col,display:'inline-block'}}),h('span',null,'Thế giới: '+text));
+    },
+
+    startWorld(cfg){
+      let view='all';try{const v=this.storage&&this.storage.getItem(VIEW_KEY);if(v==='mine'||v==='all')view=v;}catch(_){}
+      this.world={me:cfg.me,islands:[],scenes:new Map(),pos:new Map(),viewers:0,conn:'connecting',view,cam:null,goal:null,user:false,zoomAt:0,sw:0,sh:0,mmAt:0};
+      this.setState({sel:null,selIsland:null,live:'off'});
+      // The pointer handlers bound at mount drive the local camera; the world has its own, bound to the world stage
+      // element when React mounts it (the local stage element goes away).
+      const swap=[['wheel','onWheel',{passive:false}],['pointerdown','onDown'],['pointermove','onDrag'],['pointerup','onUp'],['pointercancel','onUp']];
+      const bind=(el,on)=>{if(el)for(const[ev,k,o]of swap)on?el.addEventListener(ev,this[k],o):el.removeEventListener(ev,this[k]);};
+      bind(this.stageEl,false);
+      this.onWheel=e=>this.worldWheel(e);this.onDown=e=>this.worldDown(e);this.onDrag=e=>this.worldDrag(e);this.onUp=e=>this.worldUp(e);
+      this.setWorldStage=el=>{if(this.stageEl===el)return;bind(this.stageEl,false);this.stageEl=el;bind(el,true);};
+      this.setWorldCanvas=el=>{this.worldCanvas=el;};this.setMinimap=el=>{this.minimapEl=el;};
+      const w=this.world,parse=e=>{try{const d=JSON.parse(e.data);return d&&typeof d==='object'?d:null;}catch(_){return null;}};
+      const es=new EventSource('/api/world/stream');w.es=es;
+      es.onopen=()=>{w.conn='ok';};es.onerror=()=>{w.conn='error';};
+      es.addEventListener('world',e=>{const d=parse(e);if(d)this.worldMeta(d);});
+      es.addEventListener('island',e=>{const d=parse(e);if(!d||typeof d.id!=='string')return;
+        let sc=w.scenes.get(d.id);if(!sc){sc=new IslandScene(this,d.id);w.scenes.set(d.id,sc);}
+        sc.sync(Array.isArray(d.sessions)?d.sessions.filter(s=>s&&typeof s.id==='string'):[]);});
+      es.addEventListener('remove',e=>{const d=parse(e);if(!d||typeof d.id!=='string')return;
+        w.scenes.delete(d.id);w.islands=w.islands.filter(i=>i.id!==d.id);this.relayout();
+        if(this.state.selIsland===d.id)this.setState({sel:null,selIsland:null});});
+    },
+    worldMeta(d){
+      const w=this.world;
+      w.islands=(Array.isArray(d.islands)?d.islands:[]).filter(i=>i&&typeof i.id==='string');
+      w.viewers=Number.isFinite(d.viewers)?d.viewers:0;
+      const ids=new Set(w.islands.map(i=>i.id));
+      for(const id of[...w.scenes.keys()])if(!ids.has(id))w.scenes.delete(id);
+      for(const i of w.islands)if(!w.scenes.has(i.id))w.scenes.set(i.id,new IslandScene(this,i.id));
+      this.relayout();
+    },
+    myIsland(){const w=this.world,id=w.me.islandId;return id?w.islands.find(i=>i.id===id)||null:null;},
+    // Layout is index based (a removed island moves the later ones); the camera tweens to the new places.
+    relayout(){const w=this.world;w.pos=WorldLogic.layout(w.islands,w.me.islandId);if(!w.user)w.goal=this.homeCam();},
+    homeCam(){
+      const w=this.world,sw=w.sw,sh=w.sh;if(!(sw>0&&sh>0))return null;
+      if(w.view==='mine')return{x:0,y:0,z:zFit(sw,sh)};
+      return WorldLogic.fitAll(w.pos,sw,sh);
+    },
+    setView(view){
+      const w=this.world;if(w.view===view)return;w.view=view;w.user=false;w.goal=this.homeCam();
+      try{this.storage&&this.storage.setItem(VIEW_KEY,view);}catch(_){}
+      this.setState({sel:null,selIsland:null});
+    },
+    // The islands drawn in the current view, back to front: [{id, meta, sc, p}].
+    shownIslands(){
+      const w=this.world;
+      if(w.view==='mine'){const m=this.myIsland(),sc=m&&w.scenes.get(m.id);return sc?[{id:m.id,meta:m,sc,p:{x:0,y:0}}]:[];}
+      const out=[];for(const m of w.islands){const sc=w.scenes.get(m.id),p=w.pos.get(m.id);if(sc&&p)out.push({id:m.id,meta:m,sc,p});}
+      return out.sort((a,b)=>a.p.y-b.p.y);
+    },
+    // On-screen box of an island's whole canvas (rect) and of its top (focus box), in stage px.
+    islandRect(p){
+      const w=this.world,c=WorldLogic.toScreen(w.cam,p.x,p.y,w.sw,w.sh),s=w.cam.z/LW;
+      return{x:c.x-LW/2*s,y:c.y-FH/2*s,w:w.cam.z,h:LH*s,fh:FH*s,s};
+    },
+
+    worldFrame(ts){
+      const w=this.world,dt=Math.min(0.05,Math.max(0,(ts-this.last)/1000));this.last=ts;
+      this.env=this.envNow();this.frameTheme=this.theme;
+      const st=this.stageEl,sw=st?st.clientWidth:0,sh=st?st.clientHeight:0;
+      if(sw!==w.sw||sh!==w.sh){w.sw=sw;w.sh=sh;if(!w.user||!w.cam)w.goal=this.homeCam();}
+      if(sw>0&&sh>0){
+        if(!w.cam&&w.goal){w.cam=w.goal;w.goal=null;}
+        else if(w.cam&&w.goal){const g=w.goal;w.cam=WorldLogic.camStep(w.cam,g,dt);if(w.cam.x===g.x&&w.cam.y===g.y&&w.cam.z===g.z)w.goal=null;}
+      }
+      this.drawWorld(ts/1000,dt,sw,sh);
+      this.drawSky(ts/1000);
+      if(ts-w.mmAt>200){w.mmAt=ts;this.drawMinimap();}
+    },
+    drawWorld(t,dt,sw,sh){
+      const w=this.world,cv=this.worldCanvas;if(!cv)return;
+      const dpr=window.devicePixelRatio||1,bw=Math.round(sw*dpr),bh=Math.round(sh*dpr);
+      if(cv.width!==bw||cv.height!==bh){cv.width=bw;cv.height=bh;}
+      const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,sw,sh);
+      const now=performance.now(),shown=w.cam&&sw>0&&sh>0?this.shownIslands():[],drawn=new Set();
+      // A camera still moving keeps the full-detail resolution it had, so the island is not re-baked every frame.
+      const moving=!!w.goal||now-w.zoomAt<150||!!this.drag||!!this.pinchAt;
+      const due=[];let viewed=null,best=Infinity;
+      for(const it of shown){
+        const r=it.r=this.islandRect(it.p);
+        it.vis=WorldLogic.visible(r,sw,sh);if(!it.vis)continue;
+        drawn.add(it.id);
+        it.lod=WorldLogic.lodFor(r.w,sw);
+        // Islands are all the same size on screen, so neighbours of the one in view are "full" too: only the one
+        // nearest the stage centre is drawn at full detail, the others as mid.
+        if(it.lod==='full'){const d=Math.hypot(r.x+r.w/2-sw/2,r.y+r.fh/2-sh/2);if(d<best){best=d;viewed=it;}}
+      }
+      for(const it of shown){
+        if(!it.vis)continue;
+        const r=it.r,sc=it.sc,simDt=Math.min(1,(now-(sc.simAt||now))/1000)||dt;sc.simAt=now;sc.frame(Math.min(0.05,simDt));
+        const lod=it.lod==='full'&&it!==viewed?'mid':it.lod;
+        // Full detail matches the screen pixel for pixel (a plain copy, no scaling) once the camera rests.
+        let k=lod==='mid'?MID_K:lod==='thumb'?THUMB_K:Math.min(4,Math.max(0.5,r.w*dpr/LW));
+        if(lod==='full'&&moving)k=sc.lod==='full'?sc.lodK:Math.max(MID_K,sc.lodK);
+        const age=now-sc.drawnAt,stale=sc.lod!==lod||sc.lodK!==k;
+        if(lod==='full')it.redraw={k,lod,force:true};
+        else if(stale||age>=(lod==='mid'?MID_MS:THUMB_MS)){it.redraw={k,lod};due.push(it);}
+      }
+      // Mid and thumbnail islands share a small per-frame budget, longest-waiting first (one while an island is full size).
+      const budget=shown.some(it=>it.vis&&it.redraw&&it.redraw.force)?1:REDRAWS_PER_FRAME;
+      due.sort((a,b)=>a.sc.drawnAt-b.sc.drawnAt).slice(budget).forEach(it=>{if(it.sc.k!=null)it.redraw=null;});
+      // Islands not drawn (off screen, or other islands in "Của tôi") still walk, a few times a second.
+      for(const sc of w.scenes.values())if(!drawn.has(sc.id)&&now-sc.simAt>=OFF_MS){const d=Math.min(1,(now-(sc.simAt||now))/1000);sc.simAt=now;if(d>0)sc.frame(d);}
+      const selIsl=this.state.selIsland,sel=this.state.sel,labels=[];
+      shown.forEach((it,i)=>{if(!it.vis)return;const sc=it.sc,r=it.r;
+        if(it.redraw){sc.lodK=it.redraw.k;sc.lod=it.redraw.lod;sc.state.sel=selIsl===sc.id?sel:null;sc.draw(t);sc.drawnAt=now;}
+        if(sc.k==null)return;
+        const bob=this.env&&this.env.reduced?0:Math.round(Math.sin(t*0.7+i*1.7)*3);
+        ctx.globalAlpha=it.meta.online===false?OFFLINE_ALPHA:1;
+        ctx.imageSmoothingEnabled=r.w<sc.canvas.width/dpr;
+        ctx.drawImage(sc.canvas,r.x,r.y+bob,r.w,r.h);
+        ctx.globalAlpha=1;
+        labels.push({it,x:r.x+r.w/2,y:r.y+bob+r.fh*0.04});
+      });
+      ctx.imageSmoothingEnabled=true;
+      if(w.view==='all'||labels.length)for(const l of labels)this.drawIslandLabel(ctx,l.it,l.x,l.y);
+    },
+    // Name, how many are working, a yellow dot when someone waits for approval or another session; 35 % dimmer offline.
+    drawIslandLabel(ctx,it,x,y){
+      const m=it.meta,raw=[...it.sc.raw.values()];
+      const busy=raw.filter(s=>BUSY.has(s.status)).length,alert=raw.some(s=>s.status==='permission'||s.status==='waiting');
+      const name=clip(m.name||'Đảo',24),sub=m.private?'riêng tư':busy+' đang làm'+(m.online===false?' · offline':'');
+      ctx.save();ctx.globalAlpha=m.online===false?OFFLINE_ALPHA:1;
+      ctx.font="600 12px 'JetBrains Mono',monospace";const nw=ctx.measureText(name).width;
+      ctx.font="500 11px 'JetBrains Mono',monospace";const sw_=ctx.measureText(sub).width;
+      const pw=Math.ceil(14+nw+10+sw_+(alert?14:0)+10),ph=22,px=Math.round(x-pw/2),py=Math.round(y-ph-6);
+      ctx.fillStyle='rgba(16,20,30,0.82)';ctx.fillRect(px,py,pw,ph);
+      ctx.fillStyle=okColor(m.color);ctx.fillRect(px,py,4,ph);
+      if(this.world.me.islandId===m.id){ctx.strokeStyle='#ffd166';ctx.lineWidth=1;ctx.strokeRect(px+0.5,py+0.5,pw-1,ph-1);}
+      ctx.textBaseline='middle';
+      ctx.font="600 12px 'JetBrains Mono',monospace";ctx.fillStyle='#ffffff';ctx.fillText(name,px+12,py+ph/2+1);
+      ctx.font="500 11px 'JetBrains Mono',monospace";ctx.fillStyle=m.private?'#c9cfdc':'#aab2c5';ctx.fillText(sub,px+12+nw+10,py+ph/2+1);
+      if(alert){ctx.fillStyle='#ffd166';ctx.beginPath();ctx.arc(px+pw-12,py+ph/2,4,0,Math.PI*2);ctx.fill();}
+      ctx.restore();
+    },
+    drawMinimap(){
+      const w=this.world,cv=this.minimapEl;if(!cv||w.view!=='all'||!w.cam)return;
+      const W_=cv.width,H_=cv.height,ctx=cv.getContext('2d'),ps=[...w.pos.entries()];
+      ctx.clearRect(0,0,W_,H_);ctx.fillStyle='rgba(16,20,30,0.75)';ctx.fillRect(0,0,W_,H_);
+      if(!ps.length)return;
+      const xs=ps.map(([,p])=>p.x),ys=ps.map(([,p])=>p.y),x0=Math.min(...xs)-0.8,x1=Math.max(...xs)+0.8,y0=Math.min(...ys)-0.6,y1=Math.max(...ys)+0.6;
+      const s=Math.min(W_/(x1-x0),H_/(y1-y0)),ox=(W_-(x1-x0)*s)/2-x0*s,oy=(H_-(y1-y0)*s)/2-y0*s;
+      w.mm={s,ox,oy};
+      const metas=new Map(w.islands.map(i=>[i.id,i]));
+      for(const[id,p]of ps){const m=metas.get(id);ctx.globalAlpha=m&&m.online===false?OFFLINE_ALPHA:1;ctx.fillStyle=okColor(m&&m.color);
+        const iw=Math.max(4,s*0.9),ih=Math.max(3,s*0.55);ctx.fillRect(Math.round(ox+p.x*s-iw/2),Math.round(oy+p.y*s-ih/2),Math.round(iw),Math.round(ih));
+        if(id===w.me.islandId){ctx.strokeStyle='#ffd166';ctx.lineWidth=1;ctx.strokeRect(Math.round(ox+p.x*s-iw/2)-1.5,Math.round(oy+p.y*s-ih/2)-1.5,Math.round(iw)+3,Math.round(ih)+3);}}
+      ctx.globalAlpha=1;
+      const a=WorldLogic.toWorld(w.cam,0,0,w.sw,w.sh),b=WorldLogic.toWorld(w.cam,w.sw,w.sh,w.sw,w.sh);
+      ctx.strokeStyle='#ffffff';ctx.lineWidth=1;ctx.strokeRect(Math.round(ox+a.x*s)+0.5,Math.round(oy+a.y*s)+0.5,Math.round((b.x-a.x)*s),Math.round((b.y-a.y)*s));
+    },
+
+    // ---- world camera: drag pans, wheel / trackpad pinch zooms about the cursor, two fingers pinch ----
+    zLimits(){const w=this.world,f=zFit(w.sw,w.sh);return[Math.min(60,f),4*f];},
+    camAround(cam,px,py,z){// cam with zoom z keeping the world point under stage (px, py) there
+      const w=this.world,[lo,hi]=this.zLimits();z=Math.min(hi,Math.max(lo,z));
+      const q=WorldLogic.toWorld(cam,px,py,w.sw,w.sh);return{x:q.x-(px-w.sw/2)/z,y:q.y-(py-w.sh/2)/z,z};
+    },
+    onWorldScene(e){return e.target===this.stageEl||e.target===this.backCanvas||e.target===this.worldCanvas;},
+    worldWheel(e){const w=this.world;if(!this.onWorldScene(e)||!e.deltaY||!w.cam)return;e.preventDefault();
+      const[px,py]=this.stagePt(e);w.cam=this.camAround(w.cam,px,py,w.cam.z*CameraLogic.wheelFactor(e));w.goal=null;w.user=true;w.zoomAt=performance.now();},
+    worldDown(e){const w=this.world;if(e.button!==0||!this.onWorldScene(e)||!w.cam)return;this.dragged=false;
+      if(e.isPrimary)this.pts.clear();
+      this.pts.set(e.pointerId,this.stagePt(e));
+      if(this.pts.size===2){const ids=[...this.pts.keys()];this.pinchAt={cam:w.cam,ids,a:this.pts.get(ids[0]),b:this.pts.get(ids[1])};this.drag=null;
+        for(const id of ids)try{this.stageEl.setPointerCapture(id);}catch(_){}return;}
+      if(this.pts.size>2)return;
+      this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,cam:w.cam,on:false};},
+    worldDrag(e){const w=this.world;if(this.pts.has(e.pointerId))this.pts.set(e.pointerId,this.stagePt(e));
+      const p=this.pinchAt;
+      if(p){if(!p.ids.includes(e.pointerId))return;this.dragged=true;const a1=this.pts.get(p.ids[0]),b1=this.pts.get(p.ids[1]);
+        const z=p.cam.z*Math.hypot(b1[0]-a1[0],b1[1]-a1[1])/Math.max(1,Math.hypot(p.b[0]-p.a[0],p.b[1]-p.a[1]));
+        const m0=[(p.a[0]+p.b[0])/2,(p.a[1]+p.b[1])/2],m1=[(a1[0]+b1[0])/2,(a1[1]+b1[1])/2],c=this.camAround(p.cam,m0[0],m0[1],z);
+        w.cam={x:c.x-(m1[0]-m0[0])/c.z,y:c.y-(m1[1]-m0[1])/c.z,z:c.z};w.goal=null;w.user=true;w.zoomAt=performance.now();return;}
+      const d=this.drag;
+      if(!d){if(e.target===this.worldCanvas)e.target.style.cursor=this.worldHit(...this.stagePt(e))?'pointer':'grab';return;}
+      if(e.pointerId!==d.id)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;
+      if(!d.on){if(!CameraLogic.isDrag(dx,dy))return;d.on=true;try{this.stageEl.setPointerCapture(d.id);}catch(_){}if(this.worldCanvas)this.worldCanvas.style.cursor='grabbing';}
+      w.cam={x:d.cam.x-dx/d.cam.z,y:d.cam.y-dy/d.cam.z,z:d.cam.z};w.goal=null;w.user=true;},
+    worldUp(e){this.pts.delete(e.pointerId);
+      const p=this.pinchAt;if(p&&p.ids.includes(e.pointerId)){this.pinchAt=null;setTimeout(()=>{this.dragged=false;},0);return;}
+      const d=this.drag;if(!d||e.pointerId!==d.id)return;this.drag=null;
+      if(d.on){this.dragged=true;setTimeout(()=>{this.dragged=false;},0);if(this.worldCanvas)this.worldCanvas.style.cursor='grab';}},
+    // The island (front-most first) and, when it is drawn large enough to aim at, the agent under a stage point.
+    worldHit(px,py){
+      const w=this.world;if(!w.cam)return null;
+      const shown=this.shownIslands();
+      for(let i=shown.length-1;i>=0;i--){const it=shown[i],r=this.islandRect(it.p);
+        if(px<r.x||px>r.x+r.w||py<r.y||py>r.y+r.h)continue;
+        let agent=null;
+        if(r.w>=0.35*w.sw)agent=it.sc.hit({currentTarget:{getBoundingClientRect:()=>({left:r.x,top:r.y,width:r.w,height:r.h})},clientX:px,clientY:py});
+        if(agent||py<=r.y+r.fh)return{it,agent};
+      }
+      return null;
+    },
+    onWorldClick(e){
+      if(this.dragged){this.dragged=false;return;}
+      const w=this.world,[px,py]=this.stagePt(e),hit=this.worldHit(px,py);
+      if(!hit){this.setState({sel:null,selIsland:null});return;}
+      if(hit.agent){this.setState({selIsland:hit.it.id,sel:hit.agent.id});return;}
+      if(w.view==='all'){w.goal=WorldLogic.focusOn(hit.it.p,w.sw,w.sh);w.user=true;}
+      this.setState({selIsland:hit.it.id,sel:null});
+    },
+    onMinimapClick(e){
+      const w=this.world,mm=w.mm;if(!mm||!w.cam)return;const r=e.currentTarget.getBoundingClientRect();
+      const x=(e.clientX-r.left)*e.currentTarget.width/r.width,y=(e.clientY-r.top)*e.currentTarget.height/r.height;
+      w.goal={x:(x-mm.ox)/mm.s,y:(y-mm.oy)/mm.s,z:w.cam.z};w.user=true;
+    },
+
+    // ---- world page ----
+    renderWorld(){
+      const w=this.world,{showSettings}=this.state,mine=this.myIsland(),online=w.islands.filter(i=>i.online!==false).length;
+      const pad={paddingLeft:'max(16px, env(safe-area-inset-left, 0px))',paddingRight:'max(16px, env(safe-area-inset-right, 0px))'};
+      const hdrCtl={padding:'4px 10px',fontSize:11};
+      const connCol=w.conn==='ok'?'#46a758':w.conn==='error'?'#e5484d':'#f5a524';
+      const connText=w.conn==='ok'?'Đã kết nối':w.conn==='error'?'Mất kết nối, đang thử lại':'Đang kết nối';
+      const tab=(v,label)=>h('button',{key:v,className:'btn'+(w.view===v?' btn-active':''),style:hdrCtl,'aria-pressed':w.view===v,onClick:()=>this.setView(v)},label);
+      return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:8,paddingTop:12,paddingBottom:12,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
+        h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'8px 16px'}},
+          h('div',{style:{display:'flex',alignItems:'baseline',gap:8,flex:'none'}},
+            h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:20,fontWeight:700,letterSpacing:'0.02em',color:'#ffffff'}},'CLAUDE CO.'),
+            h('span',{style:{fontSize:11,color:'var(--muted)'}},location.host)),
+          h('div',{style:{display:'flex',flexWrap:'wrap',gap:6,fontSize:11,alignItems:'center',flex:'1 1 300px',minWidth:0}},
+            h('div',{className:'chip'},h('span',null,'Đảo online'),h('strong',{style:{color:'#ffffff'}},online+'/'+w.islands.length)),
+            h('div',{className:'chip'},h('span',null,'Đang xem'),h('strong',{style:{color:'#ffffff'}},w.viewers)),
+            h('div',{className:'chip',title:connText},h('span',{style:{width:8,height:8,background:connCol,display:'inline-block'}}),h('span',null,connText))),
+          h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8,flex:'none'}},
+            h('div',{role:'group','aria-label':'Chế độ xem',style:{display:'flex'}},tab('all','Toàn cảnh'),tab('mine','Của tôi')),
+            h('a',{className:'btn',style:{...hdrCtl,textDecoration:'none'},href:'/me'},'Đảo của tôi'))),
+        h('div',{ref:this.setWorldStage,style:{position:'relative',flex:'1 1 0',minHeight:0,border:'3px solid #232a39',overflow:'hidden'}},
+          h('canvas',{ref:this.setBack,style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:0,display:'block'}}),
+          h('canvas',{ref:this.setWorldCanvas,onClick:e=>this.onWorldClick(e),style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:1,display:'block'}}),
+          h('canvas',{ref:this.setFront,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:2,pointerEvents:'none',display:'block'}}),
+          w.view==='all'&&h('canvas',{ref:this.setMinimap,width:168,height:110,'aria-label':'Bản đồ nhỏ',onClick:e=>this.onMinimapClick(e),
+            style:{position:'absolute',zIndex:5,left:12,bottom:12,width:168,height:110,border:'2px solid var(--border)',cursor:'pointer'}}),
+          this.worldPanel(mine),
+          h('button',{className:'settings-toggle','aria-label':'Cài đặt',title:'Cài đặt: tốc độ, thời tiết',onClick:()=>this.setState(p=>({showSettings:!p.showSettings}))},'⚙'),
+          showSettings&&this.worldSettings())
+      );
+    },
+    worldPanel(mine){
+      const w=this.world,{sel,selIsland}=this.state;
+      const close=h('button',{className:'btn',onClick:()=>this.setState({sel:null,selIsland:null}),style:{width:28,height:28,padding:0,flex:'none'}},'×');
+      const sc=selIsland&&w.scenes.get(selIsland),meta=selIsland&&w.islands.find(i=>i.id===selIsland);
+      const a=sc&&sel!=null&&sc.byId(sel);
+      if(a){// Hub data has no names, prompts or folders: status, kind of work, room, and tool / model on "Cơ bản".
+        const raw=sc.raw.get(a.sid)||{},Dp=sc.depts.get(a.dept),stx=ST[a.status]||ST.working,par=a.parent&&sc.byId(a.parent);
+        return h('div',{style:PANEL},
+          h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+            h('div',{style:{width:34,height:34,background:Dp?Dp.color:'#8b8fa3',color:'#ffffff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Pixelify Sans',monospace",fontSize:13,fontWeight:700,flex:'none'}},clip(a.short,4)),
+            h('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:2}},h('div',{style:TITLE},clip(a.dept,40)),h('div',{style:MUTED},meta?clip(meta.name,40):'')),
+            close),
+          h('div',{style:{display:'flex',flexDirection:'column',gap:4,padding:10,background:'var(--bg)',borderLeft:'4px solid '+stx[1]}},h('span',{style:{fontWeight:600,color:stx[1]}},stx[0])),
+          h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:'10px 14px'}},
+            field('NHÓM VIỆC',KIND_LABEL.get(raw.kind)||'—'),
+            field('PHÒNG BAN',clip(a.dept,40)),
+            raw.tool?field('TOOL',clip(raw.tool,32)):null,
+            raw.model?field('MODEL',clip(raw.model,48)):null,
+            field('VAI TRÒ',par?'Sub-agent của '+par.short:'Main session')));
+      }
+      if(w.view==='all'&&sc&&meta){
+        const counts=new Map();for(const x of sc.agents)if(!x.leaving)counts.set(x.dept,(counts.get(x.dept)||0)+1);
+        return h('div',{style:PANEL},
+          h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+            h('span',{style:{width:14,height:14,background:okColor(meta.color),flex:'none'}}),
+            h('div',{style:{...TITLE,flex:1,minWidth:0}},meta.name||'Đảo'),close),
+          h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:'10px 14px'}},
+            field('TRẠNG THÁI',meta.online===false?'Offline':'Online'),
+            field('MỨC CHIA SẺ',meta.private?'Riêng tư':SHARE_LABEL.get(meta.share)||'—'),
+            field('SESSION',String(sc.raw.size))),
+          meta.private?h('span',{style:{color:'var(--muted)'}},'Chủ đảo đang để riêng tư, không hiện nhân viên.'):
+          h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
+            h('span',{style:MUTED},'PHÒNG BAN'),
+            counts.size?[...counts].map(([dk,n],i)=>{const Dp=sc.depts.get(dk);return h('div',{key:i,style:{display:'flex',alignItems:'center',gap:8}},
+              h('span',{style:{width:8,height:8,background:Dp?Dp.color:'#8b8fa3',display:'inline-block',flex:'none'}}),
+              h('span',{style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},dk),h('strong',{style:{color:'#ffffff'}},n));})
+            :h('span',{style:{color:'var(--muted)'}},'Chưa có session nào.')));
+      }
+      if(w.view!=='mine')return null;
+      const fullLink=h('a',{href:'http://localhost:4317',target:'_blank',rel:'noopener noreferrer',style:{color:'#9fd3ff'}},'Mở bản đầy đủ trên máy này');
+      const meLink=h('a',{href:'/me',style:{color:'#9fd3ff'}},'Quản lý máy ở trang Đảo của tôi');
+      if(!w.me.islandId){const origin=location.origin;
+        return h('div',{style:PANEL},
+          h('div',{style:TITLE},'Bạn chưa có đảo'),
+          h('span',{style:{lineHeight:1.5}},'Ghép máy đang chạy Claude Code với thế giới:'),
+          h('ol',{style:{margin:0,paddingLeft:18,display:'flex',flexDirection:'column',gap:6,lineHeight:1.5}},
+            h('li',null,'Trên máy, trong thư mục plugin, chạy:',h('code',{style:{display:'block',marginTop:4,background:'var(--bg)',padding:'6px 8px',color:'#ffd166',fontSize:11,wordBreak:'break-all',userSelect:'all'}},'node server.js join '+origin)),
+            h('li',null,'Terminal in một mã dạng XXXX-XXXX và một link. Mở link, đăng nhập bằng tài khoản này.'),
+            h('li',null,'Gõ đúng mã thấy trên terminal rồi bấm Cho phép. Chỉ làm vậy nếu bạn vừa chạy lệnh trên máy của mình.'),
+            h('li',null,'Giữ server chạy; đảo của bạn hiện ra sau vài giây.')),
+          meLink);
+      }
+      const sending=mine&&mine.online!==false;
+      return h('div',{style:PANEL},
+        h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+          h('span',{style:{width:14,height:14,background:okColor(mine&&mine.color),flex:'none'}}),
+          h('div',{style:{...TITLE,flex:1,minWidth:0}},mine?mine.name||'Đảo của tôi':'Đảo của tôi')),
+        !mine&&h('span',{style:{color:'var(--muted)',lineHeight:1.5}},'Chưa máy nào gửi trạng thái. Chạy server của plugin trên máy đã ghép.'),
+        mine&&h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:'10px 14px'}},
+          field('MỨC CHIA SẺ',SHARE_LABEL.get(mine.share)||'—'),
+          field('RIÊNG TƯ',mine.private?'Có':'Không'),
+          field('TRẠNG THÁI GỬI',sending?'Đang gửi':'Mất kết nối'),
+          field('SESSION',String((w.scenes.get(mine.id)||{raw:new Map()}).raw.size))),
+        h('span',{style:{color:'var(--muted)',lineHeight:1.5}},'Đây là bản đã lọc, đúng như người khác thấy. Tên session, câu lệnh và bong bóng chữ chỉ có trên máy của bạn.'),
+        fullLink,meLink);
+    },
+    worldSettings(){
+      const st=this.state;
+      return h('div',{className:'settings-panel'},
+        h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:14,fontWeight:600,color:'#ffffff',marginBottom:4}},'Cài đặt'),
+        h('label',null,'Tốc độ: '+st.speed.toFixed(2)+'x',h('input',{type:'range',min:0.5,max:3,step:0.25,value:st.speed,onChange:e=>this.setState({speed:+e.target.value})})),
+        h('div',{style:{borderTop:'1px solid var(--border)',margin:'2px 0'}}),
+        h('label',null,'Thời tiết',
+          h('select',{'aria-label':'Chế độ thời tiết',value:st.weatherMode,onChange:e=>this.setWeather({weatherMode:e.target.value})},
+            h('option',{value:'random'},'Ngẫu nhiên'),h('option',{value:'real'},'Thời tiết thật'),h('option',{value:'off'},'Tắt (luôn trời quang)'))),
+        st.weatherMode==='real'&&h('div',{style:{display:'flex',gap:6}},
+          h('input',{type:'text','aria-label':'Thành phố',placeholder:'Thành phố, ví dụ Đà Lạt',value:st.cityDraft,style:{flex:1,maxWidth:'none'},
+            onChange:e=>this.setState({cityDraft:e.target.value}),onKeyDown:e=>{if(e.key==='Enter')this.setWeather({city:st.cityDraft.trim()});}}),
+          h('button',{className:'btn',style:{padding:'4px 8px',fontSize:11},onClick:()=>this.setWeather({city:st.cityDraft.trim()})},'Cập nhật')),
+        st.weatherMode==='real'&&st.realStatus.text&&h('span',{role:'status',style:{fontSize:11,lineHeight:1.4,color:st.realStatus.state==='error'?'#ff9b9e':'var(--muted)'}},st.realStatus.text),
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
+          WEATHER_PREVIEW.map(([type,label])=>h('button',{key:type,className:'btn',title:'Xem thử: '+WEATHER_LABEL[type],style:{padding:'3px 7px',fontSize:11},onClick:()=>this.previewWeather(type)},label))));
+    },
+  });
+})();
 
 ReactDOM.createRoot(document.getElementById('root')).render(h(ClaudeOffice));
 </script>
