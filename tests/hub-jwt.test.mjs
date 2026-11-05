@@ -25,6 +25,9 @@ test('a token signed by a JWKS key verifies', async () => {
 test('malformed tokens are rejected', async () => {
   const { google, jwks } = setup();
   await assert.rejects(jwks.verify('a.b'), /^Error: jwt: /);
+  await assert.rejects(jwks.verify('a.b.c.d'), /jwt: malformed/);
+  await assert.rejects(jwks.verify('a b.c.d'), /jwt: malformed/);
+  await assert.rejects(jwks.verify('a+b.c/d.e=='), /jwt: malformed/);
   await assert.rejects(jwks.verify(''), /^Error: jwt: /);
   await assert.rejects(jwks.verify(`${Buffer.from('nope').toString('base64url')}.e30.sig`), /jwt: bad header/);
   await assert.rejects(jwks.verify(`${enc({ alg: 'RS256' })}.e30.sig`), /jwt: no kid/);
@@ -43,7 +46,8 @@ test('a wrong signature is rejected', async () => {
 test('alg none and HS256 are rejected', async () => {
   const { google, jwks } = setup();
   await jwks.verify(google.sign({})); // prime the cache so kid-1 is known
-  await assert.rejects(jwks.verify(`${enc({ alg: 'none', kid: 'kid-1' })}.${enc({ sub: 'x' })}.`), /jwt: unsupported alg/);
+  await assert.rejects(jwks.verify(`${enc({ alg: 'none', kid: 'kid-1' })}.${enc({ sub: 'x' })}.`), /jwt: malformed/);
+  await assert.rejects(jwks.verify(`${enc({ alg: 'none', kid: 'kid-1' })}.${enc({ sub: 'x' })}.c2ln`), /jwt: unsupported alg/);
   const input = `${enc({ alg: 'HS256', kid: 'kid-1' })}.${enc({ sub: 'x' })}`;
   const mac = crypto.createHmac('sha256', 'secret').update(input).digest('base64url');
   await assert.rejects(jwks.verify(`${input}.${mac}`), /jwt: unsupported alg/);
@@ -61,7 +65,7 @@ test('a rotated key is fetched once', async () => {
   assert.equal(google.jwksFetches, 2);
   // the old key is gone from the JWKS
   const oldKid = 'kid-1';
-  await assert.rejects(jwks.verify(google.sign({}, { kid: oldKid })), /jwt: (unknown kid|bad signature)/);
+  await assert.rejects(jwks.verify(google.sign({}, { kid: oldKid })), /^Error: jwt: unknown kid$/);
 });
 
 test('unknown kids refetch at most once a minute', async () => {
@@ -115,6 +119,45 @@ test('max-age defaults to one hour and is capped at 24 hours', async () => {
   s.clock.t += 2 * SEC;
   await s.jwks.verify(s.google.sign({}));
   assert.equal(s.google.jwksFetches, 2);
+});
+
+test('a max-age shorter than the refetch interval still serves the cached keys', async () => {
+  const { clock, google, jwks } = setup(withCacheControl('max-age=0'));
+  await jwks.verify(google.sign({}));
+  for (const dt of [1, 29, 30]) {
+    clock.t = NOW + dt * SEC;
+    assert.deepEqual(await jwks.verify(google.sign({ dt })), { dt });
+  }
+  clock.t = NOW + 59 * SEC;
+  await jwks.verify(google.sign({}));
+  assert.equal(google.jwksFetches, 1);
+  clock.t = NOW + 61 * SEC;
+  await jwks.verify(google.sign({}));
+  assert.equal(google.jwksFetches, 2);
+});
+
+test('fetch failures are throttled and never drop good keys', async () => {
+  const clock = { t: NOW };
+  const google = makeGoogle({ now: () => clock.t });
+  let broken = true, attempts = 0;
+  const fetch = async (u, o) => { attempts += 1; if (broken) throw new Error('down'); return google.fetch(u, o); };
+  const jwks = createJwks({ fetch, now: () => clock.t });
+  await assert.rejects(jwks.verify(google.sign({})), /jwt: keys unavailable/);
+  clock.t += 10 * SEC;
+  await assert.rejects(jwks.verify(google.sign({})), /jwt: unknown kid/);
+  assert.equal(attempts, 1);
+  clock.t += 51 * SEC;
+  broken = false;
+  assert.deepEqual(await jwks.verify(google.sign({ ok: 1 })), { ok: 1 });
+  assert.equal(attempts, 2);
+  // a failure after a good fetch (cache expired) keeps the cached keys usable
+  broken = true;
+  clock.t += 3601 * SEC;
+  assert.deepEqual(await jwks.verify(google.sign({ ok: 2 })), { ok: 2 });
+  assert.equal(attempts, 3);
+  clock.t += 10 * SEC;
+  assert.deepEqual(await jwks.verify(google.sign({ ok: 3 })), { ok: 3 });
+  assert.equal(attempts, 3);
 });
 
 test('concurrent unknown kids share one fetch', async () => {
