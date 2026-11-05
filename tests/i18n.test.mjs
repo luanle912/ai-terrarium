@@ -37,6 +37,7 @@ test('detect prefers ?lang=, then the saved choice, then the browser languages b
   assert.equal(I18n.detect(store('ko'), ['vi']), 'ko')
   assert.equal(I18n.detect(store('xx'), ['es-MX']), 'es')
   assert.equal(I18n.detect(null, ['zh-TW', 'en']), 'zh')
+  assert.equal(I18n.detect(null, ['th-TH', 'en']), 'th')
   assert.equal(I18n.detect(null, ['de-DE', 'fr']), 'en')
   assert.equal(I18n.detect({ getItem: () => { throw new Error('blocked') } }, ['ja']), 'ja')
 })

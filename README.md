@@ -152,7 +152,7 @@ https://claude.ai/artifact/7rKQWsQxG8WttUXiWqEUt6?server=localhost:4317
 
 ### Language
 
-The page is available in Tiếng Việt, English, 日本語, 한국어, 简体中文 and Español. It starts in your browser's language (English if it is not one of these); pick another under **Language** at the top of the ⚙ panel and the page reloads in it and remembers the choice. The hub sign-in pages and the `server.js` command-line messages are still Vietnamese.
+The page is available in Tiếng Việt, English, 日本語, 한국어, 简体中文, Español and ไทย. It starts in your browser's language (English if it is not one of these); pick another under **Language** at the top of the ⚙ panel and the page reloads in it and remembers the choice. The hub sign-in pages and the `server.js` command-line messages are still Vietnamese.
 
 ### Weather
 
