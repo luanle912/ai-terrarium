@@ -9,8 +9,8 @@ Anh Kiệt gửi ảnh chụp bãi cỏ phía đông, ngay ngoài bức tường
 "thiết kế nhà vệ sinh cạnh chỗ này, dời khu hút thuốc xuống dưới".
 
 - **Nhà vệ sinh** đứng đúng chỗ khu hút thuốc hiện nay, sát pantry: người trong pantry ra là tới, như một văn phòng thật.
-- **Khu hút thuốc** dời "xuống dưới", tức về phía trước và phía dưới trên màn hình isometric (tăng `y`), xa nhà vệ sinh
-  để khói không bay vào chỗ đi vệ sinh.
+- **Khu hút thuốc** dời "xuống dưới", tức về phía trước và phía dưới trên màn hình isometric (tăng `y`), cách nhà vệ sinh
+  ba hàng cỏ để khói không bay vào chỗ đi vệ sinh.
 - Agent rảnh thỉnh thoảng đi vệ sinh một lát rồi quay lại, như một hoạt động ngắn.
 
 ## 2. Vị trí
@@ -21,7 +21,7 @@ Lưới văn phòng 27×14 (`W`, `H`). Bãi cỏ phía đông là các cột `x 
 | Khu | Ô chừa (`SkyLogic.outdoorSpots`) | Trước | Sau |
 |---|---|---|---|
 | `east-back` | `x 28..31, y 2..5` (4×4), sát tường đông pantry | khu hút thuốc | **nhà vệ sinh** |
-| `east-front` | `x 28..31, y 10..13` (4×4) | ô chừa 4×3 ở `y 10..12`, bỏ trống | **khu hút thuốc** |
+| `east-front` | `x 28..31, y 9..12` (4×4) | ô chừa 4×3 ở `y 10..12`, bỏ trống | **khu hút thuốc** |
 | `south-left` | không đổi | trống | trống |
 
 ### 2.1. Nhà vệ sinh (`east-back`)
@@ -35,17 +35,20 @@ Lưới văn phòng 27×14 (`W`, `H`). Bãi cỏ phía đông là các cột `x 
 
 ### 2.2. Khu hút thuốc (`east-front`)
 
-- Ô chừa `east-front` đổi từ 4×3 thành 4×4: `x 28..31, y 10..13` (`y = H-4`). Bố cục bên trong giữ nguyên như
-  `SmokeLogic.layout` hiện nay: bồn cây chắn ở cột phía pantry (`x = 28`, `y 10..12`), ghế băng hàng sau, thùng tàn
-  thuốc và hai chỗ đứng, cửa vào là hai ô đầu của hàng trước `(28,13)`, `(29,13)`.
+- Ô chừa `east-front` đổi từ 4×3 thành 4×4: `x 28..31, y 9..12` (`y = H-5`). Bố cục bên trong giữ nguyên như
+  `SmokeLogic.layout` hiện nay: bồn cây chắn ở cột phía pantry (`x = 28`, `y 9..11`), ghế băng hàng sau, thùng tàn
+  thuốc và hai chỗ đứng, cửa vào là hai ô đầu của hàng trước `(28,12)`, `(29,12)`.
+- Lúc làm, em thử `y 10..13` trước: cây ở `(29,14)` che mất cửa vào và biển báo, nên lùi lên một hàng.
 - **Lý do chọn chỗ này:** đây là chỗ trống lớn nhất phía dưới trên bãi cỏ đông, đã được chừa từ bản sky island nên
-  không có cây, không chạm hồ. Đường đá dọc `x = 27` chạy sát cạnh trái khu, nên cửa vào `(28,13)` nằm ngay cạnh
-  đường đá `(27,13)`. Khoảng cách tới nhà vệ sinh là 5 hàng cỏ (`y 5 → 10`), đủ xa để khói không bay tới.
+  không có cây, không chạm hồ. Đường đá dọc `x = 27` chạy sát cạnh trái khu, nên cửa vào `(28,12)` nằm ngay cạnh
+  đường đá `(27,12)`. Giữa hai khu là 3 hàng cỏ (`y 6..8`); khói bốc thẳng lên trên màn hình, không trôi về phía nhà vệ sinh.
 - Vì cầu thang nằm **phía trên** khu mới, đường rẻ nhất có thể cắt qua cỏ rồi trèo qua lưng ghế băng vào khu.
   Để tránh vậy, nền đá **chỉ vào được qua hai ô cửa**: mọi cạnh khác của nền là kín (`SmokeLogic.layout(...).shut`),
   được thêm vào tập `EDGE` mà `bfs` đã dùng cho tường văn phòng.
-- Ô `(30,13)` hiện có một hòn đá trang trí; ô chừa lớn hơn nên hòn đá này không còn. Đây là thay đổi duy nhất ngoài
+- Ô `(30,9)` hiện có một bông hoa trang trí; ô chừa lớn hơn nên bông hoa này không còn. Đây là thay đổi duy nhất ngoài
   hai khu.
+- Biển báo khu hút thuốc dời từ góc trước bên phải sang mép trước, ngay sau cửa vào (`x ≈ X+2`), vì cây ở `(32,13)`
+  che góc trước bên phải của chỗ mới.
 
 ## 3. Thiết kế hình ảnh nhà vệ sinh
 
@@ -59,7 +62,7 @@ tuyết như khu hút thuốc.
 | Mái | Mái bằng màu đá phiến, viền trắng, chìa ra một chút; tuyết phủ trắng dần | `#4a5266` |
 | Mái hiên | Tấm hiên nghiêng màu xanh ngọc trên hai cửa | `#3f8f82` |
 | Hai cửa | Cửa gỗ ở mặt trước; mỗi cửa một biển hình người nhỏ (nam xanh dương, nữ đỏ hồng) | `#a8763e` |
-| Biển WC | Biển trắng chữ `WC` trên mái hiên | `#ffffff` / `#2d3142` |
+| Biển WC | Biển xanh chữ `WC` trắng, trên gương lavabo (chỗ này không bị người đứng ở cửa che) | `#3a8fd0` / `#ffffff` |
 | Đèn báo | Chấm nhỏ trên mỗi cửa: xanh lá khi trống, đỏ khi có người | `#46a758` / `#e5484d` |
 | Lavabo | Chậu sứ trắng gắn tường bên phải hai cửa, vòi inox, gương xanh nhạt có vệt sáng phía trên | `#f6f4ee`, `#bfe3ff` |
 | Cửa sổ nhỏ | Ô kính mờ cao ở mặt hông đông | `#dfe8f2` |
@@ -104,8 +107,8 @@ tuyết như khu hút thuốc.
 
 - **Không có gì thô tục:** không vẽ bồn cầu, không âm thanh, không hình ảnh bên trong. Chỉ có cửa, biển và lavabo;
   người vào thì biến mất sau cánh cửa.
-- **Khói không bay vào nhà vệ sinh:** hai khu cách nhau ít nhất 4 hàng cỏ (có test).
-- **Không thay đổi phần nào khác của đảo**, ngoài hòn đá ở `(30,13)` nằm trong ô chừa mới.
+- **Khói không bay vào nhà vệ sinh:** hai khu cách nhau ít nhất 3 hàng cỏ (có test).
+- **Không thay đổi phần nào khác của đảo**, ngoài bông hoa ở `(30,9)` nằm trong ô chừa mới.
 - Không ai đi xuyên tường nhà vệ sinh hay leo qua lưng ghế vào khu hút thuốc; chó không vào hai khu.
 - Không thêm dependency hay bước build; trang vẫn là một file.
 

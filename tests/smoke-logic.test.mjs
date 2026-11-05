@@ -8,14 +8,15 @@ const SkyLogic = loadSkyLogic()
 const SmokeLogic = loadSmokeLogic()
 const W = 27, H = 14
 const island = SkyLogic.buildIsland({ W, H })
-const zone = island.spots.find(s => s.id === 'east-back')
+const zone = island.spots.find(s => s.id === 'east-front')
 const corner = SmokeLogic.layout(zone)
 const key = ([x, y]) => x + ',' + y
 const inZone = ([x, y]) => x >= zone.x && x < zone.x + zone.w && y >= zone.y && y < zone.y + zone.h
 
 // ---- layout ----
 
-test('the corner fills the east-back outdoor spot and every tile of it is dry lawn', () => {
+test('the corner fills the east-front outdoor spot, 4×4 down the east lawn, and every tile of it is dry lawn', () => {
+  assert.deepEqual([zone.x, zone.y, zone.w, zone.h], [W + 1, H - 5, 4, 4])
   assert.equal(corner.x, zone.x)
   assert.equal(corner.y, zone.y)
   for (let y = zone.y; y < zone.y + zone.h; y++) for (let x = zone.x; x < zone.x + zone.w; x++) {
@@ -66,6 +67,20 @@ test('every spot and the entrance can be walked to from the foot of the east sta
   for (const t of corner.entry) assert.ok(seen.has(key(t)), `entrance ${t} reachable`)
 })
 
+test('the pad is closed all round except through the entrance', () => {
+  const shut = new Set(corner.shut), entry = new Set(corner.entry.map(key))
+  for (let y = zone.y; y < zone.y + zone.h; y++) for (let x = zone.x; x < zone.x + zone.w; x++)
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const a = [x, y], b = [x + dx, y + dy]
+      if (inZone(b)) { assert.ok(!shut.has(key(a) + '|' + key(b)), `step ${a} → ${b} inside the pad is open`); continue }
+      const open = entry.has(key(a))
+      assert.equal(shut.has(key(a) + '|' + key(b)), !open, `step ${a} → ${b}`)
+      assert.equal(shut.has(key(b) + '|' + key(a)), !open, `step ${b} → ${a}`)
+    }
+  // the entrance sits right beside the garden path down from the east stairs
+  assert.ok(corner.entry.some(([x, y]) => island.paths.cells.has(key([x - 1, y]))), 'an entrance tile borders the garden path')
+})
+
 test('the whole stone pad is paved, the trough tiles included', () => {
   const tiles = []
   for (let y = zone.y; y < zone.y + zone.h; y++) for (let x = zone.x; x < zone.x + zone.w; x++) tiles.push(x + ',' + y)
@@ -76,10 +91,10 @@ test('walking in from the east stairs, smokers come off the garden path through 
   // the same costs the page's bfs uses: garden path and paving cost 1, bare grass costs more
   const walk = SkyLogic.lawnWalk(island, W, H)
   corner.blocked.forEach(k => walk.delete(k))
-  const paved = new Set(corner.paved), entry = new Set(corner.entry.map(key))
+  const paved = new Set(corner.paved), entry = new Set(corner.entry.map(key)), shut = new Set(corner.shut)
   const east = SkyLogic.stairs(W, H).find(s => s.side === 'east')
   for (const s of corner.spots) {
-    const route = SkyLogic.cheapestPath([east.x, east.y], s.tile, (c, n) => walk.has(key(n)),
+    const route = SkyLogic.cheapestPath([east.x, east.y], s.tile, (c, n) => walk.has(key(n)) && !shut.has(key(c) + '|' + key(n)),
       n => island.paths.cells.has(key(n)) || paved.has(key(n)) ? 1 : SkyLogic.GRASS_COST)
     const firstIn = route.find(inZone)
     assert.ok(entry.has(key(firstIn)), `route to ${s.tile} enters at ${firstIn}, not an entrance tile`)

@@ -381,14 +381,14 @@ test('garden paths lie on walkable lawn, off the water and the reserved spots', 
   for (const d of island.decor) assert.ok(!island.paths.cells.has(d.x + ',' + d.y), `${d.kind} at ${d.x},${d.y} sits on the path`)
 })
 
-test('garden paths join both stairs to the pond and the east stairs to the smoking area edge', () => {
+test('garden paths join both stairs to the pond and the east stairs to the restroom step', () => {
   const cells = island.paths.cells
   const bath = island.pond.spots.reduce((a, b) => (b.y < a.y ? b : a))
   const entry = [bath.x, bath.y - 1]
   assert.ok(cells.has(entry + ''), 'the path ends right next to a bathing spot')
   assert.ok(reachWithin(cells, [W, 8], entry), 'east stairs → pond')
   assert.ok(reachWithin(cells, [23, H], entry), 'south stairs → pond')
-  assert.ok(reachWithin(cells, [W, 7], [W + 1, 6]), 'east stairs → smoking area edge')
+  assert.ok(reachWithin(cells, [W, 7], [W + 1, 6]), 'east stairs → restroom step')
   assert.ok(inSpotId('east-back', W + 1, 5), 'the spur stops right below the east-back spot')
 })
 
@@ -430,7 +430,7 @@ test('stepping stones are laid about one stride apart', () => {
   }
 })
 
-test('the smoking-area spur ends on the lawn just below the east-back spot', () => {
+test('the restroom spur ends on the lawn just below the east-back spot', () => {
   const spot = island.spots.find((s) => s.id === 'east-back')
   const end = island.paths.stones.reduce((a, b) => (b.y < a.y ? b : a))
   assert.ok(end.x >= spot.x && end.x < spot.x + 2, `the last stone is at x ${end.x}, outside the spot's entrance x ${spot.x}–${spot.x + 1}`)
@@ -479,8 +479,8 @@ test('agents walking out to the pond keep to the garden path', () => {
     assert.ok(route.length > 0, `no way from ${from} to the pond`)
     for (const c of route.slice(0, -1)) assert.ok(cells.has(c + ''), `from ${from} the walk leaves the path at ${c}`)
   }
-  const smoke = SkyLogic.cheapestPath([W, 7], [W + 1, 6], step, cost)
-  assert.deepEqual(smoke, [[W + 1, 7], [W + 1, 6]], 'east stairs → smoking area edge along the spur')
+  const toRestroom = SkyLogic.cheapestPath([W, 7], [W + 1, 6], step, cost)
+  assert.deepEqual(toRestroom, [[W + 1, 7], [W + 1, 6]], 'east stairs → restroom step along the spur')
 })
 
 test('agents still reach lawn goals off the path, and not by a long detour', () => {

@@ -16,12 +16,12 @@
 
 ## Global Constraints
 
-- `east-back` = nhà vệ sinh (`x 28..31, y 2..5`), `east-front` = khu hút thuốc, đổi thành 4×4 (`x 28..31, y 10..13`).
+- `east-back` = nhà vệ sinh (`x 28..31, y 2..5`), `east-front` = khu hút thuốc, đổi thành 4×4 (`x 28..31, y 9..12`).
 - Thân nhà vệ sinh chặn 9 ô `x 28..30, y 2..4`; hai idle spot `act:'wc'` ở `(28,5)` và `(29,5)`.
 - Nền khu hút thuốc chỉ vào được qua hai ô cửa; các cạnh kín nằm trong `SmokeLogic.layout(...).shut`.
 - Chó tránh cả hai ô chừa.
 - Bộ test đầy đủ `node --test tests/*.test.mjs` phải PASS (368 test ở `ea16158`, cộng test mới).
-- Ngoài hòn đá trang trí ở `(30,13)`, phần còn lại của đảo trông như cũ.
+- Ngoài bông hoa trang trí ở `(30,9)`, phần còn lại của đảo trông như cũ.
 
 ## Review Focus
 
@@ -37,11 +37,11 @@
 - Modify: `claude-office.html`: khối `sky-logic` (`outdoorSpots`: `east-front` thành `h:4`; chú thích `lawnPaths`), khối `smoke-logic` (thêm `shut`), script chính (`SMOKE` lấy `east-front`, thêm `SMOKE.shut` vào `EDGE`, `DOG_ROAM` tránh cả hai ô).
 - Modify: `tests/smoke-logic.test.mjs`, `tests/sky-logic.test.mjs` (tên test nhánh đường đá).
 
-- [ ] **Step 1: Sửa test** `smoke-logic`: khu nằm ở `east-front` 4×4 tại `y = H-4`; test mới "nền chỉ vào được qua cửa" (mọi cạnh biên trừ cạnh vào ô cửa nằm trong `shut`); test "đi từ cầu thang đông" dùng `shut` khi tìm đường.
+- [ ] **Step 1: Sửa test** `smoke-logic`: khu nằm ở `east-front` 4×4 tại `y = H-5`; test mới "nền chỉ vào được qua cửa" (mọi cạnh biên trừ cạnh vào ô cửa nằm trong `shut`); test "đi từ cầu thang đông" dùng `shut` khi tìm đường.
 - [ ] **Step 2: Chạy** `node --test tests/smoke-logic.test.mjs`. Kỳ vọng: FAIL.
 - [ ] **Step 3: Cài đặt** `outdoorSpots`, `SmokeLogic.layout(...).shut`, `SMOKE`, `EDGE`, `DOG_ROAM`.
 - [ ] **Step 4: Chạy** toàn bộ test. Kỳ vọng: PASS.
-- [ ] **Kiểm bằng mắt:** khu hút thuốc vẽ đầy đủ ở chỗ mới; chỗ cũ chỉ còn cỏ.
+- [ ] **Kiểm bằng mắt:** khu hút thuốc vẽ đầy đủ ở chỗ mới, biển báo không bị cây che; chỗ cũ chỉ còn cỏ.
 
 ### Task 2: Logic nhà vệ sinh
 
@@ -53,7 +53,7 @@
 - `RestroomLogic.layout(zone) → {x, y, blocked: string[], paved: string[], spots: {act:'wc', tile, pt, front:false, door}[], doors: {x0, x1}[]}`.
 - `RestroomLogic.visit(t) → 'door' | 'inside' | 'out' | 'done'`, `RestroomLogic.VISIT` (tổng thời lượng).
 
-- [ ] **Step 1: Viết test hỏng:** khu nằm trong `east-back`; thân nhà chặn đúng 9 ô; hai spot đứng trên ô đi được ngay trước cửa, mỗi spot một ô, điểm đứng trong ô của nó; đi tới được từ chân cầu thang đông theo đường đá; cách khu hút thuốc ≥ 4 hàng; nhịp `visit` đúng thứ tự và ngắn hơn 10 giây.
+- [ ] **Step 1: Viết test hỏng:** khu nằm trong `east-back`; thân nhà chặn đúng 9 ô; hai spot đứng trên ô đi được ngay trước cửa, mỗi spot một ô, điểm đứng trong ô của nó; đi tới được từ chân cầu thang đông theo đường đá; cách khu hút thuốc ≥ 3 hàng; nhịp `visit` đúng thứ tự và ngắn hơn 10 giây.
 - [ ] **Step 2: Chạy**, kỳ vọng FAIL. **Step 3:** cài đặt. **Step 4:** PASS.
 
 ### Task 3: Vẽ nhà vệ sinh
