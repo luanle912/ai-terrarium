@@ -9,15 +9,18 @@
 //   requireCsrf(req, session, formField?) -> boolean   (formField = the submitted `csrf` form value)
 //   onSessionEnd(listener) -> unsubscribe fn; listener({userId, tokenHash, reason}) on logout/expiry/ban
 //   endSessionsForUser(userId, reason?) -> number      (call after banning a user)
-// Pure exports: routes, checkClaims, sha256hex.
+//   isOwner(user) -> boolean                           (owner = email in config.ownerEmails; read on every call)
+// Pure exports: routes, checkClaims, sha256hex, NO_REFRESH_TTL_MS.
 
 const crypto = require('node:crypto');
 const { HttpError, send, sendJson, parseCookies, readBody } = require('./http.js');
+const { seal } = require('./secret.js');
 
 const GOOGLE_AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN = 'https://oauth2.googleapis.com/token';
 const ISSUERS = new Set(['https://accounts.google.com', 'accounts.google.com']);
-const SESSION_TTL_MS = 7 * 24 * 3600 * 1000;
+const SESSION_TTL_MS = 7 * 24 * 3600 * 1000; // user has a refresh token: Google can be re-checked hourly
+const NO_REFRESH_TTL_MS = 24 * 3600 * 1000; // no refresh token: cannot be re-checked, so a day at most
 const LOGIN_TTL_MS = 10 * 60 * 1000;
 const IAT_SKEW_S = 300;
 
@@ -99,19 +102,40 @@ function routes(ctx) {
   ctx.helpers.requireCsrf = requireCsrf;
   ctx.helpers.onSessionEnd = onSessionEnd;
   ctx.helpers.endSessionsForUser = endSessionsForUser;
+  // No role column: ownership follows env. config.ownerEmails is read each time, never copied.
+  const isOwner = (user) => config.ownerEmails.includes(String(user && user.email).toLowerCase());
+  ctx.helpers.isOwner = isOwner;
 
   // Creates/updates the user, refuses banned ones, starts a session and redirects home.
-  function finishLogin(res, who) {
+  // who.refreshToken (optional) is sealed into the user's row. A fresh login also ends this browser's old session.
+  function finishLogin(req, res, who) {
     const now = deps.now();
-    const user = db.upsertUser({ googleSub: who.sub, email: who.email, name: who.name, now });
+    let user = db.upsertUser({ googleSub: who.sub, email: who.email, name: who.name, now });
     if (user.banned_at != null) {
-      return send(res, 403, 'This account has been blocked.', { 'Content-Type': 'text/plain; charset=utf-8', ...noStore });
+      // A ban set because Google revoked access is undone by a successful Google sign-in; any other ban stays.
+      if (user.ban_reason !== 'google_revoked') {
+        return send(res, 403, 'This account has been blocked.', { 'Content-Type': 'text/plain; charset=utf-8', ...noStore });
+      }
+      db.liftBan(user.id);
+      db.addAudit({ at: now, actorId: user.id, action: 'ban_lifted', target: String(user.id), ip: ctx.helpers.clientIp(req) });
     }
+    if (who.refreshToken) db.setRefreshToken(user.id, seal(config.secretKey, who.refreshToken, 'user:' + user.id));
+    db.markChecked(user.id, now);
+    user = db.getUserById(user.id);
+
+    const oldToken = parseCookies(req.headers.cookie)[sessName];
+    if (oldToken) {
+      const oldHash = sha256hex(oldToken);
+      const old = db.getSession(oldHash);
+      if (old) endSession(oldHash, old.user_id, 'relogin');
+    }
+
+    const ttl = user.refresh_enc ? SESSION_TTL_MS : NO_REFRESH_TTL_MS;
     const token = rand();
-    db.createSession({ tokenHash: sha256hex(token), userId: user.id, csrf: rand(), now, expiresAt: now + SESSION_TTL_MS });
+    db.createSession({ tokenHash: sha256hex(token), userId: user.id, csrf: rand(), now, expiresAt: now + ttl });
     send(res, 302, '', {
       Location: '/', ...noStore,
-      'Set-Cookie': [cookie(sessName, token, SESSION_TTL_MS / 1000), cookie(loginName, '', 0)],
+      'Set-Cookie': [cookie(sessName, token, ttl / 1000), cookie(loginName, '', 0)],
     });
   }
 
@@ -122,7 +146,8 @@ function routes(ctx) {
     handler(req, res, rc) {
       if (!limiters.login.take(ctx.helpers.clientIp(req), deps.now())) throw new HttpError(429, 'too many requests');
       const state = rand(), nonce = rand(), verifier = rand();
-      db.createLoginState({ state, nonce, verifier, now: deps.now() });
+      const consent = rc.query.get('consent') === '1';
+      db.createLoginState({ state, nonce, verifier, consent: consent ? 1 : 0, now: deps.now() });
       const q = new URLSearchParams({
         client_id: config.googleClientId,
         redirect_uri: config.origin + '/auth/callback',
@@ -132,7 +157,8 @@ function routes(ctx) {
         code_challenge: crypto.createHash('sha256').update(verifier).digest('base64url'),
         code_challenge_method: 'S256',
         hd: config.allowedDomains[0],
-        prompt: 'select_account',
+        access_type: 'offline', // asks Google for a refresh token
+        prompt: consent ? 'consent' : 'select_account',
       });
       send(res, 302, '', {
         Location: `${GOOGLE_AUTH}?${q}`, ...noStore,
@@ -166,8 +192,8 @@ function routes(ctx) {
         });
       } catch { throw new HttpError(502, 'could not reach Google'); }
       if (!tokenRes || !tokenRes.ok) throw new HttpError(400, 'sign-in failed');
-      let idToken;
-      try { idToken = (await tokenRes.json()).id_token; } catch { throw new HttpError(400, 'sign-in failed'); }
+      let idToken, refreshToken;
+      try { const body = await tokenRes.json(); idToken = body.id_token; refreshToken = body.refresh_token; } catch { throw new HttpError(400, 'sign-in failed'); }
       let claims;
       try { claims = await ctx.jwks.verify(idToken); } catch (e) {
         // The reason only (never the token), so operators can tell a JWKS outage from a rejected token.
@@ -176,7 +202,16 @@ function routes(ctx) {
       }
       const r = checkClaims(claims, { clientId: config.googleClientId, domains: config.allowedDomains, nonce: row.nonce, now: deps.now() });
       if (!r.ok) throw new HttpError(403, 'this account is not allowed to sign in');
-      finishLogin(res, r);
+      if (typeof refreshToken === 'string' && refreshToken) r.refreshToken = refreshToken;
+      else {
+        // Google only sends a refresh token on first consent. A user who has none stored gets exactly one retry
+        // with prompt=consent (row.consent marks that retry); after that they get a 24 h session.
+        const known = db.getUserBySub(r.sub);
+        if (!(known && known.refresh_enc) && row.consent === 0) {
+          return send(res, 302, '', { Location: '/auth/login?consent=1', ...noStore, 'Set-Cookie': cookie(loginName, '', 0) });
+        }
+      }
+      finishLogin(req, res, r);
     },
   });
 
@@ -205,7 +240,7 @@ function routes(ctx) {
       const island = db.getIslandByUser(s.user.id);
       sendJson(res, 200, {
         mode: 'world',
-        me: { id: s.user.id, name: s.user.name, email: s.user.email, islandId: island ? island.id : null },
+        me: { id: s.user.id, name: s.user.name, email: s.user.email, islandId: island ? island.id : null, role: isOwner(s.user) ? 'owner' : 'member' },
         csrf: s.session.csrf,
       });
     },
@@ -226,7 +261,7 @@ function routes(ctx) {
         };
         const r = checkClaims(claims, { clientId: claims.aud, domains: config.allowedDomains, nonce, now: deps.now() });
         if (!r.ok) throw new HttpError(403, 'this account is not allowed to sign in');
-        finishLogin(res, r);
+        finishLogin(req, res, r);
       },
     });
   }
@@ -234,4 +269,4 @@ function routes(ctx) {
   return list;
 }
 
-module.exports = { routes, checkClaims, sha256hex };
+module.exports = { routes, checkClaims, sha256hex, NO_REFRESH_TTL_MS };
