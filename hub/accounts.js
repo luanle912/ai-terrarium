@@ -48,12 +48,17 @@ function createAccounts(ctx) {
   async function banUser(userId, reason, { actorId = null } = {}) {
     const now = deps.now();
     db.banUser(userId, reason, now);
-    db.revokeDevicesForUser(userId, now);
-    ctx.helpers.endSessionsForUser(userId, 'banned');
-    const island = db.getIslandByUser(userId);
-    if (island) ctx.world.removeIsland(island.id); // the islands row stays: the user keeps their name and colour
-    await revokeGoogle(userId);
-    audit('user_banned', { actorId, target: 'user:' + userId + ' ' + reason });
+    try {
+      db.revokeDevicesForUser(userId, now);
+      ctx.helpers.endSessionsForUser(userId, 'banned');
+      const island = db.getIslandByUser(userId);
+      if (island) ctx.world.removeIsland(island.id); // the islands row stays: the user keeps their name and colour
+    } finally {
+      // Even if a step above threw, the Google token must go and the ban must be on record.
+      try { await revokeGoogle(userId); } finally {
+        audit('user_banned', { actorId, target: 'user:' + userId + ' ' + reason });
+      }
+    }
   }
 
   function removeIslandOf(userId, { actorId = null, ip = null } = {}) {

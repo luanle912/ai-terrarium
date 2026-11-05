@@ -108,14 +108,14 @@ function routes(ctx) {
 
   // Creates/updates the user, refuses banned ones, starts a session and redirects home.
   // who.refreshToken (optional) is sealed into the user's row. A fresh login also ends this browser's old session.
-  async function finishLogin(req, res, who) {
+  function finishLogin(req, res, who) {
     const now = deps.now();
     let user = db.upsertUser({ googleSub: who.sub, email: who.email, name: who.name, now });
     if (user.banned_at != null) {
       // A ban set because Google revoked access is undone by a successful Google sign-in; any other ban stays.
       if (user.ban_reason !== 'google_revoked') {
         // Google just granted a refresh token for a blocked account: hand it back instead of dropping it silently.
-        if (who.refreshToken) await ctx.accounts.revokeToken(who.refreshToken);
+        if (who.refreshToken) void ctx.accounts.revokeToken(who.refreshToken).catch(() => {}); // not awaited, never rejects
         return send(res, 403, 'This account has been blocked.', { 'Content-Type': 'text/plain; charset=utf-8', ...noStore });
       }
       db.liftBan(user.id);
@@ -213,7 +213,7 @@ function routes(ctx) {
           return send(res, 302, '', { Location: '/auth/login?consent=1', ...noStore, 'Set-Cookie': cookie(loginName, '', 0) });
         }
       }
-      await finishLogin(req, res, r);
+      finishLogin(req, res, r);
     },
   });
 
@@ -252,7 +252,7 @@ function routes(ctx) {
     // S20: no Google, but the same claim checks (hd comes from the email's domain).
     list.push({
       method: 'GET', path: '/auth/dev',
-      async handler(req, res, rc) {
+      handler(req, res, rc) {
         const email = String(rc.query.get('email') || '').toLowerCase();
         const name = rc.query.get('name') || '';
         const nowS = Math.floor(deps.now() / 1000);
@@ -263,7 +263,7 @@ function routes(ctx) {
         };
         const r = checkClaims(claims, { clientId: claims.aud, domains: config.allowedDomains, nonce, now: deps.now() });
         if (!r.ok) throw new HttpError(403, 'this account is not allowed to sign in');
-        await finishLogin(req, res, r);
+        finishLogin(req, res, r);
       },
     });
   }
