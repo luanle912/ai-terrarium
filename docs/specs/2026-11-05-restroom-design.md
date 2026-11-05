@@ -141,7 +141,7 @@ hàng `y = 1` chỉ tới `x = 33` và hàng `y = 0` chỉ tới `x = 31`.
 | | Giá trị |
 |---|---|
 | Ô chừa `east-back` (`SkyLogic.outdoorSpots`) | `x 27..34, y 2..6` (8×5), trước là `x 28..31, y 2..5` |
-| Sàn khối (bệ) | `x 27 → 34.6`, `y 2 → 7`, cao `FLOOR_Z = 8` như sàn văn phòng; tường sau dày 0.3 ô lùi ra sau tới `y 1.7` |
+| Sàn khối (bệ) | `x 27 → 34.6`, `y 2 → 7`, cao `FLOOR_Z = 8` như sàn văn phòng; tường sau dày 0.25 ô đứng trên mép sau của sàn (`y 2 → 2.25`), vì hàng `y = 1` phía đông không có đảo bên dưới |
 | Phòng nam | `x 27..31, y 2..5` (4×3 ô) |
 | Phòng nữ | `x 31..34.6, y 2..5` (3.6×3 ô) |
 | Sảnh chung | `x 27..34.6, y 5..7` (2 hàng), cạnh tây `(27,5)`, `(27,6)` mở thẳng sang pantry `(26,5)`, `(26,6)` |
@@ -162,19 +162,21 @@ Lý do chọn chỗ này:
 - **Tường sau** của khối: cao đúng `WALL` (56), cùng nẹp đỉnh 3 px như tường văn phòng.
 - **Vách lửng** (pantry ↔ nam, nam ↔ nữ): tường trắng cao 28 (nửa tường), nắp đá phiến 2 px, trên là kính mờ tới 46.
 - **Tường trước và tường đông của hai phòng**: cao đầu gối, 10 px, nắp đá phiến.
-- **Buồng vệ sinh**: rộng 1 ô (nam) và 0.87 ô (nữ, 3 buồng trong 2.6 ô), sâu 1.4 ô (`y 2 → 3.4`); vách HPL cao `3 → 32`
+- **Buồng vệ sinh**: rộng 1 ô (nam) và 0.87 ô (nữ, 3 buồng trong 2.6 ô), sâu 1.35 ô (`y 2.25 → 3.6`, tính từ mặt tường sau); vách HPL cao `3 → 32`
   (hở chân 3 px), cao hơn người (đầu người ≈ 23 px). Gọn hơn kích thước thật một chút, như cách tileset thu gọn đồ.
 - **Bồn tiểu**: mỗi cái rộng 0.36 ô, cách nhau 0.75 ô (≈ 50 cm), treo tường ở `z 7..18`.
 - **Lavabo đôi**: dài 1.6 ô (≈ 1 bàn làm việc), sâu 0.56 ô, mặt đá cao 13..15 (≈ mặt bàn bếp 14).
 - Gương cao `z 20..36`, khung LED vàng; máy sấy tay `z 17..24`; cửa sổ kính mờ trên cao `z 40..50`.
-- Khung cửa ra vào: hai trụ mảnh tới `z 34`, hộp biển phát sáng `z 34..43`, rộng hơn ô cửa 0.15 ô mỗi bên.
+- Khung cửa ra vào: hai trụ mảnh tới `z 49`, hộp biển phát sáng `z 49..58`, rộng hơn ô cửa 0.1 ô mỗi bên. Biển treo cao
+  vì trên màn hình nó đứng ngay trước người trong phòng: biển ở độ cao `z` trên tường trước che người (cao ≈ 25) đứng ở
+  độ sâu `y` nếu `z < 25 + 16·(5 − y)`; với chỗ đứng trước buồng (`y 3.88`) và lavabo (`y ≥ 3.5`) cần `z ≥ 49`.
 
 ## B4. Bố cục từng ô
 
 Ký hiệu toạ độ thế giới (ô `x, y`). Tường đứng trên cạnh ô.
 
 **Tường và vách**
-- Tường sau: mặt phẳng `y = 2`, `x 27 → 34.6`, cao 56. Phần dưới (tới `z 36`) ốp gạch trắng `#F7F9FC` có ron,
+- Tường sau: mặt trong ở `y = 2.25`, `x 27 → 34.6`, cao 56. Phần dưới (tới `z 36`) ốp gạch trắng `#F7F9FC` có ron,
   phần trên vữa kem `#F4ECDA`; hai dải cửa sổ kính mờ trên cao, một dải mỗi phòng.
 - Vách lửng pantry ↔ nam: `x 27 → 27.14`, `y 2 → 5`. Vách lửng nam ↔ nữ: `x 30.93 → 31.07`, `y 2 → 5`.
 - Tường trước hai phòng: `y 4.93 → 5.07`, cao đầu gối, chừa **cửa nam** `x 28 → 29` và **cửa nữ** `x 33 → 34`.
@@ -183,9 +185,9 @@ Ký hiệu toạ độ thế giới (ô `x, y`). Tường đứng trên cạnh �
 **WC NAM** (`x 27..31, y 2..5`)
 | Món | Vị trí |
 |---|---|
-| Chậu cây voxel ở góc | `(27.4, 2.35)` |
+| Chậu cây voxel ở góc | `(27.38, 2.47)` |
 | 2 bồn tiểu treo tường sau, vách kính mờ chắn | tâm `x 27.85`, `28.6`; kính ở `x 27.55`, `28.22` |
-| 2 buồng, vách HPL xanh, cửa mở vào trong, bồn cầu treo tường, nút xả | `x 29 → 30`, `30 → 31`, `y 2 → 3.4` |
+| 2 buồng, vách HPL xanh, cửa mở vào trong, bồn cầu treo tường, nút xả | `x 29 → 30`, `30 → 31`, `y 2.25 → 3.6`; người đứng chờ ở `y 3.88` |
 | Lavabo đôi: tủ gỗ, mặt đá tối, 2 chậu trắng, vòi chrome, gương rộng viền LED vàng trên vách lửng | `x 27.14 → 27.7`, `y 3.1 → 4.7`, chậu ở `y 3.5`, `4.3` |
 | Máy sấy tay trắng (trên vách), thùng rác đạp chân inox (dưới) | `y 4.85` |
 | Biển cửa xanh: hình người nam + `NAM` | trên cửa `x 28 → 29` |
@@ -193,10 +195,10 @@ Ký hiệu toạ độ thế giới (ô `x, y`). Tường đứng trên cạnh �
 **WC NỮ** (`x 31..34.6, y 2..5`)
 | Món | Vị trí |
 |---|---|
-| Góc trang điểm: bàn gỗ nhỏ mặt trắng, gương chữ nhật viền LED, ghế tròn hồng | bàn `x 31.07 → 31.55`, `y 2.1 → 2.9`; ghế `(31.8, 2.5)` |
-| 3 buồng, vách HPL hồng, cửa mở vào trong, bồn cầu treo tường, thùng băng vệ sinh có nắp trong mỗi buồng | `x 32 → 32.87 → 33.73 → 34.6`, `y 2 → 3.4` |
-| Lavabo đôi mặt đá, 2 chậu, gương LED | `x 31.07 → 31.63`, `y 3.1 → 4.7` |
-| Máy sấy tay, thùng rác | `y 4.85` trên/dưới vách |
+| Góc trang điểm: bàn gỗ nhỏ mặt trắng, gương chữ nhật viền LED, ghế tròn hồng | bàn `x 31.07 → 31.55`, `y 2.3 → 3.0`; ghế `(31.8, 2.65)` |
+| 3 buồng, vách HPL hồng, cửa mở vào trong, bồn cầu treo tường, thùng băng vệ sinh có nắp trong mỗi buồng | `x 32 → 32.87 → 33.73 → 34.6`, `y 2.25 → 3.6` |
+| Lavabo đôi mặt đá, 2 chậu, gương LED | `x 31.07 → 31.63`, `y 3.3 → 4.85`, chậu ở `y 3.72`, `4.45` (lùi ra trước so với phòng nam để chỗ rửa tay không lọt vào cạnh vách buồng đầu) |
+| Máy sấy tay, thùng rác | `y 3.15`, giữa bàn trang điểm và lavabo, trên/dưới vách |
 | Chậu cây | `(34.2, 4.55)` |
 | Biển cửa hồng: hình người nữ + `NỮ` | trên cửa `x 33 → 34` |
 
