@@ -66,8 +66,8 @@ function createAccounts(ctx) {
     db.revokeDevicesForUser(userId, deps.now());
     const island = db.getIslandByUser(userId);
     if (!island) return false;
+    db.deleteIslandByUser(userId); // first: the world's `remove` is only sent once the row is gone
     ctx.world.removeIsland(island.id);
-    db.deleteIslandByUser(userId);
     audit('island_removed', { actorId, target: 'island:' + island.id + ' user:' + userId, ip });
     return true;
   }

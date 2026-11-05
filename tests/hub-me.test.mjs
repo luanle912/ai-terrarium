@@ -47,7 +47,7 @@ async function openStream(url, cookie) {
       await new Promise((res) => { waiters.push(res); setTimeout(res, 100); });
     }
   };
-  return { until, close: () => ac.abort() };
+  return { events, until, close: () => ac.abort() };
 }
 
 test('api me lists devices with their send state', async () => {
@@ -153,7 +153,7 @@ test('island and revoke APIs need csrf and origin', async () => {
   } finally { await h.close(); }
 });
 
-test('revoking through the API removes the device and its island', async () => {
+test('revoking through the API removes the device and leaves its island offline', async () => {
   const h = await startDevHub();
   let st;
   try {
@@ -162,7 +162,9 @@ test('revoking through the API removes the device and its island', async () => {
     await postJson(h.url, '/api/publish', pkt(), bearer(a.token));
     st = await openStream(h.url, login.cookie);
     assert.equal((await api(h, login, `/api/me/devices/${a.device_id}/revoke`, {})).status, 200);
-    assert.ok(await st.until((e) => e.event === 'remove' && e.data.id === a.island_id));
+    assert.ok(await st.until((e) => e.event === 'world' && e.data.islands.some((i) => i.id === a.island_id && i.online === false)));
+    assert.ok(await st.until((e) => e.event === 'island' && e.data.id === a.island_id && e.data.sessions.length === 0));
+    assert.equal(st.events.some((e) => e.event === 'remove'), false);
     assert.equal((await postJson(h.url, '/api/publish', pkt({ seq: 2 }), bearer(a.token))).status, 401);
     assert.equal(audit(h, 'device_revoked').length, 1);
     assert.equal((await api(h, login, `/api/me/devices/${a.device_id}/revoke`, {})).status, 404); // already revoked
