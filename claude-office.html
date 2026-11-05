@@ -4143,11 +4143,14 @@ const k=(x,y)=>x+','+y;
 // lobby, open to the pantry on the west.
 function layout(zone,wall){
   const X=zone.x,Y=zone.y,x1=X+zone.w,y1=Y+zone.h,front=Y+5,BACK=0.35,T=0.07;
-  // Solid room walls stand above a person (about 25 px) but well under the full wall, so the rooms read from the 3/4
-  // view like the office's own rooms; stall panels hide whoever is inside once the door shuts.
-  const heights={full:wall,room:32,stall:28,stallFoot:3,knee:10};
-  const rooms={m:{x0:X,x1:X+3,door:[X+1,X+2],accent:'#173DC9'},f:{x0:X+3,x1,door:[X+4,X+5],accent:'#D9467A'}};
-  const walls={pantry:{x:X,t:0.14},split:{x:X+3-T,t:2*T},east:{x:x1-0.12,t:0.12},front:{y:front-T,t:2*T}};
+  // The outer walls (back, front with the two doors, east) are full office walls; the walls between rooms stand above a
+  // person (about 25 px) but well under the full wall; stall panels hide whoever is inside once the door shuts.
+  const heights={full:wall,room:32,stall:28,stallFoot:3,door:40};
+  // Accents muted to sit with the office palette (dusty blue / dusty pink); the neon signs a little brighter.
+  const rooms={m:{x0:X,x1:X+3,door:[X+1,X+2],accent:'#7989c3',sign:'#6c84da'},f:{x0:X+3,x1,door:[X+4,X+5],accent:'#c37993',sign:'#da6c93'}};
+  const walls={pantry:{x:X,t:0.14},split:{x:X+3-T,t:2*T},east:{x:x1-0.12,t:0.12,y0:Y-BACK,y1:front+T},front:{y:front-T,t:2*T}};
+  // Swing doors in the front wall's two openings, hinged on their west jamb.
+  const doors=['m','f'].map(r=>({room:r,x0:rooms[r].door[0],x1:rooms[r].door[1],y:front}));
   const stall=(room,x0,x1)=>({room,x0,x1,y0:Y,y1:Y+1.35});
   const fw=(X+5.88-(X+3+T))/3,f0=X+3+T;
   const stalls=[stall('m',X+1.08,X+2),stall('m',X+2,X+3-T),stall('f',f0,f0+fw),stall('f',f0+fw,f0+2*fw),stall('f',f0+2*fw,X+5.88)];
@@ -4166,7 +4169,7 @@ function layout(zone,wall){
     [2,5],[3,5],[5,5],[0,6]].map(([dx,dy])=>k(X+dx,Y+dy)));
   const walk=floor.filter(c=>!taken.has(c));
   // Walls as blocked steps (both ways): the room walls at x = X (the pantry side) and x = X+3 along the rooms, and the
-  // knee-high front wall along y = front except at the two doorways. The back and east sides need none: nobody steps
+  // front wall along y = front except at the two doorways. The back and east sides need none: nobody steps
   // from the floor onto the lawn at all (see step()).
   const shut=[],cut=(a,b)=>shut.push(a+'|'+b,b+'|'+a);
   for(let y=Y;y<front;y++){cut(k(X-1,y),k(X,y));cut(k(X+2,y),k(X+3,y));}
@@ -4175,7 +4178,7 @@ function layout(zone,wall){
   const wash=(room,i)=>{const v=vanities[room],y=v.basins[i%2],x=v.x1+0.45;return{tile:[Math.floor(x),Math.floor(y)],pt:[x,y]};};
   const spots=stalls.map((s,i)=>{const n=stalls.filter((o,j)=>j<i&&o.room===s.room).length,cx=(s.x0+s.x1)/2;
     return{act:'wc',room:s.room,stall:i,tile:[Math.floor(cx),Y+1],pt:[cx,Y+1.63],front:false,wash:wash(s.room,n)};});
-  return{x0:X,y0:Y,x1,y1,front,back:BACK,wy:Y,heights,rooms,walls,stalls,vanities,urinals,screens,makeup,plants,dryerM,bin,lobby,
+  return{x0:X,y0:Y,x1,y1,front,back:BACK,wy:Y,heights,rooms,walls,doors,stalls,vanities,urinals,screens,makeup,plants,dryerM,bin,lobby,
     floor,floorSet:new Set(floor),walk,shut,spots};
 }
 // Is a point (world tiles) on the block's raised floor?
@@ -4190,13 +4193,18 @@ function step(L,a,b,inOffice){
   if(fa&&fb)return true;
   const o=fa?b:a;return inOffice(o[0],o[1]);
 }
+// How each swing door hangs, from where people stand: 0 shut; +1 pushed open toward the lobby (someone coming out);
+// -1 pushed open into the room (someone going in). A door swings while anyone is in its doorway (within the opening and
+// less than DOORWAY tiles from the wall), away from the first such person. Cheap: one pass over the people per frame.
+const DOORWAY=0.75;
+const doorSwing=(L,people)=>L.doors.map(d=>{for(const p of people)if(p.x>d.x0&&p.x<d.x1&&Math.abs(p.y-d.y)<DOORWAY)return p.y<d.y?1:-1;return 0;});
 // Which room an agent uses, fixed per agent so it always walks to the same door.
 const roomOf=id=>id%2?'m':'f';
 // One visit, in simulated seconds spent standing (walking does not count): a moment at the stall door while it opens,
 // a while inside with the door shut, a moment coming back out, washing hands at the vanity, then on to somewhere else.
 const DOOR=0.8,INSIDE=6,OUT=0.6,WASH=2.5,VISIT=DOOR+INSIDE+OUT+WASH;
 const visit=t=>t<DOOR?'door':t<DOOR+INSIDE?'inside':t<DOOR+INSIDE+OUT?'out':t<VISIT?'wash':'done';
-globalThis.RestroomLogic={layout,onFloor,step,roomOf,visit,VISIT,DOOR,INSIDE,OUT,WASH};
+globalThis.RestroomLogic={layout,onFloor,step,doorSwing,DOORWAY,roomOf,visit,VISIT,DOOR,INSIDE,OUT,WASH};
 })();
 </script>
 <script>
@@ -4966,19 +4974,20 @@ class ClaudeOffice extends React.Component{
       const[sx,sy]=PG(X+1.75,Y+3.7,19.5);ctx.save();ctx.translate(Math.round(sx),Math.round(sy));ctx.transform(1,0.5,0,1,0,0);
       ctx.fillStyle=N('#ffffff');ctx.fillRect(2,4,6,1);ctx.fillRect(3,2,1,1);ctx.fillRect(4,1,1,1);ctx.fillRect(5,2,1,1);ctx.fillStyle='#ff9a3d';ctx.fillRect(8,4,1,1);ctx.restore();}});
   }
-  // The restroom block beside the pantry (RestroomLogic.layout, spec "Bản 3"): an open-top cutaway on the office floor
-  // level that continues the office. Nothing here has a look of its own: the back wall is the office back wall, the
-  // room walls are office walls (solid, 32 px: above a person, under the full wall), the floors are the pantry's tiles
-  // and planks, the fixtures are drawn with the pantry's kit and colours (cabinets, worktop, steel sinks, white pots,
-  // the bar stool), the bench is the smoking corner's, the room signs are neon boards like CAFE and the lobby name is
-  // painted on the floor like PANTRY. The two accents (#173DC9 men, #D9467A women) are only on the stall panels and the
-  // signs. Slab, floor, rug and back wall are drawn at once (nothing on the block stands behind them); everything else
-  // goes into `items` by depth, walls one tile at a time so people sort in front of and behind them.
+  // The restroom block beside the pantry (RestroomLogic.layout, spec "Bản 3"): an open-top block on the office floor
+  // level that continues the office. Nothing here has a look of its own: the back, front and east walls are full office
+  // walls (the front one with two doorways and swing doors in the office door's colours), the walls between rooms are
+  // office walls 32 px high, the floors are the pantry's tiles and planks, the fixtures are drawn with the pantry's kit
+  // and colours (cabinets, worktop, steel sinks, white pots, the bar stool), the bench is the smoking corner's, the room
+  // signs are neon boards like CAFE and the lobby name is painted on the floor like PANTRY. The two muted accents (dusty
+  // blue men, dusty pink women) are only on the stall panels and the signs. Slab, floor and back wall are drawn at once
+  // (nothing on the block stands behind them); everything else goes into `items` by depth, walls one tile at a time so
+  // people sort in front of and behind them.
   restroomItems(G,items,snow){
     const{ctx,poly,th,t,df}=G,L=WC,X=L.x0,Y=L.y0,X1=L.x1,Y1=L.y1,F=L.front,HT=L.heights,PI=window.PantryItems;
     if(!PI)return;
     const K=PI.kit(ctx,...P(0,0)),{box,fL,fR,top,R}=K,night=df<0.5;
-    const ACC={m:'#173DC9',f:'#D9467A'},WHITE='#f6f4ee',STEEL='#c9d3e3',WOOD='#a8763e',WORK='#efe9dc';
+    const ACC={m:L.rooms.m.accent,f:L.rooms.f.accent},SIGN={m:L.rooms.m.sign,f:L.rooms.f.sign},WHITE='#f6f4ee',STEEL='#c9d3e3',WOOD='#a8763e',WORK='#efe9dc';
     const cap=shade(th.trim,18),glow=df<0.6?1-df/0.6:0;
     // stall doors are shut, with a red light, while someone is inside (RestroomLogic.visit 'inside')
     const occupied=new Set();for(const a of this.agents)if(a.wcIn&&a.idleSpot!=null&&IDLE_SPOTS[a.idleSpot])occupied.add(IDLE_SPOTS[a.idleSpot].stall);
@@ -5018,14 +5027,14 @@ class ClaudeOffice extends React.Component{
       poly([P(X,Y,0),P(X1,Y,0),P(X1,Y,4),P(X,Y,4)],th.trim,null);
       poly([P(X,Y-WT,ZT),P(X1,Y-WT,ZT),P(X1,Y,ZT),P(X,Y,ZT)],cap,null);
       poly([P(X1,Y-WT,0),P(X1,Y,0),P(X1,Y,ZT),P(X1,Y-WT,ZT)],shade(th.wr,-34),null);
-      // neon room signs on the back wall, above the stalls, made like the CAFE board
-      for(const r of['m','f']){const ss=L.stalls.filter(s=>s.room===r),x0=ss[0].x0+0.05,x1=ss[ss.length-1].x1-0.05;this.restroomSign(K,x0,x1,r,ACC[r],night,t);}
+      // neon room signs on the back wall, above the stalls, made like the CAFE board. The women's board stops 1.2 tiles
+      // short of the east wall: that full-height wall stands in front of the back wall's last stretch on screen.
+      for(const r of['m','f']){const ss=L.stalls.filter(s=>s.room===r),x0=ss[0].x0+0.05,x1=r==='f'?L.walls.east.x-1.2:ss[ss.length-1].x1-0.05;this.restroomSign(K,x0,x1,r,SIGN[r],night,t);}
       // hand dryer in the men's room corner, above the plant
       const[dx]=L.dryerM;box(dx-0.12,Y,0.24,0.14,17,24,WHITE,'#e3ddd0','#d6cfbf');fL(dx-0.04,dx+0.04,Y+0.14,17,17.6,'#8b93a7');}
 
     // ---- solid room walls (office walls: wall colour, skirting, top band, cap), one tile at a time ----
     const wallX=(x0,w,ya,yb,h)=>{box(x0,ya,w,yb-ya,0,h-2,th.trim,shade(th.wl,-20),th.wl);box(x0,ya,w,yb-ya,h-2,h,cap,th.trim,th.trim);fR(x0+w,ya,yb,0,4,th.trim);};
-    const wallY=(xa,xb,y0,d,h)=>{box(xa,y0,xb-xa,d,0,h-1.5,th.trim,th.wr,shade(th.wr,-34));box(xa,y0,xb-xa,d,h-1.5,h,cap,th.trim,th.trim);fL(xa,xb,y0+d,0,3,th.trim);};
     const deco={};const put=(x,y,f)=>{const k=x+','+Math.min(F-1,Math.floor(y));(deco[k]=deco[k]||[]).push(f);};
     // a mirror on a room wall's east face: a thin trim frame round glass that catches the light like the office windows
     const mirror=(x,ya,yb,za,zb)=>{fR(x,ya,yb,za,zb,th.trim);fR(x,ya+0.05,yb-0.05,za+1.2,zb-1.2,th.glass);
@@ -5039,10 +5048,33 @@ class ClaudeOffice extends React.Component{
     for(const[wx,wt]of[[L.walls.pantry.x,L.walls.pantry.t],[L.walls.split.x,L.walls.split.t]])for(let y=Y;y<F;y++){const k=Math.round(wx===X?X:X+3)+','+y;
       items.push({z:wx+y+0.3,f:()=>{wallX(wx,wt,y,y+1,HT.room);(deco[k]||[]).forEach(f=>f());}});}
     L.screens.forEach(s=>items.push({z:X+s+0.5,f:()=>{const x=L.walls.pantry.x+L.walls.pantry.t;box(x,s-0.02,0.38,0.04,6,22,cap,th.wr,shade(th.wr,-34));}}));
-    // knee-high front wall with its two doorways, and the knee-high east wall of the women's room
-    const doorX=[L.rooms.m.door[0],L.rooms.f.door[0]],fw=L.walls.front;
-    for(let x=X;x<X1;x++){if(doorX.includes(x))continue;items.push({z:x+0.5+F,f:()=>wallY(x,Math.min(x+1,X1),fw.y,fw.t,HT.knee)});}
-    for(let y=Y;y<F;y++)items.push({z:X1+y+0.4,f:()=>{const ew=L.walls.east;box(ew.x,y,ew.t,y===F-1?1-fw.t:1,0,HT.knee-1.5,th.trim,shade(th.wl,-20),th.wl);box(ew.x,y,ew.t,y===F-1?1-fw.t:1,HT.knee-1.5,HT.knee,cap,th.trim,th.trim);}});
+    // ---- the front wall (with the two doorways) and the women's room's east wall: full office walls, drawn exactly like
+    // the back wall (wall colour, skirting, top band, cap). The office itself is open on its front and east, so these
+    // are the only outer walls that face the camera; they are solid, and the rooms behind them stay private.
+    const fw=L.walls.front,ew=L.walls.east,ZT=WALL+3,DH=HT.door;
+    const frontPiece=(xa,xb,z0)=>{box(xa,fw.y,xb-xa,fw.t,z0,WALL,th.trim,th.wr,shade(th.wr,-34));box(xa,fw.y,xb-xa,fw.t,WALL,ZT,cap,th.trim,th.trim);
+      if(z0===0)fL(xa,xb,fw.y+fw.t,0,4,th.trim);};
+    const solid=[];for(let x=X;x<ew.x;x=Math.floor(x)+1)if(!L.doors.some(d=>x>=d.x0&&x<d.x1))solid.push([x,Math.min(Math.floor(x)+1,ew.x)]);
+    for(const[xa,xb]of solid)items.push({z:xa+0.5+F,f:()=>frontPiece(xa,xb,0)});
+    const tiles=[[ew.y0,Y+1]];for(let y=Y+1;y<F;y++)tiles.push([y,y+1]);tiles[tiles.length-1][1]=ew.y1;
+    for(const[ya,yb]of tiles)items.push({z:X1+Math.max(ya,Y)+0.4,f:()=>{
+      box(ew.x,ya,ew.t,yb-ya,0,WALL,th.trim,shade(th.wl,-20),th.wl);box(ew.x,ya,ew.t,yb-ya,WALL,ZT,cap,th.trim,th.trim);fR(X1,ya,yb,0,4,th.trim);}});
+    // Swing doors (RestroomLogic.doorSwing): a leaf in the office door's colours (frame, panel, small window, kick
+    // panel) with a steel push plate on each face, hung on the west jamb; shut, or swung about 70° away from whoever
+    // is in the doorway. The lintel above is part of the wall.
+    const swing=RestroomLogic.doorSwing(L,this.agents.filter(a=>!a.gone));
+    L.doors.forEach((d,i)=>items.push({z:(d.x0+d.x1)/2+F,f:()=>{
+      // the lintel and the frame round the opening; a leaf pushed into the room is behind them, one pushed out in front
+      const s=swing[i],frame=()=>{frontPiece(d.x0,d.x1,DH);
+        fL(d.x0,d.x0+0.06,fw.y+fw.t+0.002,0,DH,'#5c4330');fL(d.x1-0.06,d.x1,fw.y+fw.t+0.002,0,DH,'#5c4330');fL(d.x0,d.x1,fw.y+fw.t+0.002,DH-1.5,DH,'#5c4330');};
+      if(s>=0)frame();
+      const a=s?1.22:0,hx=d.x0+0.07,hy=d.y,w=(d.x1-d.x0)-0.14,ux=Math.cos(a),uy=s*Math.sin(a);
+      const Q=(u,z)=>K.P(hx+ux*u,hy+uy*u,z),rect=(u0,u1,z0,z1,c)=>K.poly([Q(u0,z0),Q(u1,z0),Q(u1,z1),Q(u0,z1)],c);
+      const tone=c=>s<0?shade(c,-14):c;
+      rect(0,w,0.5,DH-1.5,tone('#5c4330'));rect(0.04,w-0.04,1.5,DH-2.5,tone('#8a5a3a'));
+      rect(0.18,w-0.18,4,13,tone('#7a4f2f'));rect(0.25,w-0.25,24,33,tone('#9fd3ff'));rect(0.28,0.4,26,31,tone('#cfeaff'));
+      rect(w-0.2,w-0.1,17,25,tone(STEEL));
+      if(s<0)frame();}}));
 
     // ---- stalls: solid accent panels raised off the floor, wall-hung toilets, doors swung inward or shut ----
     L.stalls.forEach((s,i)=>{const acc=ACC[s.room],room=L.rooms[s.room],first=!i||L.stalls[i-1].room!==s.room;
@@ -5088,7 +5120,7 @@ class ClaudeOffice extends React.Component{
     {const[sx,sy]=L.lobby.sanitizer;items.push({z:sx+sy+0.2,f:()=>{box(sx-0.09,sy-0.09,0.18,0.18,0,1,STEEL);box(sx-0.02,sy-0.02,0.04,0.04,1,20,STEEL);
       box(sx-0.08,sy-0.07,0.16,0.14,20,27,WHITE,'#e3ddd0','#d6cfbf');fL(sx-0.05,sx+0.05,sy+0.07,22,25,'#46a758');box(sx-0.06,sy-0.02,0.12,0.12,13,14,'#aab4c6');}});}
     {const[tx,ty]=L.lobby.totem;items.push({z:tx+ty,f:()=>{box(tx-0.03,ty-0.03,0.06,0.06,0,20,'#3d4350');box(tx-0.18,ty-0.04,0.36,0.08,20,30,'#1f2230','#171922','#14161c');
-      const[ax,ay]=K.P(tx-0.12,ty+0.04,28);R(ax+1,ay+1,1,1,ACC.m);R(ax+1,ay+2,1,3,ACC.m);R(ax+5,ay+1,1,1,ACC.f);R(ax+4,ay+2,3,2,ACC.f);R(ax+5,ay+4,1,1,ACC.f);}});}
+      const[ax,ay]=K.P(tx-0.12,ty+0.04,28);R(ax+1,ay+1,1,1,SIGN.m);R(ax+1,ay+2,1,3,SIGN.m);R(ax+5,ay+1,1,1,SIGN.f);R(ax+4,ay+2,3,2,SIGN.f);R(ax+5,ay+4,1,1,SIGN.f);}});}
   }
   // A neon room sign on the restroom's back wall, built like the pantry's CAFE board: a dark plate with four screws and
   // glowing letters (a pictogram, then WC NAM / WC NỮ in the page's 3×5 font, Ữ with its marks drawn in).
