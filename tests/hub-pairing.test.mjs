@@ -130,13 +130,28 @@ test('device page shows the device name escaped and the warning', async () => {
     assert.equal(r.status, 200);
     assert.ok(t.includes('&lt;script&gt;'));
     assert.ok(!t.includes('<script>'));
-    assert.ok(t.includes('Chỉ bấm Cho phép nếu bạn vừa chạy lệnh này trên máy của mình'));
+    assert.ok(t.includes('Chỉ bấm Cho phép nếu bạn vừa bấm "Tham gia thế giới" (hoặc chạy lệnh join) trên máy của mình'));
     assert.match(t, /Yêu cầu lúc: 2027-/);
     assert.match(r.headers.get('content-security-policy'), /default-src 'none'/);
   } finally { await h.close(); }
 });
 
-test('device page never prefills the code (B10)', async () => {
+test('?code= of a pending request opens its confirm page but approves nothing by itself', async () => {
+  const h = await startDevHub();
+  try {
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const s = await start(h, 'Mac của Ann');
+    const r = await fetch(h.url + '/device?code=' + s.user_code.toLowerCase().replace('-', ''), { headers: { cookie: login.cookie } });
+    const t = await r.text();
+    assert.equal(r.status, 200);
+    assert.match(t, /Mac của Ann/);
+    assert.match(t, /value="approve"/);
+    assert.equal(h.hub.db.getDeviceCodeByHash(sha256hex(s.device_code)).approved_user_id, null);
+    assert.equal((await poll(h, s.device_code)).status, 428);
+  } finally { await h.close(); }
+});
+
+test('?code= that matches nothing shows the empty form and counts as a wrong guess', async () => {
   const h = await startDevHub();
   try {
     const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
@@ -144,11 +159,62 @@ test('device page never prefills the code (B10)', async () => {
     const t = await r.text();
     assert.equal(r.status, 200);
     assert.ok(!t.includes('ABCD'));
-    assert.match(t, /name="user_code"[^>]*>/);
     assert.ok(!/name="user_code"[^>]*value=/.test(t));
-    // without a session: redirect to login
+    for (let i = 0; i < 4; i++) await fetch(h.url + '/device?code=BBBB-CCCC', { headers: { cookie: login.cookie } });
+    const s = await start(h);
+    const locked = await fetch(h.url + '/device?code=' + s.user_code, { headers: { cookie: login.cookie } });
+    assert.equal(locked.status, 429, 'five wrong codes lock the GET path too');
     const anon = await fetch(h.url + '/device', { redirect: 'manual' });
     assert.equal(anon.status, 302);
+    assert.equal(anon.headers.getSetCookie().some((c) => /tr_pair=/.test(c)), false, 'no code, no pair cookie');
+  } finally { await h.close(); }
+});
+
+test('signing in from a ?code= link lands back on that confirm page', async () => {
+  const h = await startDevHub();
+  try {
+    const s = await start(h, 'Laptop');
+    const anon = await fetch(h.url + '/device?code=' + s.user_code, { redirect: 'manual' });
+    assert.equal(anon.status, 302);
+    assert.equal(anon.headers.get('location'), '/auth/login');
+    const pair = anon.headers.getSetCookie().map((c) => c.split(';')[0]).find((c) => /tr_pair=/.test(c));
+    assert.equal(pair.split('=')[1], s.user_code);
+    const back = await fetch(`${h.url}/auth/dev?email=ann%40newera.inc`, { redirect: 'manual', headers: { cookie: pair } });
+    assert.equal(back.headers.get('location'), '/device?code=' + s.user_code);
+    assert.ok(back.headers.getSetCookie().some((c) => /tr_pair=;.*Max-Age=0/.test(c)), 'the pair cookie is spent');
+    const forged = await fetch(`${h.url}/auth/dev?email=bob%40newera.inc`, { redirect: 'manual', headers: { cookie: 'tr_pair=//evil.example' } });
+    assert.equal(forged.headers.get('location'), '/');
+  } finally { await h.close(); }
+});
+
+test('browsers get an error page, API callers keep plain text', async () => {
+  const h = await startDevHub();
+  try {
+    const page = await fetch(h.url + '/nope', { headers: { accept: 'text/html,application/xhtml+xml' } });
+    assert.equal(page.status, 404);
+    assert.match(page.headers.get('content-type'), /text\/html/);
+    assert.match(page.headers.get('content-security-policy'), /default-src 'none'/);
+    const t = await page.text();
+    assert.match(t, /Không tìm thấy/);
+    assert.ok(!/<script/i.test(t));
+    const api = await fetch(h.url + '/api/nope', { headers: { accept: 'text/html' } });
+    assert.equal(await api.text(), 'not found');
+    const plain = await fetch(h.url + '/nope');
+    assert.equal(await plain.text(), 'not found');
+    const denied = await fetch(h.url + '/device', { method: 'POST', headers: { accept: 'text/html', 'content-type': 'application/x-www-form-urlencoded' }, body: 'action=lookup' });
+    assert.equal(denied.status, 401);
+    assert.match(await denied.text(), /Đăng nhập lại/);
+  } finally { await h.close(); }
+});
+
+test('the approved page sends the browser on to the world view', async () => {
+  const h = await startDevHub();
+  try {
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const s = await start(h);
+    const t = await (await postDeviceForm(h.url, login, { user_code: s.user_code, action: 'approve' })).text();
+    assert.match(t, /http-equiv="refresh" content="3;url=\/"/);
+    assert.match(t, /<strong>Laptop<\/strong> sẽ tự kết nối/);
   } finally { await h.close(); }
 });
 

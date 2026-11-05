@@ -35,7 +35,7 @@ function loadConfig(env = process.env) {
   }
 
   const allowedDomains = list(env.HUB_ALLOWED_DOMAINS);
-  if (!allowedDomains.length) need('HUB_ALLOWED_DOMAINS', 'required (comma-separated email domains, e.g. newera.inc)');
+  if (!allowedDomains.length) need('HUB_ALLOWED_DOMAINS', 'required (comma-separated email domains, or * for any Google account)');
   const ownerEmails = list(env.HUB_OWNER_EMAILS);
   if (!ownerEmails.length) need('HUB_OWNER_EMAILS', 'required (comma-separated owner emails)');
 

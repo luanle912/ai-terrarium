@@ -392,12 +392,15 @@ test('world state rebuilds from the next publish after a restart', async () => {
   } finally { st && st.close(); hub2 && await hub2.close(); await h1.close(); }
 });
 
-test('GET / without session redirects to login; with session serves the page', async () => {
+test('GET / without session shows the welcome page; with session serves the world page', async () => {
   const { h, login } = await setup();
   try {
     const r = await fetch(h.url + '/', { redirect: 'manual' });
-    assert.equal(r.status, 302);
-    assert.equal(r.headers.get('location'), '/auth/login');
+    assert.equal(r.status, 200);
+    const welcome = await r.text();
+    assert.match(welcome, /href="\/auth\/login"/);
+    assert.ok(!/<script/i.test(welcome), 'welcome page carries no script');
+    assert.match(r.headers.get('content-security-policy'), /default-src 'none'/);
     const ok = await fetch(h.url + '/', { headers: { cookie: login.cookie } });
     assert.equal(ok.status, 200);
     assert.match(ok.headers.get('content-type'), /text\/html/);

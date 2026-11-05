@@ -2,7 +2,7 @@
 // Publish, live world and viewer pages (spec 9.3-9.5).
 //   POST /api/publish          Bearer device token, JSON <= 16KB. Cookies are never read here (S11).
 //   GET  /api/world/stream     SSE for signed-in viewers: `world`, `island`, `remove` events, `: ping` every 25 s
-//   GET  /                     redirect to login, or the claude-office.html page
+//   GET  /                     welcome page with the sign-in button, or the claude-office.html page
 // ctx.streams = {check(), count()} is exposed for tests and the periodic session check (B8).
 
 const path = require('node:path');
@@ -10,6 +10,7 @@ const { HttpError, send, sendJson, SECURITY_HEADERS } = require('./http.js');
 const { sha256hex, NO_REFRESH_TTL_MS } = require('./auth.js');
 const { validatePublish } = require('./validate.js');
 const { createOfficePage } = require('./csp.js');
+const { welcomePage, PAGE_CSP } = require('./pages.js');
 
 const PUBLISH_LIMIT = 16 * 1024;
 const PING_MS = 25 * 1000;
@@ -181,7 +182,7 @@ function routes(ctx) {
     method: 'GET', path: '/',
     handler(req, res) {
       const s = helpers.requireSession(req);
-      if (!s) return redirect(res, '/auth/login');
+      if (!s) return send(res, 200, welcomePage(), { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, ...NO_STORE });
       let page;
       try { page = officePage.get(); } catch { throw new HttpError(500, 'page missing'); }
       send(res, 200, page.body, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': page.csp, ...NO_STORE });
