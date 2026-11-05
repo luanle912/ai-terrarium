@@ -78,7 +78,8 @@ test('invalid_grant bans with google_revoked', async () => {
     assert.equal(u.ban_reason, 'google_revoked');
     assert.equal(db.sessionTokensForUser(user.id).length, 0);
     assert.equal(await own.waitEnd(), true);
-    assert.ok(await other.until((e) => e.event === 'remove' && e.data.id === dev.island_id));
+    assert.ok(await other.until((e) => e.event === 'world' && e.data.islands.some((i) => i.id === dev.island_id && i.online === false)));
+    assert.equal(other.events.some((e) => e.event === 'remove'), false); // a ban keeps the island in its slot
     assert.equal((await postJson(h.url, '/api/publish', pkt(2), bearer(dev.token))).status, 401);
     assert.equal(u.refresh_enc, null);
     assert.ok(revokeCalls(google).length >= 1);

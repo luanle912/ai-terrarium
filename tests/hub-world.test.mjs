@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { DatabaseSync } from 'node:sqlite';
 import { startDevHub, devLogin, pairDevice, postJson, makeGoogle, googleLogin, NOW } from './hub-helpers.mjs';
 
 const require = createRequire(import.meta.url);
@@ -71,7 +72,7 @@ test('private packets drop their sessions', () => {
 });
 
 // ---- world ----
-const ISL = { id: 'i1', name: 'Đảo A', color: '#fff' };
+const ISL = { id: 'i1', name: 'Đảo A', color: '#fff', slot: 0 };
 function mkWorld() {
   const clock = { t: 1000 };
   const events = [];
@@ -164,6 +165,18 @@ test('removeDevice and removeIsland emit', () => {
   world.publish(ISL, 'd3', 'kin', val([sess(1)]));
   world.removeIsland('i1');
   assert.deepEqual(world.islands(), []);
+});
+
+test('islands() carries the slot', () => {
+  const { world } = mkWorld();
+  world.publish({ ...ISL, slot: 5 }, 'd1', 'kin', val([sess(1)]));
+  assert.equal(world.islands()[0].slot, 5);
+});
+
+test('removeIsland always emits remove then world, even when the island is not in RAM', () => {
+  const { world, events } = mkWorld();
+  world.removeIsland('ghost');
+  assert.deepEqual(events, [{ type: 'remove', id: 'ghost' }, { type: 'world' }]);
 });
 
 // ---- integration ----
@@ -276,7 +289,7 @@ test('stream needs a session and sends world then island events', async () => {
     const w = await st.until((e) => e.event === 'world');
     assert.ok(w);
     assert.equal(w.data.islands.length, 1);
-    assert.deepEqual(Object.keys(w.data.islands[0]).sort(), ['color', 'id', 'name', 'online', 'private', 'share']);
+    assert.deepEqual(Object.keys(w.data.islands[0]).sort(), ['color', 'id', 'name', 'online', 'private', 'share', 'slot']);
     assert.equal(w.data.islands[0].id, dev.island_id);
     assert.equal(w.data.viewers, 1);
     const isl = await st.until((e) => e.event === 'island');
@@ -293,7 +306,7 @@ test('stream needs a session and sends world then island events', async () => {
   } finally { streams.forEach((s) => s.close()); await h.close(); }
 });
 
-test('revoking a device removes the island from viewers', async () => {
+test('revoking the last device leaves the island offline in its slot', async () => {
   const { h, login, dev } = await setup();
   let st;
   try {
@@ -302,12 +315,112 @@ test('revoking a device removes the island from viewers', async () => {
     assert.ok(await st.until((e) => e.event === 'island'));
     const r = await fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: login.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: login.csrf, device_id: dev.device_id }) });
     assert.equal(r.status, 302);
-    const rm = await st.until((e) => e.event === 'remove');
-    assert.deepEqual(rm.data, { id: dev.island_id });
+    const w = await st.until((e) => e.event === 'world' && e.data.islands[0] && e.data.islands[0].online === false);
+    assert.deepEqual(w.data.islands, [{ id: dev.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin' }]);
+    assert.ok(await st.until((e) => e.event === 'island' && e.data.id === dev.island_id && e.data.sessions.length === 0));
+    assert.equal(st.events.some((e) => e.event === 'remove'), false);
     assert.equal(h.hub.world.islands().length, 0);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 2 }), bearer(dev.token))).status, 401);
     // revoke needs csrf
     const r2 = await fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: login.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: 'bad', device_id: dev.device_id }) });
     assert.equal(r2.status, 403);
+  } finally { st && st.close(); await h.close(); }
+});
+
+test('world events carry slot and capacity', async () => {
+  const h = await startDevHub();
+  let st;
+  try {
+    const an = await devLogin(h.url, 'an@newera.inc', 'An');
+    const bo = await devLogin(h.url, 'bo@newera.inc', 'Bo');
+    const a = await pairDevice(h.url, an, 'A');
+    const b = await pairDevice(h.url, bo, 'B');
+    await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(a.token));
+    await postJson(h.url, '/api/publish', pkt([sess(2)]), bearer(b.token));
+    st = await openStream(h.url, an.cookie);
+    const w = await st.until((e) => e.event === 'world' && e.data.islands.length === 2);
+    assert.equal(w.data.capacity, 8);
+    assert.deepEqual(w.data.islands.map((i) => [i.id, i.slot, i.online]), [[a.island_id, 0, true], [b.island_id, 1, true]]);
+  } finally { st && st.close(); await h.close(); }
+});
+
+test('an island with no device sending shows offline in its slot', async () => {
+  const h = await startDevHub();
+  let h2; let st;
+  try {
+    const an = await devLogin(h.url, 'an@newera.inc', 'An');
+    const a = await pairDevice(h.url, an, 'A');
+    await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(a.token));
+    await h.hub.close(); // the RAM world is gone; the DB file stays
+    h2 = await startDevHub({ env: { HUB_DB: h.config.dbPath } });
+    const login = await devLogin(h2.url, 'an@newera.inc', 'An');
+    st = await openStream(h2.url, login.cookie);
+    const w = await st.until((e) => e.event === 'world');
+    assert.equal(w.data.islands.length, 1);
+    assert.deepEqual(w.data.islands[0], { id: a.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin' });
+    const isl = await st.until((e) => e.event === 'island' && e.data.id === a.island_id);
+    assert.deepEqual(isl.data.sessions, []);
+  } finally { st && st.close(); if (h2) await h2.close(); await h.close(); }
+});
+
+test('a hidden island publishes but is never sent to viewers', async () => {
+  const h = await startDevHub();
+  let st;
+  try {
+    const an = await devLogin(h.url, 'an@newera.inc', 'An');
+    const bo = await devLogin(h.url, 'bo@newera.inc', 'Bo');
+    const a = await pairDevice(h.url, an, 'A');
+    const b = await pairDevice(h.url, bo, 'B');
+    const raw = new DatabaseSync(h.config.dbPath);
+    raw.prepare('UPDATE islands SET slot=NULL WHERE id=?').run(b.island_id);
+    raw.close();
+    st = await openStream(h.url, an.cookie);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(2)]), bearer(b.token))).status, 204);
+    await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(a.token));
+    assert.ok(await st.until((e) => e.event === 'island' && e.data.id === a.island_id && e.data.sessions.length === 1));
+    await new Promise((res) => setTimeout(res, 700)); // past the island throttle
+    assert.equal(st.events.some((e) => e.event === 'island' && e.data.id === b.island_id), false);
+    assert.equal(st.events.some((e) => e.event === 'world' && e.data.islands.some((i) => i.id === b.island_id)), false);
+  } finally { st && st.close(); await h.close(); }
+});
+
+test('a promoted hidden island appears in its new slot', async () => {
+  const h = await startDevHub();
+  let st;
+  try {
+    const boss = await devLogin(h.url, 'boss@newera.inc', 'Boss');
+    const ids = [];
+    for (let i = 0; i < 8; i++) {
+      const u = await devLogin(h.url, `u${i}@newera.inc`, 'U' + i);
+      ids.push((await pairDevice(h.url, u, 'M' + i)).island_id);
+    }
+    const raw = new DatabaseSync(h.config.dbPath);
+    raw.prepare('UPDATE islands SET slot=NULL WHERE id=?').run(ids[7]); // the ninth, hidden one
+    raw.close();
+    st = await openStream(h.url, boss.cookie);
+    assert.ok(await st.until((e) => e.event === 'world'));
+    const r = await postJson(h.url, `/api/owner/islands/${ids[4]}/remove`, {}, { cookie: boss.cookie, origin: h.url, 'x-csrf-token': boss.csrf });
+    assert.equal(r.status, 200);
+    assert.ok(await st.until((e) => e.event === 'remove' && e.data.id === ids[4]));
+    const w = await st.until((e) => e.event === 'world' && e.data.islands.some((i) => i.id === ids[7]));
+    assert.equal(w.data.islands.find((i) => i.id === ids[7]).slot, 4);
+    assert.equal(w.data.islands.some((i) => i.id === ids[4]), false);
+  } finally { st && st.close(); await h.close(); }
+});
+
+test('owner removal still sends remove for an island that is offline', async () => {
+  const h = await startDevHub();
+  let st;
+  try {
+    const boss = await devLogin(h.url, 'boss@newera.inc', 'Boss');
+    const an = await devLogin(h.url, 'an@newera.inc', 'An');
+    const a = await pairDevice(h.url, an, 'A'); // never publishes: not in RAM
+    st = await openStream(h.url, boss.cookie);
+    assert.ok(await st.until((e) => e.event === 'world' && e.data.islands.length === 1));
+    const r = await postJson(h.url, `/api/owner/islands/${a.island_id}/remove`, {}, { cookie: boss.cookie, origin: h.url, 'x-csrf-token': boss.csrf });
+    assert.equal(r.status, 200);
+    assert.ok(await st.until((e) => e.event === 'remove' && e.data.id === a.island_id));
+    assert.ok(await st.until((e) => e.event === 'world' && e.data.islands.length === 0));
   } finally { st && st.close(); await h.close(); }
 });
 
@@ -382,12 +495,12 @@ test('world state rebuilds from the next publish after a restart', async () => {
     await new Promise((r) => setTimeout(r, 50));
     st = await openStream(h1.url, login.cookie); // fresh sockets: undici may hold a dead keep-alive one
     const w = await st.until((e) => e.event === 'world');
-    assert.equal(w.data.islands.length, 0);
+    assert.deepEqual(w.data.islands.map((i) => [i.id, i.online]), [[dev.island_id, false]]); // still in its slot, offline
     // the restarted publisher begins again at seq 0, the hub never saw its old seq
     assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 3 }), { ...bearer(dev.token), connection: 'close' })).status, 204);
-    const isl = await st.until((e) => e.event === 'island');
+    const isl = await st.until((e) => e.event === 'island' && e.data.sessions.length === 1);
     assert.equal(isl.data.id, dev.island_id);
-    const w2 = await st.until((e) => e.event === 'world' && e.data.islands.length === 1);
+    const w2 = await st.until((e) => e.event === 'world' && e.data.islands.length === 1 && e.data.islands[0].online);
     assert.ok(w2);
   } finally { st && st.close(); hub2 && await hub2.close(); await h1.close(); }
 });
