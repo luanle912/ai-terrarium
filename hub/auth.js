@@ -24,6 +24,7 @@ const SESSION_TTL_MS = 7 * 24 * 3600 * 1000; // user has a refresh token: Google
 const NO_REFRESH_TTL_MS = 24 * 3600 * 1000; // no refresh token: cannot be re-checked, so a day at most
 const LOGIN_TTL_MS = 10 * 60 * 1000;
 const IAT_SKEW_S = 300;
+const PAIR_CODE_RE = /^[A-Z]{4}-[A-Z]{4}$/;
 
 const sha256hex = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 const rand = () => crypto.randomBytes(32).toString('base64url');
@@ -47,11 +48,14 @@ function checkClaims(claims, { clientId, domains, nonce, now, requireNonce = tru
   if (requireNonce && (typeof nonce !== 'string' || !nonce || claims.nonce !== nonce)) return bad('nonce');
   if (claims.email_verified !== true) return bad('email_verified');
   const allowed = (domains || []).map((d) => String(d).toLowerCase());
-  if (typeof claims.hd !== 'string' || !allowed.includes(claims.hd.toLowerCase())) return bad('hd');
+  const open = allowed.includes('*');
+  if (!open) {
+    if (typeof claims.hd !== 'string' || !allowed.includes(claims.hd.toLowerCase())) return bad('hd');
+  }
   if (typeof claims.email !== 'string' || typeof claims.sub !== 'string' || !claims.sub) return bad('email');
   const email = claims.email.toLowerCase();
   const m = /^([^@\s]+)@([^@\s]+)$/.exec(email);
-  if (!m || !allowed.includes(m[2])) return bad('email domain');
+  if (!m || (!open && !allowed.includes(m[2]))) return bad('email domain');
   const name = typeof claims.name === 'string' && claims.name.trim() ? claims.name.trim().slice(0, 100) : m[1];
   return { ok: true, sub: claims.sub, email, name };
 }
@@ -61,6 +65,8 @@ function routes(ctx) {
   const sessName = config.secure ? '__Host-tr_sess' : 'tr_sess';
   const loginName = config.secure ? '__Host-tr_login' : 'tr_login';
   const consentName = config.secure ? '__Host-tr_consent' : 'tr_consent';
+  // Holds a pairing code across the Google round trip so sign-in lands back on its approval page.
+  const pairName = config.secure ? '__Host-tr_pair' : 'tr_pair';
   // One-shot tickets for the internal consent hop: the callback hands one out with its redirect to
   // /auth/login?consent=1, and that request spends it instead of taking from the login limiter. Memory only.
   const consentTickets = new Map(); // sha256hex(ticket) -> expires at (ms)
@@ -131,6 +137,7 @@ function routes(ctx) {
   ctx.helpers.requireSession = requireSession;
   ctx.helpers.requireCsrf = requireCsrf;
   ctx.helpers.clearSessionCookie = clearSessionCookie;
+  ctx.helpers.pairCookie = (code) => cookie(pairName, PAIR_CODE_RE.test(code) ? code : '', PAIR_CODE_RE.test(code) ? LOGIN_TTL_MS / 1000 : 0);
   ctx.helpers.onSessionEnd = onSessionEnd;
   ctx.helpers.endSessionsForUser = endSessionsForUser;
   // No role column: ownership follows env. config.ownerEmails is read each time, never copied.
@@ -166,9 +173,11 @@ function routes(ctx) {
     const ttl = user.refresh_enc ? SESSION_TTL_MS : NO_REFRESH_TTL_MS;
     const token = rand();
     db.createSession({ tokenHash: sha256hex(token), userId: user.id, csrf: rand(), now, expiresAt: now + ttl });
+    const pending = parseCookies(req.headers.cookie)[pairName];
+    const back = PAIR_CODE_RE.test(pending || '') ? '/device?code=' + pending : '/';
     send(res, 302, '', {
-      Location: '/', ...noStore,
-      'Set-Cookie': [cookie(sessName, token, ttl / 1000), cookie(loginName, '', 0)],
+      Location: back, ...noStore,
+      'Set-Cookie': [cookie(sessName, token, ttl / 1000), cookie(loginName, '', 0), cookie(pairName, '', 0)],
     });
   }
 
@@ -190,10 +199,11 @@ function routes(ctx) {
         state, nonce,
         code_challenge: crypto.createHash('sha256').update(verifier).digest('base64url'),
         code_challenge_method: 'S256',
-        hd: config.allowedDomains[0],
         access_type: 'offline', // asks Google for a refresh token
         prompt: consent ? 'consent' : 'select_account',
       });
+      // hd=* would hide personal Gmail accounts from Google's account chooser.
+      if (!config.allowedDomains.includes('*')) q.set('hd', config.allowedDomains[0]);
       send(res, 302, '', {
         Location: `${GOOGLE_AUTH}?${q}`, ...noStore,
         'Set-Cookie': [cookie(loginName, sha256hex(state), LOGIN_TTL_MS / 1000), cookie(consentName, '', 0)],

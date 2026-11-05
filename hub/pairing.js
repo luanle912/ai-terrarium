@@ -140,10 +140,24 @@ function routes(ctx) {
 
   list.push({
     method: 'GET', path: '/device',
-    handler(req, res) {
+    // ?code= (from the local page's join button) opens the confirm page; approving still needs the POST below.
+    handler(req, res, rc) {
+      const raw = rc && rc.query ? rc.query.get('code') : null;
+      const code = raw ? normalizeUserCode(raw) : '';
+      const valid = /^[A-Z]{4}-[A-Z]{4}$/.test(code);
       const s = helpers.requireSession(req);
-      if (!s) return send(res, 302, '', { Location: '/auth/login', ...NO_STORE });
-      html(res, 200, devicePage({ csrf: s.session.csrf })); // the code is never prefilled (B10), ?code= is ignored
+      if (!s) return send(res, 302, '', { Location: '/auth/login', ...NO_STORE, ...(valid ? { 'Set-Cookie': helpers.pairCookie(code) } : {}) });
+      const csrf = s.session.csrf;
+      if (!valid) return html(res, 200, devicePage({ csrf }));
+      const now = deps.now();
+      const key = s.session.token_hash;
+      if (locked(key, now)) return html(res, 429, devicePage({ csrf, error: 'Nhập sai quá nhiều lần. Thử lại sau 10 phút.' }));
+      const row = db.getDeviceCodeByUserCode(code);
+      if (!row || row.expires_at <= now || row.denied || row.approved_user_id != null) {
+        recordWrong(key, now);
+        return html(res, 200, devicePage({ csrf, error: 'Mã không đúng hoặc đã hết hạn.' }));
+      }
+      html(res, 200, devicePage({ csrf, device: { name: row.name, userCode: row.user_code, requestedAt: row.created_at } }));
     },
   });
 
@@ -174,7 +188,7 @@ function routes(ctx) {
         recordWrong(key, now);
         return html(res, 400, devicePage({ csrf, error: 'Mã không đúng hoặc đã hết hạn.' }));
       }
-      html(res, 200, devicePage({ csrf, done: 'approved' }));
+      html(res, 200, devicePage({ csrf, done: 'approved', device }));
     },
   });
 

@@ -48,6 +48,15 @@ test('checkClaims rejects each bad case', () => {
   assert.equal(chk({ iss: 'accounts.google.com' }).ok, true);
 });
 
+test('checkClaims with domains ["*"] accepts any verified Google account', () => {
+  const open = (over) => checkClaims(good(over), { clientId: CID, domains: ['*'], nonce: 'n1', now: NOW });
+  assert.deepEqual(open({ hd: undefined, email: 'Me@Gmail.com' }), { ok: true, sub: 's1', email: 'me@gmail.com', name: 'Ann' });
+  assert.equal(open({ hd: 'other.org', email: 'x@other.org' }).ok, true);
+  assert.equal(open({ hd: undefined, email: 'me@gmail.com', email_verified: false }).ok, false);
+  assert.equal(open({ hd: undefined, email: 'a@b@gmail.com' }).ok, false);
+  assert.equal(open({ hd: undefined, email: 'me@gmail.com', aud: 'other' }).ok, false);
+});
+
 // ---- hub harness ----
 function setup(env = {}, fetchImpl) {
   const clock = { t: NOW };
@@ -105,6 +114,14 @@ test('login sets state cookie and redirects to google with hd and pkce', async (
   assert.ok(c.includes(sha256hex(state)));
   assert.equal(r.headers['X-Content-Type-Options'], 'nosniff');
   await h.hub.close();
+});
+
+test('login with HUB_ALLOWED_DOMAINS=* sends no hd, so personal Gmail accounts can be chosen', async () => {
+  const h = setup({ HUB_ALLOWED_DOMAINS: '*' });
+  const { r, loc } = await startLogin(h);
+  assert.equal(r.status, 302);
+  assert.equal(loc.searchParams.has('hd'), false);
+  assert.match(loc.search, /code_challenge_method=S256/);
 });
 
 test('callback rejects a state that is not bound to this browser', async () => {
