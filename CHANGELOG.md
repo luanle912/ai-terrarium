@@ -31,6 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Items deferred from GĐ1 review** — `?server=` is ignored when the local page is served over `https:`; device-code approval only succeeds for a code that is pending and unexpired; a signing-in browser's old session is ended; a publisher that gets 401 no longer marks a newer config as revoked; departments with more than 16 projects no longer repeat letters; the hub page offers "Thử lại" when `/api/config` fails transiently
 
+## [1.4.2] - 2026-11-05
+
+### Removed
+
+- **Pantry event tree** — The seasonal event tree that stood in the front corner of the pantry is gone; the pantry is now just a kitchen without a decorative tree taking up floor space. Event trees on the island lawn are unchanged
+
+## [1.4.1] - 2026-11-05
+
+### Fixed
+
+- **Pantry fridge** — The tall fridge was drawn over the wooden cabinet and espresso machine next to it, making it look like the fridge was in front of both even though it stands behind them; the fridge now draws before the cabinet and espresso so their shorter bodies correctly cover the overlap, and the top of the fridge still shows above the counter as it would in a real kitchen
+- **Department desks** — Desks in the four department zones were missing the detailed design: the monitor showed a blank rectangle, chairs had no backrest, and seated agents sometimes overlapped the desk edge; desks now show the full pixel-art design with a monitor that reflects the agent's current state (code editor, terminal, reading, thinking, permission prompt, error or done), an animated keyboard, a mug with rising steam, a desk lamp with glow, and seated agents layer correctly behind the desk backrest
+
 ## [1.4.0] - 2026-11-05
 
 ### Added
@@ -257,6 +270,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.4.2]: https://github.com/luanle912/ai-terrarium/compare/v1.4.1...v1.4.2
+[1.4.1]: https://github.com/luanle912/ai-terrarium/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/luanle912/ai-terrarium/compare/v1.3.5...v1.4.0
 [1.3.5]: https://github.com/luanle912/ai-terrarium/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/luanle912/ai-terrarium/compare/v1.3.3...v1.3.4
