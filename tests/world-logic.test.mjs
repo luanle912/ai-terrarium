@@ -299,3 +299,34 @@ test('Esc closes an open confirm first, then goes back; never while typing', () 
   assert.equal(W.escAction({ ...base, view: 'all' }), 'none')
   assert.equal(W.escAction({ ...base, view: 'all', confirm: true }), 'none')
 })
+
+// ---- /api/me probe for an island that may be mine (Task 5 review) ----
+test('meProbeStep: the first world list is only remembered, a new island then probes', () => {
+  const st = W.meProbeState()
+  const o = { visible: true, hasMine: false, every: 10000 }
+  assert.deepEqual(W.meProbeStep(st, ['a', 'b'], 0, { ...o, first: true }), { fire: false, retryIn: null })
+  assert.deepEqual(W.meProbeStep(st, ['a', 'b'], 100, o), { fire: false, retryIn: null })
+  assert.deepEqual(W.meProbeStep(st, ['a', 'b', 'c'], 200, o), { fire: true, retryIn: null })
+})
+
+test('meProbeStep: a second new island inside the throttle window gets a trailing probe', () => {
+  const st = W.meProbeState()
+  const o = { visible: true, hasMine: false, every: 10000 }
+  W.meProbeStep(st, ['a'], 0, { ...o, first: true })
+  assert.equal(W.meProbeStep(st, ['a', 'b'], 1000, o).fire, true)
+  assert.deepEqual(W.meProbeStep(st, ['a', 'b', 'c'], 4000, o), { fire: false, retryIn: 7000 })
+  // nothing new arrives; the trailing call when the window reopens still probes for 'c'
+  assert.deepEqual(W.meProbeStep(st, ['a', 'b', 'c'], 11000, o), { fire: true, retryIn: null })
+  assert.deepEqual(W.meProbeStep(st, ['a', 'b', 'c'], 30000, o), { fire: false, retryIn: null })
+})
+
+test('meProbeStep: a hidden tab waits and probes once when visible; having an island clears it', () => {
+  const st = W.meProbeState()
+  const o = { visible: true, hasMine: false, every: 10000 }
+  W.meProbeStep(st, ['a'], 0, { ...o, first: true })
+  assert.deepEqual(W.meProbeStep(st, ['a', 'b'], 100, { ...o, visible: false }), { fire: false, retryIn: null })
+  assert.equal(W.meProbeStep(st, ['a', 'b'], 5000, o).fire, true)
+  assert.equal(W.meProbeStep(st, ['a', 'b'], 6000, o).fire, false)
+  W.meProbeStep(st, ['a', 'b', 'c'], 7000, { ...o, hasMine: true })
+  assert.deepEqual(W.meProbeStep(st, ['a', 'b', 'c'], 30000, o), { fire: false, retryIn: null })
+})
