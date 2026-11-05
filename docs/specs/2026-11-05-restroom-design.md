@@ -273,3 +273,144 @@ nâu" nhưng cũng ghi "giống cách vẽ bệ văn phòng", nên ưu tiên kh�
 - Không ai đi xuyên tường, vách lửng hay tường đầu gối; không ai bước từ sàn khối xuống cỏ; chó không vào khối.
 - Không đổi pantry ngoài chỗ nối; ngoài vùng pantry/khối/bãi cỏ phía đông, ảnh phải giống từng pixel (kiểm bằng pixel diff).
 - Không sửa `<script id="world-view">` và `<script id="world-logic">`. Không thêm dependency, trang vẫn một file.
+
+---
+
+# Bản 3 (đồng bộ phong cách, sát pantry, khu hút thuốc cạnh nhà vệ sinh)
+
+Ngày: 2026-11-05 (tối) · Theo góp ý của anh Kiệt sau bản 2. Thay cho B2, B4, B5, B6 và B9 ở trên.
+
+## C1. Góp ý và hướng xử lý
+
+| Góp ý | Xử lý |
+|---|---|
+| Kính, màu, cây, ghế, đồ đạc "lệch tông" với văn phòng | Vẽ lại mọi món bằng ngôn ngữ hình sẵn có của đảo (C3) |
+| Khối phải sát tường pantry, đang "bị đẩy lên" | Tường sau khối nằm đúng đường tường sau văn phòng (`y = 0`), thêm đất để đặt vừa (C2, C4) |
+| Khu hút thuốc phải ngay cạnh nhà vệ sinh, thiếu chỗ thì thêm đất | Dời khu hút thuốc sát cạnh đông của khối, thêm một mũi đất (C4, C6) |
+| Vách kính → **tường đặc** cho kín đáo (vách pantry, vách nam/nữ, vách buồng, vách chắn bồn tiểu) | C3 |
+| **Không mái**, không mái hiên, không thứ gì giống trần | C3 |
+| Bên trong vẫn **nhìn rõ** từ góc 3/4 như các phòng văn phòng | Chiều cao vách theo C3; người trong buồng vẫn khuất sau cửa buồng đóng |
+
+## C2. Vị trí mới
+
+| | Bản 2 | Bản 3 |
+|---|---|---|
+| Ô chừa `east-back` (khối nhà vệ sinh) | `x 27..34, y 2..6` | **`x 27..32, y 0..6`** (6×7) |
+| Sàn khối | `x 27 → 34.6`, `y 2 → 7` | `x 27 → 33`, `y 0 → 7`, cao `FLOOR_Z` |
+| Tường sau | mặt trong `y = 2.25` | **mặt trong `y = 0`, dày 0.35 ra sau tới `y = −0.35`**, như tường sau văn phòng, nối liền không khe |
+| Phòng nam | `x 27..31, y 2..5` | `x 27 → 30, y 0 → 5` |
+| Phòng nữ | `x 31..34.6, y 2..5` | `x 30 → 33, y 0 → 5` |
+| Sảnh | `y 5..7` | `x 27 → 33, y 5 → 7`, mở sang pantry ở `(26,5)` |
+| Ô chừa `east-front` (khu hút thuốc) | `x 28..31, y 9..12` | **`x 33..36, y 4..7`**, sát cạnh đông của khối |
+
+- Góc pantry không còn bị che: tường sau khối nằm cùng mặt phẳng với tường bếp, không đứng trước nó trên màn hình.
+- Rộng 6 ô (không phải 8) vì giới hạn ở C4. Phòng sâu 5 ô bù lại chiều rộng.
+
+## C3. Đồng bộ phong cách
+
+Nguyên tắc: không có ngôn ngữ hình mới. Mỗi món mượn đúng cách vẽ của một món đã có trên đảo.
+
+| Món | Mượn từ |
+|---|---|
+| Tường sau | Y hệt tường sau văn phòng: màu `th.wr` theo theme ngày/đêm, nẹp chân `th.trim` cao 4, dải nẹp đỉnh `WALL → WALL+3`, mặt đỉnh `shade(th.trim, 18)`, mặt cắt cuối tường `shade(th.wr, −34)` |
+| Vách pantry ↔ nam, nam ↔ nữ | **Tường đặc**, cùng màu và cách tô với tường văn phòng (`th.wl` cho mặt nhìn thấy, nẹp chân, mặt đỉnh), cao **32**. Như vậy cao hơn người (≈ 25) nên kín, mà vẫn thấp hơn tường đầy (56) để nhìn được vào bên trong từ góc 3/4 |
+| Tường trước, tường đông của phòng nữ | Cùng kiểu, cao đầu gối **10**, chừa 2 lối cửa |
+| Vách buồng, cửa buồng | Tấm đặc màu nhấn (nam `#173DC9`, nữ `#D9467A`), cao `3 → 28`, tô 3 mặt như hộp văn phòng. Màu nhấn chỉ có ở đây và trên biển |
+| Vách chắn bồn tiểu | Tấm đặc màu tường (`th.wl`), không kính |
+| Sàn hai phòng | Gạch sáng dễ lau của bếp pantry (`#ebe7dd`/`#dfdace` ban ngày, `#2e2d3a`/`#282734` ban đêm), ô bàn cờ |
+| Sàn sảnh | Ván gỗ khu ngồi pantry (`#c99862`/`#c18f59`, đêm `#3a2d2b`/`#332725`), cùng đường ron và mạch so le |
+| Thảm chạy ở sảnh | Màu thảm phòng khách pantry (nền xanh đậm, viền đỏ rượu) |
+| Lavabo | Thân tủ gỗ `#a8763e` có cánh tủ và tay nắm vàng, mặt đá sáng `#efe9dc` như tủ bếp dưới; chậu inox lõm như bồn rửa bếp |
+| Gương | Khung mảnh màu nẹp, mặt gương xanh nhạt như kính cửa sổ văn phòng; không viền LED |
+| Chậu cây | `PantryItems.I.potplant` (chậu sứ trắng, lá `PLANT`), vẽ đúng như ở pantry |
+| Ghế bàn trang điểm | `PantryItems.I.stool` (ghế bar của pantry) |
+| Ghế băng sảnh | Kiểu ghế băng khu hút thuốc: chân kim loại tối, mặt ván gỗ `#c79a5e` có rãnh, không tựa |
+| Biển phòng | Bảng nền tối gắn tường sau, chữ phát sáng như biển neon CAFE: `WC NAM` (xanh) phía trên buồng nam, `WC NỮ` (hồng) phía trên buồng nữ, kèm hình người nhỏ |
+| Nhãn sảnh | Chữ sơn trên sàn như chữ `PANTRY`: `SẢNH CHUNG`, cỡ 2, màu nâu gỗ như `PANTRY`, đậm 60% |
+| Bệ | Đá bệ văn phòng `#b9b2a3` qua `night()`, cùng đường ron |
+| Viền | Bỏ viền tối 1px. Chỉ tô phẳng 3 mặt như phần còn lại |
+
+- **Không có mái.** Không mái hiên, không tấm che, không dải nẹp nào chạy ngang trên đầu. Thứ duy nhất ở trên cao là
+  dải nẹp đỉnh của tường sau, giống hệt tường văn phòng.
+- Bỏ: kính mờ, khung LED vàng, nhãn nổi trên trời, hộp biển trên cửa (hộp này che người trong phòng), cột chỉ dẫn sọc
+  xanh hồng.
+- Đêm: tường theo theme văn phòng (`th`), gạch và gỗ pantry nội suy theo `df` như pantry. Biển neon giữ sáng và có
+  quầng như biển CAFE. Tuyết: trong khối không có gì bị phủ (văn phòng cũng vậy); chỉ cỏ quanh khối phủ tuyết.
+
+## C4. Đất thêm
+
+Tường sau khối phải đứng trên đất. Ở bản 2, hàng `y = −1` chỉ tới `x = 28`, hàng `y = 0` tới `x = 31`. Bản 3 thêm 21 ô
+(`SkyLogic` `ANNEX_LAND`, cộng vào đảo sau hình squircle):
+
+| Hàng `y` | Ô thêm `x` |
+|---|---|
+| −1 | 29, 30, 31 |
+| 0 | 32 |
+| 3 | 35 |
+| 4 | 35, 36 |
+| 5, 6, 7, 8 | 35, 36, 37 |
+| 9 | 35, 36 |
+| 10 | 35 |
+
+- **Ràng buộc khung cảnh:** mọi ô thêm thoả `(x + 1) − y ≤ 33`. Góc phải nhất trên màn hình của đảo vẫn ở chỗ cũ, nên
+  `sceneFrame` (LW 848, LH 644, OX 304, OY 83) không đổi. Vì thế độ phân giải canvas không đổi và mọi pixel phía tây
+  vẫn y nguyên. Nếu thêm `(32,−1)` hay `(33,0)`, khung sẽ rộng ra 1 ô và đổi `k` cho cả trang, nên không thêm.
+- Hệ quả: góc sau bên phải của tường sau (`x 32 → 33`, `y −0.35 → 0`) chìa ra 0.35 ô khỏi mép đất. Chấp nhận được, vì
+  đây là góc xa nhất và chính tường che nó.
+- Đất mới là ô đảo thường: mặt cỏ, đáy đất và đá, mép vách, độ sâu đáy tính lại theo khoảng cách tới bờ như mọi ô.
+  Mũi đất phía đông làm bờ thành bậc thang chéo, khớp với dáng góc đảo.
+- Hoa và cây trên đất mới mọc theo `hash` như mọi ô: được một bông hoa ở `(37,5)`. Ô chừa cũ của khu hút thuốc trả lại
+  cỏ nên mọc thêm cây ở `(28,11)`, `(31,11)` và hoa ở `(30,9)`. Cục đá `(30,0)` nay nằm dưới khối. Các hoa ở `(33,3)`,
+  `(34,2)`, `(34,4)`, `(34,5)` (ngoài khối) có lại. Hoa `(30,7)` mất vì đường đá mới.
+- Thác, hồ và đường đá xuống hồ không đổi (hồ chọn theo bờ đông ở các hàng dưới cùng, không bị ảnh hưởng).
+
+## C5. Bố cục khối (6 × 7)
+
+**WC NAM** `x 27 → 30`
+- Góc sau bên trái: chậu cây `(27.4, 0.4)`, máy sấy tay trên tường sau ở `x 27.85`.
+- 2 buồng trên tường sau: `x 28.08 → 29 → 29.93`, `y 0 → 1.35`; người chờ ở `y 1.63`.
+- 2 bồn tiểu trên vách pantry ở `y 1.75`, `2.5`, vách chắn đặc ở `y 2.12`, `2.88`.
+- Lavabo đôi dựa vách pantry: `x 27.14 → 27.7`, `y 3.15 → 4.75`, chậu ở `y 3.55`, `4.35`; gương phía trên.
+- Thùng rác góc trước bên phải `(29.75, 4.7)`. Cửa `x 28 → 29`.
+
+**WC NỮ** `x 30 → 33`
+- 3 buồng trên tường sau: `x 30.07 → 31.01 → 31.94 → 32.88`, mỗi buồng một thùng nhỏ có nắp.
+- Góc trang điểm dựa vách nam/nữ: bàn `y 1.95 → 2.6`, gương phía trên, ghế bar `(30.82, 2.28)`.
+- Lavabo đôi `x 30.07 → 30.63`, `y 2.95 → 4.55`, chậu ở `y 3.35`, `4.15`; máy sấy tay và thùng rác ở `y 4.75`.
+- Chậu cây góc trước bên phải `(32.55, 4.55)`. Cửa `x 31 → 32`.
+
+**SẢNH** `y 5 → 7`
+- Ghế băng dựa tường trước, giữa hai cửa: `x 29.45 → 30.85`, `y 5.1 → 5.45`; trạm sát khuẩn `(29.2, 5.25)`.
+- Lối đi là hàng `y = 6` (thảm chạy `x 27.2 → 32.8`, `y 6.15 → 6.85`, chữ `SẢNH CHUNG` sơn trên đó).
+- Chậu cây lớn góc phải `(32.55, 5.55)`, cột chỉ dẫn nhỏ màu tối ở `(27.25, 6.75)`.
+- Từ pantry vào qua `(27,5)`.
+
+**Chiều cao** (px, `WALL = 56` ≈ 3 ô): tường sau 56 + nẹp 3; vách 32; vách buồng `3 → 28`; tường đầu gối 10; lavabo 14
+(như mặt bếp); gương `18 → 32`; biển neon `40 → 50`.
+
+## C6. Khu hút thuốc
+
+- Ô chừa `east-front` = `x 33..36, y 4..7`. Bố cục `SmokeLogic.layout` giữ nguyên:
+  - bồn cây chắn ở cột `x = 33`, sát cạnh đông của khối, đúng phía cần chắn;
+  - ghế băng ở hàng sau `y = 4`, thùng tàn thuốc;
+  - cửa vào `(33,7)`, `(34,7)`; các cạnh khác của nền vẫn kín (`shut`).
+- Đường đá mới chạy từ chân cầu thang đông `(27,7)` dọc mặt trước khối tới `(32,7)`, ngay trước cửa vào. Đường xuống hồ
+  không đổi.
+- **Khói:** bồn cây cao ≈ 1.2 m chắn giữa ghế và khối. Làn khói trong `drawPerson` vốn đã trôi sang phải trên màn hình
+  (về phía đông, ra xa khối) và tan sau ≈ 14 px, nên không bay qua nhà vệ sinh.
+- Cây `(33,8)` (chỗ chó ngủ đêm) vẫn đứng ngay dưới cửa vào. Lối vào đi từ `(32,7)` nên cây không chặn.
+
+## C7. Agent, đường đi, chó
+
+- Cơ chế giữ như bản 2: mỗi agent dùng buồng trong phòng của mình, khuất khi ở trong, rửa tay xong thì đi tiếp. Spot
+  và chỗ rửa tay lấy từ bố cục C5.
+- Lưới đi: sàn khối là sàn trong nhà. Vách pantry chặn các hàng `y 0..4`, sảnh mở ở `y 5..6`. Không bước được từ sàn
+  khối xuống cỏ.
+- Chó tránh cả hai ô chừa; ô sàn khối không thuộc bãi cỏ.
+
+## C8. Anti-goals bổ sung
+
+- Không thêm kiểu vẽ mới (kính mờ, viền tối, LED, nhãn nổi). Màu nhấn chỉ ở vách buồng và biển.
+- Không mái, không thứ gì giống trần.
+- Không đổi khung cảnh (`sceneFrame`). Không đổi pixel nào ngoài vùng pantry phía đông, khối, khu hút thuốc và đất mới
+  (kiểm bằng pixel diff, CPU raster, ngày/đêm/tuyết).

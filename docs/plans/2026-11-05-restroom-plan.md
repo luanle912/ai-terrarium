@@ -153,3 +153,54 @@ Kiệt, và cho agent đi vào qua sảnh, đúng cửa, đứng trước buồn
 - [ ] Sửa dòng **Restroom** trong `[Unreleased]` cho đúng bản 2 (và dòng khu hút thuốc nếu cần).
 - [ ] `node --test tests/*.test.mjs` PASS.
 - [ ] Commit `feat: restroom v2 — open-top cutaway with men's, women's rooms and a shared lobby`. Không push.
+
+---
+
+## Bản 3: đồng bộ phong cách, sát pantry, khu hút thuốc bên cạnh
+
+**Spec:** mục "Bản 3" trong spec. **Base:** `9fc9ae2`, 443 test.
+
+### Task 11: Đất thêm, ô chừa mới, đường đá
+
+**Files:** `claude-office.html` khối `sky-logic` (`ANNEX_LAND`, `annexLand`, `outdoorSpots`, chân `lawnPaths` mới);
+`tests/sky-logic.test.mjs`.
+
+- [ ] Test:
+  - mọi ô thêm kề đất cũ và thoả `(x+1) − y ≤ W+6`;
+  - `sceneFrame` không đổi so với đảo không có đất thêm;
+  - hai ô chừa nằm trên đất;
+  - đường đá nối cầu thang đông với ô ngay trước cửa khu hút thuốc;
+  - thác và hồ không đổi.
+- [ ] Cài đặt, chạy test.
+
+### Task 12: `RestroomLogic` bản 3
+
+**Files:** khối `restroom-logic`; `tests/restroom-logic.test.mjs`.
+
+- [ ] Test:
+  - tường sau ở `y = 0`, sát pantry; khối 6×7 nằm trên đất;
+  - chiều cao: vách thấp hơn tường đầy và cao hơn người, tường đầu gối thấp;
+  - spot, chỗ rửa tay, và đường đi từ `(26,5)` qua đúng cửa;
+  - không bước được xuống cỏ;
+  - khu hút thuốc kề cạnh đông của khối, cửa vào nối đường đá;
+  - buồng đủ rộng.
+- [ ] Cài đặt, chạy test.
+
+### Task 13: Vẽ lại theo phong cách văn phòng
+
+**Files:** `restroomItems` trong script chính.
+
+- [ ] Vẽ: tường, vách đặc, sàn gạch/gỗ pantry, potplant, stool, ghế băng kiểu khu hút thuốc, biển neon, chữ sơn trên
+  sàn.
+- [ ] Bỏ: viền, kính, LED, nhãn nổi, hộp biển.
+- [ ] Chụp:
+  - toàn đảo;
+  - cận cảnh ngày, đêm, tuyết;
+  - đặt cạnh pantry;
+  - agent vào nhà vệ sinh và vào khu hút thuốc.
+- [ ] Pixel diff ngày/đêm/tuyết với `9fc9ae2`.
+
+### Task 14: CHANGELOG, commit
+
+- [ ] Sửa dòng Restroom và dòng khu hút thuốc.
+- [ ] Commit `feat: restroom v3 — matches the office style, flush with the pantry, smoking corner beside it`.
