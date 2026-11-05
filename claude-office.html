@@ -592,7 +592,20 @@ const LAYOUT=[
   ['cafetable',1.25,9.85,0],['cafetable',1.25,11.05,0],['cafetable',1.25,12.25,0],['potplant',0.03,13.3,0],
   ['arcade',4.8,9.6,0],['arcade',5.7,9.6,0],['foosball',4.4,11.75,0],['potplant',3.75,13.3,0]
 ];
-window.PantryItems={I,kit,PLANT,LAYOUT,ORDER};
+// Depth keys (island tiles; the pantry starts at x=20) for each LAYOUT entry, sorted with the rest of the scene.
+// Flat rugs go first, then the wall band (19.5..19.6) ordered along the wall: a piece further along x is nearer the
+// viewer, so the wall cabinet covers the edge of the fridge to its left instead of tying with it. Floor pieces sort
+// by their near corner; a counter-top piece (rz>0) also sorts just after every base unit under it, so the microwave
+// straddling the cabinet and the drinks cooler sits on the cooler's top instead of under it.
+function depths(layout){
+  const base=layout.map(([n,rx,ry])=>{const it=I[n];if(!it)return 0;
+    if(it.flat)return 19;if(it.wall)return 19.5+rx*0.01;if(n==='planter')return 20+ry*0.01;return 20+rx+ry;});
+  return layout.map(([n,rx,ry,rz],i)=>{const it=I[n];if(!it||!(rz>0))return base[i];const[w,h]=it.size;let z=base[i];
+    layout.forEach(([m,bx,by,bz],j)=>{const b=I[m];if(!b||bz||b.flat||b.wall||m==='planter')return;const[bw,bh]=b.size;
+      if(rx<bx+bw&&bx<rx+w&&ry<by+bh&&by<ry+h)z=Math.max(z,base[j]+0.01);});
+    return z;});
+}
+window.PantryItems={I,kit,PLANT,LAYOUT,ORDER,depths};
 })();
 </script>
 <script id="sky-logic">
@@ -2500,15 +2513,11 @@ class ClaudeOffice extends React.Component{
     const{ctx,th,t,df}=G,PI=window.PantryItems;
     if(!PI)return;
     const isNight=df<0.5;
-    PI.LAYOUT.forEach(([name,rx,ry,rz])=>{
+    const Z=PI.depths(PI.LAYOUT);
+    PI.LAYOUT.forEach(([name,rx,ry,rz],i)=>{
       const it=PI.I[name];if(!it)return;
       const ox=20+rx,oy=ry;
-      let z;
-      if(it.flat)z=19;
-      else if(it.wall)z=19.5;
-      else if(name==='planter')z=20+oy*0.01;
-      else z=ox+oy;
-      items.push({z,f:()=>{
+      items.push({z:Z[i],f:()=>{
         const[sx,sy]=P(ox,oy);
         const k=PI.kit(ctx,sx,sy-rz);
         if(!it.flat&&!it.wall&&name!=='pendant'&&rz===0&&name!=='planter')k.shadow(0,0,it.size[0],it.size[1],0.22);

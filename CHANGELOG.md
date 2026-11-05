@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Usage board stuck at 0%** — The 5H/7D board reads the rate limits from the Claude Code statusLine (`node server.js statusline [--chain "<cmd>"]`, written to `~/.claude-terrarium/usage.json`) and shows `--` instead of 0% when there is no data
 - **Items deferred from GĐ1 review** — `?server=` is ignored when the local page is served over `https:`; device-code approval only succeeds for a code that is pending and unexpired; a signing-in browser's old session is ended; a publisher that gets 401 no longer marks a newer config as revoked; departments with more than 16 projects no longer repeat letters; the hub page offers "Thử lại" when `/api/config` fails transiently
+- **Pantry draw order** — The microwave, which stands partly on the drinks cooler, was drawn under the cooler's countertop; it now sits on top of the counter. The wooden wall cabinet tied with the fridge in draw order and lost, so the fridge's top covered the cabinet's edge; pieces on the back wall now draw in order along the wall, and the cabinet covers the fridge's side as it should
 
 ## [1.4.2] - 2026-11-05
 
