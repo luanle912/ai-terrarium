@@ -79,3 +79,38 @@ test('camStep converges in about 0.4 s and snaps', () => {
   for (let i = 0; i < 60; i++) cam = W.camStep(cam, goal, 1 / 60)
   assert.deepEqual(cam, goal)
 })
+
+test('lodFor uses THUMB_PX', () => {
+  assert.equal(W.lodFor(W.THUMB_PX, 1000), 'mid')
+  assert.equal(W.lodFor(W.THUMB_PX - 1, 1000), 'thumb')
+})
+
+test('pickRedraws takes the longest-waiting first and never exceeds the budget', () => {
+  const due = Array.from({ length: 10 }, (_, i) => ({ id: 'i' + i, drawnAt: -Infinity }))
+  assert.equal(W.pickRedraws(due, 2).size, 2)
+  const mixed = [{ id: 'a', drawnAt: 30 }, { id: 'b', drawnAt: 10 }, { id: 'c', drawnAt: 20 }]
+  assert.deepEqual([...W.pickRedraws(mixed, 2)].sort(), ['b', 'c'])
+  assert.equal(W.pickRedraws(mixed, 0).size, 0)
+  assert.equal(W.pickRedraws([], 3).size, 0)
+})
+
+test('never-drawn islands queue like the others', () => {
+  const due = [{ id: 'old', drawnAt: 5 }, { id: 'n1', drawnAt: -Infinity }, { id: 'n2', drawnAt: -Infinity }, { id: 'n3', drawnAt: -Infinity }]
+  const got = W.pickRedraws(due, 2)
+  assert.equal(got.size, 2)
+  assert.ok(!got.has('old'))
+})
+
+test('clientSessions maps a public view', () => {
+  const out = W.clientSessions([
+    { id: 's1', parent: 'p', status: 'working', waitingOn: null, talkingTo: 'x', dept: 'proj', kind: 'main', tool: 'Bash', model: 'm' },
+    { id: 's2', parent: null, status: 'idle', waitingOn: null, talkingTo: null, dept: 'proj', kind: 'main' },
+    { parent: 'p', status: 'idle' },
+    { id: 7 },
+  ])
+  assert.equal(out.length, 2)
+  assert.deepEqual(Object.keys(out[0]).sort(), ['id', 'kind', 'model', 'parentId', 'project', 'status', 'talkingTo', 'tool', 'waitingOn'])
+  assert.equal(out[0].parentId, 'p')
+  assert.equal(out[0].project, 'proj')
+  assert.deepEqual(Object.keys(out[1]).sort(), ['id', 'kind', 'parentId', 'project', 'status', 'talkingTo', 'waitingOn'])
+})
