@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Clouds follow the zoom** — Zooming and panning the island now carries the sky with it by depth: the sky colour, sun, moon and stars stay put, far clouds and islands drift a little, the cloud sea grows toward the island's own zoom, the mist over the island moves with it exactly and the near mist bank a little more
 - **`HUB_SECRET_KEY` is required** — 32 random bytes in base64, even with dev login; it encrypts stored refresh tokens. Changing it drops all stored refresh tokens, so everyone falls back to the 24-hour rule until they sign in again
 - **Hub security** — ID tokens are verified against Google's JWKS; the world page is served with a hash-based CSP and SRI for React; HSTS on `https://` and `Cross-Origin-Opener-Policy: same-origin`; full per-route rate limits and SSE stream caps (5 per user, 300 total)
 - **Upgrading from GĐ1** — The hub DB upgrades in place (`PRAGMA user_version` 2); stop the hub, back up `hub.sqlite`, set `HUB_SECRET_KEY`, start the new version; everyone signs in again within 24 hours so their machines keep sending
