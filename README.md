@@ -116,7 +116,8 @@ Open the ⚙ panel in the bottom-right corner of the office:
 ## 🏝️ Chia sẻ đảo
 
 Nhân viên newera.inc có thể đưa đảo của mình lên một bầu trời chung (hub). Chỉ trạng thái đã lọc rời khỏi máy: không có
-nội dung, đường dẫn hay tên agent.
+nội dung, đường dẫn hay tên agent. Mức Cơ bản gửi thêm tên tool và model; tên project chỉ gửi khi bạn chọn
+(xem `docs/hub-setup.md`).
 
 ```bash
 node server.js join https://terrarium.newera.inc   # ghép máy, duyệt mã trên trình duyệt

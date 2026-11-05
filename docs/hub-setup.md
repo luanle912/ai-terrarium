@@ -4,6 +4,9 @@ Hub là một server Node nhỏ (`hub/server.js`, không cần cài package) cho
 ghép máy của mình rồi xem đảo của cả công ty. Thiết kế đầy đủ ở `docs/specs/2026-11-04-multi-island-design.md`.
 Tài liệu này chỉ nói phần giai đoạn 1 (GĐ1).
 
+Yêu cầu: **Node ≥ 22.13** cho hub, vì hub dùng `node:sqlite` có sẵn trong Node. Plugin local trên máy từng người vẫn chạy
+được với Node 18 trở lên.
+
 ## 1. Tạo OAuth client trong Google Cloud
 
 1. Vào Google Cloud project thuộc Workspace newera.inc, mở **APIs & Services → OAuth consent screen**.
@@ -27,7 +30,7 @@ Thiếu hoặc sai biến thì hub từ chối khởi động và in ra **mọi*
 | `HUB_PORT` | | `4318` | Cổng hub nghe |
 | `HUB_HOST` | | `127.0.0.1` | Địa chỉ hub nghe. Chỉ đặt `0.0.0.0` khi thật sự cần |
 | `HUB_DB` | | `./data/hub.sqlite` | Đường dẫn file SQLite |
-| `HUB_TRUST_PROXY` | | tắt | `1` khi đứng sau proxy, để hub tin `X-Forwarded-*` |
+| `HUB_TRUST_PROXY` | | tắt | `1` khi đứng sau proxy: hub lấy IP người dùng từ mục cuối của `X-Forwarded-For` để giới hạn tần suất. Không bật thì mọi người dùng chung IP của proxy và chung một hạn mức. Không bật khi hub lộ thẳng ra mạng, vì header này giả được |
 | `HUB_DEV_LOGIN` | | tắt | `1` bật đăng nhập giả, **chỉ để phát triển trên máy local** |
 
 `HUB_DEV_LOGIN=1` bỏ qua Google và cho đăng nhập bằng một đường dẫn tự gõ email. Hub chỉ cho bật khi `HUB_PUBLIC_URL`
@@ -62,8 +65,13 @@ Luồng SSE (`/api/world/stream`) cần proxy không đệm và không cắt k�
 
 ## 4. Sao lưu
 
-Toàn bộ dữ liệu nằm trong một file SQLite (`HUB_DB`). Sao lưu file đó theo lịch (ví dụ `sqlite3 hub.sqlite ".backup
-'hub-backup.sqlite'"` rồi chép đi). Mất file thì mọi người phải ghép lại máy.
+Toàn bộ dữ liệu nằm trong một file SQLite (`HUB_DB`). Sao lưu file đó theo lịch rồi chép bản sao đi nơi khác, ví dụ
+bằng CLI `sqlite3`:
+
+```bash
+sqlite3 hub.sqlite ".backup 'hub-backup.sqlite'"
+```
+ Mất file thì mọi người phải ghép lại máy.
 
 ## 5. Cách người dùng tham gia
 
