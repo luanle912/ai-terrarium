@@ -5,7 +5,7 @@
 // array of {method, path (string | RegExp), handler(req, res, rc)}. Add the module to ROUTE_MODULES below;
 // createHub builds one shared ctx and concatenates all arrays into one router. Tests may also pass
 // `deps.routeModules` (array of such functions) which are appended after the built-in ones.
-//   ctx = { config, db, deps: {fetch, now, log}, limiters, world, helpers }
+//   ctx = { config, db, deps: {fetch, now, log}, limiters, world, helpers, jwks }
 // Handlers may be async; throwing/rejecting with an error that has `.status` replies with that status.
 
 const http = require('node:http');
@@ -14,6 +14,7 @@ const { openDb } = require('./db.js');
 const { createRouter, clientIp, readBody, send, sendJson, parseCookies, HttpError } = require('./http.js');
 const { createLimiter } = require('./limits.js');
 const { createWorld } = require('./world.js');
+const { createJwks } = require('./jwt.js');
 
 const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes, require('./publish.js').routes];
 
@@ -37,6 +38,7 @@ function createHub(config, deps = {}) {
     login: createLimiter({ rate: 30 / 3600, burst: 30 }), // key: IP
   };
   ctx.limiters = limiters;
+  ctx.jwks = createJwks({ fetch: d.fetch, now: d.now });
   ctx.world = world;
   ctx.helpers = { readBody, send, sendJson, parseCookies, clientIp: (req) => clientIp(req, config.trustProxy), HttpError };
 

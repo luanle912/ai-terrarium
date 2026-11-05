@@ -1,15 +1,15 @@
 'use strict';
 // Google sign-in (OIDC, domain restricted), sessions and CSRF (spec §9.1, B7, B8, S7, S9-S11, S20).
 //
-// Phase 1: the ID token comes straight from Google's token endpoint over TLS, so its JWT signature is NOT
-// verified (spec §0). `decodeJwtPayload` is the single boundary where phase 2 adds JWKS verification.
+// The ID token's RS256 signature is verified against Google's JWKS (ctx.jwks, see jwt.js) before its claims
+// are checked by `checkClaims`.
 //
 // Per-hub helpers live on ctx.helpers (installed by routes(ctx)):
 //   requireSession(req) -> {user, session} | null
 //   requireCsrf(req, session, formField?) -> boolean   (formField = the submitted `csrf` form value)
 //   onSessionEnd(listener) -> unsubscribe fn; listener({userId, tokenHash, reason}) on logout/expiry/ban
 //   endSessionsForUser(userId, reason?) -> number      (call after banning a user)
-// Pure exports: routes, checkClaims, decodeJwtPayload, sha256hex.
+// Pure exports: routes, checkClaims, sha256hex.
 
 const crypto = require('node:crypto');
 const { HttpError, send, sendJson, parseCookies, readBody } = require('./http.js');
@@ -28,15 +28,6 @@ function safeEqual(a, b) {
   const x = Buffer.from(String(a || ''));
   const y = Buffer.from(String(b || ''));
   return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y);
-}
-
-// Phase 2: verify the RS256 signature against Google's JWKS here (and make this async).
-function decodeJwtPayload(jwt) {
-  const parts = String(jwt || '').split('.');
-  if (parts.length !== 3) throw new Error('malformed jwt');
-  const obj = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) throw new Error('malformed jwt');
-  return obj;
 }
 
 // now is in ms; exp/iat are in seconds.
@@ -175,11 +166,10 @@ function routes(ctx) {
         });
       } catch { throw new HttpError(502, 'could not reach Google'); }
       if (!tokenRes || !tokenRes.ok) throw new HttpError(400, 'sign-in failed');
+      let idToken;
+      try { idToken = (await tokenRes.json()).id_token; } catch { throw new HttpError(400, 'sign-in failed'); }
       let claims;
-      try {
-        const body = await tokenRes.json();
-        claims = decodeJwtPayload(body.id_token);
-      } catch { throw new HttpError(400, 'sign-in failed'); }
+      try { claims = await ctx.jwks.verify(idToken); } catch { throw new HttpError(403, 'this account is not allowed to sign in'); }
       const r = checkClaims(claims, { clientId: config.googleClientId, domains: config.allowedDomains, nonce: row.nonce, now: deps.now() });
       if (!r.ok) throw new HttpError(403, 'this account is not allowed to sign in');
       finishLogin(res, r);
@@ -240,4 +230,4 @@ function routes(ctx) {
   return list;
 }
 
-module.exports = { routes, checkClaims, decodeJwtPayload, sha256hex };
+module.exports = { routes, checkClaims, sha256hex };
