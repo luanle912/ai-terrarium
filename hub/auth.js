@@ -144,7 +144,7 @@ function routes(ctx) {
   const list = [];
 
   list.push({
-    method: 'GET', path: '/auth/login',
+    method: 'GET', path: '/auth/login', ownLimit: true,
     handler(req, res, rc) {
       if (!limiters.login.take(ctx.helpers.clientIp(req), deps.now())) throw new HttpError(429, 'too many requests');
       const state = rand(), nonce = rand(), verifier = rand();

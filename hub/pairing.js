@@ -77,7 +77,7 @@ function routes(ctx) {
   const list = [];
 
   list.push({
-    method: 'POST', path: '/api/device/start',
+    method: 'POST', path: '/api/device/start', ownLimit: true,
     async handler(req, res) {
       const now = deps.now();
       if (!limiters.deviceStart.take(helpers.clientIp(req), now)) throw new HttpError(429, 'too many requests');
@@ -98,7 +98,7 @@ function routes(ctx) {
   });
 
   list.push({
-    method: 'POST', path: '/api/device/token',
+    method: 'POST', path: '/api/device/token', ownLimit: true,
     async handler(req, res) {
       const body = await jsonBody(req);
       if (typeof body.device_code !== 'string' || !body.device_code || body.device_code.length > 200) throw new HttpError(400, 'bad request');

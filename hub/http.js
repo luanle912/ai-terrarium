@@ -5,6 +5,7 @@
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'same-origin',
+  'Cross-Origin-Opener-Policy': 'same-origin',
   'Content-Security-Policy': "frame-ancestors 'none'",
 };
 
@@ -77,9 +78,10 @@ function clientIp(req, trustProxy) {
 // routes: [{method, path: string | RegExp, handler(req, res, rc)}]; rc = {url, path, query, match}.
 // No match -> 404. A handler error with .status maps to that status, anything else is a bare 500
 // (details are never sent to the client or logged).
-function createRouter(routes, { log = () => {}, now = Date.now } = {}) {
+function createRouter(routes, { log = () => {}, now = Date.now, hsts = false } = {}) {
   return function handle(req, res) {
     const t0 = now();
+    if (hsts && typeof res.setHeader === 'function') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     let pathname = '/';
     let url = null;
     try { url = new URL(req.url, 'http://hub.invalid'); pathname = url.pathname; } catch { /* keep '/' */ }

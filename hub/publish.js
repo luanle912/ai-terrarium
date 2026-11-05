@@ -5,11 +5,11 @@
 //   GET  /                     redirect to login, or the claude-office.html page
 // ctx.streams = {check(), count()} is exposed for tests and the periodic session check (B8).
 
-const fs = require('node:fs');
 const path = require('node:path');
 const { HttpError, send, sendJson, SECURITY_HEADERS } = require('./http.js');
 const { sha256hex, NO_REFRESH_TTL_MS } = require('./auth.js');
 const { validatePublish } = require('./validate.js');
+const { createOfficePage } = require('./csp.js');
 
 const PUBLISH_LIMIT = 16 * 1024;
 const PING_MS = 25 * 1000;
@@ -19,11 +19,8 @@ const ISLAND_EVERY_MS = 500; // at most 2 island events per second per island
 const MAX_BUFFERED = 1024 * 1024;
 const TOUCH_EVERY_MS = 30 * 1000;
 const NO_STORE = { 'Cache-Control': 'no-store' };
-// The big page loads React from cdnjs and fonts today; the hash-based CSP comes in phase 2.
-const OFFICE_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline' https://fonts.googleapis.com; " +
-  "font-src https://fonts.gstatic.com; connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com; img-src 'self' data:; " +
-  "frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 const OFFICE_FILE = path.join(__dirname, '..', 'claude-office.html');
+const officePage = createOfficePage(OFFICE_FILE);
 
 function routes(ctx) {
   const { db, deps, limiters, world, helpers } = ctx;
@@ -132,7 +129,7 @@ function routes(ctx) {
   const list = [];
 
   list.push({
-    method: 'POST', path: '/api/publish',
+    method: 'POST', path: '/api/publish', ownLimit: true,
     async handler(req, res) {
       const auth = bearerDevice(req, res); // cookies are ignored on purpose
       if (auth === false) return;
@@ -160,6 +157,13 @@ function routes(ctx) {
     handler(req, res) {
       const s = helpers.requireSession(req);
       if (!s) throw new HttpError(401, 'not signed in');
+      // Caps are answered before the SSE headers go out. The counts come from the live set, which every close
+      // path (client abort, session end, server close) removes from, so a slot can never leak.
+      const { perUser, total } = ctx.streamLimits;
+      if (streams.size >= total) throw new HttpError(503, 'too many viewers');
+      let mine = 0;
+      for (const x of streams) if (x.userId === s.user.id) mine++;
+      if (mine >= perUser) throw new HttpError(429, 'too many streams');
       res.writeHead(200, {
         ...SECURITY_HEADERS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store, no-transform',
         Connection: 'keep-alive', 'X-Accel-Buffering': 'no',
@@ -179,8 +183,8 @@ function routes(ctx) {
       const s = helpers.requireSession(req);
       if (!s) return redirect(res, '/auth/login');
       let page;
-      try { page = fs.readFileSync(OFFICE_FILE); } catch { throw new HttpError(500, 'page missing'); }
-      send(res, 200, page, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': OFFICE_CSP, ...NO_STORE });
+      try { page = officePage.get(); } catch { throw new HttpError(500, 'page missing'); }
+      send(res, 200, page.body, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': page.csp, ...NO_STORE });
     },
   });
 
