@@ -122,6 +122,16 @@ test('leave revokes on the hub first', async () => {
   assert.equal(n, 0)
 })
 
+test('leave on a config the publisher already marked revoked says so without calling the hub', async () => {
+  const dir = tmp(); writeConfig(dir, { ...base(), revoked: true })
+  let calls = 0
+  const r = await run(dir, ['leave'], { revokeSelf: async () => { calls++; return 'ok' } })
+  assert.equal(r.code, 0)
+  assert.equal(calls, 0)
+  assert.match(r.out, /This device was already removed on the hub\./)
+  assert.equal(fs.existsSync(path.join(dir, 'config.json')), false)
+})
+
 test('leave says so when the hub no longer knows this device (401)', async () => {
   const dir = tmp(); writeConfig(dir, base())
   const r = await run(dir, ['leave'], { revokeSelf: async () => 'gone' })
