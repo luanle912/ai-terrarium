@@ -14,19 +14,31 @@ const MAX_CLIENTS = 20;
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 const USAGE_GLOB = path.join(os.homedir(), '.claude', 'plugins', 'store');
 let usageCache = []; let usageCacheTs = 0;
-function readUsage() {
-  const now = Date.now();
-  if (now - usageCacheTs < 5000) return usageCache;
-  usageCacheTs = now;
+// Sources, in order: <configDir>/usage.json (written by `server.js statusline`), then the legacy usage-quota* files.
+// An empty array means "unknown", which the page shows as "--" rather than 0%.
+// Passing opts (dir, legacyDir, now) bypasses the 5 s cache; used by tests.
+function readUsage(opts) {
+  const now = (opts && opts.now) || Date.now();
+  if (!opts && now - usageCacheTs < 5000) return usageCache;
+  let out = [];
   try {
-    const files = fs.readdirSync(USAGE_GLOB).filter(f => f.startsWith('usage-quota'));
-    for (const f of files) {
-      const d = JSON.parse(fs.readFileSync(path.join(USAGE_GLOB, f), 'utf8'));
-      const lims = (d.limits && d.limits.limits) || (d.planLimits && d.planLimits.limits) || [];
-      usageCache = lims.map(l => ({ kind: l.kind, pct: l.percentUsed || 0, resets: l.resetsAt }));
-      return usageCache;
-    }
+    const cur = require('./lib/statusline.js').readUsageFile((opts && opts.dir) || require('./lib/terrarium-config.js').configDir(), now);
+    if (cur && cur.length) out = cur;
   } catch {}
+  if (!out.length) {
+    const legacyDir = (opts && opts.legacyDir) || USAGE_GLOB;
+    try {
+      const files = fs.readdirSync(legacyDir).filter(f => f.startsWith('usage-quota'));
+      for (const f of files) {
+        const d = JSON.parse(fs.readFileSync(path.join(legacyDir, f), 'utf8'));
+        const lims = (d.limits && d.limits.limits) || (d.planLimits && d.planLimits.limits) || [];
+        out = lims.map(l => ({ kind: l.kind, pct: l.percentUsed || 0, resets: l.resetsAt }));
+        break;
+      }
+    } catch {}
+  }
+  if (opts) return out;
+  usageCacheTs = now; usageCache = out;
   return usageCache;
 }
 const files = new Map();
@@ -296,6 +308,7 @@ async function main() {
     try { await pub.join(hub, { name, dir: cfgLib.configDir() }); return 0; }
     catch (e) { console.log('join: ' + e.message); return 1; }
   };
+  if (process.argv[2] === 'statusline') process.exit(require('./lib/statusline.js').main(process.argv.slice(3), cfgLib.configDir()));
   const code = await cfgLib.runCommand(process.argv.slice(2), { join: joinCmd, revokeSelf: pub.revokeSelf });
   if (typeof code === 'number') process.exit(code);
   setInterval(() => { scan(); const data = 'data: ' + JSON.stringify(snapshot()) + '\n\n'; for (const r of clients) r.write(data); }, 1000);
@@ -310,5 +323,5 @@ async function main() {
     });
 }
 
-module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview };
+module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage };
 if (require.main === module) main();

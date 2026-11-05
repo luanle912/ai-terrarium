@@ -145,12 +145,13 @@ function boardLED(g,o,t){
   g.fillStyle='#0a101c';g.fillRect(3,3,W-6,H-6);
   for(let y=4;y<H-3;y+=2){g.fillStyle='rgba(255,255,255,0.02)';g.fillRect(3,y,W-6,1);}
   text3(g,'USAGE',4,6,'#8b93a7');
-  const worst=Math.max(o.h5,o.d7), off=worst>=1&&Math.floor(t*3)%2;
+  const worst=Math.max(o.h5||0,o.d7||0), off=worst>=1&&Math.floor(t*3)%2;
   g.fillStyle=off?'#3a1416':UCOL(worst);g.fillRect(W-9,6,3,3);g.fillStyle='rgba(255,255,255,0.55)';g.fillRect(W-9,6,1,1);
   g.fillStyle='#1c2535';g.fillRect(5,13,W-10,1);
   [['5H',o.h5,o.r5,300],['7D',o.d7,o.r7,10080]].forEach(([lab,p,rm,win],i)=>{
-    const y=17+i*14,N=13,bx=16,bw=N*3-1,col=UCOL(p);
+    const y=17+i*14,N=13,bx=16,bw=N*3-1,unk=p==null,col=UCOL(unk?0:p);
     text3(g,lab,4,y,'#e6e9ef');
+    if(unk){for(let k=0;k<N;k++){g.fillStyle='#18202e';g.fillRect(bx+k*3,y,2,5);}text3(g,'--',W-19,y,'#5d6a86');g.fillStyle='#141b28';g.fillRect(bx,y+8,bw,1);return;}
     if(p>=1){const on=Math.floor(t*2.5)%2;g.fillStyle=on?'#ff5a5f':'#4a1518';g.fillRect(bx,y,bw,5);text3(g,'LIMIT',bx+((bw-19)>>1),y,on?'#ffffff':'#ff8a8d');}
     else{const lit=Math.min(N,Math.round(p*N));for(let k=0;k<N;k++){const on=k<lit;let c=on?col:'#18202e';if(on&&p>=0.9&&k===lit-1&&Math.floor(t*4)%2)c='#3a1416';g.fillStyle=c;g.fillRect(bx+k*3,y,2,5);if(on&&c!=='#3a1416'){g.fillStyle=mix(col,'#ffffff',0.45);g.fillRect(bx+k*3,y,2,1);}}}
     const pt=Math.min(100,Math.round(p*100))+'%';text3(g,pt,W-19,y,p>=0.85?'#ff8a8d':'#e6e9ef');
@@ -2394,11 +2395,11 @@ class ClaudeOffice extends React.Component{
     poly([P(-WT,H,0),P(0,H,0),P(0,H,ZT),P(-WT,H,ZT)],shade(th.wl,-20),null);
     {const OD=window.OfficeDecor;if(OD)[1.6,4.8,11.6,14.8].forEach(x=>OD.F.window(OD.kit(ctx,...P(x,0)),t,{night:df<0.5}));}
     {const OD=window.OfficeDecor,u=this.usage||[];
-      const u5h=u.find(x=>x.kind==='five_hour')||{pct:0,resets:''};
-      const u7d=u.find(x=>x.kind==='seven_day')||{pct:0,resets:''};
+      const u5h=u.find(x=>x.kind==='five_hour')||{pct:null,resets:''};
+      const u7d=u.find(x=>x.kind==='seven_day')||{pct:null,resets:''};
       const rMin=r=>{if(!r)return 0;const d=new Date(r)-Date.now();return Math.max(0,d/60000);};
       if(OD&&OD.drawUsageBoard&&!this.noUsage){const[bx,by]=P(0,4.9,50);// hub islands and the public preview carry no usage
-        OD.drawUsageBoard(ctx,bx,by,{h5:u5h.pct/100,d7:u7d.pct/100,r5:rMin(u5h.resets),r7:rMin(u7d.resets),variant:'led',night:df<0.5},t,'left');
+        OD.drawUsageBoard(ctx,bx,by,{h5:u5h.pct==null?null:u5h.pct/100,d7:u7d.pct==null?null:u7d.pct/100,r5:rMin(u5h.resets),r7:rMin(u7d.resets),variant:'led',night:df<0.5},t,'left');
       }
     }
     [[1.3,2.5,18,'#c9cfdc'],[2.8,4.2,18,'#c9cfdc']].forEach(([a,b,z,col])=>{ctx.globalAlpha=0.3;poly([P(0,a,z),P(0,b,z),P(0,b,z+0.5),P(0,a,z+0.5)],col,null);ctx.globalAlpha=1;});

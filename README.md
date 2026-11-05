@@ -136,6 +136,23 @@ Hướng dẫn dựng hub và biến môi trường: [docs/hub-setup.md](docs/hu
 
 ---
 
+## 📊 Hiện mức dùng 5H/7D
+
+Bảng **USAGE** trên tường lấy số liệu từ statusLine của Claude Code (Claude Code không còn ghi file usage nào khác). Thêm một lần vào `~/.claude/settings.json`:
+
+```json
+"statusLine": { "type": "command", "command": "node <đường dẫn plugin>/server.js statusline" }
+```
+
+Nếu bạn đã có status line riêng, giữ nó bằng `--chain`:
+
+```json
+"statusLine": { "type": "command", "command": "node <đường dẫn plugin>/server.js statusline --chain \"<lệnh cũ>\"" }
+```
+
+Lệnh ghi `~/.claude-terrarium/usage.json` (quyền 0600) và in một dòng như `🏝 5H 23% · 7D 41%`. Khi chưa có dữ liệu, bảng hiện `--` thay vì 0%.
+Chỉ chạy được với gói Pro/Max của claude.ai, Claude Code ≥ 2.1.80, và sau phản hồi đầu tiên của mỗi phiên.
+
 ## 🔄 Update
 
 ```
