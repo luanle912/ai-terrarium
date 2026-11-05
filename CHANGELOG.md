@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Sky of 8 islands** — A hub holds at most 8 islands (`MAX_ISLANDS`, no setting to raise it), each in a fixed slot 0-7 that never changes; the 9th person gets "Hub đã đủ 8 đảo" on the device page and in `join` (`the hub is full (8 islands); ask a hub owner to remove one`), and an owner's "Xoá đảo" or leaving the hub frees the slot for the next pairing; the hub DB upgrades in place to v3 (existing hubs with more than 8 islands keep them, the 9th onwards stay hidden until a slot frees up, see `docs/hub-setup.md`)
+- **Cloud transition** — Moving between "Toàn cảnh" and one island is a pixel-cloud transition (two banks close, the view swaps, they part; a short fade with reduced motion); Esc or "← Toàn cảnh" goes back
+
+### Changed
+
+- **"Toàn cảnh" is centred on the viewer** — Your island sits in the middle, a little larger, with the other 7 places in a ring around it in the same order for everyone (2 columns below your island on a phone); free places read "chỗ trống", a viewer without an island sees "chỗ của bạn" or "Hub đã đủ 8 đảo", and islands are drawn in a light simplified style; no dragging or zooming
+- **A revoked or banned island stays offline in its slot** — Revoking someone's last device, or an automatic `google_revoked` ban, no longer removes the island from the sky: it goes offline with no staff and keeps its place (the machine is still cut at once); only "Xoá đảo" and leaving the hub free the slot
+- **One-island panel** — On a phone the island's panel is a bottom sheet that starts as a one-line bar (name and status) and opens on tap; on a wide screen it can be collapsed, and the island is drawn beside it rather than under it. Esc with a modifier key held no longer leaves the island
+- **Restroom rebuilt** — An open-top, cutaway restroom block is built onto the pantry's east side at office floor level, where the smoking corner used to be: a men's room in blue (two urinals behind frosted screens, two stalls, a double vanity with an LED-lit mirror) and a women's room in pink (a makeup corner, three stalls, a double vanity) behind half-height walls with frosted glass, knee-high front walls with a glowing NAM / NỮ sign over each doorway, and a wood-floored shared lobby with a runner rug, a wayfinding totem, a sanitiser stand, a bench and plants that opens straight onto the pantry; labels WC NAM, WC NỮ and SẢNH CHUNG float above it, the mirrors and signs glow at night and snow settles on the wall caps; now and then an idle agent walks over ("đi vệ sinh") through the lobby to their own room, disappears behind a stall door for a few seconds, washes their hands at the vanity and moves on, and the dogs stay out
+
+### Removed
+
+- **Free camera and minimap of the world view** — Dragging, zooming, flying to an island and the minimap are gone from the hub page (the local page on port 4317 keeps its own drag and zoom)
+
 ## [1.5.0] - 2026-11-05
 
 ### Added
@@ -23,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **"Xem như người khác"** — A setting on the local page that draws exactly what others would see, usable before the machine has joined a hub
 - **Automatic access loss** — The hub asks Google for offline access (`access_type=offline`, scope still `openid email profile`), stores the refresh token encrypted, checks it hourly and bans anyone whose Google access was revoked or who left the allowed domain; people without a refresh token are cut after 24 hours until they sign in again
 - **Audit log** — An `audit` table in the hub DB records bans, island removals, renames, device pairing and revocation, and leaving
-- **Restroom** — An open-top, cutaway restroom block is built onto the pantry's east side at office floor level, where the smoking corner used to be: a men's room in blue (two urinals behind frosted screens, two stalls, a double vanity with an LED-lit mirror) and a women's room in pink (a makeup corner, three stalls, a double vanity) behind half-height walls with frosted glass, knee-high front walls with a glowing NAM / NỮ sign over each doorway, and a wood-floored shared lobby with a runner rug, a wayfinding totem, a sanitiser stand, a bench and plants that opens straight onto the pantry; labels WC NAM, WC NỮ and SẢNH CHUNG float above it, the mirrors and signs glow at night and snow settles on the wall caps; now and then an idle agent walks over ("đi vệ sinh") through the lobby to their own room, disappears behind a stall door for a few seconds, washes their hands at the vanity and moves on, and the dogs stay out
+- **Restroom** — A small restroom stands on the east lawn against the pantry wall, where the smoking corner used to be: two doors with pictograms and a vacant/occupied light under a teal awning, a wash basin with a mirror and a WC plate, a lamp that glows at night and a frosted window that lights up when someone is inside; now and then an idle agent walks over ("đi vệ sinh"), steps inside for a few seconds and then moves on, and the dogs leave them be
 
 ### Changed
 
