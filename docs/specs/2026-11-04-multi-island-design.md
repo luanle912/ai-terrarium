@@ -319,7 +319,8 @@ Thông số:
   chuyển sang chế độ thế giới.
 - `GET /api/world/stream` (SSE, cookie):
   - `event: world` khi kết nối và khi danh sách đảo đổi:
-    `{"islands":[{"id","name","color","online","private","viewers":n}]}`;
+    `{"islands":[{"id","name","color","online","private","share"}],"viewers":<tổng số người đang xem>}`
+    (`share` là `kin` hoặc `co-ban`, theo từng đảo; `viewers` nằm ở cấp trên cùng, không theo từng đảo);
   - `event: island`: `{"id","sessions":[…]}`, gộp mọi máy của đảo, tối đa 2 lần mỗi giây mỗi đảo;
   - `event: remove`: `{"id"}` khi đảo bị xoá hoặc chủ bị cấm;
   - dòng chú thích `: ping` mỗi 25 giây.
@@ -377,6 +378,7 @@ không copy rồi xoá bớt. Tối đa 32 session. Nếu nhiều hơn thì gi�
 ### 10.2 Hub kiểm gói publish (`hub/validate.js`)
 
 - Đúng các khoá trên. **Khoá lạ thì từ chối cả gói** (400), không lặng lẽ bỏ qua, để phát hiện publisher lỗi hoặc giả.
+- `share` (nếu có) là `'kin'` hoặc `'co-ban'`, mặc định `'kin'`; publisher luôn gửi trường này.
 - `v === 1`; `seq` là số nguyên ≥ 0 (gói có `seq` nhỏ hơn gói trước của cùng máy thì bỏ, trừ khi máy vừa khởi động
   lại, khi đó `seq` về 0); `private` là boolean nếu có.
 - Chuỗi đúng regex ở §10.1; `dept` ở mức Kín khớp `^[A-P]$`, ở mức Cơ bản khớp `^[\p{L}\p{N} ._-]{1,40}$`u.
