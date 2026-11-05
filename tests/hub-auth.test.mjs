@@ -170,15 +170,6 @@ test('callback refuses wrong domain, wrong nonce, failed exchange', async () => 
   await h.hub.close();
 });
 
-test('owner email gets owner role, others member', async () => {
-  const h = setup();
-  await signIn(h, { sub: 'o', email: 'Boss@example.com' });
-  await signIn(h, { sub: 'm', email: 'x@example.com' });
-  assert.equal(h.hub.db.getUserBySub('o').role, 'owner');
-  assert.equal(h.hub.db.getUserBySub('m').role, 'member');
-  await h.hub.close();
-});
-
 test('banned user gets no session', async () => {
   const h = setup();
   await signIn(h);

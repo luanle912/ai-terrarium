@@ -1,5 +1,6 @@
 'use strict';
-// SQLite store (node:sqlite). Tables follow spec §10.3 minus `audit` and the B12 columns (phase 2).
+// SQLite store (node:sqlite). Tables follow spec §10.3. The SCHEMA below is the phase-1 shape and stays verbatim;
+// migrate() upgrades it in place to SCHEMA_VERSION (PRAGMA user_version) so existing hub.sqlite files keep their data.
 // All queries are parameterized. Every helper lives on the object returned by openDb; later tasks call db.<name>.
 // Secrets (session tokens, device tokens, device codes) are stored as SHA-256 hashes by the CALLER; this layer
 // only stores what it is given. Island snapshots are never written here (RAM only).
@@ -30,7 +31,42 @@ CREATE TABLE IF NOT EXISTS login_states(
   state TEXT PRIMARY KEY, nonce TEXT NOT NULL, verifier TEXT NOT NULL, created_at INTEGER NOT NULL);
 `;
 
+const SCHEMA_VERSION = 2;
 const LOGIN_STATE_TTL_MS = 10 * 60 * 1000;
+const AUDIT_TTL_MS = 180 * 24 * 3600 * 1000;
+const DAY_MS = 24 * 3600 * 1000;
+
+// user_version 0 (phase 1, or a fresh file just given the phase-1 SCHEMA) -> 2. One transaction: all or nothing.
+function migrate(raw, now) {
+  void now; // reserved: migrations so far need no clock
+  const version = raw.prepare('PRAGMA user_version').get().user_version;
+  if (version > SCHEMA_VERSION) throw new Error('hub.sqlite is newer than this hub');
+  if (version === SCHEMA_VERSION) return;
+  raw.exec('BEGIN');
+  try {
+    if (version < 2) {
+      raw.exec(`
+        ALTER TABLE users DROP COLUMN role;
+        ALTER TABLE users ADD COLUMN refresh_enc TEXT;
+        ALTER TABLE users ADD COLUMN checked_at INTEGER;
+        ALTER TABLE users ADD COLUMN check_fail_since INTEGER;
+        ALTER TABLE users ADD COLUMN check_warned_at INTEGER;
+        ALTER TABLE users ADD COLUMN ban_reason TEXT;
+        ALTER TABLE login_states ADD COLUMN consent INTEGER NOT NULL DEFAULT 0;
+        CREATE TABLE audit(id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER, action TEXT NOT NULL, target TEXT, ip TEXT);
+        CREATE INDEX audit_at ON audit(at);
+      `);
+      // Users without a refresh token cannot be re-checked against Google: cap their sessions at 24 h from creation.
+      raw.prepare(`UPDATE sessions SET expires_at = MIN(expires_at, created_at + ?)
+                   WHERE user_id IN (SELECT id FROM users WHERE refresh_enc IS NULL)`).run(DAY_MS);
+    }
+    raw.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    raw.exec('COMMIT');
+  } catch (e) {
+    try { raw.exec('ROLLBACK'); } catch { /* nothing to roll back */ }
+    throw e;
+  }
+}
 
 function openDb(dbPath) {
   if (dbPath !== ':memory:') {
@@ -42,6 +78,7 @@ function openDb(dbPath) {
   raw.exec('PRAGMA journal_mode=WAL');
   raw.exec('PRAGMA foreign_keys=ON');
   raw.exec(SCHEMA);
+  migrate(raw, Date.now());
   if (dbPath !== ':memory:') {
     for (const suffix of ['', '-wal', '-shm']) { try { fs.chmodSync(dbPath + suffix, 0o600); } catch { /* may not exist */ } }
   }
@@ -54,17 +91,36 @@ function openDb(dbPath) {
   const db = {
     raw,
 
-    // users. `role` is only applied on first insert; use setUserRole afterwards.
-    upsertUser({ googleSub, email, name, role = 'member', now }) {
-      run(`INSERT INTO users(google_sub, email, name, role, created_at, last_login_at) VALUES(?,?,?,?,?,?)
+    // users. There is no role in the DB: owner status comes from HUB_OWNER_EMAILS.
+    upsertUser({ googleSub, email, name, now }) {
+      run(`INSERT INTO users(google_sub, email, name, created_at, last_login_at) VALUES(?,?,?,?,?)
            ON CONFLICT(google_sub) DO UPDATE SET email=excluded.email, name=excluded.name, last_login_at=excluded.last_login_at`,
-      googleSub, email, name, role, now, now);
+      googleSub, email, name, now, now);
       return get('SELECT * FROM users WHERE google_sub=?', googleSub);
     },
     getUserBySub: (googleSub) => get('SELECT * FROM users WHERE google_sub=?', googleSub),
     getUserById: (id) => get('SELECT * FROM users WHERE id=?', id),
-    setUserRole: (id, role) => run('UPDATE users SET role=? WHERE id=?', role, id).changes > 0,
-    setUserBanned: (id, at) => run('UPDATE users SET banned_at=? WHERE id=?', at, id).changes > 0,
+    setRefreshToken: (userId, enc) => run('UPDATE users SET refresh_enc=? WHERE id=?', enc, userId).changes > 0,
+    markChecked: (userId, now) => run('UPDATE users SET checked_at=?, check_fail_since=NULL, check_warned_at=NULL WHERE id=?', now, userId).changes > 0,
+    // Keeps the first failure time while failures continue; returns it.
+    markCheckFailed(userId, now) {
+      run('UPDATE users SET check_fail_since=COALESCE(check_fail_since, ?) WHERE id=?', now, userId);
+      return { failSince: get('SELECT check_fail_since FROM users WHERE id=?', userId)?.check_fail_since };
+    },
+    setCheckWarned: (userId, now) => run('UPDATE users SET check_warned_at=? WHERE id=?', now, userId).changes > 0,
+    // Unbanned users with a refresh token, last checked before now-staleMs (or never), who still have an
+    // unrevoked device or an unexpired session.
+    usersDueForCheck: (now, staleMs) => all(
+      `SELECT * FROM users u WHERE u.banned_at IS NULL AND u.refresh_enc IS NOT NULL
+         AND (u.checked_at IS NULL OR u.checked_at < ?)
+         AND (EXISTS (SELECT 1 FROM devices d WHERE d.user_id=u.id AND d.revoked_at IS NULL)
+              OR EXISTS (SELECT 1 FROM sessions s WHERE s.user_id=u.id AND s.expires_at > ?))
+       ORDER BY u.id`, now - staleMs, now),
+    banUser: (userId, reason, now) => run('UPDATE users SET banned_at=?, ban_reason=? WHERE id=?', now, reason, userId).changes > 0,
+    liftBan: (userId) => run('UPDATE users SET banned_at=NULL, ban_reason=NULL WHERE id=?', userId).changes > 0,
+    clearUserIdentity: (userId) => run('UPDATE users SET email=NULL, name=NULL, refresh_enc=NULL WHERE id=?', userId).changes > 0,
+    // Alias kept for older tests.
+    setUserBanned: (id, at) => db.banUser(id, null, at),
 
     // sessions (token_hash = SHA-256 of the cookie token)
     createSession({ tokenHash, userId, csrf, now, expiresAt }) {
@@ -72,11 +128,12 @@ function openDb(dbPath) {
     },
     getSession: (tokenHash) => get('SELECT * FROM sessions WHERE token_hash=?', tokenHash),
     deleteSession: (tokenHash) => run('DELETE FROM sessions WHERE token_hash=?', tokenHash).changes > 0,
+    sessionTokensForUser: (userId) => all('SELECT token_hash FROM sessions WHERE user_id=?', userId).map((r) => r.token_hash),
     deleteSessionsForUser: (userId) => run('DELETE FROM sessions WHERE user_id=?', userId).changes,
 
     // login_states (OIDC state/nonce/PKCE verifier)
-    createLoginState({ state, nonce, verifier, now }) {
-      run('INSERT INTO login_states(state, nonce, verifier, created_at) VALUES(?,?,?,?)', state, nonce, verifier, now);
+    createLoginState({ state, nonce, verifier, consent = 0, now }) {
+      run('INSERT INTO login_states(state, nonce, verifier, consent, created_at) VALUES(?,?,?,?,?)', state, nonce, verifier, consent, now);
     },
     // One-shot: returns the row and deletes it (undefined when unknown or already used).
     takeLoginState(state) {
@@ -91,7 +148,10 @@ function openDb(dbPath) {
     },
     getDeviceCodeByHash: (codeHash) => get('SELECT * FROM device_codes WHERE code_hash=?', codeHash),
     getDeviceCodeByUserCode: (userCode) => get('SELECT * FROM device_codes WHERE user_code=?', userCode),
-    approveDeviceCode: (codeHash, userId) => run('UPDATE device_codes SET approved_user_id=? WHERE code_hash=? AND denied=0', userId, codeHash).changes > 0,
+    // Succeeds at most once, and never for a denied or expired code.
+    approveDeviceCode: (codeHash, userId, now) => run(
+      'UPDATE device_codes SET approved_user_id=? WHERE code_hash=? AND denied=0 AND approved_user_id IS NULL AND expires_at > ?',
+      userId, codeHash, now).changes > 0,
     denyDeviceCode: (codeHash) => run('UPDATE device_codes SET denied=1 WHERE code_hash=?', codeHash).changes > 0,
     touchDeviceCodePoll: (codeHash, now) => run('UPDATE device_codes SET last_poll_at=? WHERE code_hash=?', now, codeHash).changes > 0,
     deleteDeviceCode: (codeHash) => run('DELETE FROM device_codes WHERE code_hash=?', codeHash).changes > 0,
@@ -116,13 +176,24 @@ function openDb(dbPath) {
     },
     getIslandByUser: (userId) => get('SELECT * FROM islands WHERE user_id=?', userId),
     getIsland: (id) => get('SELECT * FROM islands WHERE id=?', id),
+    updateIsland(userId, { name, color }) {
+      run('UPDATE islands SET name=?, color=? WHERE user_id=?', name, color, userId);
+      return get('SELECT * FROM islands WHERE user_id=?', userId);
+    },
     deleteIslandByUser: (userId) => run('DELETE FROM islands WHERE user_id=?', userId).changes > 0,
 
-    // Hourly sweep: login_states > 10 min, expired device_codes and sessions.
+    // audit (append-only log; no web viewer in phase 2)
+    addAudit({ at, actorId = null, action, target = null, ip = null }) {
+      run('INSERT INTO audit(at, actor_id, action, target, ip) VALUES(?,?,?,?,?)', at, actorId, action, target, ip);
+    },
+    listAudit: (limit = 200) => all('SELECT * FROM audit ORDER BY at DESC, id DESC LIMIT ?', limit),
+
+    // Hourly sweep: login_states > 10 min, expired device_codes and sessions, audit > 180 days.
     cleanup(now) {
       run('DELETE FROM login_states WHERE created_at < ?', now - LOGIN_STATE_TTL_MS);
       run('DELETE FROM device_codes WHERE expires_at < ?', now);
       run('DELETE FROM sessions WHERE expires_at < ?', now);
+      run('DELETE FROM audit WHERE at < ?', now - AUDIT_TTL_MS);
     },
 
     close() { try { raw.close(); } catch { /* already closed */ } },
@@ -130,4 +201,4 @@ function openDb(dbPath) {
   return db;
 }
 
-module.exports = { openDb };
+module.exports = { openDb, SCHEMA_VERSION };
