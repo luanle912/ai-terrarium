@@ -27,7 +27,7 @@ button{font-family:inherit}
 .settings-panel input[type=range]{flex:1;max-width:120px}
 .settings-panel input[type=text]{flex:1;max-width:160px;background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:4px 8px;font-family:inherit;font-size:11px}
 .settings-panel select{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:4px 8px;font-family:inherit;font-size:11px}
-/* World mode: "← Toàn cảnh" on one island. A chunky pixel plaque that presses down when clicked; it arrives as the
+/* World mode: the "← Overview" (world.view.all) button on one island. A chunky pixel plaque that presses down when clicked; it arrives as the
    clouds part, and names the Esc key where there is a keyboard. */
 .sky-back{position:absolute;z-index:11;top:12px;left:12px;display:flex;align-items:center;gap:10px;padding:5px 8px 5px 0;background:var(--surface);color:#ffffff;border:3px solid var(--fg);box-shadow:4px 4px 0 rgba(0,0,0,0.45);font-family:'Pixelify Sans',monospace;font-size:15px;font-weight:600;line-height:1;cursor:pointer;animation:sky-back-in .28s .16s both steps(4,end)}
 .sky-back:hover{background:#1d2433}
@@ -92,6 +92,11 @@ vi:{
 "office.act.snack":"chọn snack",
 "office.act.smoke":"hút thuốc",
 "office.act.wc":"đi vệ sinh",
+"office.wc.men":"WC NAM",
+"office.wc.women":"WC NỮ",
+"office.wc.lobby":"SẢNH CHUNG",
+"office.wc.signMen":"NAM",
+"office.wc.signWomen":"NỮ",
 "office.act.phone":"lướt điện thoại",
 "office.act.stretch":"vươn vai",
 "office.act.bath":"tắm hồ",
@@ -253,6 +258,7 @@ vi:{
 "world.join.errDenied":"Yêu cầu ghép máy đã bị từ chối.",
 "world.join.errExpired":"Mã đã hết hạn, bấm Tham gia lại.",
 "world.join.errFailed":"Không tham gia được: {msg}",
+"world.join.errFull":"Hub đã đủ 8 đảo, nhờ owner xoá bớt.",
 "world.save.ok":"Đã lưu.",
 "world.save.noIsland":"Bạn chưa có đảo.",
 "world.save.failed":"Không lưu được, thử lại sau.",
@@ -274,6 +280,16 @@ vi:{
 "world.header.viewMode":"Chế độ xem",
 "world.view.all":"Toàn cảnh",
 "world.view.mine":"Của tôi",
+"world.back.aria":"Về Toàn cảnh (Esc)",
+"world.slots.label":"Đảo",
+"world.slots.online":"· {n} online",
+"world.slots.title":"{islands} trong {cap} chỗ có đảo, {online} đảo đang gửi",
+"world.slot.empty":"chỗ trống",
+"world.slot.yours":"chỗ của bạn",
+"world.slot.pair":"Bấm để ghép máy",
+"world.slot.full":"Hub đã đủ {n} đảo",
+"world.slot.askOwner":"Nhờ owner xoá bớt",
+"world.panel.close":"Đóng",
 "world.header.myIslandLink":"Đảo của tôi",
 "world.settings.label":"Cài đặt",
 "world.settings.title":"Cài đặt: tốc độ, thời tiết",
@@ -400,6 +416,11 @@ en:{
 "office.act.snack":"picking a snack",
 "office.act.smoke":"smoke break",
 "office.act.wc":"restroom break",
+"office.wc.men":"MEN",
+"office.wc.women":"WOMEN",
+"office.wc.lobby":"SHARED LOBBY",
+"office.wc.signMen":"M",
+"office.wc.signWomen":"W",
 "office.act.phone":"scrolling the phone",
 "office.act.stretch":"stretching",
 "office.act.bath":"taking a dip",
@@ -561,6 +582,7 @@ en:{
 "world.join.errDenied":"The pairing request was denied.",
 "world.join.errExpired":"The code expired; join again.",
 "world.join.errFailed":"Could not join: {msg}",
+"world.join.errFull":"The hub is full (8 islands); ask an owner to remove one.",
 "world.save.ok":"Saved.",
 "world.save.noIsland":"You don't have an island yet.",
 "world.save.failed":"Couldn't save, try again later.",
@@ -582,6 +604,16 @@ en:{
 "world.header.viewMode":"View mode",
 "world.view.all":"Overview",
 "world.view.mine":"Mine",
+"world.back.aria":"Back to Overview (Esc)",
+"world.slots.label":"Islands",
+"world.slots.online":"· {n} online",
+"world.slots.title":"{islands} of {cap} places have an island, {online} sending",
+"world.slot.empty":"empty",
+"world.slot.yours":"your place",
+"world.slot.pair":"Click to pair a machine",
+"world.slot.full":"The hub is full: {n} islands",
+"world.slot.askOwner":"Ask an owner to remove one",
+"world.panel.close":"Close",
 "world.header.myIslandLink":"My island",
 "world.settings.label":"Settings",
 "world.settings.title":"Settings: speed, weather",
@@ -708,6 +740,11 @@ ja:{
 "office.act.snack":"おやつ選び中",
 "office.act.smoke":"タバコ休憩",
 "office.act.wc":"トイレ休憩",
+"office.wc.men":"男性用",
+"office.wc.women":"女性用",
+"office.wc.lobby":"共用ロビー",
+"office.wc.signMen":"男",
+"office.wc.signWomen":"女",
 "office.act.phone":"スマホいじり中",
 "office.act.stretch":"ストレッチ中",
 "office.act.bath":"池で水浴び中",
@@ -869,6 +906,7 @@ ja:{
 "world.join.errDenied":"ペアリングは拒否されました。",
 "world.join.errExpired":"コードの有効期限が切れました。もう一度参加してください。",
 "world.join.errFailed":"参加できませんでした: {msg}",
+"world.join.errFull":"ハブは満員です（8 島）。オーナーに削除を依頼してください。",
 "world.save.ok":"保存しました。",
 "world.save.noIsland":"まだ島がありません。",
 "world.save.failed":"保存できませんでした。後でもう一度お試しください。",
@@ -890,6 +928,16 @@ ja:{
 "world.header.viewMode":"表示モード",
 "world.view.all":"全体",
 "world.view.mine":"自分",
+"world.back.aria":"全体に戻る (Esc)",
+"world.slots.label":"島",
+"world.slots.online":"· {n} オンライン",
+"world.slots.title":"{cap} 枠中 {islands} 枠に島あり、{online} 島が送信中",
+"world.slot.empty":"空き",
+"world.slot.yours":"あなたの場所",
+"world.slot.pair":"クリックしてマシンをペアリング",
+"world.slot.full":"ハブは {n} 島で満員",
+"world.slot.askOwner":"オーナーに削除を依頼してください",
+"world.panel.close":"閉じる",
 "world.header.myIslandLink":"自分の島",
 "world.settings.label":"設定",
 "world.settings.title":"設定：速度、天気",
@@ -1016,6 +1064,11 @@ ko:{
 "office.act.snack":"간식 고르는 중",
 "office.act.smoke":"담배 타임",
 "office.act.wc":"화장실 가는 중",
+"office.wc.men":"남성용",
+"office.wc.women":"여성용",
+"office.wc.lobby":"공용 로비",
+"office.wc.signMen":"남",
+"office.wc.signWomen":"여",
 "office.act.phone":"폰 보는 중",
 "office.act.stretch":"기지개 켜는 중",
 "office.act.bath":"연못에서 물놀이",
@@ -1177,6 +1230,7 @@ ko:{
 "world.join.errDenied":"페어링 요청이 거부되었습니다.",
 "world.join.errExpired":"코드가 만료되었습니다. 다시 참여하세요.",
 "world.join.errFailed":"참여할 수 없습니다: {msg}",
+"world.join.errFull":"허브가 가득 찼어요(섬 8개). 소유자에게 삭제를 요청하세요.",
 "world.save.ok":"저장했어요.",
 "world.save.noIsland":"아직 섬이 없어요.",
 "world.save.failed":"저장하지 못했어요. 잠시 후 다시 시도하세요.",
@@ -1198,6 +1252,16 @@ ko:{
 "world.header.viewMode":"보기 모드",
 "world.view.all":"전체 보기",
 "world.view.mine":"내 섬만",
+"world.back.aria":"전체 보기로 돌아가기 (Esc)",
+"world.slots.label":"섬",
+"world.slots.online":"· {n} 온라인",
+"world.slots.title":"{cap}자리 중 {islands}자리에 섬이 있고, {online}개 섬이 전송 중",
+"world.slot.empty":"빈 자리",
+"world.slot.yours":"내 자리",
+"world.slot.pair":"클릭해서 기기 페어링",
+"world.slot.full":"허브에 섬 {n}개가 꽉 찼어요",
+"world.slot.askOwner":"소유자에게 삭제를 요청하세요",
+"world.panel.close":"닫기",
 "world.header.myIslandLink":"내 섬",
 "world.settings.label":"설정",
 "world.settings.title":"설정: 속도, 날씨",
@@ -1324,6 +1388,11 @@ zh:{
 "office.act.snack":"挑零食",
 "office.act.smoke":"抽根烟",
 "office.act.wc":"上洗手间",
+"office.wc.men":"男卫生间",
+"office.wc.women":"女卫生间",
+"office.wc.lobby":"公共大厅",
+"office.wc.signMen":"男",
+"office.wc.signWomen":"女",
 "office.act.phone":"刷手机",
 "office.act.stretch":"伸懒腰",
 "office.act.bath":"去池塘泡澡",
@@ -1485,6 +1554,7 @@ zh:{
 "world.join.errDenied":"配对请求被拒绝。",
 "world.join.errExpired":"代码已过期，请重新加入。",
 "world.join.errFailed":"无法加入：{msg}",
+"world.join.errFull":"Hub 已满（8 座岛），请 owner 删除一些。",
 "world.save.ok":"已保存。",
 "world.save.noIsland":"你还没有岛屿。",
 "world.save.failed":"保存失败，请稍后重试。",
@@ -1506,6 +1576,16 @@ zh:{
 "world.header.viewMode":"视图模式",
 "world.view.all":"全景",
 "world.view.mine":"我的",
+"world.back.aria":"返回全景 (Esc)",
+"world.slots.label":"岛屿",
+"world.slots.online":"· {n} 在线",
+"world.slots.title":"{cap} 个位置中有 {islands} 个有岛屿，{online} 座正在发送",
+"world.slot.empty":"空位",
+"world.slot.yours":"你的位置",
+"world.slot.pair":"点击配对设备",
+"world.slot.full":"Hub 已满 {n} 座岛",
+"world.slot.askOwner":"请 owner 删除一些",
+"world.panel.close":"关闭",
 "world.header.myIslandLink":"我的岛屿",
 "world.settings.label":"设置",
 "world.settings.title":"设置：速度、天气",
@@ -1632,6 +1712,11 @@ es:{
 "office.act.snack":"eligiendo un snack",
 "office.act.smoke":"pausa para fumar",
 "office.act.wc":"en el baño",
+"office.wc.men":"HOMBRES",
+"office.wc.women":"MUJERES",
+"office.wc.lobby":"VESTÍBULO",
+"office.wc.signMen":"H",
+"office.wc.signWomen":"M",
 "office.act.phone":"mirando el móvil",
 "office.act.stretch":"estirándose",
 "office.act.bath":"dándose un chapuzón",
@@ -1793,6 +1878,7 @@ es:{
 "world.join.errDenied":"La solicitud de emparejamiento fue rechazada.",
 "world.join.errExpired":"El código caducó; vuelve a unirte.",
 "world.join.errFailed":"No se pudo unir: {msg}",
+"world.join.errFull":"El hub está lleno (8 islas); pide a un owner que quite alguna.",
 "world.save.ok":"Guardado.",
 "world.save.noIsland":"Aún no tienes una isla.",
 "world.save.failed":"No se pudo guardar, inténtalo más tarde.",
@@ -1814,6 +1900,16 @@ es:{
 "world.header.viewMode":"Modo de vista",
 "world.view.all":"Vista general",
 "world.view.mine":"La mía",
+"world.back.aria":"Volver a la vista general (Esc)",
+"world.slots.label":"Islas",
+"world.slots.online":"· {n} en línea",
+"world.slots.title":"{islands} de {cap} sitios tienen isla, {online} enviando",
+"world.slot.empty":"libre",
+"world.slot.yours":"tu sitio",
+"world.slot.pair":"Haz clic para vincular un equipo",
+"world.slot.full":"El hub ya tiene {n} islas",
+"world.slot.askOwner":"Pide a un owner que quite alguna",
+"world.panel.close":"Cerrar",
 "world.header.myIslandLink":"Mi isla",
 "world.settings.label":"Ajustes",
 "world.settings.title":"Ajustes: velocidad, clima",
@@ -4809,10 +4905,13 @@ class ClaudeOffice extends React.Component{
         :[[0,0,potH+1,5],[-0.08,0.06,potH+5,4],[0.07,-0.05,potH+8,4],[0,0,potH+11,3]];
       cubes.forEach(([dx,dy,z,c],i)=>{const r=c/32;box(x+dx-r,y+dy-r,r*2,r*2,z,z+c,i%2?gl:g,true,gd,shade(gd,-12));});};
     const PERSON={m:['..#..','.....','.###.','.###.','.###.','.#.#.','.#.#.'],f:['..#..','.....','.###.','.###.','#####','.#.#.','.#.#.']};
-    // 3×5 letters from the page font, plus Ữ and Ả with their marks drawn above (rows -3 and -2)
-    const glyph=ch=>{if(ch==='Ữ')return{rows:['.##.','##..','#.##','#.#.','#.#.','#.#.','###.'],up:2};if(ch==='Ả')return{rows:['##.','.#.','.#.','#.#','###','#.#','#.#'],up:2};
-      const f=FONT[ch];if(!f)return{rows:['...','...','...','...','...'],up:0};const rows=[];for(let r=0;r<5;r++)rows.push(f.slice(r*3,r*3+3).replace(/1/g,'#').replace(/0/g,'.'));return{rows,up:0};};
-    const word=s=>{const gs=[...s].map(ch=>ch===' '?{rows:['..'],up:0,sp:1}:glyph(ch));let x=0;const out=[];gs.forEach(g=>{out.push({g,x});x+=(g.sp?2:g.rows[g.rows.length-1].length)+1;});return{out,w:x-1};};
+    // 3×5 letters from the page font, plus \u1EEE (U with horn and tilde) and \u1EA2 (A with hook) with their marks drawn above (rows -3 and -2)
+    const glyph=ch=>{if(ch==='\u1EEE')return{rows:['.##.','##..','#.##','#.#.','#.#.','#.#.','###.'],up:2};if(ch==='\u1EA2')return{rows:['##.','.#.','.#.','#.#','###','#.#','#.#'],up:2};
+      const f=FONT[ch];if(!f)return null;const rows=[];for(let r=0;r<5;r++)rows.push(f.slice(r*3,r*3+3).replace(/1/g,'#').replace(/0/g,'.'));return{rows,up:0};};
+    // A label in another language may have letters the pixel font lacks (CJK, Ñ, Í…): word() is then null and the
+    // label is drawn with fillText in TXT_FONT instead.
+    const TXT_FONT="bold 8px 'JetBrains Mono',sans-serif";
+    const word=s=>{const gs=[...s].map(ch=>ch===' '?{rows:['..'],up:0,sp:1}:glyph(ch));if(gs.some(g=>!g))return null;let x=0;const out=[];gs.forEach(g=>{out.push({g,x});x+=(g.sp?2:g.rows[g.rows.length-1].length)+1;});return{out,w:x-1};};
     // stall doors: shut, with a red light, while someone is inside (RestroomLogic.visit 'inside')
     const occupied=new Set();for(const a of this.agents)if(a.wcIn&&a.idleSpot!=null&&IDLE_SPOTS[a.idleSpot])occupied.add(IDLE_SPOTS[a.idleSpot].stall);
 
@@ -4878,7 +4977,7 @@ class ClaudeOffice extends React.Component{
     const doorX=[L.rooms.m.door,L.rooms.f.door];
     for(let x=X;x<X1;x++){if(doorX.some(d=>d[0]===x))continue;const w=Math.min(1,X1-x);items.push({z:x+0.5+F,f:()=>knee(x,F-0.07,w,0.14)});}
     for(let y=Y;y<F;y++)items.push({z:X1+y+0.4,f:()=>knee(X1-0.12,y===Y?wy:y,0.12,y===F-1?1-0.07:1)});
-    // door frames: two slim posts and a glowing sign box over each doorway (pictogram + NAM / NỮ). The box hangs at
+    // door frames: two slim posts and a glowing sign box over each doorway (pictogram + office.wc.signMen / signWomen). The box hangs at
     // SIGN so it clears the heads of people at the stalls and vanities behind it: on screen a sign at height z on the
     // front wall covers a person standing at depth y (about 25 px tall) unless z >= 25 + 16 * (front - y).
     const SIGN=49;
@@ -4890,8 +4989,10 @@ class ClaudeOffice extends React.Component{
         box(sx0,yb-0.02,sx1-sx0,h+0.04,SIGN,SIGN+9,shade(sc,10),true,sc,shade(sc,-30));
         const ink=lit?'#ffffff':NB('#ffffff');
         pix(sx0+0.12,yb+h+0.021,SIGN+8,PERSON[r],ink);
-        const txt=r==='m'?'NAM':'NỮ',{out}=word(txt);
-        out.forEach(({g,x})=>{const[px0,py0]=P(sx0+0.12,yb+h+0.021,SIGN+6+g.up);ctx.save();ctx.translate(Math.round(px0)+6+x,Math.round(py0)+3+x*0.5);ctx.transform(1,0.5,0,1,0,0);ctx.fillStyle=ink;
+        const txt=r==='m'?tr('office.wc.signMen'):tr('office.wc.signWomen'),wd=word(txt);
+        if(!wd){const[px0,py0]=P(sx0+0.12,yb+h+0.021,SIGN+6);ctx.save();ctx.translate(Math.round(px0)+6,Math.round(py0)+3);ctx.transform(1,0.5,0,1,0,0);
+          ctx.fillStyle=ink;ctx.font=TXT_FONT;ctx.textBaseline='top';ctx.fillText(txt,0,-2);ctx.restore();return;}
+        wd.out.forEach(({g,x})=>{const[px0,py0]=P(sx0+0.12,yb+h+0.021,SIGN+6+g.up);ctx.save();ctx.translate(Math.round(px0)+6+x,Math.round(py0)+3+x*0.5);ctx.transform(1,0.5,0,1,0,0);ctx.fillStyle=ink;
           g.rows.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(i,j,1,1);});ctx.restore();});}});});
 
     // ---- men's room: corner plant, two urinals with frosted privacy screens ----
@@ -4952,13 +5053,14 @@ class ClaudeOffice extends React.Component{
       for(let y=b.y0+0.1;y<b.y1-0.05;y+=0.1)ftop(b.x0,y,b.x1,y+0.015,10.51,shade(w,-20));}});}
     {const[px,py]=L.plants.lobby;items.push({z:px+py,f:()=>plant(px,py,9,true)});}
 
-    // ---- floating tags, in the page's pixel font: WC NAM (blue), WC NỮ (pink), SẢNH CHUNG (dark); labels, so they
+    // ---- floating tags, in the page's pixel font: men's room (blue), women's room (pink), shared lobby (dark); labels, so they
     // stay readable after dark ----
-    const tag=(x,y,z,s,col)=>{const{out,w}=word(s),[cx,cy]=P(x,y,z),x0=Math.round(cx-w/2)-3,y0=Math.round(cy)-12,bw=w+6,bh=12;
+    const tag=(x,y,z,s,col)=>{const wd=word(s);if(!wd)ctx.font=TXT_FONT;const w=wd?wd.w:Math.ceil(ctx.measureText(s).width),[cx,cy]=P(x,y,z),x0=Math.round(cx-w/2)-3,y0=Math.round(cy)-12,bw=w+6,bh=12;
       ctx.fillStyle='#ffffff';ctx.fillRect(x0,y0,bw,bh);ctx.strokeStyle='#2B2D42';ctx.lineWidth=1;ctx.strokeRect(x0+0.5,y0+0.5,bw-1,bh-1);
       ctx.fillStyle='#2B2D42';ctx.fillRect(Math.round(cx)-1,y0+bh,3,1);ctx.fillRect(Math.round(cx),y0+bh+1,1,1);
-      ctx.fillStyle=col;out.forEach(({g,x:dx})=>g.rows.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(x0+3+dx+i,y0+5+j-g.up,1,1);}));};
-    items.push({z:1e6,f:()=>{tag(X+2,Y+1.5,64,'WC NAM',ACC.m);tag(X+5.8,Y+1.5,64,'WC NỮ',ACC.f);tag(X+3.8,Y1-0.2,30,'SẢNH CHUNG','#2B2D42');}});
+      ctx.fillStyle=col;if(!wd){ctx.textBaseline='middle';ctx.fillText(s,x0+3,y0+bh/2+0.5);return;}
+      wd.out.forEach(({g,x:dx})=>g.rows.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(x0+3+dx+i,y0+5+j-g.up,1,1);}));};
+    items.push({z:1e6,f:()=>{tag(X+2,Y+1.5,64,tr('office.wc.men'),ACC.m);tag(X+5.8,Y+1.5,64,tr('office.wc.women'),ACC.f);tag(X+3.8,Y1-0.2,30,tr('office.wc.lobby'),'#2B2D42');}});
   }
   drawDesk(G,d,i){
     const{ctx,poly,box,rect,t,df}=G,{gx,gy}=d,owner=this.agents.find(a=>a.desk===i&&!a.leaving&&!a.parent);
@@ -5679,6 +5781,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       if(e==='local')return tr('world.join.errLocal');
       if(e==='hub_unreachable')return tr('world.join.warnUnreachable');
       if(e==='local_config')return tr('world.join.errConfig');
+      if(/hub_full|hub is full/.test(e))return tr('world.join.errFull');
       if(/denied/.test(e))return tr('world.join.errDenied');
       if(/expired/.test(e))return tr('world.join.errExpired');
       return tr('world.join.errFailed',{msg:String(e||'')});
@@ -6047,9 +6150,9 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       this.stampArt(ctx,img,p,dy,1);
       const x=rect.x+rect.w/2,y=(p.ay+(ISL.cy+2)*p.s+dy)/p.dpr;
       const B="600 12px 'JetBrains Mono',monospace",S="500 10px 'JetBrains Mono',monospace";
-      if(kind==='empty')plate(ctx,x,y,[['chỗ trống',"500 11px 'JetBrains Mono',monospace",'#dfe4ee']],null,0.55);
-      else if(kind==='yours')plate(ctx,x,y,[['chỗ của bạn',B,'#ffffff'],['Bấm để ghép máy',S,GOLD]],hover?'#ffe08f':GOLD);
-      else plate(ctx,x,y,[['Hub đã đủ 8 đảo',B,'#ffffff'],['Nhờ owner xoá bớt',S,'#aab2c5']],'#4a5468');
+      if(kind==='empty')plate(ctx,x,y,[[tr('world.slot.empty'),"500 11px 'JetBrains Mono',monospace",'#dfe4ee']],null,0.55);
+      else if(kind==='yours')plate(ctx,x,y,[[tr('world.slot.yours'),B,'#ffffff'],[tr('world.slot.pair'),S,GOLD]],hover?'#ffe08f':GOLD);
+      else plate(ctx,x,y,[[tr('world.slot.full',{n:WorldLogic.SLOTS}),B,'#ffffff'],[tr('world.slot.askOwner'),S,'#aab2c5']],'#4a5468');
     },
     // Name, how many are working (muted when offline), a yellow dot when someone waits for approval or another session.
     // Mine has a gold edge; a hovered one a light edge and a darker plate. Wider than maxW (a narrow phone cell), the
@@ -6115,18 +6218,18 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       // "← Toàn cảnh" on one island and on "Của tôi", edged in that island's colour like its name plate.
       const shownMeta=w.view==='one'?w.islands.find(i=>i.id===w.focus):w.view==='mine'?mine:null;
       const back=w.view!=='all'&&!w.dead&&h('button',{key:'back:'+w.view+':'+(w.focus||''),type:'button',className:'sky-back',
-        'aria-label':'Về Toàn cảnh (Esc)',title:'Về Toàn cảnh (Esc)',onClick:()=>this.navigate({view:'all'})},
+        'aria-label':tr('world.back.aria'),title:tr('world.back.aria'),onClick:()=>this.navigate({view:'all'})},
         h('span',{className:'tab','aria-hidden':true,style:{background:shownMeta?okColor(shownMeta.color):GOLD}}),
-        h('span',{'aria-hidden':true},'←'),h('span',null,'Toàn cảnh'),h('kbd',{'aria-hidden':true},'Esc'));
+        h('span',{'aria-hidden':true},'←'),h('span',null,tr('world.view.all')),h('kbd',{'aria-hidden':true},'Esc'));
       const tab=(v,label)=>h('button',{key:v,className:'btn'+(w.view===v?' btn-active':''),style:hdrCtl,'aria-pressed':w.view===v,onClick:()=>this.navigate({view:v})},label);
       // "Đảo 5/8 · 3 online", led by eight small squares, one per place in the sky: green sending, grey offline,
       // hollow free; mine has a gold edge.
       const cap=w.capacity||WorldLogic.SLOTS,bySlot=new Map(w.islands.map(i=>[i.slot,i])),mySlot=this.mySlot();
-      const slotChip=h('div',{className:'chip',title:w.islands.length+' trong '+cap+' chỗ có đảo, '+online+' đảo đang gửi'},
+      const slotChip=h('div',{className:'chip',title:tr('world.slots.title',{islands:w.islands.length,cap,online})},
         h('span',{'aria-hidden':true,style:{display:'flex',gap:2}},Array.from({length:cap},(_,s)=>{const m=bySlot.get(s);
           return h('span',{key:s,style:{width:6,height:6,boxSizing:'border-box',display:'inline-block',
             background:m?(m.online===false?'#5d6478':'#46a758'):'transparent',border:'1px solid '+(s===mySlot?'#ffd166':m?'transparent':'#4a5468')}});})),
-        h('span',null,'Đảo'),h('strong',{style:{color:'#ffffff'}},w.islands.length+'/'+cap),h('span',null,'· '+online+' online'));
+        h('span',null,tr('world.slots.label')),h('strong',{style:{color:'#ffffff'}},w.islands.length+'/'+cap),h('span',null,tr('world.slots.online',{n:online})));
       return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:8,paddingTop:12,paddingBottom:12,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
         h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'8px 16px'}},
           h('div',{style:{display:'flex',alignItems:'baseline',gap:8,flex:'none'}},
@@ -6174,7 +6277,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
           h('a',{href:'/auth/login',className:'btn btn-accent',style:{textAlign:'center',textDecoration:'none'}},tr('world.session.relogin')));
         return h('div',{style:PANEL},h('div',{style:TITLE},tr('world.stream.lost')),h('span',{style:{color:'var(--muted)'}},tr('world.stream.askingHub')));
       }
-      const close=h('button',{className:'btn','aria-label':'Đóng',onClick:()=>{if(sel!=null)return this.setState({sel:null});
+      const close=h('button',{className:'btn','aria-label':tr('world.panel.close'),onClick:()=>{if(sel!=null)return this.setState({sel:null});
         if(w.view==='one')return this.navigate({view:'all'});w.confirm=null;this.setState({sel:null,selIsland:null});},style:{width:28,height:28,padding:0,flex:'none'}},'×');
       const sc=selIsland&&w.scenes.get(selIsland),meta=selIsland&&w.islands.find(i=>i.id===selIsland);
       const a=sc&&sel!=null&&sc.byId(sel);
