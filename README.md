@@ -26,7 +26,7 @@
 
 <br>
 
-Each active **Claude Code session** becomes an animated character sitting at a desk in an isometric pixel-art office. Day and night follow your real clock — lights dim at sunset, stars come out, desk lamps glow.
+Each active **Claude Code session** becomes an animated character sitting at a desk in an isometric pixel-art office — on a floating sky island, above a sea of clouds. Day and night follow your real clock, weather changes on its own, and three office dogs roam the lawn.
 
 ---
 
@@ -46,17 +46,65 @@ Open your browser → **http://localhost:4317** — that's it.
 
 ## ✨ Features
 
+### The Office
+
+<p align="center">
+  <img src="assets/island.png" alt="Floating sky island with autumn trees and block clouds" width="600">
+</p>
+
+| | Feature | Description |
+|---|---------|-------------|
+| 🏝️ | **Sky island** | The office floats on an island with a grassy lawn, a pond with a waterfall that falls into the clouds, trees, rocks and flowers |
+| 🌅 | **Day/night cycle** | Smooth lighting with cosine interpolation based on your local clock — warm dawn and dusk, stars and moon at night, desk lamps glow after dark |
+| 🌦️ | **Weather** | Clear, cloudy, rain, storm, snow and fog — random every 20–40 min, or synced to the real weather of a city you choose via Open-Meteo. Rain runs down the windows, storms darken the office with lightning, snow whitens the lawn and ices the pond |
+| 🎄 | **Seasonal events** | Vietnamese holidays and seasons get their own event tree on the lawn — Tết mai blossoms, Christmas tree with blinking lights, Halloween pumpkins, cherry blossoms in spring, and more |
+| 🐕 | **Office dogs** | A corgi, a husky and a dalmatian roam the lawn: they stroll, drink at the pond, chase each other, greet people who come outside and sleep together under a tree at night |
+
+### Sessions & Agents
+
+<p align="center">
+  <img src="assets/desks.png" alt="Department desks with monitors showing agent status and speech bubbles" width="600">
+</p>
+
 | | Feature | Description |
 |---|---------|-------------|
 | 🔌 | **Zero setup** | Installs as a Claude Code plugin — server auto-starts on `session.start` |
 | ⚡ | **Real-time** | Sessions appear and disappear as you open and close Claude Code |
-| 🏝️ | **Sky island** | The office stands on a floating island above a sea of block clouds, with distant islands fading into the haze |
-| 🌅 | **Day/night cycle** | Smooth continuous lighting with cosine interpolation based on local time, warm dawn and dusk skies, stars and moon at night |
-| 🌦️ | **Weather** | Clear, cloudy, rain, storm, snow and fog — random every 20–40 min, or following the real weather of a city you choose |
-| 🔍 | **Session status** | See who's working, thinking, waiting for permission, talking, or idle |
+| 🔍 | **Session status** | See who's working, thinking, waiting for permission, talking, or idle — monitors show the current activity (code editor, terminal, reading, thinking) |
+| 🏢 | **Departments** | Sessions are grouped by working directory into up to four department zones with labelled floors |
 | 🤖 | **Sub-agents** | Child agents appear as smaller desks next to their parent |
-| 📦 | **Zero dependencies** | Pure Node.js — no `npm install`, no build step |
+| 💤 | **Vacant desks** | Unclaimed desks look greyed out; empty departments show an EMPTY label |
+
+### Pantry & Outdoors
+
+<p align="center">
+  <img src="assets/pantry.png" alt="Modern pantry kitchen with CAFE board, espresso machine and seating area" width="480">
+  &nbsp;&nbsp;
+  <img src="assets/outdoor.png" alt="Pond, stairs, lawn with autumn trees and agents outdoors" width="480">
+</p>
+
+| | Feature | Description |
+|---|---------|-------------|
+| 🍳 | **Modern kitchen** | A full pantry with fridge, espresso machine, grinder, sink, dishwasher, microwave, drinks cooler and sorted bins along the back wall |
+| 🪑 | **Break seating** | A wooden bench with tables, a sky-view bar with high stools, and a bar-height island — agents on a break heat food, snack, or watch the clouds |
+| 🚬 | **Smoking corner** | A paved corner on the east lawn with a bench under a vine-covered pergola, an ash bin, a planted screen toward the pantry, and a light at the entrance |
+| 🛤️ | **Lawn paths** | Stepping-stone paths run from both flights of stairs to the pond and the smoking corner; agents follow them instead of cutting across the grass |
+| 🏊 | **Pond bathing** | Idle agents can walk down to the pond and bathe — shown up to the shoulders with ripples around them |
+
+### Interaction & Display
+
+<p align="center">
+  <img src="assets/header.png" alt="Status header showing season, agent counts and department badges" width="600">
+</p>
+
+| | Feature | Description |
+|---|---------|-------------|
+| 🔎 | **Pan & zoom** | Drag to pan, scroll or pinch to zoom 1×–4×; works on desktop and touch screens |
+| 📱 | **Phone layout** | Responsive design that fits phone screens — compact header, scrollable status strip, smaller bubbles |
+| 💬 | **Speech bubbles** | Agents show what they're doing in speech bubbles above their heads |
+| 📊 | **Whiteboard** | A wall-mounted board showing real Claude API usage (5-hour and 7-day quotas) |
 | 🔒 | **Private** | Reads local transcripts only; nothing leaves your machine unless you turn on Real weather, which sends the city name to Open-Meteo |
+| 📦 | **Zero dependencies** | Pure Node.js — no `npm install`, no build step |
 
 ---
 
