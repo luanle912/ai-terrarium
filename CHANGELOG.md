@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Fridge z-ordering** — The fridge's right face no longer overlaps the wooden cabinet and espresso machine; natural painter's-algorithm ordering (fridge z=19.5 draws before cabinet z=21.4) handles the layering correctly
-- **Design-based desk rendering** — Department desks now use the design project's `deskWorkstation()` with `F.desk`, `F.chair` and `F.backrest`, giving proper desk→chair→person→backrest layering with screen states (code, read, term, think, perm, error, done, off), keyboard animation, mug steam and monitor glow; seated agents are drawn by `deskWorkstation` instead of the main agent loop
+- **Pantry fridge** — The fridge no longer overlaps the wooden cabinet and espresso machine; it now sits behind both as it should
+- **Desk detail** — Department desks show the full design: monitor with screen states, keyboard animation, mug with steam, desk lamp and glow; seated agents layer correctly behind the desk backrest
 
 ## [1.4.0] - 2026-11-05
 
