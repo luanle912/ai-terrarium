@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Pantry fridge** — The fridge no longer overlaps the wooden cabinet and espresso machine; it now sits behind both as it should
-- **Desk detail** — Department desks show the full design: monitor with screen states, keyboard animation, mug with steam, desk lamp and glow; seated agents layer correctly behind the desk backrest
+- **Pantry fridge** — The tall fridge was drawn over the wooden cabinet and espresso machine next to it, making it look like the fridge was in front of both even though it stands behind them; the fridge now draws before the cabinet and espresso so their shorter bodies correctly cover the overlap, and the top of the fridge still shows above the counter as it would in a real kitchen
+- **Department desks** — Desks in the four department zones were missing the detailed design: the monitor showed a blank rectangle, chairs had no backrest, and seated agents sometimes overlapped the desk edge; desks now show the full pixel-art design with a monitor that reflects the agent's current state (code editor, terminal, reading, thinking, permission prompt, error or done), an animated keyboard, a mug with rising steam, a desk lamp with glow, and seated agents layer correctly behind the desk backrest
 
 ## [1.4.0] - 2026-11-05
 
