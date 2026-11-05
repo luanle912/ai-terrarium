@@ -3,7 +3,8 @@
 Hub là một server Node nhỏ (`hub/server.js`, không cần cài package) cho mọi người đăng nhập bằng Google, ghép máy của
 mình rồi xem đảo của nhau. Hub công khai đang chạy ở https://terrarium.openlabs.click; tài liệu này dành cho ai muốn
 dựng hub riêng, ví dụ chỉ cho tài khoản một công ty. Thiết kế đầy đủ ở `docs/specs/2026-11-04-multi-island-design.md`.
-Tài liệu này mô tả hub ở giai đoạn 2 (GĐ2): tự quản lý đảo, mất quyền tự động khi Google thu hồi, nhật ký.
+Tài liệu này mô tả hub ở giai đoạn 3 (GĐ3): tự quản lý đảo, mất quyền tự động khi Google thu hồi, nhật ký, và bầu trời
+8 đảo (mục 3d).
 
 Yêu cầu: **Node ≥ 22.13** cho hub, vì hub dùng `node:sqlite` có sẵn trong Node. Plugin local trên máy từng người vẫn chạy
 được với Node 18 trở lên.
@@ -57,7 +58,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 **Vì sao cần.** Khi một người nghỉ việc, hub phải biết để cắt quyền trong vòng 24 giờ (B12). Hub làm việc đó bằng
 refresh token của Google: mỗi giờ hub kiểm những người có lần kiểm gần nhất cũ hơn 24 giờ, đổi refresh token lấy
 token mới. Google trả `invalid_grant` hoặc ID token không còn khớp tên miền thì hub tự cấm với lý do `google_revoked`
-(thu hồi máy, xoá phiên, gỡ đảo khỏi bản đồ, đóng luồng xem). Lỗi mạng hoặc 5xx thì không cấm, thử lại ở lượt sau;
+(thu hồi máy, xoá phiên, đóng luồng xem; đảo chuyển sang offline và vẫn giữ chỗ trên bầu trời, xem mục 3d). Lỗi mạng hoặc 5xx thì không cấm, thử lại ở lượt sau;
 lỗi liên tục quá 72 giờ thì ghi cảnh báo vào `audit`. Refresh token nằm trong DB đã mã hoá bằng `HUB_SECRET_KEY`.
 
 **Cách xin.** `/auth/login` gửi `access_type=offline` và `prompt=select_account`, scope vẫn `openid email profile`.
@@ -110,7 +111,7 @@ Luồng SSE (`/api/world/stream`) cần proxy không đệm và không cắt k�
 bỏ email khỏi biến môi trường (rồi khởi động lại hub) thì người đó về `member` ngay. Không có vai trò `admin`.
 
 Quyền duy nhất của owner là **"Xoá đảo"** của một member ngay trên chế độ thế giới: hub thu hồi máy và xoá đảo của người
-đó (người đó vẫn đăng nhập được và ghép máy lại để có đảo mới). Owner không xoá được đảo của owner khác. Không có cấm
+đó, **trả lại một chỗ** trong 8 chỗ của hub (người đó vẫn đăng nhập được và ghép máy lại để có đảo mới, nếu hub còn chỗ). Owner không xoá được đảo của owner khác. Không có cấm
 hay bỏ cấm bằng tay: cấm chỉ xảy ra tự động theo `google_revoked`.
 
 **Lưu ý email cấp lại (B6).** Nếu Workspace xoá một tài khoản rồi cấp lại cùng email cho người khác, người mới có `sub`
@@ -134,6 +135,26 @@ sqlite3 hub.sqlite "SELECT datetime(at/1000,'unixepoch') AS time, actor_id, acti
 - Giới hạn tốc độ (token bucket, trả 429): đăng nhập 30 lần/giờ mỗi IP; bắt đầu ghép thiết bị 10 lần/giờ mỗi IP; gói
   `publish` 4 gói/giây (burst 8) mỗi máy; các route còn lại 120 yêu cầu/phút mỗi IP. Luồng SSE: 5 luồng đồng thời mỗi
   người, 300 luồng toàn hub. Sau proxy nhớ bật `HUB_TRUST_PROXY=1`, nếu không mọi người dùng chung một hạn mức.
+
+## 3d. Sức chứa: tối đa 8 đảo
+
+Một hub chứa **tối đa 8 đảo**, mỗi đảo một **chỗ cố định** (slot 0 đến 7) trên bầu trời. Con số này nằm trong code
+(`MAX_ISLANDS` ở `hub/db.js`), **không có biến môi trường để nâng**.
+
+- **Ai tính vào 8.** Mỗi người có một đảo (bản ghi `islands`) chiếm một chỗ, kể cả khi họ offline, đã thu hồi hết máy,
+  hay bị cấm `google_revoked`. Đảo của họ vẫn nằm ở chỗ cũ trên bầu trời, mờ đi như đảo offline, cho tới khi bị xoá.
+  Người chưa ghép máy lần nào không tính.
+- **Chỗ cố định.** Đảo mới nhận slot trống nhỏ nhất và không bao giờ đổi slot, kể cả khi hub khởi động lại. Chỗ của đảo
+  offline không bị vẽ thành "chỗ trống".
+- **Người thứ 9 thấy gì.** Họ đăng nhập được và xem bầu trời bình thường; ô giữa của họ ghi **"Hub đã đủ 8 đảo"**
+  (bấm không làm gì). Khi duyệt mã ghép máy ở `/device`, trang báo **"Hub đã đủ 8 đảo, nhờ owner xoá bớt."** và mã bị
+  từ chối hẳn; lệnh `join` của họ in `join: the hub is full (8 islands); ask a hub owner to remove one` rồi thoát với mã 1,
+  không ghi config nào. Người **đã có đảo** vẫn ghép thêm máy được khi hub đủ.
+- **Trả chỗ.** Owner bấm **"Xoá đảo"** ở bảng thông tin của đảo đó (chế độ thế giới; xem mục 3b), hoặc chính người đó
+  **rời hub** ở `/me/leave`. Ô trống hiện ra ở mọi tab ngay (sự kiện `remove`), và người tiếp theo ghép máy sẽ nhận đúng chỗ
+  đó. Thu hồi máy hay cấm tự động thì **không** trả chỗ: đảo chuyển offline và giữ chỗ.
+- **Tranh chỗ cuối.** Kiểm đủ chỗ và tạo đảo nằm trong một transaction, cộng chỉ mục `UNIQUE` trên `slot`: hai người cùng
+  duyệt mã khi chỉ còn một chỗ thì đúng một người được, người kia thấy câu báo đủ chỗ.
 
 ## 4. Sao lưu
 
@@ -169,8 +190,8 @@ node server.js leave                                # Revoke this device on the 
 - Cấu hình nằm ở `~/.claude-terrarium/config.json` (quyền `0600`). Chạy `join` lại để ghép lại sau khi bị thu hồi.
 - Server local đang chạy sẽ đọc lại cấu hình trong vài giây: `private on` có hiệu lực trên hub trong chưa đầy 3 giây.
 - Chỉ server giữ được cổng mới gửi trạng thái lên hub.
-- Trang local hiện chip "Thế giới" khi máy đã tham gia hub. Trang của hub có hai chế độ: **Toàn cảnh** (cả bầu trời) và
-  **Của tôi** (đảo của mình).
+- Trang local hiện chip "Thế giới" khi máy đã tham gia hub. Trang của hub có hai chế độ: **Toàn cảnh** (8 chỗ quanh đảo của người
+  xem; bấm một đảo để vào, **Esc** để ra) và **Của tôi** (đảo của mình).
 - Thu hồi một máy ở trang `/me` của hub: publisher ghi `revoked` và dừng gửi.
 - `leave` giờ cũng **thu hồi máy này trên hub** trước khi xoá cấu hình local. Hub không với tới được thì lệnh in thông
   báo và chỉ đường tới `/me` để thu hồi tay. `join` lại cũng tự thu hồi token cũ.
@@ -210,3 +231,29 @@ Người dùng GĐ1 chưa có refresh token, nên phiên của họ bị rút v�
 
 Nếu hub đứng sau proxy, kiểm tra `HUB_TRUST_PROXY` **trước khi nâng cấp** (mục 2 và 3): đăng nhập bị giới hạn 30 lần mỗi giờ theo IP,
 nên nếu hub không thấy IP thật thì cả văn phòng dùng chung một lượt đếm và dễ bị khoá đúng ngày nâng cấp.
+
+## 8. Nâng cấp từ GĐ2 lên v3 (bầu trời 8 đảo)
+
+DB GĐ2 (`PRAGMA user_version` 2) được nâng cấp tại chỗ khi bản mới khởi động; DB GĐ1 nâng thẳng lên v3. Thứ tự giống mục 7:
+dừng hub, sao lưu `hub.sqlite` (mục 4), chạy bản mới trên cùng file. Không cần đặt thêm biến môi trường nào.
+
+Migration thêm cột `islands.slot` (chỉ mục `UNIQUE` trên các slot khác `NULL`) và cột `device_codes.deny_reason`, rồi gán chỗ
+theo **thứ tự tạo đảo** (`created_at`, rồi `id`): 8 đảo cũ nhất nhận slot 0 đến 7.
+
+Hub GĐ2 không giới hạn số đảo, nên nếu hub đang có **hơn 8 đảo** thì:
+
+- Không đảo nào bị xoá. Đảo thứ 9 trở đi có `slot = NULL`: **ẩn**, không hiện ở "Toàn cảnh" và không có trong sự kiện `world`,
+  nhưng vẫn là đảo của người đó và vẫn tính vào số đảo của hub.
+- Hub vẫn tính là **đủ**: người mới chưa có đảo bị từ chối như ở mục 3d.
+- Owner xoá bớt các đảo đang hiện bằng "Xoá đảo". Mỗi lần một chỗ được trả, **đảo ẩn cũ nhất** hiện vào đúng chỗ đó (nó chưa
+  từng có slot nên đây không phải đổi slot). Cứ thế cho tới khi hết đảo ẩn.
+
+Kiểm sau khi nâng cấp:
+
+```bash
+sqlite3 hub.sqlite "PRAGMA user_version;"                                           # 3
+sqlite3 hub.sqlite "SELECT slot, name FROM islands ORDER BY created_at, id;"        # slot 0..7, rồi NULL cho đảo ẩn
+```
+
+Đã chạy thật trên một DB GĐ2 có 10 đảo: `user_version` 3, slot 0 đến 7 theo thứ tự tạo, 2 đảo ẩn; owner xoá đảo ở slot 2 thì
+đảo ẩn cũ nhất nhận slot 2.

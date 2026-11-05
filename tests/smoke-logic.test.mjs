@@ -15,8 +15,11 @@ const inZone = ([x, y]) => x >= zone.x && x < zone.x + zone.w && y >= zone.y && 
 
 // ---- layout ----
 
-test('the corner fills the east-front outdoor spot, 4×4 down the east lawn, and every tile of it is dry lawn', () => {
-  assert.deepEqual([zone.x, zone.y, zone.w, zone.h], [W + 1, H - 5, 4, 4])
+test('the corner fills the east-front outdoor spot, 4×4 right beside the restroom block, and every tile of it is dry lawn', () => {
+  assert.deepEqual([zone.x, zone.y, zone.w, zone.h], [W + 6, 4, 4, 4])
+  const block = island.spots.find(s => s.id === 'east-back')
+  assert.equal(zone.x, block.x + block.w, 'its west column touches the block')
+  assert.ok(zone.y < block.y + block.h && zone.y + zone.h >= block.y + block.h, 'alongside the block, ending on the row below it')
   assert.equal(corner.x, zone.x)
   assert.equal(corner.y, zone.y)
   for (let y = zone.y; y < zone.y + zone.h; y++) for (let x = zone.x; x < zone.x + zone.w; x++) {
