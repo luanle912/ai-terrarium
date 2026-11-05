@@ -1125,7 +1125,7 @@ class ClaudeOffice extends React.Component{
     // with letters hanging toward -z, so labels, signs and the clock face look painted on or hung on the wall.
     const wallText=(str,y,zTop,col,wx=0)=>{const[px,py]=P(wx,y,zTop);ctx.save();ctx.translate(px,py);ctx.transform(1,-0.5,0,1,0,0);text3(ctx,str,0,0,col);ctx.restore();};
     const wallTextLen=str=>(String(str).length*4-1)/16;
-    {const u=this.usage||[];
+    if(!this.noUsage){const u=this.usage||[];
       const u5h=u.find(x=>x.kind==='five_hour')||{pct:0};
       const u7d=u.find(x=>x.kind==='seven_day')||{pct:0};
       // each row: label on the left, a bar filling left to right, the percentage on the right
@@ -1669,6 +1669,7 @@ class IslandScene{
     this.canvas=document.createElement('canvas');this.k=null;this.lodK=1;this.lod=null;this.drawnAt=-1e9;this.simAt=0;
     this.state={sel:null};// the host's selected agent, when it is on this island
     this.raw=new Map();// session id -> the session as the hub sent it (kind, tool, model for the detail panel)
+    this.noUsage=true;// hubs carry no 5H / 7D usage, so the wall bars are left off
   }
   get theme(){return this.host.frameTheme||this.host.theme;}
   get env(){return this.host.env;}
@@ -1697,6 +1698,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
   const KIND_LABEL=new Map([['shell','Chạy lệnh'],['edit','Sửa code'],['read','Đọc code'],['web','Tra web'],['agent','Giao sub-agent'],['mcp','Công cụ MCP'],['other','Việc khác'],['none','—']]);
   const SHARE_LABEL=new Map([['kin','Kín'],['co-ban','Cơ bản']]);
   const BUSY=new Set(['working','thinking','talking']);
+  const releaseCanvas=sc=>{sc.canvas.width=sc.canvas.height=0;sc.k=null;sc.lod=null;};
   const okColor=c=>typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c)?c:'#8b8fa3';
   const clip=(s,n)=>{s=String(s==null?'':s);return s.length>n?s.slice(0,n-1)+'…':s;};
   const zFit=(sw,sh)=>Math.min(sw,sh*LW/FH);// island top fills the stage, like the local page
@@ -1746,9 +1748,12 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       this.setWorldCanvas=el=>{this.worldCanvas=el;};this.setMinimap=el=>{this.minimapEl=el;};
       const w=this.world,parse=e=>{try{const d=JSON.parse(e.data);return d&&typeof d==='object'?d:null;}catch(_){return null;}};
       const es=new EventSource('/api/world/stream');w.es=es;
-      es.onopen=()=>{w.conn='ok';};es.onerror=()=>{w.conn='error';};
+      es.onopen=()=>{w.conn='ok';};
+      // A dropped connection retries by itself; a refused one (401/403: signed out, expired, banned) closes for good.
+      es.onerror=()=>{if(es.readyState===EventSource.CLOSED)this.worldEnded();else w.conn='error';};
       es.addEventListener('world',e=>{const d=parse(e);if(d)this.worldMeta(d);});
-      es.addEventListener('island',e=>{const d=parse(e);if(!d||typeof d.id!=='string')return;
+      es.addEventListener('island',e=>{const d=parse(e);if(!d||typeof d.id!=='string'||w.conn==='ended')return;
+        if(w.metaSeen&&!w.islands.some(i=>i.id===d.id))return;// not (or no longer) in the world list
         let sc=w.scenes.get(d.id);if(!sc){sc=new IslandScene(this,d.id);w.scenes.set(d.id,sc);}
         sc.sync(Array.isArray(d.sessions)?d.sessions.filter(s=>s&&typeof s.id==='string'):[]);});
       es.addEventListener('remove',e=>{const d=parse(e);if(!d||typeof d.id!=='string')return;
@@ -1758,11 +1763,21 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     worldMeta(d){
       const w=this.world;
       w.islands=(Array.isArray(d.islands)?d.islands:[]).filter(i=>i&&typeof i.id==='string');
-      w.viewers=Number.isFinite(d.viewers)?d.viewers:0;
+      w.viewers=Number.isFinite(d.viewers)?d.viewers:0;w.metaSeen=true;
       const ids=new Set(w.islands.map(i=>i.id));
       for(const id of[...w.scenes.keys()])if(!ids.has(id))w.scenes.delete(id);
       for(const i of w.islands)if(!w.scenes.has(i.id))w.scenes.set(i.id,new IslandScene(this,i.id));
       this.relayout();
+    },
+    // The stream was refused for good: drop everything shown, then reload if the hub no longer says world mode
+    // (signed out: the hub sends the login page), else offer to sign in again.
+    worldEnded(){
+      const w=this.world;if(w.conn==='ended')return;
+      w.conn='ended';w.es&&w.es.close();w.scenes.clear();w.islands=[];w.pos=new Map();w.viewers=0;
+      this.setState({sel:null,selIsland:null});
+      fetch('/api/config',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}})
+        .then(r=>r.status===200&&/^application\/json\b/i.test(r.headers.get('content-type')||'')?r.json():null)
+        .then(cfg=>{if(!cfg||cfg.mode!=='world')location.reload();}).catch(()=>{});
     },
     myIsland(){const w=this.world,id=w.me.islandId;return id?w.islands.find(i=>i.id===id)||null:null;},
     // Layout is index based (a removed island moves the later ones); the camera tweens to the new places.
@@ -1829,6 +1844,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
         let k=lod==='mid'?MID_K:lod==='thumb'?THUMB_K:Math.min(4,Math.max(0.5,r.w*dpr/LW));
         if(lod==='full'&&moving)k=sc.lod==='full'?sc.lodK:Math.max(MID_K,sc.lodK);
         const age=now-sc.drawnAt,stale=sc.lod!==lod||sc.lodK!==k;
+        if(sc.lod==='full'&&lod!=='full')releaseCanvas(sc);// a full-detail canvas can be ~20 MB; a smaller one is made at once
         if(lod==='full')it.redraw={k,lod,force:true};
         else if(stale||age>=(lod==='mid'?MID_MS:THUMB_MS)){it.redraw={k,lod};due.push(it);}
       }
@@ -1836,7 +1852,9 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const budget=shown.some(it=>it.vis&&it.redraw&&it.redraw.force)?1:REDRAWS_PER_FRAME;
       due.sort((a,b)=>a.sc.drawnAt-b.sc.drawnAt).slice(budget).forEach(it=>{if(it.sc.k!=null)it.redraw=null;});
       // Islands not drawn (off screen, or other islands in "Của tôi") still walk, a few times a second.
-      for(const sc of w.scenes.values())if(!drawn.has(sc.id)&&now-sc.simAt>=OFF_MS){const d=Math.min(1,(now-(sc.simAt||now))/1000);sc.simAt=now;if(d>0)sc.frame(d);}
+      // Their backing canvas is let go; the next draw makes a new one.
+      for(const sc of w.scenes.values())if(!drawn.has(sc.id)){if(sc.k!=null)releaseCanvas(sc);
+        if(now-sc.simAt>=OFF_MS){const d=Math.min(1,(now-(sc.simAt||now))/1000);sc.simAt=now;if(d>0)sc.frame(d);}}
       const selIsl=this.state.selIsland,sel=this.state.sel,labels=[];
       shown.forEach((it,i)=>{if(!it.vis)return;const sc=it.sc,r=it.r;
         if(it.redraw){sc.lodK=it.redraw.k;sc.lod=it.redraw.lod;sc.state.sel=selIsl===sc.id?sel:null;sc.draw(t);sc.drawnAt=now;}
@@ -1948,8 +1966,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const w=this.world,{showSettings}=this.state,mine=this.myIsland(),online=w.islands.filter(i=>i.online!==false).length;
       const pad={paddingLeft:'max(16px, env(safe-area-inset-left, 0px))',paddingRight:'max(16px, env(safe-area-inset-right, 0px))'};
       const hdrCtl={padding:'4px 10px',fontSize:11};
-      const connCol=w.conn==='ok'?'#46a758':w.conn==='error'?'#e5484d':'#f5a524';
-      const connText=w.conn==='ok'?'Đã kết nối':w.conn==='error'?'Mất kết nối, đang thử lại':'Đang kết nối';
+      const connCol=w.conn==='ok'?'#46a758':w.conn==='error'||w.conn==='ended'?'#e5484d':'#f5a524';
+      const connText=w.conn==='ok'?'Đã kết nối':w.conn==='error'?'Mất kết nối, đang thử lại':w.conn==='ended'?'Phiên đã hết':'Đang kết nối';
       const tab=(v,label)=>h('button',{key:v,className:'btn'+(w.view===v?' btn-active':''),style:hdrCtl,'aria-pressed':w.view===v,onClick:()=>this.setView(v)},label);
       return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:8,paddingTop:12,paddingBottom:12,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
         h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'8px 16px'}},
@@ -1967,7 +1985,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
           h('canvas',{ref:this.setBack,style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:0,display:'block'}}),
           h('canvas',{ref:this.setWorldCanvas,onClick:e=>this.onWorldClick(e),style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:1,display:'block'}}),
           h('canvas',{ref:this.setFront,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:2,pointerEvents:'none',display:'block'}}),
-          w.view==='all'&&h('canvas',{ref:this.setMinimap,width:168,height:110,'aria-label':'Bản đồ nhỏ',onClick:e=>this.onMinimapClick(e),
+          w.view==='all'&&w.conn!=='ended'&&h('canvas',{ref:this.setMinimap,width:168,height:110,'aria-label':'Bản đồ nhỏ',onClick:e=>this.onMinimapClick(e),
             style:{position:'absolute',zIndex:5,left:12,bottom:12,width:168,height:110,border:'2px solid var(--border)',cursor:'pointer'}}),
           this.worldPanel(mine),
           h('button',{className:'settings-toggle','aria-label':'Cài đặt',title:'Cài đặt: tốc độ, thời tiết',onClick:()=>this.setState(p=>({showSettings:!p.showSettings}))},'⚙'),
@@ -1976,6 +1994,10 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     },
     worldPanel(mine){
       const w=this.world,{sel,selIsland}=this.state;
+      if(w.conn==='ended')return h('div',{style:PANEL},
+        h('div',{style:TITLE},'Phiên đã hết'),
+        h('span',{style:{lineHeight:1.5}},'Hub đã ngắt luồng dữ liệu (đăng xuất, hết hạn hoặc bị chặn).'),
+        h('a',{href:'/auth/login',className:'btn btn-accent',style:{textAlign:'center',textDecoration:'none'}},'Đăng nhập lại'));
       const close=h('button',{className:'btn',onClick:()=>this.setState({sel:null,selIsland:null}),style:{width:28,height:28,padding:0,flex:'none'}},'×');
       const sc=selIsland&&w.scenes.get(selIsland),meta=selIsland&&w.islands.find(i=>i.id===selIsland);
       const a=sc&&sel!=null&&sc.byId(sel);
