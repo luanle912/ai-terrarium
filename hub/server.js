@@ -30,7 +30,7 @@ function createHub(config, deps = {}) {
   };
   const db = openDb(config.dbPath);
   // In-memory world: island snapshots never touch disk or logs. publish.js listens through ctx.onWorldChange.
-  const ctx = { config, db, deps: d, limiters: null, world: null, closers: [], onWorldChange: null, helpers: null };
+  const ctx = { config, db, deps: d, streamLimits: { perUser: 5, total: 300, ...(deps.streamLimits || {}) }, limiters: null, world: null, closers: [], onWorldChange: null, helpers: null };
   const world = createWorld({ now: d.now, onChange: (e) => { if (ctx.onWorldChange) ctx.onWorldChange(e); } });
   // Token buckets per spec S14 (rate is tokens/second). Keys are chosen by the route that uses them.
   const limiters = {
@@ -38,6 +38,7 @@ function createHub(config, deps = {}) {
     deviceToken: createLimiter({ rate: 1 / 5, burst: 1 }), // key: device_code hash
     publish: createLimiter({ rate: 4, burst: 8 }), // key: device id
     login: createLimiter({ rate: 30 / 3600, burst: 30 }), // key: IP
+    general: createLimiter({ rate: 2, burst: 120 }), // key: IP; every route without ownLimit (120 a minute)
   };
   ctx.limiters = limiters;
   ctx.jwks = createJwks({ fetch: d.fetch, now: d.now });
@@ -47,8 +48,18 @@ function createHub(config, deps = {}) {
   ctx.accounts = createAccounts(ctx);
   ctx.googleCheck = createGoogleCheck(ctx);
 
-  const routes = [...ROUTE_MODULES, ...(deps.routeModules || [])].flatMap((m) => m(ctx));
-  const server = http.createServer(createRouter(routes, { log: d.log, now: d.now }));
+  // Routes with their own limiter (ownLimit) are exempt; every other route shares the per-IP general bucket.
+  const limitGeneral = (r) => (r.ownLimit ? r : {
+    ...r,
+    handler(req, res, rc) {
+      if (!limiters.general.take(ctx.helpers.clientIp(req), d.now())) {
+        return send(res, 429, 'too many requests', { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '30' });
+      }
+      return r.handler(req, res, rc);
+    },
+  });
+  const routes = [...ROUTE_MODULES, ...(deps.routeModules || [])].flatMap((m) => m(ctx)).map(limitGeneral);
+  const server = http.createServer(createRouter(routes, { log: d.log, now: d.now, hsts: config.secure }));
 
   const setTimer = deps.setInterval || setInterval; // injectable so tests can check unref/clear
   const clearTimer = deps.clearInterval || clearInterval;
