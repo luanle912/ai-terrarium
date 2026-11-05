@@ -980,7 +980,6 @@ globalThis.SkyLogic={stepSnow,stairs,canCross,lawnWalk,lawnPaths,cheapestPath,GR
 // other islands come or go. On a phone the centre is a full-width card on top and the ring is two columns below it.
 // Moving between views is covered by two cloud bands: close in 350 ms, hold 100 ms, open in 400 ms. With reduced
 // motion it is a 200 ms cross-fade instead. All rects are in stage px, h = w * ISLAND_ASPECT.
-// The older world-camera functions (layout ... toScreen) stay until Task 5 because world-view still uses them.
 globalThis.WorldLogic = (() => {
   const SLOTS = 8, PHONE_MAX_W = 520, CENTRE_SCALE = 1.4, HOVER_LIFT = 6, GUTTER = 12
   const CLOUD_IN_MS = 350, CLOUD_HOLD_MS = 100, CLOUD_OUT_MS = 400, CLOUD_MS = 850, FADE_MS = 200
@@ -1060,38 +1059,7 @@ globalThis.WorldLogic = (() => {
   }
   const canNavigate = (trans, nowMs, reduced) => !trans || cloudPhase(nowMs - trans.start, reduced).done
 
-  const SPACING = 1.15        // removed in Task 5: minimum centre distance, in island widths
   const ISLAND_ASPECT = 0.62  // island height / width
-  const GOLDEN = 2.399963229728653
-  // My island at (0,0), the others in array order along a spiral, each at the first spot clear of those already placed.
-  function layout(islands, meId) { // removed in Task 5
-    const out = new Map()
-    const placed = []
-    const mine = islands.find((i) => i.id === meId)
-    if (mine) { out.set(mine.id, { x: 0, y: 0 }); placed.push({ x: 0, y: 0 }) }
-    else placed.push({ x: 0, y: 0 }) // keep the centre free when my island is not (yet) in the list
-    let k = 1
-    for (const isl of islands) {
-      if (isl === mine || out.has(isl.id)) continue
-      for (;; k++) {
-        const r = 0.6 * Math.sqrt(k), a = k * GOLDEN
-        const p = { x: r * Math.cos(a), y: r * Math.sin(a) }
-        if (placed.every((q) => Math.hypot(q.x - p.x, q.y - p.y) >= SPACING - 1e-9)) {
-          out.set(isl.id, p); placed.push(p); k++
-          break
-        }
-      }
-    }
-    return out
-  }
-  // Level of detail from an island's on-screen width.
-  const THUMB_PX = 130 // removed in Task 5
-  const lodFor = /* removed in Task 5 */ (screenW, stageW) => (screenW >= 0.5 * stageW ? 'full' : screenW >= THUMB_PX ? 'mid' : 'thumb')
-
-  // Redraw budget: of the islands due for a redraw, take the `budget` that have waited longest.
-  // Never-drawn islands carry drawnAt = -Infinity and queue like the rest (no exemption).
-  const pickRedraws = /* removed in Task 5 */ (due, budget) =>
-    new Set([...due].sort((a, b) => a.drawnAt - b.drawnAt).slice(0, Math.max(0, budget)).map((d) => d.id))
 
   // Public session view (hub payload) -> the shape the island renderer takes.
   const clientSessions = (publicSessions) => {
@@ -1105,30 +1073,8 @@ globalThis.WorldLogic = (() => {
     }
     return out
   }
-  // rect = {x, y, w, h} in stage px; true when any part is on the stage.
-  const visible = /* removed in Task 5: visible, toScreen, toWorld, fitAll, focusOn, camStep */ (r, stageW, stageH) => r.x + r.w > 0 && r.y + r.h > 0 && r.x < stageW && r.y < stageH
-  const toScreen = (cam, wx, wy, stageW, stageH) => ({ x: (wx - cam.x) * cam.z + stageW / 2, y: (wy - cam.y) * cam.z + stageH / 2 })
-  const toWorld = (cam, px, py, stageW, stageH) => ({ x: (px - stageW / 2) / cam.z + cam.x, y: (py - stageH / 2) / cam.z + cam.y })
-  // Camera showing every island with a little sky around, never closer than a single focused island.
-  function fitAll(positions, stageW, stageH) {
-    const ps = [...positions.values()]
-    if (!ps.length) return focusOn({ x: 0, y: 0 }, stageW, stageH)
-    const x0 = Math.min(...ps.map((p) => p.x)) - 0.5, x1 = Math.max(...ps.map((p) => p.x)) + 0.5
-    const y0 = Math.min(...ps.map((p) => p.y)) - ISLAND_ASPECT / 2, y1 = Math.max(...ps.map((p) => p.y)) + ISLAND_ASPECT / 2
-    const z = Math.min(0.9 * stageW / (x1 - x0), 0.9 * stageH / (y1 - y0), focusOn({ x: 0, y: 0 }, stageW, stageH).z)
-    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z }
-  }
-  // Camera with one island centred and filling most of the stage.
-  const focusOn = (pos, stageW, stageH) => ({ x: pos.x, y: pos.y, z: Math.min(0.7 * stageW, 0.8 * stageH / ISLAND_ASPECT) })
-  // One frame of exponential approach to goal (~99 % of the way in 0.4 s), snapping once within half a pixel.
-  function camStep(cam, goal, dt) {
-    const k = 1 - Math.exp(-11.5 * dt)
-    const n = { x: cam.x + (goal.x - cam.x) * k, y: cam.y + (goal.y - cam.y) * k, z: cam.z + (goal.z - cam.z) * k }
-    const close = Math.abs(goal.z - n.z) < 0.5 && Math.hypot(goal.x - n.x, goal.y - n.y) * goal.z < 0.5
-    return close ? { x: goal.x, y: goal.y, z: goal.z } : n
-  }
   return { SLOTS, PHONE_MAX_W, CENTRE_SCALE, HOVER_LIFT, GUTTER, CLOUD_IN_MS, CLOUD_HOLD_MS, CLOUD_OUT_MS, CLOUD_MS, FADE_MS, skyLayout, skyHit, easeInOut, cloudPhase, cloudBands, canNavigate,
-    SPACING, ISLAND_ASPECT, THUMB_PX, layout, lodFor, pickRedraws, clientSessions, visible, fitAll, focusOn, camStep, toWorld, toScreen }
+    ISLAND_ASPECT, clientSessions }
 })()
 </script>
 <script id="sky-render">
@@ -3480,20 +3426,95 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
 </script>
 <script id="world-view">
 // World mode: the page is served by a hub (GET /api/config says mode 'world'). Every island is an IslandScene fed by
-// /api/world/stream and drawn into its own canvas at a level of detail (WorldLogic.lodFor), then stamped onto one
-// stage-sized canvas between the sky and the weather. "Toàn cảnh" shows every island, "Của tôi" only mine.
+// /api/world/stream. "Toàn cảnh" is the 8-slot sky (WorldLogic.skyLayout): my island in the centre, the other seven
+// slots in a ring around it, each a small pixel-art island (drawSimpleIsland) rather than the full scene. "Của tôi"
+// and an island opened from the sky draw that one island in full. There is no world camera: no drag, zoom or minimap.
 (function(){
   const VIEW_KEY='ai-terrarium.view';
-  const MID_MS=100,THUMB_MS=2000,OFF_MS=250,REDRAWS_PER_FRAME=2,THUMB_K=0.25,MID_K=1,OFFLINE_ALPHA=0.65;
+  const OFF_MS=250,OFFLINE_ALPHA=0.65,ME_PROBE_MS=10000;
   const KIND_LABEL=new Map([['shell','Chạy lệnh'],['edit','Sửa code'],['read','Đọc code'],['web','Tra web'],['agent','Giao sub-agent'],['mcp','Công cụ MCP'],['other','Việc khác'],['none','—']]);
   const SHARE_LABEL=new Map([['kin','Kín'],['co-ban','Cơ bản']]);
   const BUSY=new Set(['working','thinking','talking']);
-  // Lets go of a full-detail canvas (~20 MB at k=4). Mid and thumbnail canvases are small and kept, so coming back to
-  // them needs no redraw. An island left without a canvas goes to the front of the redraw queue.
+  // Lets go of a full-detail canvas (~20 MB at k=4); the next full draw makes a new one.
   const releaseCanvas=sc=>{sc.canvas.width=sc.canvas.height=0;sc.k=null;sc.lod=null;sc.drawnAt=-Infinity;};
   const okColor=c=>typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c)?c:'#8b8fa3';
   const clip=(s,n)=>{s=String(s==null?'':s);return s.length>n?s.slice(0,n-1)+'…':s;};
   const zFit=(sw,sh)=>Math.min(sw,sh*LW/FH);// island top fills the stage, like the local page
+  const validSlot=s=>Number.isInteger(s)&&s>=0&&s<WorldLogic.SLOTS;
+  // How many sessions of an island are at work, and whether one waits for approval or for another session.
+  const tally=sc=>{let busy=0,alert=false;if(sc)for(const s of sc.raw.values()){if(BUSY.has(s.status))busy++;else if(s.status==='permission'||s.status==='waiting')alert=true;}return{busy,alert};};
+
+  // ---- simple islands for "Toàn cảnh" ----
+  // Each is painted once into an ART_W x ART_H canvas (one art pixel = one canvas pixel) and stamped at a whole number
+  // of device pixels per art pixel with smoothing off, so edges stay crisp at any devicePixelRatio. The art follows the
+  // scene's look: 2:1 isometric, three flat shades per block (top, left 12 % darker, right 30 % darker), 1 px outline.
+  // Island: grass diamond, an earth-and-stone underside tapering to the front corner, one office block roofed in the
+  // island colour with six windows (one lit per session at work, at most six), two trees, a path, a gold pennant on mine.
+  const ART_W=88,ART_H=59,LABEL_H=26,ISL={cx:44,cy:26,hw:40},BLD={cx:42,cy:24,hw:14,h:12};
+  const OUTLINE='#141a26',GOLD='#ffd166';
+  const ART=new Map();
+  const art=(key,paint)=>{let c=ART.get(key);if(c)return c;if(ART.size>=96)ART.clear();
+    c=document.createElement('canvas');c.width=ART_W;c.height=ART_H;paint(c.getContext('2d',{willReadFrequently:true}));ART.set(key,c);return c;};
+  const px1=(g,c,x,y,w,hh)=>{g.fillStyle=c;g.fillRect(x,y,w||1,hh||1);};
+  // A 2:1 diamond centred on (cx, cy) with half-width hw: rows grow 4 px wider to the middle, then shrink.
+  // rim lights the two back edges.
+  const diamond=(g,cx,cy,hw,col,rim)=>{const hh=hw/2;
+    for(let r=0;r<2*hh;r++){const half=r<hh?2*(r+1):2*(2*hh-r),y=cy-hh+r;px1(g,col,cx-half,y,2*half,1);
+      if(rim&&r<hh){px1(g,rim,cx-half,y,2,1);px1(g,rim,cx+half-2,y,2,1);}}};
+  // The columns of the two front faces under a diamond: fn(x, last row of the diamond there, left face?, i), where i
+  // counts columns out from the front corner (1 at the corner).
+  const faceCols=(cx,cy,hw,fn)=>{const hh=hw/2;
+    for(let x=cx-hw;x<cx+hw;x++){const left=x<cx,i=left?cx-x:x-cx+1;fn(x,cy+hh-Math.ceil(i/2),left,i);}};
+  const hash=(x,s)=>{const v=Math.sin(x*127.1+s*311.7)*43758.5453;return v-Math.floor(v);};
+  // Every clear pixel next to a solid one becomes the outline (a sprite outline that follows any silhouette);
+  // dashed keeps every other run of three columns.
+  const outline=(g,col,dashed)=>{const a=g.getImageData(0,0,ART_W,ART_H).data,solid=(x,y)=>x>=0&&y>=0&&x<ART_W&&y<ART_H&&a[(y*ART_W+x)*4+3]>=24;
+    g.fillStyle=col;
+    for(let y=0;y<ART_H;y++)for(let x=0;x<ART_W;x++){if(solid(x,y)||(dashed&&Math.floor(x/3)%2))continue;
+      if(solid(x-1,y)||solid(x+1,y)||solid(x,y-1)||solid(x,y+1))g.fillRect(x,y,1,1);}};
+  const tree=(g,x,y,df)=>{const N=SkyRender.night,leaf=N('#3e9a45',df);
+    px1(g,'rgba(0,0,0,0.2)',x-3,y,6,1);px1(g,N('#6b4a2a',df),x,y-3,1,3);
+    px1(g,leaf,x-2,y-7,5,4);px1(g,SkyRender.mix(leaf,'#000000',0.18),x+1,y-7,2,4);px1(g,N('#57b85a',df),x-1,y-8,3,1);};
+  function paintIsland(g,color,df,lit,mine){
+    const N=SkyRender.night,M=SkyRender.mix,{cx,cy,hw}=ISL,b=BLD;
+    // underside: two rows of grass edge, three of earth, then stone, deepest (and a little ragged) at the front corner
+    faceCols(cx,cy,hw,(x,y0,left,i)=>{const d=2+Math.round(9*Math.pow(1-(i-1)/hw,1.2))+(i>3&&i<hw-4&&hash(x,1)>0.6?1:0);
+      for(let j=0;j<d;j++){const base=j<2?(left?'#3f7f33':'#356c2b'):j<5?'#8a5a36':j<9?'#7a7a84':'#5f6070';
+        px1(g,N(j<2?base:M(base,'#000000',left?0.12:0.3),df),x,y0+1+j);}});
+    diamond(g,cx,cy,hw,N('#5fae4b',df),N('#7cc65f',df));
+    for(const[fx,fy,fc]of[[-14,9,GOLD],[9,12,'#ff8fab'],[-30,2,'#ffffff'],[27,2,GOLD],[-6,-9,'#ffffff'],[-20,8,'#ff8fab']])px1(g,N(fc,df),cx+fx,cy+fy);
+    // the path runs from the door, square to the office's right face
+    for(let k=0;k<6;k++)px1(g,N(k%2?'#bdb6aa':'#c9c3b8',df),b.cx+8+2*k,b.cy+4+k,2,1);
+    tree(g,cx-24,cy+1,df);
+    const wall=N('#efe9dc',df),roof=N(color,df),glass=N('#33415e',df);
+    const WIN=[[false,7],[true,7],[false,2],[true,2],[false,12],[true,12]];// lit in this order, right face first
+    faceCols(b.cx,b.cy-b.h,b.hw,(x,y0,left,i)=>{
+      for(let j=0;j<b.h;j++)px1(g,M(j<2?roof:wall,'#000000',(left?0.12:0.3)+(j<2?0.12:0)),x,y0+1+j);
+      const wi=WIN.findIndex(([l,c])=>l===left&&(i===c||i===c+1));
+      if(wi>=0)for(let j=4;j<7;j++)px1(g,wi<lit?GOLD:M(glass,'#000000',left?0:0.2),x,y0+1+j);
+      if(!left&&(i===7||i===8))for(let j=8;j<b.h;j++)px1(g,N('#5c4330',df),x,y0+1+j);});
+    diamond(g,b.cx,b.cy-b.h,b.hw,roof,M(roof,'#ffffff',0.3));
+    if(mine){const y=b.cy-b.h-10;px1(g,'#3b4058',b.cx,y,1,10);px1(g,GOLD,b.cx+1,y,4,1);px1(g,GOLD,b.cx+1,y+1,3,1);px1(g,GOLD,b.cx+1,y+2,2,1);}
+    tree(g,cx+21,cy+8,df);
+    outline(g,SkyRender.mix(OUTLINE,'#3a4766',1-df),false);// lighter at night, so islands keep their edge on a dark sky
+  }
+  // A place with no island: a see-through diamond with a dashed outline; the viewer's place-to-be ("yours") is gold.
+  function paintTile(g,kind){
+    const yours=kind==='yours',{cx,cy,hw}=ISL;
+    faceCols(cx,cy,hw,(x,y0,left)=>px1(g,yours?'rgba(255,209,102,0.14)':left?'rgba(16,20,30,0.14)':'rgba(16,20,30,0.22)',x,y0+1,1,2));
+    diamond(g,cx,cy,hw,yours?'rgba(255,209,102,0.2)':'rgba(16,20,30,0.18)',yours?'rgba(255,209,102,0.4)':'rgba(255,255,255,0.14)');
+    outline(g,yours?GOLD:kind==='full'?'rgba(200,208,222,0.8)':'rgba(236,242,250,0.85)',true);
+  }
+  // Lines of text on a dark plate in the island-label style, centred on (x, y) in stage px: lines = [[text, font, colour]].
+  function plate(ctx,x,y,lines,border,alpha){
+    ctx.save();let wd=0;for(const[s,f]of lines){ctx.font=f;wd=Math.max(wd,ctx.measureText(s).width);}
+    const lh=15,pw=Math.ceil(wd+20),ph=lines.length*lh+8,px=Math.round(x-pw/2),py=Math.round(y-ph/2);
+    ctx.fillStyle='rgba(16,20,30,'+(alpha||0.82)+')';ctx.fillRect(px,py,pw,ph);
+    if(border){ctx.strokeStyle=border;ctx.lineWidth=1;ctx.strokeRect(px+0.5,py+0.5,pw-1,ph-1);}
+    ctx.textBaseline='middle';ctx.textAlign='center';
+    lines.forEach(([s,f,c],i)=>{ctx.font=f;ctx.fillStyle=c;ctx.fillText(s,px+pw/2,py+4+lh*i+lh/2+1);});
+    ctx.restore();
+  }
   const PANEL={position:'absolute',zIndex:10,top:12,right:12,width:300,maxWidth:'calc(100% - 24px)',maxHeight:'calc(100% - 68px)',overflowY:'auto',boxSizing:'border-box',background:'var(--surface)',border:'3px solid var(--fg)',boxShadow:'6px 6px 0 rgba(0,0,0,0.45)',padding:14,display:'flex',flexDirection:'column',gap:12,fontSize:12};
   const TITLE={fontFamily:"'Pixelify Sans',monospace",fontSize:17,fontWeight:600,color:'#ffffff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'};
   const MUTED={fontSize:10,color:'var(--muted)'};
@@ -3558,17 +3579,17 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     startWorld(cfg){
       let view='all';try{const v=this.storage&&this.storage.getItem(VIEW_KEY);if(v==='mine'||v==='all')view=v;}catch(_){}
       if(this.world){clearTimeout(this.world.meTimer);clearTimeout(this.world.waitTimer);}// "Thử lại" starts a fresh world
-      this.world={me:cfg.me,csrf:typeof cfg.csrf==='string'?cfg.csrf:'',islands:[],scenes:new Map(),pos:new Map(),viewers:0,conn:'connecting',view,cam:null,goal:null,user:false,zoomAt:0,sw:0,sh:0,mmAt:0,
-        dead:false,errAt:0,mine:null,meErr:false,meSeq:0,draft:null,confirm:null};
+      this.world={me:cfg.me,csrf:typeof cfg.csrf==='string'?cfg.csrf:'',islands:[],scenes:new Map(),viewers:0,capacity:WorldLogic.SLOTS,conn:'connecting',view,focus:null,hover:null,sw:0,sh:0,sky:null,
+        dead:false,errAt:0,mine:null,meErr:false,meSeq:0,draft:null,confirm:null,seen:new Set(),meProbeAt:0};
       this.setState({sel:null,selIsland:null,live:'off'});
-      // The pointer handlers bound at mount drive the local camera; the world has its own, bound to the world stage
-      // element when React mounts it (the local stage element goes away).
-      const swap=[['wheel','onWheel',{passive:false}],['pointerdown','onDown'],['pointermove','onDrag'],['pointerup','onUp'],['pointercancel','onUp']];
-      const bind=(el,on)=>{if(el)for(const[ev,k,o]of swap)on?el.addEventListener(ev,this[k],o):el.removeEventListener(ev,this[k]);};
-      bind(this.stageEl,false);
-      this.onWheel=e=>this.worldWheel(e);this.onDown=e=>this.worldDown(e);this.onDrag=e=>this.worldDrag(e);this.onUp=e=>this.worldUp(e);
-      this.setWorldStage=el=>{if(this.stageEl===el)return;bind(this.stageEl,false);this.stageEl=el;bind(el,true);};
-      this.setWorldCanvas=el=>{this.worldCanvas=el;};this.setMinimap=el=>{this.minimapEl=el;};
+      // The pointer handlers bound at mount drive the local camera; the world has none of it (no drag, no zoom).
+      // Hover and clicks go to a scroller over the canvases, which on a phone also scrolls the sky.
+      const st=this.stageEl;
+      if(st&&!this.setWorldStage)for(const[ev,k]of[['wheel','onWheel'],['pointerdown','onDown'],['pointermove','onDrag'],['pointerup','onUp'],['pointercancel','onUp']])st.removeEventListener(ev,this[k]);
+      this.setWorldStage=el=>{this.stageEl=el;};
+      this.setWorldCanvas=el=>{this.worldCanvas=el;};
+      this.setWorldScroller=el=>{this.worldScroller=el;};this.setWorldSpacer=el=>{this.worldSpacer=el;};
+      if(!this.onWorldHover)this.onWorldHover=e=>this.worldHover(e);
       const w=this.world,parse=e=>{try{const d=JSON.parse(e.data);return d&&typeof d==='object'?d:null;}catch(_){return null;}};
       const es=new EventSource('/api/world/stream');w.es=es;
       es.onopen=()=>{if(!w.dead){w.conn='ok';w.errAt=0;this.worldStalls=0;}};
@@ -3586,10 +3607,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       es.addEventListener('remove',e=>{const d=parse(e);if(!d||typeof d.id!=='string'||w.dead)return;
         const sc=w.scenes.get(d.id);if(sc)releaseCanvas(sc);
         w.scenes.delete(d.id);w.islands=w.islands.filter(i=>i.id!==d.id);
-        // The island in focus went away (an owner removed it): back to the whole sky, so a neighbour does not
-        // slide into its place.
-        if(this.state.selIsland===d.id)w.user=false;
-        this.relayout();this.dropGone();});
+        this.dropGone();});
       // "Của tôi" polls only while the tab is visible, and refreshes once when it becomes visible again.
       const tick=()=>{if(this.world!==w)return;
         if(w.view==='mine'&&!w.dead&&document.visibilityState==='visible')this.loadMe();
@@ -3609,17 +3627,22 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const w=this.world,has=id=>w.islands.some(i=>i.id===id);
       if(w.confirm&&w.confirm.kind==='remove'&&!has(w.confirm.id)){clearTimeout(w.confirm.timer);w.confirm=null;this.forceUpdate();}
       if(this.state.selIsland!=null&&!has(this.state.selIsland))this.setState({sel:null,selIsland:null});
+      if(w.view==='one'&&!has(w.focus))this.navigate({view:'all'});
     },
     worldMeta(d){
       const w=this.world;
-      w.islands=(Array.isArray(d.islands)?d.islands:[]).filter(i=>i&&typeof i.id==='string');
+      // Only islands with a slot 0-7 have a place in the sky (an older hub sends none: nothing is shown).
+      w.islands=(Array.isArray(d.islands)?d.islands:[]).filter(i=>i&&typeof i.id==='string'&&validSlot(i.slot));
       w.viewers=Number.isFinite(d.viewers)?d.viewers:0;
+      w.capacity=Number.isInteger(d.capacity)&&d.capacity>0?d.capacity:WorldLogic.SLOTS;
+      // Without an island of my own, an island never seen before may be mine (just paired on another tab): ask
+      // /api/me, at most once every ME_PROBE_MS, so the centre turns from "chỗ của bạn" into my island by itself.
+      const fresh=w.islands.some(i=>!w.seen.has(i.id));for(const i of w.islands)w.seen.add(i.id);
+      if(fresh&&w.metaSeen&&!this.myIslandId()&&performance.now()-w.meProbeAt>=ME_PROBE_MS){w.meProbeAt=performance.now();this.loadMe();}
       const ids=new Set(w.islands.map(i=>i.id));
       for(const[id,sc]of[...w.scenes])if(!ids.has(id)){releaseCanvas(sc);w.scenes.delete(id);}
       for(const i of w.islands)if(!w.scenes.has(i.id))w.scenes.set(i.id,new IslandScene(this,i.id));
-      const selGone=this.state.selIsland!=null&&!ids.has(this.state.selIsland);
-      if(selGone)w.user=false;
-      this.relayout();this.dropGone();
+      this.dropGone();
       // My island's name, colour or sending state changed (a rename from /me, a device going offline...): the
       // "Của tôi" panel asks /api/me again rather than wait for the next poll.
       const m=this.myIsland(),sig=m?JSON.stringify([m.name,m.color,m.online,m.private,m.share]):'';
@@ -3635,7 +3658,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     worldEnded(refused){
       const w=this.world;if(w.dead)return;
       w.dead=true;w.es&&w.es.close();for(const sc of w.scenes.values())releaseCanvas(sc);
-      w.scenes.clear();w.islands=[];w.pos=new Map();w.viewers=0;
+      w.scenes.clear();w.islands=[];w.viewers=0;w.hover=null;
       if(w.confirm)clearTimeout(w.confirm.timer);w.confirm=null;
       this.setState({sel:null,selIsland:null});
       probeConfig().then(x=>{if(this.world!==w)return;
@@ -3676,8 +3699,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
           w.mine={island,colors:(Array.isArray(d.colors)?d.colors:[]).filter(c=>okColor(c)===c),devices:d.devices.filter(x=>x&&typeof x==='object'&&HEX_ID.test(x.id))};
           w.meErr=false;
           if(!w.draft||!w.draft.dirty||!island)w.draft=island?{name:String(island.name||''),color:island.color,dirty:false}:null;
-          // Pairing or removal since the page loaded moves "my island" (and the layout that puts it first).
-          const id=island?island.id:null;if(id!==w.me.islandId){w.me={...w.me,islandId:id};this.relayout();}})
+          // Pairing or removal since the page loaded moves "my island" (and the sky's centre with it).
+          const id=island?island.id:null;if(id!==w.me.islandId)w.me={...w.me,islandId:id};})
         .catch(()=>{if(this.world===w&&seq===w.meSeq)w.meErr=true;})// keep what was shown
         .then(()=>{if(this.world===w)this.forceUpdate();});
     },
@@ -3717,191 +3740,179 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
         c.busy=false;c.err=status===403&&data&&data.error==='owner_island'?'Không xoá được đảo của owner.':'Không xoá được đảo.';
         this.forceUpdate();});
     },
-    myIsland(){const w=this.world,id=w.me.islandId;return id?w.islands.find(i=>i.id===id)||null:null;},
-    // Layout is index based (a removed island moves the later ones); the camera tweens to the new places.
-    relayout(){const w=this.world;w.pos=WorldLogic.layout(w.islands,w.me.islandId);if(!w.user)w.goal=this.homeCam();},
-    homeCam(){
-      const w=this.world,sw=w.sw,sh=w.sh;if(!(sw>0&&sh>0))return null;
-      if(w.view==='mine')return{x:0,y:0,z:zFit(sw,sh)};
-      return WorldLogic.fitAll(w.pos,sw,sh);
+    // My island: the one /api/me (or the page's config) names, only while the hub lists it in a slot.
+    myIslandId(){const w=this.world,m=w.mine,id=m&&m.island?m.island.id:w.me.islandId;return id&&w.islands.some(i=>i.id===id)?id:null;},
+    mySlot(){const id=this.myIslandId(),m=id&&this.world.islands.find(i=>i.id===id);return m?m.slot:null;},
+    myIsland(){const id=this.myIslandId();return id?this.world.islands.find(i=>i.id===id):null;},
+    // The 8-slot layout for the current islands and stage, remembered until one of its inputs changes.
+    skyNow(){
+      const w=this.world,slots=w.islands.map(i=>i.slot),mine=this.mySlot(),key=slots.join(',')+'|'+mine+'|'+w.sw+'|'+w.sh;
+      if(!w.sky||w.sky.key!==key)w.sky={key,L:WorldLogic.skyLayout(slots,mine,w.sw,w.sh)};
+      return w.sky.L;
     },
-    setView(view){
-      const w=this.world;if(w.view===view)return;w.view=view;w.user=false;w.goal=this.homeCam();
-      try{this.storage&&this.storage.setItem(VIEW_KEY,view);}catch(_){}
-      w.confirm=null;this.setState({sel:null,selIsland:null});
+    // Moves between "Toàn cảnh" ('all'), one island ('one', focus = its id) and "Của tôi" ('mine'). Task 5 switches at
+    // once; the cloud transition goes in here (it will call applyView when the clouds close).
+    navigate(to){
+      const w=this.world;if(!w||w.dead)return;
+      if(w.view===to.view&&(to.view!=='one'||w.focus===to.focus))return;
+      this.applyView(to);
+    },
+    applyView(to){
+      const w=this.world;let view=to.view,focus=view==='one'?to.focus:null;
+      if(view==='one'&&!w.islands.some(i=>i.id===focus)){view='all';focus=null;}// gone meanwhile
+      const was=w.view==='one'?w.focus:w.view==='mine'?this.myIslandId():null,old=was&&w.scenes.get(was);
+      if(old)releaseCanvas(old);
+      w.view=view;w.focus=focus;w.hover=null;
+      if(view!=='one')try{this.storage&&this.storage.setItem(VIEW_KEY,view);}catch(_){}
+      if(w.confirm)clearTimeout(w.confirm.timer);w.confirm=null;
+      this.setState({sel:null,selIsland:focus});
       if(view==='mine'&&!w.dead)this.loadMe();
     },
-    // The islands drawn in the current view, back to front: [{id, meta, sc, p}].
-    shownIslands(){
-      const w=this.world;
-      if(w.view==='mine'){const m=this.myIsland(),sc=m&&w.scenes.get(m.id);return sc?[{id:m.id,meta:m,sc,p:{x:0,y:0}}]:[];}
-      const out=[];for(const m of w.islands){const sc=w.scenes.get(m.id),p=w.pos.get(m.id);if(sc&&p)out.push({id:m.id,meta:m,sc,p});}
-      return out.sort((a,b)=>a.p.y-b.p.y);
-    },
-    // On-screen box of an island's whole canvas (rect) and of its top (focus box), in stage px.
-    islandRect(p){
-      const w=this.world,c=WorldLogic.toScreen(w.cam,p.x,p.y,w.sw,w.sh),s=w.cam.z/LW;
-      return{x:c.x-LW/2*s,y:c.y-FH/2*s,w:w.cam.z,h:LH*s,fh:FH*s,s};
-    },
+    // One island alone, centred and as wide as the local page draws it (no camera).
+    oneIslandRect(sw,sh){const z=zFit(sw,sh),s=z/LW;return{x:(sw-z)/2,y:(sh-FH*s)/2,w:z,h:LH*s,fh:FH*s};},
 
     worldFrame(ts){
       const w=this.world,dt=Math.min(0.05,Math.max(0,(ts-this.last)/1000));this.last=ts;
       this.env=this.envNow();this.frameTheme=this.theme;
-      const st=this.stageEl,sw=st?st.clientWidth:0,sh=st?st.clientHeight:0;
-      if(sw!==w.sw||sh!==w.sh){w.sw=sw;w.sh=sh;if(!w.user||!w.cam)w.goal=this.homeCam();}
-      if(sw>0&&sh>0){
-        if(!w.cam&&w.goal){w.cam=w.goal;w.goal=null;}
-        else if(w.cam&&w.goal){const g=w.goal;w.cam=WorldLogic.camStep(w.cam,g,dt);if(w.cam.x===g.x&&w.cam.y===g.y&&w.cam.z===g.z)w.goal=null;}
-      }
-      this.drawWorld(ts/1000,dt,sw,sh);
+      const st=this.stageEl;w.sw=st?st.clientWidth:0;w.sh=st?st.clientHeight:0;
+      this.drawWorld(ts/1000,dt,w.sw,w.sh);
       this.drawSky(ts/1000);
-      if(ts-w.mmAt>200){w.mmAt=ts;this.drawMinimap();}
     },
     drawWorld(t,dt,sw,sh){
       const w=this.world,cv=this.worldCanvas;if(!cv)return;
       const dpr=window.devicePixelRatio||1,bw=Math.round(sw*dpr),bh=Math.round(sh*dpr);
       if(cv.width!==bw||cv.height!==bh){cv.width=bw;cv.height=bh;}
       const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,sw,sh);
-      const now=performance.now(),shown=w.cam&&sw>0&&sh>0?this.shownIslands():[],drawn=new Set();
-      // A camera still moving keeps the full-detail resolution it had, so the island is not re-baked every frame.
-      const moving=!!w.goal||now-w.zoomAt<150||!!this.drag||!!this.pinchAt;
-      const due=[];let viewed=null,best=Infinity;
-      for(const it of shown){
-        const r=it.r=this.islandRect(it.p);
-        it.vis=WorldLogic.visible(r,sw,sh);if(!it.vis)continue;
-        drawn.add(it.id);
-        it.lod=WorldLogic.lodFor(r.w,sw);
-        // Islands are all the same size on screen, so neighbours of the one in view are "full" too: only the one
-        // nearest the stage centre is drawn at full detail, the others as mid.
-        if(it.lod==='full'){const d=Math.hypot(r.x+r.w/2-sw/2,r.y+r.fh/2-sh/2);if(d<best){best=d;viewed=it;}}
-      }
-      for(const it of shown){
-        if(!it.vis)continue;
-        const r=it.r,sc=it.sc,simDt=Math.min(1,(now-(sc.simAt||now))/1000)||dt;sc.simAt=now;sc.frame(Math.min(0.05,simDt));
-        const lod=it.lod==='full'&&it!==viewed?'mid':it.lod;
-        // Full detail matches the screen pixel for pixel (a plain copy, no scaling) once the camera rests.
-        let k=lod==='mid'?MID_K:lod==='thumb'?THUMB_K:Math.min(4,Math.max(0.5,r.w*dpr/LW));
-        if(lod==='full'&&moving)k=sc.lod==='full'?sc.lodK:Math.max(MID_K,sc.lodK);
-        const age=now-sc.drawnAt,stale=sc.lod!==lod||sc.lodK!==k;
-        if(sc.lod==='full'&&lod!=='full')releaseCanvas(sc);
-        if(lod==='full')it.redraw={k,lod,force:true};
-        // While the camera moves, a mid or thumbnail canvas is kept at the detail it has; it changes once the camera rests.
-        else if(moving&&sc.k!=null&&sc.lod!=='full'){if(age>=(sc.lod==='mid'?MID_MS:THUMB_MS)){it.redraw={k:sc.lodK,lod:sc.lod};due.push(it);}}
-        else if(stale||age>=(lod==='mid'?MID_MS:THUMB_MS)){it.redraw={k,lod};due.push(it);}
-      }
-      // Mid and thumbnail islands share a small per-frame budget, longest-waiting first (one while an island is full
-      // size). Islands without a canvas wait their turn too, and are left out (no label) until it comes.
-      const budget=shown.some(it=>it.vis&&it.redraw&&it.redraw.force)?1:REDRAWS_PER_FRAME;
-      const picked=WorldLogic.pickRedraws(due.map(it=>({id:it.id,drawnAt:it.sc.drawnAt})),budget);
-      for(const it of due)if(!picked.has(it.id))it.redraw=null;
-      // Islands not drawn (off screen, or other islands in "Của tôi") still walk, a few times a second.
-      // Only a full-detail canvas is let go; the next draw makes a new one.
-      for(const sc of w.scenes.values())if(!drawn.has(sc.id)){if(sc.lod==='full')releaseCanvas(sc);
+      if(w.view!=='all')this.setScroll(0);
+      const now=performance.now(),full=sw>0&&sh>0?(w.view==='all'?(this.drawSky8(t,dt,sw,sh),null):this.drawOne(ctx,t,dt,sw,sh,now)):null;
+      // Islands not drawn in full still walk, a few times a second, and hold no full-detail canvas.
+      for(const sc of w.scenes.values())if(sc.id!==full){if(sc.lod==='full')releaseCanvas(sc);
         if(now-sc.simAt>=OFF_MS){const d=Math.min(1,(now-(sc.simAt||now))/1000);sc.simAt=now;if(d>0)sc.frame(d);}}
-      const selIsl=this.state.selIsland,sel=this.state.sel,labels=[];
-      shown.forEach((it,i)=>{if(!it.vis)return;const sc=it.sc,r=it.r;
-        if(it.redraw){sc.lodK=it.redraw.k;sc.lod=it.redraw.lod;sc.state.sel=selIsl===sc.id?sel:null;sc.draw(t);sc.drawnAt=now;}
-        if(sc.k==null)return;
-        const bob=this.env&&this.env.reduced?0:Math.round(Math.sin(t*0.7+i*1.7)*3);
-        ctx.globalAlpha=it.meta.online===false?OFFLINE_ALPHA:1;
-        ctx.imageSmoothingEnabled=r.w<sc.canvas.width/dpr;
-        ctx.drawImage(sc.canvas,r.x,r.y+bob,r.w,r.h);
-        ctx.globalAlpha=1;
-        labels.push({it,x:r.x+r.w/2,y:r.y+bob+r.fh*0.04});
-      });
-      ctx.imageSmoothingEnabled=true;
-      if(w.view==='all'||labels.length)for(const l of labels)this.drawIslandLabel(ctx,l.it,l.x,l.y);
     },
-    // Name, how many are working, a yellow dot when someone waits for approval or another session; 35 % dimmer offline.
-    drawIslandLabel(ctx,it,x,y){
-      const m=it.meta,raw=[...it.sc.raw.values()];
-      const busy=raw.filter(s=>BUSY.has(s.status)).length,alert=raw.some(s=>s.status==='permission'||s.status==='waiting');
-      const name=clip(m.name||'Đảo',24),sub=m.private?'riêng tư':busy+' đang làm'+(m.online===false?' · offline':'');
-      ctx.save();ctx.globalAlpha=m.online===false?OFFLINE_ALPHA:1;
-      ctx.font="600 12px 'JetBrains Mono',monospace";const nw=ctx.measureText(name).width;
-      ctx.font="500 11px 'JetBrains Mono',monospace";const sw_=ctx.measureText(sub).width;
-      const pw=Math.ceil(14+nw+10+sw_+(alert?14:0)+10),ph=22,px=Math.round(x-pw/2),py=Math.round(y-ph-6);
-      ctx.fillStyle='rgba(16,20,30,0.82)';ctx.fillRect(px,py,pw,ph);
+    // "Của tôi" or one island from the sky: the full scene every frame, at the screen's resolution. Returns its id.
+    drawOne(ctx,t,dt,sw,sh,now){
+      const w=this.world,id=w.view==='mine'?this.myIslandId():w.focus,sc=id&&w.scenes.get(id),meta=sc&&w.islands.find(i=>i.id===id);
+      if(!sc||!meta)return null;
+      const dpr=window.devicePixelRatio||1,r=this.oneIslandRect(sw,sh),simDt=Math.min(1,(now-(sc.simAt||now))/1000)||dt;
+      sc.simAt=now;sc.frame(Math.min(0.05,simDt));
+      sc.lodK=Math.min(4,Math.max(0.5,r.w*dpr/LW));sc.lod='full';
+      sc.state.sel=this.state.selIsland===sc.id?this.state.sel:null;sc.draw(t);sc.drawnAt=now;
+      const bob=this.env&&this.env.reduced?0:Math.round(Math.sin(t*0.7)*3);
+      ctx.globalAlpha=meta.online===false?OFFLINE_ALPHA:1;ctx.imageSmoothingEnabled=r.w<sc.canvas.width/dpr;
+      ctx.drawImage(sc.canvas,r.x,r.y+bob,r.w,r.h);
+      ctx.globalAlpha=1;ctx.imageSmoothingEnabled=true;
+      const c=tally(sc);this.drawIslandLabel(ctx,meta,c.busy,c.alert,r.x+r.w/2,r.y+bob+r.fh*0.04);
+      return id;
+    },
+    // "Toàn cảnh": the ring first (top rows first, so lower places overlap upper ones), my place in the centre last.
+    // On a phone the stage scrolls (a spacer as tall as the layout); the canvas stays put and draws shifted up.
+    drawSky8(t,dt,sw,sh){
+      const w=this.world,ctx=this.worldCanvas.getContext('2d'),L=this.skyNow(),sc_=this.worldScroller;
+      const tall=L.phone&&L.height>sh;this.setScroll(tall?L.height:0);
+      const top=tall&&sc_?sc_.scrollTop:0,reduced=!!(this.env&&this.env.reduced),bySlot=new Map();
+      for(const i of w.islands)if(!bySlot.has(i.slot))bySlot.set(i.slot,i);
+      const at=r=>({x:r.x,y:r.y-top,w:r.w,h:r.h}),seen=r=>r.y-top<sh&&r.y-top+r.h>0;
+      const island=(r,meta,mine)=>{const sc=w.scenes.get(meta.id),c=tally(sc);
+        this.drawSimpleIsland(ctx,at(r),meta,{busy:c.busy,alert:c.alert,hover:w.hover===meta.slot,mine,t,reduced});};
+      for(const c of[...L.cells].sort((a,b)=>a.rect.y-b.rect.y)){if(!seen(c.rect))continue;
+        const meta=c.kind==='island'&&bySlot.get(c.slot);
+        if(meta)island(c.rect,meta,false);else this.drawSlotTile(ctx,at(c.rect),'empty');}
+      const C=L.centre;
+      if(seen(C.rect)){const meta=C.kind==='mine'&&bySlot.get(C.slot);
+        if(meta)island(C.rect,meta,true);else this.drawSlotTile(ctx,at(C.rect),C.kind==='mine'?'yours':C.kind,{hover:C.kind==='yours'&&w.hover===C.slot,t,reduced});}
+    },
+    // A content height to scroll through, or 0 for none (back at the top, so hit tests need no offset).
+    setScroll(height){
+      const el=this.worldScroller,sp=this.worldSpacer,ov=height?'auto':'hidden',hs=height?Math.ceil(height)+'px':'100%';
+      if(el&&el.style.overflowY!==ov){el.style.overflowY=ov;if(!height)el.scrollTop=0;}
+      if(sp&&sp.style.height!==hs)sp.style.height=hs;
+    },
+    // Where a simple island (or an empty place) goes inside its rect, in device px: s device px per art px, the art's
+    // top left (ax, ay), and whether its name plate fits under it (else the plate sits over the island's underside).
+    artPlace(rect){
+      const dpr=window.devicePixelRatio||1,W=rect.w*dpr,H=rect.h*dpr;
+      const fit=Math.max(1,Math.floor(Math.min(W/ART_W,H/ART_H))),below=Math.floor(Math.min(W/ART_W,(H-LABEL_H*dpr)/ART_H));
+      const under=below>=1&&below*4>=fit*3,s=under?below:fit,aw=ART_W*s,ah=ART_H*s,block=ah+(under?LABEL_H*dpr:0);
+      return{dpr,s,aw,ah,under,ax:Math.round(rect.x*dpr+(W-aw)/2),ay:Math.round(rect.y*dpr+(H-block)/2)};
+    },
+    // Lift on hover and a ±1 px bob (none with reduced motion), in whole device px.
+    artShift(p,hover,t,slot,reduced){
+      return(hover?-Math.round(WorldLogic.HOVER_LIFT*p.dpr):0)+(reduced?0:Math.round(Math.sin(t*0.7+(slot||0)*1.7))*Math.max(1,Math.round(p.dpr)));
+    },
+    stampArt(ctx,img,p,dy,alpha){
+      ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=alpha;
+      ctx.drawImage(img,p.ax,p.ay+dy,p.aw,p.ah);ctx.restore();
+    },
+    drawSimpleIsland(ctx,rect,meta,{busy,alert,hover,mine,t,reduced}){
+      const df=Math.round((this.env?this.env.df:1)*10)/10,lit=Math.min(6,busy|0),color=okColor(meta.color);
+      const img=art('i'+color+df+lit+(mine?'m':''),g=>paintIsland(g,color,df,lit,!!mine));
+      const p=this.artPlace(rect),dy=this.artShift(p,hover,t,meta.slot,reduced);
+      this.stampArt(ctx,img,p,dy,meta.online===false?OFFLINE_ALPHA:1);
+      // the name plate: under the island when there is room, else over its underside
+      const y=p.under?(p.ay+p.ah+dy)/p.dpr+4+28:Math.min(rect.y+rect.h+4,(p.ay+p.ah+dy)/p.dpr+4);
+      this.drawIslandLabel(ctx,meta,busy,alert,rect.x+rect.w/2,y,hover,rect.w+8);
+    },
+    drawSlotTile(ctx,rect,kind,o){
+      o=o||{};const img=art('t'+kind,g=>paintTile(g,kind)),p=this.artPlace(rect),hover=!!o.hover&&kind==='yours';
+      const dy=kind==='yours'?this.artShift(p,hover,o.t||0,0,o.reduced||kind!=='yours'):0;
+      this.stampArt(ctx,img,p,dy,1);
+      const x=rect.x+rect.w/2,y=(p.ay+(ISL.cy+2)*p.s+dy)/p.dpr;
+      const B="600 12px 'JetBrains Mono',monospace",S="500 10px 'JetBrains Mono',monospace";
+      if(kind==='empty')plate(ctx,x,y,[['chỗ trống',"500 11px 'JetBrains Mono',monospace",'#dfe4ee']],null,0.55);
+      else if(kind==='yours')plate(ctx,x,y,[['chỗ của bạn',B,'#ffffff'],['Bấm để ghép máy',S,GOLD]],hover?'#ffe08f':GOLD);
+      else plate(ctx,x,y,[['Hub đã đủ 8 đảo',B,'#ffffff'],['Nhờ owner xoá bớt',S,'#aab2c5']],'#4a5468');
+    },
+    // Name, how many are working, a yellow dot when someone waits for approval or another session; dimmer offline.
+    // Mine has a gold edge; a hovered one a light edge and a darker plate. Wider than maxW (a narrow phone cell), the
+    // count goes on a second line and the name is shortened to fit.
+    drawIslandLabel(ctx,m,busy,alert,x,y,hover,maxW){
+      const NF="600 12px 'JetBrains Mono',monospace",SF="500 11px 'JetBrains Mono',monospace";
+      let name=clip(m.name||'Đảo',24);const sub=m.private?'riêng tư':busy+' đang làm'+(m.online===false?' · offline':'');
+      ctx.save();ctx.globalAlpha=m.online===false&&!hover?OFFLINE_ALPHA:1;
+      ctx.font=NF;let nw=ctx.measureText(name).width;
+      ctx.font=SF;const sw_=ctx.measureText(sub).width,dot=alert?14:0;
+      let pw=Math.ceil(14+nw+10+sw_+dot+10),two=false;
+      if(maxW&&pw>maxW){two=true;ctx.font=NF;
+        while(name.length>2&&14+nw+dot+10>maxW){name=clip(name,name.length-1);nw=ctx.measureText(name).width;}
+        pw=Math.ceil(14+Math.max(nw+dot,sw_)+10);}
+      const ph=two?36:22,px=Math.round(x-pw/2),py=Math.round(y-ph-6),l1=two?py+11:py+ph/2;
+      ctx.fillStyle=hover?'rgba(10,13,20,0.94)':'rgba(16,20,30,0.82)';ctx.fillRect(px,py,pw,ph);
       ctx.fillStyle=okColor(m.color);ctx.fillRect(px,py,4,ph);
-      if(this.world.me.islandId===m.id){ctx.strokeStyle='#ffd166';ctx.lineWidth=1;ctx.strokeRect(px+0.5,py+0.5,pw-1,ph-1);}
+      const mine=this.myIslandId()===m.id;
+      if(mine||hover){ctx.strokeStyle=mine?GOLD:'#e6e9ef';ctx.lineWidth=1;ctx.strokeRect(px+0.5,py+0.5,pw-1,ph-1);}
       ctx.textBaseline='middle';
-      ctx.font="600 12px 'JetBrains Mono',monospace";ctx.fillStyle='#ffffff';ctx.fillText(name,px+12,py+ph/2+1);
-      ctx.font="500 11px 'JetBrains Mono',monospace";ctx.fillStyle=m.private?'#c9cfdc':'#aab2c5';ctx.fillText(sub,px+12+nw+10,py+ph/2+1);
-      if(alert){ctx.fillStyle='#ffd166';ctx.beginPath();ctx.arc(px+pw-12,py+ph/2,4,0,Math.PI*2);ctx.fill();}
+      ctx.font=NF;ctx.fillStyle='#ffffff';ctx.fillText(name,px+12,l1+1);
+      ctx.font=SF;ctx.fillStyle=m.private?'#c9cfdc':'#aab2c5';ctx.fillText(sub,two?px+12:px+12+nw+10,two?py+26:l1+1);
+      if(alert){ctx.fillStyle=GOLD;ctx.beginPath();ctx.arc(px+pw-12,l1,4,0,Math.PI*2);ctx.fill();}
       ctx.restore();
     },
-    drawMinimap(){
-      const w=this.world,cv=this.minimapEl;if(!cv||w.view!=='all'||!w.cam)return;
-      const W_=cv.width,H_=cv.height,ctx=cv.getContext('2d'),ps=[...w.pos.entries()];
-      ctx.clearRect(0,0,W_,H_);ctx.fillStyle='rgba(16,20,30,0.75)';ctx.fillRect(0,0,W_,H_);
-      if(!ps.length)return;
-      const xs=ps.map(([,p])=>p.x),ys=ps.map(([,p])=>p.y),x0=Math.min(...xs)-0.8,x1=Math.max(...xs)+0.8,y0=Math.min(...ys)-0.6,y1=Math.max(...ys)+0.6;
-      const s=Math.min(W_/(x1-x0),H_/(y1-y0)),ox=(W_-(x1-x0)*s)/2-x0*s,oy=(H_-(y1-y0)*s)/2-y0*s;
-      w.mm={s,ox,oy};
-      const metas=new Map(w.islands.map(i=>[i.id,i]));
-      for(const[id,p]of ps){const m=metas.get(id);ctx.globalAlpha=m&&m.online===false?OFFLINE_ALPHA:1;ctx.fillStyle=okColor(m&&m.color);
-        const iw=Math.max(4,s*0.9),ih=Math.max(3,s*0.55);ctx.fillRect(Math.round(ox+p.x*s-iw/2),Math.round(oy+p.y*s-ih/2),Math.round(iw),Math.round(ih));
-        if(id===w.me.islandId){ctx.strokeStyle='#ffd166';ctx.lineWidth=1;ctx.strokeRect(Math.round(ox+p.x*s-iw/2)-1.5,Math.round(oy+p.y*s-ih/2)-1.5,Math.round(iw)+3,Math.round(ih)+3);}}
-      ctx.globalAlpha=1;
-      const a=WorldLogic.toWorld(w.cam,0,0,w.sw,w.sh),b=WorldLogic.toWorld(w.cam,w.sw,w.sh,w.sw,w.sh);
-      ctx.strokeStyle='#ffffff';ctx.lineWidth=1;ctx.strokeRect(Math.round(ox+a.x*s)+0.5,Math.round(oy+a.y*s)+0.5,Math.round((b.x-a.x)*s),Math.round((b.y-a.y)*s));
-    },
 
-    // ---- world camera: drag pans, wheel / trackpad pinch zooms about the cursor, two fingers pinch ----
-    zLimits(){const w=this.world,f=zFit(w.sw,w.sh);return[Math.min(60,f),4*f];},
-    camAround(cam,px,py,z){// cam with zoom z keeping the world point under stage (px, py) there
-      const w=this.world,[lo,hi]=this.zLimits();z=Math.min(hi,Math.max(lo,z));
-      const q=WorldLogic.toWorld(cam,px,py,w.sw,w.sh);return{x:q.x-(px-w.sw/2)/z,y:q.y-(py-w.sh/2)/z,z};
+    // ---- pointer: hover and click, in content px (the phone layout scrolls) ----
+    worldPt(e){const el=this.worldScroller,r=el.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top+el.scrollTop];},
+    // The agent under a stage point on the island drawn in full ("Của tôi" or one island), if any.
+    oneHit(px,py){
+      const w=this.world,id=w.view==='mine'?this.myIslandId():w.focus,sc=id&&w.scenes.get(id);if(!sc||sc.k==null)return null;
+      const r=this.oneIslandRect(w.sw,w.sh);
+      return sc.hit({currentTarget:{getBoundingClientRect:()=>({left:r.x,top:r.y,width:r.w,height:r.h})},clientX:px,clientY:py});
     },
-    onWorldScene(e){return e.target===this.stageEl||e.target===this.backCanvas||e.target===this.worldCanvas;},
-    worldWheel(e){const w=this.world;if(!this.onWorldScene(e)||!e.deltaY||!w.cam)return;e.preventDefault();
-      const[px,py]=this.stagePt(e);w.cam=this.camAround(w.cam,px,py,w.cam.z*CameraLogic.wheelFactor(e));w.goal=null;w.user=true;w.zoomAt=performance.now();},
-    worldDown(e){const w=this.world;if(e.button!==0||!this.onWorldScene(e)||!w.cam)return;this.dragged=false;
-      if(e.isPrimary)this.pts.clear();
-      this.pts.set(e.pointerId,this.stagePt(e));
-      if(this.pts.size===2){const ids=[...this.pts.keys()];this.pinchAt={cam:w.cam,ids,a:this.pts.get(ids[0]),b:this.pts.get(ids[1])};this.drag=null;
-        for(const id of ids)try{this.stageEl.setPointerCapture(id);}catch(_){}return;}
-      if(this.pts.size>2)return;
-      this.drag={id:e.pointerId,x:e.clientX,y:e.clientY,cam:w.cam,on:false};},
-    worldDrag(e){const w=this.world;if(this.pts.has(e.pointerId))this.pts.set(e.pointerId,this.stagePt(e));
-      const p=this.pinchAt;
-      if(p){if(!p.ids.includes(e.pointerId))return;this.dragged=true;const a1=this.pts.get(p.ids[0]),b1=this.pts.get(p.ids[1]);
-        const z=p.cam.z*Math.hypot(b1[0]-a1[0],b1[1]-a1[1])/Math.max(1,Math.hypot(p.b[0]-p.a[0],p.b[1]-p.a[1]));
-        const m0=[(p.a[0]+p.b[0])/2,(p.a[1]+p.b[1])/2],m1=[(a1[0]+b1[0])/2,(a1[1]+b1[1])/2],c=this.camAround(p.cam,m0[0],m0[1],z);
-        w.cam={x:c.x-(m1[0]-m0[0])/c.z,y:c.y-(m1[1]-m0[1])/c.z,z:c.z};w.goal=null;w.user=true;w.zoomAt=performance.now();return;}
-      const d=this.drag;
-      if(!d){if(e.target===this.worldCanvas)e.target.style.cursor=this.worldHit(...this.stagePt(e))?'pointer':'grab';return;}
-      if(e.pointerId!==d.id)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;
-      if(!d.on){if(!CameraLogic.isDrag(dx,dy))return;d.on=true;try{this.stageEl.setPointerCapture(d.id);}catch(_){}if(this.worldCanvas)this.worldCanvas.style.cursor='grabbing';}
-      w.cam={x:d.cam.x-dx/d.cam.z,y:d.cam.y-dy/d.cam.z,z:d.cam.z};w.goal=null;w.user=true;},
-    worldUp(e){this.pts.delete(e.pointerId);
-      const p=this.pinchAt;if(p&&p.ids.includes(e.pointerId)){this.pinchAt=null;setTimeout(()=>{this.dragged=false;},0);return;}
-      const d=this.drag;if(!d||e.pointerId!==d.id)return;this.drag=null;
-      if(d.on){this.dragged=true;setTimeout(()=>{this.dragged=false;},0);if(this.worldCanvas)this.worldCanvas.style.cursor='grab';}},
-    // The island (front-most first) and, when it is drawn large enough to aim at, the agent under a stage point.
-    worldHit(px,py){
-      const w=this.world;if(!w.cam)return null;
-      const shown=this.shownIslands();
-      for(let i=shown.length-1;i>=0;i--){const it=shown[i],r=this.islandRect(it.p);
-        if(px<r.x||px>r.x+r.w||py<r.y||py>r.y+r.h)continue;
-        let agent=null;
-        if(r.w>=0.35*w.sw)agent=it.sc.hit({currentTarget:{getBoundingClientRect:()=>({left:r.x,top:r.y,width:r.w,height:r.h})},clientX:px,clientY:py});
-        if(agent||py<=r.y+r.fh)return{it,agent};
-      }
-      return null;
+    worldHover(e){
+      const w=this.world,el=this.worldScroller;if(!el||w.dead)return;
+      let hover=null,hand=false;
+      if(e.type!=='pointerleave'){const[px,py]=this.worldPt(e);
+        if(w.view==='all'){const hit=WorldLogic.skyHit(this.skyNow(),px,py);hover=hit?hit.slot:null;hand=!!hit&&(hit.kind==='island'||hit.kind==='mine'||hit.kind==='yours');}
+        else hand=!!this.oneHit(px,py);}
+      w.hover=hand?hover:null;
+      const cur=hand?'pointer':'default';if(el.style.cursor!==cur)el.style.cursor=cur;
     },
     onWorldClick(e){
-      if(this.dragged){this.dragged=false;return;}
-      const w=this.world,[px,py]=this.stagePt(e),hit=this.worldHit(px,py);
-      if(!hit){this.setState({sel:null,selIsland:null});return;}
-      if(hit.agent){this.setState({selIsland:hit.it.id,sel:hit.agent.id});return;}
-      if(w.view==='all'){w.goal=WorldLogic.focusOn(hit.it.p,w.sw,w.sh);w.user=true;}
-      this.setState({selIsland:hit.it.id,sel:null});
-    },
-    onMinimapClick(e){
-      const w=this.world,mm=w.mm;if(!mm||!w.cam)return;const r=e.currentTarget.getBoundingClientRect();
-      const x=(e.clientX-r.left)*e.currentTarget.width/r.width,y=(e.clientY-r.top)*e.currentTarget.height/r.height;
-      w.goal={x:(x-mm.ox)/mm.s,y:(y-mm.oy)/mm.s,z:w.cam.z};w.user=true;
+      const w=this.world;if(!this.worldScroller||w.dead)return;
+      const[px,py]=this.worldPt(e);
+      if(w.view!=='all'){const a=this.oneHit(px,py),id=w.view==='mine'?this.myIslandId():w.focus;
+        this.setState(a?{selIsland:id,sel:a.id}:{sel:null});return;}
+      const hit=WorldLogic.skyHit(this.skyNow(),px,py);if(!hit)return;
+      if(hit.kind==='mine'||hit.kind==='yours')return this.navigate({view:'mine'});
+      const meta=hit.kind==='island'&&w.islands.find(i=>i.slot===hit.slot);
+      if(meta)this.navigate({view:'one',focus:meta.id});
     },
 
     // ---- world page ----
@@ -3911,27 +3922,39 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const hdrCtl={padding:'4px 10px',fontSize:11};
       const connCol=w.conn==='ok'?'#46a758':w.conn==='connecting'||w.conn==='busy'?'#f5a524':'#e5484d';
       const connText={ok:'Đã kết nối',error:'Mất kết nối, đang thử lại',ended:'Phiên đã hết',refused:'Hub từ chối luồng xem',busy:'Hub đang bận',unreachable:'Không liên lạc được hub'}[w.conn]||'Đang kết nối';
-      const tab=(v,label)=>h('button',{key:v,className:'btn'+(w.view===v?' btn-active':''),style:hdrCtl,'aria-pressed':w.view===v,onClick:()=>this.setView(v)},label);
+      const tab=(v,label)=>h('button',{key:v,className:'btn'+(w.view===v?' btn-active':''),style:hdrCtl,'aria-pressed':w.view===v,onClick:()=>this.navigate({view:v})},label);
+      // "Đảo 5/8 · 3 online", led by eight small squares, one per place in the sky: green sending, grey offline,
+      // hollow free; mine has a gold edge.
+      const cap=w.capacity||WorldLogic.SLOTS,bySlot=new Map(w.islands.map(i=>[i.slot,i])),mySlot=this.mySlot();
+      const slotChip=h('div',{className:'chip',title:w.islands.length+' trong '+cap+' chỗ có đảo, '+online+' đảo đang gửi'},
+        h('span',{'aria-hidden':true,style:{display:'flex',gap:2}},Array.from({length:cap},(_,s)=>{const m=bySlot.get(s);
+          return h('span',{key:s,style:{width:6,height:6,boxSizing:'border-box',display:'inline-block',
+            background:m?(m.online===false?'#5d6478':'#46a758'):'transparent',border:'1px solid '+(s===mySlot?'#ffd166':m?'transparent':'#4a5468')}});})),
+        h('span',null,'Đảo'),h('strong',{style:{color:'#ffffff'}},w.islands.length+'/'+cap),h('span',null,'· '+online+' online'));
       return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:8,paddingTop:12,paddingBottom:12,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
         h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'8px 16px'}},
           h('div',{style:{display:'flex',alignItems:'baseline',gap:8,flex:'none'}},
             h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:20,fontWeight:700,letterSpacing:'0.02em',color:'#ffffff'}},'CLAUDE CO.'),
             h('span',{style:{fontSize:11,color:'var(--muted)'}},location.host)),
           h('div',{style:{display:'flex',flexWrap:'wrap',gap:6,fontSize:11,alignItems:'center',flex:'1 1 300px',minWidth:0}},
-            h('div',{className:'chip'},h('span',null,'Đảo online'),h('strong',{style:{color:'#ffffff'}},online+'/'+w.islands.length)),
+            slotChip,
             h('div',{className:'chip'},h('span',null,'Đang xem'),h('strong',{style:{color:'#ffffff'}},w.viewers)),
             h('div',{className:'chip',title:connText},h('span',{style:{width:8,height:8,background:connCol,display:'inline-block'}}),h('span',null,connText))),
           h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8,flex:'none'}},
             h('div',{role:'group','aria-label':'Chế độ xem',style:{display:'flex'}},tab('all','Toàn cảnh'),tab('mine','Của tôi')),
-            h('a',{className:'btn',style:{...hdrCtl,textDecoration:'none'},href:'/me'},'Đảo của tôi'))),
+            h('a',{className:'btn',style:{...hdrCtl,textDecoration:'none'},href:'/me'},'Đảo của tôi'),
+            // Settings live in the header here: the sky uses the whole stage, down to its bottom corners.
+            h('button',{className:'btn'+(showSettings?' btn-active':''),'aria-label':'Cài đặt','aria-expanded':!!showSettings,title:'Cài đặt: tốc độ, thời tiết',
+              style:{...hdrCtl,width:30,padding:'4px 0'},onClick:()=>this.setState(p=>({showSettings:!p.showSettings}))},'⚙'))),
         h('div',{ref:this.setWorldStage,style:{position:'relative',flex:'1 1 0',minHeight:0,border:'3px solid #232a39',overflow:'hidden'}},
-          h('canvas',{ref:this.setBack,style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:0,display:'block'}}),
-          h('canvas',{ref:this.setWorldCanvas,onClick:e=>this.onWorldClick(e),style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:1,display:'block'}}),
+          h('canvas',{ref:this.setBack,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:0,display:'block'}}),
+          h('canvas',{ref:this.setWorldCanvas,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:1,display:'block'}}),
           h('canvas',{ref:this.setFront,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:2,pointerEvents:'none',display:'block'}}),
-          w.view==='all'&&!w.dead&&h('canvas',{ref:this.setMinimap,width:168,height:110,'aria-label':'Bản đồ nhỏ',onClick:e=>this.onMinimapClick(e),
-            style:{position:'absolute',zIndex:5,left:12,bottom:12,width:168,height:110,border:'2px solid var(--border)',cursor:'pointer'}}),
+          // Takes hover and clicks; on a phone it scrolls a spacer as tall as the sky (drawSky8 sets overflow and height).
+          h('div',{ref:this.setWorldScroller,onClick:e=>this.onWorldClick(e),onPointerMove:this.onWorldHover,onPointerLeave:this.onWorldHover,
+            style:{position:'absolute',inset:0,zIndex:3,overflowX:'hidden',touchAction:w.view==='all'?'pan-y':'manipulation'}},
+            h('div',{ref:this.setWorldSpacer,style:{width:1}})),
           this.worldPanel(mine),
-          h('button',{className:'settings-toggle','aria-label':'Cài đặt',title:'Cài đặt: tốc độ, thời tiết',onClick:()=>this.setState(p=>({showSettings:!p.showSettings}))},'⚙'),
           showSettings&&this.worldSettings())
       );
     },
@@ -3953,7 +3976,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
           h('a',{href:'/auth/login',className:'btn btn-accent',style:{textAlign:'center',textDecoration:'none'}},'Đăng nhập lại'));
         return h('div',{style:PANEL},h('div',{style:TITLE},'Mất luồng dữ liệu'),h('span',{style:{color:'var(--muted)'}},'Đang hỏi hub…'));
       }
-      const close=h('button',{className:'btn',onClick:()=>{w.confirm=null;this.setState({sel:null,selIsland:null});},style:{width:28,height:28,padding:0,flex:'none'}},'×');
+      const close=h('button',{className:'btn','aria-label':'Đóng',onClick:()=>{if(sel!=null)return this.setState({sel:null});
+        if(w.view==='one')return this.navigate({view:'all'});w.confirm=null;this.setState({sel:null,selIsland:null});},style:{width:28,height:28,padding:0,flex:'none'}},'×');
       const sc=selIsland&&w.scenes.get(selIsland),meta=selIsland&&w.islands.find(i=>i.id===selIsland);
       const a=sc&&sel!=null&&sc.byId(sel);
       if(a){// Hub data has no names, prompts or folders: status, kind of work, room, and tool / model on "Cơ bản".
@@ -3971,12 +3995,12 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
             raw.model?field('MODEL',clip(raw.model,48)):null,
             field('VAI TRÒ',par?'Sub-agent của '+par.short:'Main session')));
       }
-      if(w.view==='all'&&sc&&meta){
+      if(w.view==='one'&&sc&&meta){
         const head=h('div',{style:{display:'flex',alignItems:'center',gap:10}},
           h('span',{style:{width:14,height:14,background:okColor(meta.color),flex:'none'}}),
           h('div',{style:{...TITLE,flex:1,minWidth:0}},meta.name||'Đảo'),close);
         // Owners may remove anyone's island but their own (the hub also refuses another owner's).
-        const canRemove=w.me.role==='owner'&&meta.id!==w.me.islandId;
+        const canRemove=w.me.role==='owner'&&meta.id!==this.myIslandId()&&meta.id!==w.me.islandId;
         const ask=canRemove&&w.confirm&&w.confirm.kind==='remove'&&w.confirm.id===meta.id?w.confirm:null;
         if(ask)return h('div',{style:PANEL},head,
           confirmRow('Xoá đảo này? Mọi máy của người đó bị thu hồi. Họ vẫn ghép lại được.','Xoá',ask,()=>this.removeIsland(meta.id),()=>{w.confirm=null;this.forceUpdate();}));
@@ -4072,7 +4096,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     },
     worldSettings(){
       const st=this.state;
-      return h('div',{className:'settings-panel'},
+      return h('div',{className:'settings-panel',style:{top:12,bottom:'auto'}},
         h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:14,fontWeight:600,color:'#ffffff',marginBottom:4}},'Cài đặt'),
         h('label',null,'Tốc độ: '+st.speed.toFixed(2)+'x',h('input',{type:'range',min:0.5,max:3,step:0.25,value:st.speed,onChange:e=>this.setState({speed:+e.target.value})})),
         h('div',{style:{borderTop:'1px solid var(--border)',margin:'2px 0'}}),
