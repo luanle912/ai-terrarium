@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { openDb, SCHEMA_VERSION } = require('../hub/db.js');
+const { openDb, SCHEMA_VERSION, MAX_ISLANDS } = require('../hub/db.js');
 const { DatabaseSync } = require('node:sqlite');
 
 // Verbatim copy of the GD1 schema (hub/db.js at commit 1a3af72).
@@ -53,8 +53,10 @@ test('a GD1 database is upgraded in place', () => {
   const file = path.join(tmp(), 'hub.sqlite');
   buildGd1(file);
   const db = openDb(file);
-  assert.equal(SCHEMA_VERSION, 2);
-  assert.equal(version(db), 2);
+  assert.equal(SCHEMA_VERSION, 3);
+  assert.equal(version(db), SCHEMA_VERSION);
+  assert.equal(db.getIsland('isl1').slot, 0);
+  assert.ok(cols(db, 'device_codes').includes('deny_reason'));
   const uc = cols(db, 'users');
   for (const c of ['refresh_enc', 'checked_at', 'check_fail_since', 'check_warned_at', 'ban_reason']) assert.ok(uc.includes(c), c);
   assert.ok(!uc.includes('role'));
@@ -77,15 +79,16 @@ test('opening twice is a no-op', () => {
   buildGd1(file);
   openDb(file).close();
   const db = openDb(file);
-  assert.equal(version(db), 2);
+  assert.equal(version(db), SCHEMA_VERSION);
+  assert.equal(db.getIsland('isl1').slot, 0);
   assert.equal(db.getSession('sh').expires_at, 5000 + DAY);
   assert.equal(db.getUserById(7).email, 'a@newera.inc');
   db.close();
 });
 
-test('a fresh database starts at version 2', () => {
+test('a fresh database starts at the current version', () => {
   const db = openDb(path.join(tmp(), 'hub.sqlite'));
-  assert.equal(version(db), 2);
+  assert.equal(version(db), SCHEMA_VERSION);
   assert.ok(!cols(db, 'users').includes('role'));
   assert.ok(cols(db, 'users').includes('ban_reason'));
   db.close();
@@ -95,7 +98,7 @@ test('a newer database is refused', () => {
   const file = path.join(tmp(), 'hub.sqlite');
   openDb(file).close();
   const raw = new DatabaseSync(file);
-  raw.exec('PRAGMA user_version = 3');
+  raw.exec('PRAGMA user_version = 4');
   raw.close();
   assert.throws(() => openDb(file), /newer/);
 });
@@ -214,4 +217,191 @@ test('deleting an island with live device rows works and leaves devices intact',
   assert.equal(db.deleteIslandByUser(u.id), true);
   assert.equal(db.getDevice('d').user_id, u.id);
   db.close();
+});
+
+// ---- v2 -> v3 (fixed island slots) ----
+const V2_STEPS = `
+  ALTER TABLE users DROP COLUMN role;
+  ALTER TABLE users ADD COLUMN refresh_enc TEXT;
+  ALTER TABLE users ADD COLUMN checked_at INTEGER;
+  ALTER TABLE users ADD COLUMN check_fail_since INTEGER;
+  ALTER TABLE users ADD COLUMN check_warned_at INTEGER;
+  ALTER TABLE users ADD COLUMN ban_reason TEXT;
+  ALTER TABLE login_states ADD COLUMN consent INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE audit(id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER, action TEXT NOT NULL, target TEXT, ip TEXT);
+  CREATE INDEX audit_at ON audit(at);
+`;
+
+// 10 users/islands; islands i4 and i5 share created_at (tie broken by id). Creation order: i0..i3, i4, i5, i6..i9.
+function buildV2(file, n = 10) {
+  const raw = new DatabaseSync(file);
+  raw.exec('PRAGMA foreign_keys=ON');
+  raw.exec(GD1_SCHEMA);
+  raw.exec(V2_STEPS);
+  for (let k = 0; k < n; k++) {
+    raw.prepare('INSERT INTO users(id, google_sub, email, name, created_at) VALUES(?,?,?,?,?)').run(k + 1, `g${k}`, `u${k}@x`, `U${k}`, 100);
+    // insert out of order on purpose; i5 shares i4's timestamp
+    const at = k === 5 ? 1400 : 1000 + k * 100;
+    raw.prepare('INSERT INTO islands(id, user_id, name, color, created_at) VALUES(?,?,?,?,?)').run(`i${k}`, k + 1, `Isle${k}`, '#abc', at);
+  }
+  raw.exec('PRAGMA user_version = 2');
+  raw.close();
+}
+
+const mkUser = (db, k) => db.upsertUser({ googleSub: `n${k}`, email: `n${k}@x`, name: `N${k}`, now: 1 });
+const claim = (db, k) => db.claimIsland({ id: `c${k}`, userId: mkUser(db, k).id, name: `C${k}`, color: '#123', now: 10 + k });
+const fillHub = (db, n) => { for (let k = 0; k < n; k++) claim(db, k); };
+
+test('a v2 database with 10 islands gets slots by creation order', () => {
+  const file = path.join(tmp(), 'hub.sqlite');
+  buildV2(file);
+  const db = openDb(file);
+  assert.equal(version(db), 3);
+  const rows = db.raw.prepare('SELECT * FROM islands ORDER BY created_at, id').all();
+  assert.deepEqual(rows.map((r) => r.slot), [0, 1, 2, 3, 4, 5, 6, 7, null, null]);
+  assert.deepEqual(rows.map((r) => r.id), ['i0', 'i1', 'i2', 'i3', 'i4', 'i5', 'i6', 'i7', 'i8', 'i9']);
+  const i9 = db.getIsland('i9');
+  assert.equal(i9.name, 'Isle9'); assert.equal(i9.color, '#abc'); assert.equal(i9.user_id, 10); assert.equal(i9.created_at, 1900);
+  assert.ok(db.raw.prepare('PRAGMA index_list(islands)').all().some((r) => r.name === 'islands_slot'));
+  assert.ok(cols(db, 'device_codes').includes('deny_reason'));
+  db.close();
+});
+
+test('a GD1 database with a v2 step in between ends identical: 0 -> 3 equals 0 -> 2 -> 3', () => {
+  const a = path.join(tmp(), 'a.sqlite'); buildGd1(a);
+  const b = path.join(tmp(), 'b.sqlite'); buildGd1(b);
+  const raw = new DatabaseSync(b); raw.exec(V2_STEPS); raw.exec('PRAGMA user_version = 2'); raw.close();
+  const da = openDb(a), dbb = openDb(b);
+  assert.deepEqual(da.getIsland('isl1'), dbb.getIsland('isl1'));
+  assert.equal(da.getIsland('isl1').slot, 0);
+  da.close(); dbb.close();
+});
+
+test('claimIsland gives the smallest free slot', () => {
+  const db = openDb(':memory:');
+  const r = [0, 1, 2].map((k) => claim(db, k));
+  assert.deepEqual(r.map((x) => x.created), [true, true, true]);
+  assert.deepEqual(r.map((x) => x.island.slot), [0, 1, 2]);
+  assert.equal(MAX_ISLANDS, 8);
+  db.close();
+});
+
+test('claimIsland refuses a ninth island', () => {
+  const db = openDb(':memory:');
+  fillHub(db, 8);
+  assert.deepEqual(claim(db, 8), { full: true });
+  assert.equal(db.islandCount(), 8);
+  db.close();
+});
+
+test('a user with an island gets it back on a full hub', () => {
+  const db = openDb(':memory:');
+  fillHub(db, 8);
+  const u = db.getUserBySub('n3');
+  const first = db.getIslandByUser(u.id);
+  const again = db.claimIsland({ id: 'other', userId: u.id, name: 'X', color: '#000', now: 99 });
+  assert.equal(again.created, false);
+  assert.equal(again.island.id, first.id);
+  assert.equal(again.island.slot, first.slot);
+  assert.equal(db.islandCount(), 8);
+  db.close();
+});
+
+test('a hidden island (slot NULL) is returned as is, even when the hub is full', () => {
+  const file = path.join(tmp(), 'hub.sqlite');
+  buildV2(file);
+  const db = openDb(file);
+  const r = db.claimIsland({ id: 'zz', userId: 10, name: 'Z', color: '#000', now: 1 });
+  assert.equal(r.created, false);
+  assert.equal(r.island.id, 'i9');
+  assert.equal(r.island.slot, null);
+  db.close();
+});
+
+test('a freed slot is reused', () => {
+  const db = openDb(':memory:');
+  fillHub(db, 8);
+  const before = db.listSlottedIslands().map((i) => [i.id, i.slot]);
+  assert.equal(db.deleteIslandByUser(db.getUserBySub('n3').id), true);
+  const r = claim(db, 20);
+  assert.equal(r.island.slot, 3);
+  const after = db.listSlottedIslands().filter((i) => i.id !== 'c20').map((i) => [i.id, i.slot]);
+  assert.deepEqual(after, before.filter(([id]) => id !== 'c3'));
+  db.close();
+});
+
+test('a freed slot goes to the oldest hidden island first', () => {
+  const file = path.join(tmp(), 'hub.sqlite');
+  buildV2(file);
+  const db = openDb(file);
+  assert.equal(db.deleteIslandByUser(db.getIsland('i5').user_id), true);
+  assert.equal(db.getIsland('i8').slot, 5);
+  assert.equal(db.getIsland('i9').slot, null);
+  assert.equal(db.islandCount(), 9);
+  assert.deepEqual(claim(db, 1), { full: true });
+  db.close();
+});
+
+test('the slot index rejects a duplicate', () => {
+  const db = openDb(':memory:');
+  fillHub(db, 2);
+  assert.throws(() => db.raw.prepare('UPDATE islands SET slot = 0 WHERE slot = 1').run(), /UNIQUE/);
+  db.close();
+});
+
+test('the slot check rejects 8', () => {
+  const db = openDb(':memory:');
+  fillHub(db, 1);
+  assert.throws(() => db.raw.prepare('UPDATE islands SET slot = 8 WHERE slot = 0').run(), /CHECK/);
+  db.close();
+});
+
+test('listSlottedIslands is ordered by slot and skips hidden ones', () => {
+  const file = path.join(tmp(), 'hub.sqlite');
+  buildV2(file);
+  const db = openDb(file);
+  db.raw.prepare('UPDATE islands SET slot = NULL WHERE id = ?').run('i0'); // hole at slot 0
+  db.raw.prepare('UPDATE islands SET slot = 0 WHERE id = ?').run('i7'); // out of creation order
+  db.raw.prepare('UPDATE islands SET slot = 7 WHERE id = ?').run('i2');
+  const list = db.listSlottedIslands();
+  assert.deepEqual(list.map((i) => i.slot), [0, 1, 3, 4, 5, 6, 7]);
+  assert.ok(!list.some((i) => i.slot === null));
+  db.close();
+});
+
+test('denyDeviceCode keeps the reason', () => {
+  const db = openDb(':memory:');
+  db.createDeviceCode({ codeHash: 'a', userCode: 'AAAA-AAAA', name: 'm', now: 1, expiresAt: 9 });
+  db.createDeviceCode({ codeHash: 'b', userCode: 'BBBB-BBBB', name: 'm', now: 1, expiresAt: 9 });
+  assert.equal(db.denyDeviceCode('a', 'hub_full'), true);
+  assert.equal(db.denyDeviceCode('b'), true);
+  assert.equal(db.getDeviceCodeByHash('a').denied, 1);
+  assert.equal(db.getDeviceCodeByHash('a').deny_reason, 'hub_full');
+  assert.equal(db.getDeviceCodeByHash('b').deny_reason, null);
+  assert.equal(db.denyDeviceCode('missing'), false);
+  db.close();
+});
+
+test('upsertIsland claims a slot, renames an existing island, and throws on a full hub', () => {
+  const db = openDb(':memory:');
+  fillHub(db, 8);
+  const u = db.getUserBySub('n0');
+  const r = db.upsertIsland({ id: 'x', userId: u.id, name: 'New', color: '#999', now: 5 });
+  assert.equal(r.name, 'New'); assert.equal(r.id, 'c0'); assert.equal(r.slot, 0);
+  const extra = mkUser(db, 50);
+  assert.throws(() => db.upsertIsland({ id: 'y', userId: extra.id, name: 'Y', color: '#000', now: 6 }), /hub full/);
+  db.close();
+});
+
+test('two handles racing for the last slot: exactly one wins', () => {
+  const file = path.join(tmp(), 'hub.sqlite');
+  const a = openDb(file), b = openDb(file);
+  fillHub(a, 7);
+  const ua = mkUser(a, 90), ub = mkUser(b, 91);
+  const ra = a.claimIsland({ id: 'ra', userId: ua.id, name: 'A', color: '#000', now: 1 });
+  const rb = b.claimIsland({ id: 'rb', userId: ub.id, name: 'B', color: '#000', now: 1 });
+  assert.equal([ra, rb].filter((r) => r.island?.slot === 7).length, 1);
+  assert.equal([ra, rb].filter((r) => r.full).length, 1);
+  assert.equal(a.islandCount(), 8);
+  a.close(); b.close();
 });
