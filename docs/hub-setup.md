@@ -146,14 +146,14 @@ sqlite3 hub.sqlite ".backup 'hub-backup.sqlite'"
 Trên máy của mỗi người, trong thư mục plugin (hoặc bản clone của repo):
 
 ```bash
-node server.js join https://terrarium.newera.inc     # in mã thiết bị, mở trình duyệt để duyệt; thêm --name "Mac của tôi" nếu muốn
-node server.js share kin                            # mức Kín (mặc định): chỉ trạng thái, phòng ban dạng chữ cái, loại việc
-node server.js share co-ban                         # mức Cơ bản: thêm tên tool và model; tên dự án chỉ hiện nếu có trong `share projects`
-node server.js share projects a,b                   # cho phép hiện tên các dự án này (ở mức Cơ bản)
-node server.js private on                           # đảo hiện "riêng tư": không ai thấy nhân viên
-node server.js private off
-node server.js status                               # hub, token (4 ký tự cuối), mức chia sẻ, riêng tư, đã bị thu hồi chưa
-node server.js leave                                # thu hồi máy này trên hub rồi xoá cấu hình local
+node server.js join https://terrarium.newera.inc     # Pair this machine: prints a device code and opens the approval page (optional: --name "My Mac")
+node server.js share kin                            # Private level (default): status, department letter and task type only
+node server.js share co-ban                         # Basic level: also shares tool and model names; project names only if listed via `share projects`
+node server.js share projects a,b                   # Allow these project names to be shown (Basic level only)
+node server.js private on                           # Mark the island as private: no one sees its agents
+node server.js private off                          # Make the island visible again
+node server.js status                               # Show hub URL, token (last 4 characters), share level, privacy and revocation state
+node server.js leave                                # Revoke this device on the hub, then remove the local config
 ```
 
 - Cấu hình nằm ở `~/.claude-terrarium/config.json` (quyền `0600`). Chạy `join` lại để ghép lại sau khi bị thu hồi.

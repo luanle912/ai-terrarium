@@ -168,11 +168,11 @@ nội dung, đường dẫn hay tên agent. Mức Cơ bản gửi thêm tên too
 (xem `docs/hub-setup.md`).
 
 ```bash
-node server.js join https://terrarium.newera.inc   # ghép máy, duyệt mã trên trình duyệt
-node server.js share kin|co-ban                    # mức chia sẻ
-node server.js private on|off                      # ẩn nhân viên khỏi người khác
-node server.js status
-node server.js leave                               # thu hồi máy này trên hub và xoá cấu hình local
+node server.js join https://terrarium.newera.inc   # Pair this machine; approve the code in your browser
+node server.js share kin|co-ban                    # Set the share level (Private or Basic)
+node server.js private on|off                      # Hide or show your agents to others
+node server.js status                              # Show the current hub connection and settings
+node server.js leave                               # Revoke this device on the hub and remove the local config
 ```
 
 Trên trang của hub, ở chế độ **Của tôi** và trang `/me`, bạn tự đổi tên và màu đảo, xem và thu hồi từng máy, và rời hub
