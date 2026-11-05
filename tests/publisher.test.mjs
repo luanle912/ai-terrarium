@@ -7,7 +7,7 @@ import path from 'node:path';
 import { startDevHub, devLogin, postDeviceForm } from './hub-helpers.mjs';
 
 const require = createRequire(import.meta.url);
-const { startPublisher, join, makeOpenBrowser } = require('../lib/publisher.js');
+const { startPublisher, join, makeOpenBrowser, revokeSelf } = require('../lib/publisher.js');
 const { writeConfig, readConfig } = require('../lib/terrarium-config.js');
 
 const SALT = 'ab'.repeat(32);
@@ -393,4 +393,16 @@ test('join with no previous config revokes nothing', async () => {
   const h2 = joinHub()
   await join('https://hub.example', { dir: dir2, fetch: h2.fetch, log() {}, openBrowser() {}, sleep: async () => {} })
   assert.equal(h2.calls.filter((c) => c.url.endsWith('/revoke-self')).length, 0)
+})
+
+test('revokeSelf says ok (2xx), gone (401) or failed (anything else), and never throws', async () => {
+  const answer = (status) => async () => ({ status })
+  assert.equal(await revokeSelf('https://hub.example', 'trd_x', { fetch: answer(200) }), 'ok')
+  assert.equal(await revokeSelf('https://hub.example', 'trd_x', { fetch: answer(204) }), 'ok')
+  assert.equal(await revokeSelf('https://hub.example', 'trd_x', { fetch: answer(401) }), 'gone')
+  assert.equal(await revokeSelf('https://hub.example', 'trd_x', { fetch: answer(403) }), 'failed')
+  assert.equal(await revokeSelf('https://hub.example', 'trd_x', { fetch: answer(500) }), 'failed')
+  assert.equal(await revokeSelf('https://hub.example', 'trd_x', { fetch: async () => { throw new Error('offline') } }), 'failed')
+  assert.equal(await revokeSelf('http://hub.example', 'trd_x', { fetch: answer(200) }), 'failed', 'invalid hub url')
+  assert.equal(await revokeSelf('https://hub.example', '', { fetch: answer(200) }), 'failed', 'no token')
 })

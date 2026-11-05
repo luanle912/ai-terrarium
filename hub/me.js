@@ -6,11 +6,10 @@
 //   POST /api/owner/islands/:id/remove                                      owners only; never an owner's island
 
 const { HttpError, send, sendJson } = require('./http.js');
-const { mePage, leavePage, leftPage, ISLAND_COLORS, PAGE_CSP } = require('./pages.js');
+const { mePage, leavePage, leftPage, ISLAND_COLORS, PAGE_CSP, isNewDevice } = require('./pages.js');
 const { validIslandName } = require('./validate.js');
 
 const BODY_LIMIT = 4096; // S15
-const NEW_DEVICE_MS = 7 * 24 * 3600 * 1000;
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const HTML = { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, ...NO_STORE };
 
@@ -91,7 +90,7 @@ function routes(ctx) {
         const online = !!w && w.online;
         return {
           id: d.id, name: d.name, createdAt: d.created_at, lastUsedAt: d.last_used_at, revokedAt: d.revoked_at,
-          isNew: !revoked && now - d.created_at < NEW_DEVICE_MS,
+          isNew: isNewDevice(d, now),
           send: revoked ? 'revoked' : online ? (w.private ? 'private' : 'sending') : 'offline',
           share: w ? w.share : null,
         };
@@ -161,9 +160,8 @@ function routes(ctx) {
       const form = await formBody(req);
       csrfOrFail(req, s, form.get('csrf') || '');
       await accounts.leave(s.user.id, { ip: helpers.clientIp(req) });
-      const name = config.secure ? '__Host-tr_sess' : 'tr_sess';
-      const clear = `${name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${config.secure ? '; Secure' : ''}`;
-      send(res, 200, leftPage(), { ...HTML, 'Set-Cookie': clear });
+      helpers.clearSessionCookie(res);
+      send(res, 200, leftPage(), HTML);
     },
   });
 

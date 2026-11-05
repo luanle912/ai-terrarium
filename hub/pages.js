@@ -42,7 +42,8 @@ function devicePage({ csrf, error, device, done } = {}) {
 // mePage({csrf, user: {name, email}, island: {name, color} | null, colors, now,
 //         devices: [{id, name, created_at, last_used_at, revoked_at}]})
 const when = (t) => (t == null ? '-' : new Date(t).toISOString().replace('T', ' ').slice(0, 16) + ' UTC');
-const NEW_DEVICE_MS = 7 * 24 * 3600 * 1000;
+const NEW_DEVICE_MS = 7 * 24 * 3600 * 1000; // a device paired this recently is flagged "Máy mới"
+const isNewDevice = (d, now) => d.revoked_at == null && now - d.created_at < NEW_DEVICE_MS;
 const safeColor = (c) => (/^#[0-9a-fA-F]{6}$/.test(c) ? c : '#888');
 
 function mePage({ csrf, user, island, devices = [], colors = ISLAND_COLORS, now = Date.now() } = {}) {
@@ -57,7 +58,7 @@ function mePage({ csrf, user, island, devices = [], colors = ISLAND_COLORS, now 
         `<span style="display:inline-block;width:1rem;height:1rem;vertical-align:middle;background:${escapeHtml(safeColor(col))}"></span></label>`).join('')}</p>` +
       `<button type="submit">Lưu</button></form>`
     : `<p>Bạn chưa có đảo. <a href="/device">Ghép máy đầu tiên</a> để tạo đảo.</p>`;
-  const fresh = devices.filter((d) => d.revoked_at == null && now - d.created_at < NEW_DEVICE_MS).map((d) =>
+  const fresh = devices.filter((d) => isNewDevice(d, now)).map((d) =>
     `<div class="warn"><p>Máy mới: <strong>${escapeHtml(d.name)}</strong>, lúc ${escapeHtml(when(d.created_at))}</p>` +
     `<p>Không phải bạn ghép? Thu hồi ngay.</p>${revokeForm(d)}</div>`).join('');
   const rows = devices.map((d) => {
@@ -84,4 +85,4 @@ function leftPage() {
   return layout('Đã rời hub', `<h1>Đã rời hub</h1><p>Đảo và các máy của bạn đã được xoá. Bạn có thể <a href="/auth/login">đăng nhập lại</a> bất cứ lúc nào.</p>`);
 }
 
-module.exports = { escapeHtml, devicePage, mePage, leavePage, leftPage, ISLAND_COLORS, PAGE_CSP };
+module.exports = { escapeHtml, devicePage, mePage, leavePage, leftPage, ISLAND_COLORS, PAGE_CSP, NEW_DEVICE_MS, isNewDevice };

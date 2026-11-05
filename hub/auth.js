@@ -9,6 +9,7 @@
 //   requireCsrf(req, session, formField?) -> boolean   (formField = the submitted `csrf` form value)
 //   onSessionEnd(listener) -> unsubscribe fn; listener({userId, tokenHash, reason}) on logout/expiry/ban
 //   endSessionsForUser(userId, reason?) -> number      (call after banning a user)
+//   clearSessionCookie(res) -> void                    (queues the Set-Cookie that clears the session cookie)
 //   isOwner(user) -> boolean                           (owner = email in config.ownerEmails; read on every call)
 // Pure exports: routes, checkClaims, sha256hex, NO_REFRESH_TTL_MS.
 
@@ -59,6 +60,27 @@ function routes(ctx) {
   const { config, db, deps, limiters } = ctx;
   const sessName = config.secure ? '__Host-tr_sess' : 'tr_sess';
   const loginName = config.secure ? '__Host-tr_login' : 'tr_login';
+  const consentName = config.secure ? '__Host-tr_consent' : 'tr_consent';
+  // One-shot tickets for the internal consent hop: the callback hands one out with its redirect to
+  // /auth/login?consent=1, and that request spends it instead of taking from the login limiter. Memory only.
+  const consentTickets = new Map(); // sha256hex(ticket) -> expires at (ms)
+  const MAX_TICKETS = 2000;
+  function issueConsentTicket(now) {
+    for (const [k, exp] of consentTickets) if (exp <= now) consentTickets.delete(k);
+    if (consentTickets.size >= MAX_TICKETS) return null; // flooded: the hop is simply charged
+    const t = rand();
+    consentTickets.set(sha256hex(t), now + LOGIN_TTL_MS);
+    return t;
+  }
+  function spendConsentTicket(req, now) {
+    const t = parseCookies(req.headers.cookie)[consentName];
+    if (!t) return false;
+    const k = sha256hex(t);
+    const exp = consentTickets.get(k);
+    if (exp === undefined) return false;
+    consentTickets.delete(k);
+    return exp > now;
+  }
   const listeners = new Set();
 
   const cookie = (name, value, maxAgeS) =>
@@ -89,6 +111,12 @@ function routes(ctx) {
     const user = db.getUserById(session.user_id);
     if (!user) { endSession(tokenHash, session.user_id, 'gone'); return null; }
     if (user.banned_at != null) { endSessionsForUser(user.id, 'banned'); return null; }
+    // No refresh token (dropped on key rotation or leave) means Google can no longer be asked: B12 caps such a
+    // session at a day, whatever its stored expiry says.
+    if (!user.refresh_enc && deps.now() - session.created_at > NO_REFRESH_TTL_MS) {
+      endSession(tokenHash, user.id, 'login_required');
+      return null;
+    }
     return { user, session };
   }
 
@@ -98,8 +126,11 @@ function routes(ctx) {
     return safeEqual(given, session.csrf);
   }
 
+  // Queues a Set-Cookie that ends this browser's session cookie; call before send() (writeHead merges it).
+  const clearSessionCookie = (res) => res.setHeader('Set-Cookie', cookie(sessName, '', 0));
   ctx.helpers.requireSession = requireSession;
   ctx.helpers.requireCsrf = requireCsrf;
+  ctx.helpers.clearSessionCookie = clearSessionCookie;
   ctx.helpers.onSessionEnd = onSessionEnd;
   ctx.helpers.endSessionsForUser = endSessionsForUser;
   // No role column: ownership follows env. config.ownerEmails is read each time, never copied.
@@ -146,9 +177,10 @@ function routes(ctx) {
   list.push({
     method: 'GET', path: '/auth/login', ownLimit: true,
     handler(req, res, rc) {
-      if (!limiters.login.take(ctx.helpers.clientIp(req), deps.now())) throw new HttpError(429, 'too many requests');
-      const state = rand(), nonce = rand(), verifier = rand();
       const consent = rc.query.get('consent') === '1';
+      const free = consent && spendConsentTicket(req, deps.now()); // the callback's own redirect, not a new attempt
+      if (!free && !limiters.login.take(ctx.helpers.clientIp(req), deps.now())) throw new HttpError(429, 'too many requests');
+      const state = rand(), nonce = rand(), verifier = rand();
       db.createLoginState({ state, nonce, verifier, consent: consent ? 1 : 0, now: deps.now() });
       const q = new URLSearchParams({
         client_id: config.googleClientId,
@@ -164,7 +196,7 @@ function routes(ctx) {
       });
       send(res, 302, '', {
         Location: `${GOOGLE_AUTH}?${q}`, ...noStore,
-        'Set-Cookie': cookie(loginName, sha256hex(state), LOGIN_TTL_MS / 1000),
+        'Set-Cookie': [cookie(loginName, sha256hex(state), LOGIN_TTL_MS / 1000), cookie(consentName, '', 0)],
       });
     },
   });
@@ -209,8 +241,13 @@ function routes(ctx) {
         // Google only sends a refresh token on first consent. A user who has none stored gets exactly one retry
         // with prompt=consent (row.consent marks that retry); after that they get a 24 h session.
         const known = db.getUserBySub(r.sub);
-        if (!(known && known.refresh_enc) && row.consent === 0) {
-          return send(res, 302, '', { Location: '/auth/login?consent=1', ...noStore, 'Set-Cookie': cookie(loginName, '', 0) });
+        // A known user who is banned for a reason other than google_revoked is refused anyway: no consent round trip.
+        const refused = known && known.banned_at != null && known.ban_reason !== 'google_revoked';
+        if (!(known && known.refresh_enc) && !refused && row.consent === 0) {
+          const ticket = issueConsentTicket(deps.now());
+          const cookies = [cookie(loginName, '', 0)];
+          if (ticket) cookies.push(cookie(consentName, ticket, LOGIN_TTL_MS / 1000));
+          return send(res, 302, '', { Location: '/auth/login?consent=1', ...noStore, 'Set-Cookie': cookies });
         }
       }
       finishLogin(req, res, r);

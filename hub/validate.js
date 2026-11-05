@@ -64,11 +64,14 @@ function validatePublish(body) {
 }
 
 // Island name typed by a user: NFC, collapsed whitespace, trimmed; 1-24 letters, marks, digits, space . _ -
-const ISLAND_NAME_RE = /^[\p{L}\p{M}\p{N} ._-]{1,24}$/u;
+// It starts with a letter or digit and never has 3+ combining marks in a row (no stacked "zalgo" text; NFC-composed
+// Vietnamese needs at most 2 marks even when typed decomposed).
+const ISLAND_NAME_RE = /^[\p{L}\p{N}][\p{L}\p{M}\p{N} ._-]{0,23}$/u;
+const MARK_RUN_RE = /\p{M}{3,}/u;
 function validIslandName(s) {
   if (typeof s !== 'string') return null;
   const t = s.normalize('NFC').replace(/\s+/g, ' ').trim();
-  return ISLAND_NAME_RE.test(t) ? t : null;
+  return ISLAND_NAME_RE.test(t) && !MARK_RUN_RE.test(t) ? t : null;
 }
 
 module.exports = { validatePublish, validIslandName, MAX_SESSIONS };

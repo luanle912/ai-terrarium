@@ -313,6 +313,21 @@ test('an unreadable refresh token is dropped, not banned', async () => {
   } finally { await h.close(); }
 });
 
+test('a user whose refresh token was dropped loses a 7-day session after 24 h (stream closes, API 401)', async () => {
+  const { h, login, user, db } = await setup();
+  try {
+    const stream = await openStream(h.url, login.cookie);
+    assert.equal((await fetch(h.url + '/api/me', { headers: { cookie: login.cookie } })).status, 200);
+    db.setRefreshToken(user.id, null); // what the unreadable-key branch does
+    h.clock.advance(24 * HOUR - 1000);
+    assert.equal((await fetch(h.url + '/api/me', { headers: { cookie: login.cookie } })).status, 200, 'not yet 24 h');
+    h.clock.advance(1001);
+    assert.equal((await fetch(h.url + '/api/me', { headers: { cookie: login.cookie } })).status, 401);
+    assert.equal(await stream.waitEnd(), true, 'stream closed');
+    assert.equal(db.sessionTokensForUser(user.id).length, 0);
+  } finally { await h.close(); }
+});
+
 // ---- account actions ----
 test('removeIslandOf revokes devices, drops the island, and a re-pair gets a fresh island', async () => {
   const { h, login, dev, user, db } = await setup();

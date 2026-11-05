@@ -72,8 +72,8 @@ const call = (hub, method, url, headers = {}) => new Promise((resolve, reject) =
 const cookiesOf = (r) => [].concat(r.headers['Set-Cookie'] || []);
 const pair = (c) => c.split(';')[0];
 
-async function startLogin(h, p = '/auth/login') {
-  const r = await call(h.hub, 'GET', p);
+async function startLogin(h, p = '/auth/login', headers = {}) {
+  const r = await call(h.hub, 'GET', p, headers);
   const loc = new URL(r.headers.Location);
   return { r, state: loc.searchParams.get('state'), nonce: loc.searchParams.get('nonce'), loc, cookie: pair(cookiesOf(r)[0]) };
 }
@@ -356,6 +356,54 @@ test('no refresh token: one consent retry, then a 24 h session', async () => {
   const row = sessionRow(h, second.cookie);
   assert.equal(row.expires_at - row.created_at, 86400000);
   assert.equal(h.hub.db.getUserBySub('s1').refresh_enc, null);
+  await h.hub.close();
+});
+
+test('the internal consent hop is not charged to the login limiter, but only with the cookie the callback set', async () => {
+  const h = setup();
+  noRefresh(h);
+  for (let i = 0; i < 20; i++) {
+    const first = await signIn(h);
+    assert.equal(first.cb.headers.Location, '/auth/login?consent=1', 'login ' + i);
+    const consentCookie = cookiesOf(first.cb).map(pair).find((c) => /tr_consent=./.test(c));
+    assert.ok(consentCookie, 'callback sets a consent cookie');
+    const retry = await startLogin(h, '/auth/login?consent=1', { cookie: consentCookie });
+    assert.equal(retry.r.status, 302, 'consent hop ' + i);
+    h.google.claims = good({ nonce: retry.nonce });
+    const cb = await call(h.hub, 'GET', `/auth/callback?code=c&state=${retry.state}`, { cookie: retry.cookie });
+    assert.equal(cb.headers.Location, '/', 'login ' + i + ' finishes');
+  }
+  // 20 real starts so far (consent hops free); a plain ?consent=1 and a forged cookie are charged: 10 left, then 429
+  for (let i = 0; i < 10; i++) assert.equal((await call(h.hub, 'GET', '/auth/login?consent=1')).status, 302);
+  assert.equal((await call(h.hub, 'GET', '/auth/login?consent=1')).status, 429);
+  assert.equal((await call(h.hub, 'GET', '/auth/login?consent=1', { cookie: '__Host-tr_consent=forged' })).status, 429);
+  await h.hub.close();
+});
+
+test('a consent cookie is single use', async () => {
+  const h = setup();
+  noRefresh(h);
+  const first = await signIn(h);
+  const consentCookie = cookiesOf(first.cb).map(pair).find((c) => /tr_consent=./.test(c));
+  for (let i = 0; i < 29; i++) await call(h.hub, 'GET', '/auth/login');
+  assert.equal((await call(h.hub, 'GET', '/auth/login?consent=1', { cookie: consentCookie })).status, 302, 'free once');
+  assert.equal((await call(h.hub, 'GET', '/auth/login?consent=1', { cookie: consentCookie })).status, 429, 'then charged');
+  await h.hub.close();
+});
+
+test('a refused login of a banned user costs no consent round trip', async () => {
+  const h = setup();
+  noRefresh(h);
+  await signIn(h, {}, { path: '/auth/login?consent=1' });
+  const u = h.hub.db.getUserBySub('s1');
+  h.hub.db.banUser(u.id, 'abuse', NOW);
+  const { cb, cookie } = await signIn(h);
+  assert.equal(cb.status, 403);
+  assert.equal(cookie, null);
+  // a google_revoked ban still takes the consent route (the user can be re-admitted)
+  h.hub.db.liftBan(u.id);
+  h.hub.db.banUser(u.id, 'google_revoked', NOW);
+  assert.equal((await signIn(h)).cb.headers.Location, '/auth/login?consent=1');
   await h.hub.close();
 });
 
