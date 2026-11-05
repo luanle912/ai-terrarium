@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Claude Office — local server. Đọc transcript ~/.claude/projects/**/*.jsonl và stream trạng thái session qua SSE.
 // Chạy: node claude-office-server.js   (Node 18+, không cần cài package)
-// Env: PORT (4317), CLAUDE_DIR (~/.claude/projects), ACTIVE_MIN (10), PERM_SEC (8)
-const fs = require('fs'), path = require('path'), os = require('os'), http = require('http');
+// Env: PORT (4317), CLAUDE_DIR (~/.claude/projects), ACTIVE_MIN (120), PERM_SEC (8)
+const fs = require('fs'), path = require('path'), os = require('os'), http = require('http'), crypto = require('crypto');
 const ROOT = process.env.CLAUDE_DIR || path.join(os.homedir(), '.claude', 'projects');
 const PKG = (() => { try { return JSON.parse(fs.readFileSync(path.join(__dirname, '.claude-plugin', 'plugin.json'), 'utf8')); } catch { return {}; } })();
 const VERSION = PKG.version || 'dev';
@@ -277,6 +277,18 @@ function listenWithRetry(server, port, host, { retryMs = 10000, log = console.lo
   });
 }
 
+// Preview of what the hub would see. Before joining (or while the publisher has no view) it is a Kín view built with a
+// RAM-only salt; once the publisher has its own view, that one is used.
+function makePublicPreview({ publisher, getSnapshot, salt }) {
+  const { createPublicView } = require('./lib/public-view.js');
+  const viewFn = createPublicView(salt);
+  return () => {
+    const v = publisher ? publisher.view() : null;
+    if (v) return { ...publisher.state(), view: v };
+    return { state: publisher ? publisher.state().state : 'off', view: viewFn(getSnapshot(), { share: 'kin', projects: [], private: false }) };
+  };
+}
+
 async function main() {
   // Subcommands (status/share/private/leave/join) run before listening; null means "serve as usual".
   const cfgLib = require('./lib/terrarium-config.js'), pub = require('./lib/publisher.js');
@@ -284,11 +296,12 @@ async function main() {
     try { await pub.join(hub, { name, dir: cfgLib.configDir() }); return 0; }
     catch (e) { console.log('join: ' + e.message); return 1; }
   };
-  const code = await cfgLib.runCommand(process.argv.slice(2), { join: joinCmd });
+  const code = await cfgLib.runCommand(process.argv.slice(2), { join: joinCmd, revokeSelf: pub.revokeSelf });
   if (typeof code === 'number') process.exit(code);
   setInterval(() => { scan(); const data = 'data: ' + JSON.stringify(snapshot()) + '\n\n'; for (const r of clients) r.write(data); }, 1000);
   let publisher = null;
-  const publicPreview = () => publisher ? Object.assign(publisher.state(), { view: publisher.view() }) : { state: 'off' };
+  // The salt only lives in RAM: it is used for the preview before joining, never written to disk.
+  const publicPreview = makePublicPreview({ publisher: { state: () => publisher ? publisher.state() : { state: 'off' }, view: () => publisher ? publisher.view() : null }, getSnapshot: snapshot, salt: crypto.randomBytes(32).toString('hex') });
   listenWithRetry(http.createServer(createHandler({ publicPreview })), PORT, '127.0.0.1')
     .then(() => {
       console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`);
@@ -297,5 +310,5 @@ async function main() {
     });
 }
 
-module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan };
+module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview };
 if (require.main === module) main();

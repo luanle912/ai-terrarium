@@ -106,3 +106,26 @@ test('status strips control characters from what it prints', async () => {
   await runCommand(['status'], { dir, log: (l) => logs.push(l) });
   assert.ok(!/[\x00-\x1f\x7f-\x9f]/.test(logs.join('')), JSON.stringify(logs));
 });
+
+test('leave revokes on the hub first', async () => {
+  const dir = tmp(); writeConfig(dir, base())
+  const calls = []
+  const r = await run(dir, ['leave'], { revokeSelf: async (hub, token) => { calls.push([hub, token, fs.existsSync(path.join(dir, 'config.json'))]); return true } })
+  assert.equal(r.code, 0)
+  assert.deepEqual(calls, [['https://hub.example', TOKEN, true]])
+  assert.match(r.out, /Revoked this device on the hub\./)
+  assert.equal(fs.existsSync(path.join(dir, 'config.json')), false)
+  // already revoked: nothing to call
+  writeConfig(dir, { ...base(), revoked: true })
+  let n = 0
+  await run(dir, ['leave'], { revokeSelf: async () => { n++; return true } })
+  assert.equal(n, 0)
+})
+
+test('leave still removes the file when the hub is unreachable', async () => {
+  const dir = tmp(); writeConfig(dir, base())
+  const r = await run(dir, ['leave'], { revokeSelf: async () => false })
+  assert.equal(r.code, 0)
+  assert.match(r.out, /Could not reach the hub; revoke this device at https:\/\/hub\.example\/me\./)
+  assert.equal(fs.existsSync(path.join(dir, 'config.json')), false)
+})

@@ -312,3 +312,85 @@ test('join strips control characters from hub-provided strings before printing',
   assert.ok(!/[\x00-\x09\x0b-\x1f\x7f-\x9f]/.test(out), 'no control chars (newlines from log joins excepted)');
   assert.match(out, /AB\[2JCD/);
 });
+
+const status = (s, body) => ({ status: s, headers: { get: () => null }, json: async () => body })
+
+test('a 401 for an old token does not revoke a newer config', async () => {
+  const dir = tmp(); mkCfg(dir)
+  let release
+  const gate = new Promise((r) => { release = r })
+  const r = rig(dir, async (n) => { if (n === 1) { await gate; return status(401) } return ok() }, { v: snap(1) })
+  const first = r.step()   // first send is held open
+  await new Promise((res) => setImmediate(res))
+  writeConfig(dir, { ...readConfig(dir), token: 'trd_newtoken5678' })
+  release(); await first
+  assert.equal(readConfig(dir).revoked, undefined)
+  assert.notEqual(r.pub.state().state, 'revoked')
+  await r.run(2500)
+  assert.ok(r.calls.length >= 2)
+  assert.equal(r.calls.at(-1).opts.headers.authorization, 'Bearer trd_newtoken5678')
+  r.pub.stop()
+})
+
+test('403 login_required pauses without marking revoked', async () => {
+  const dir = tmp(); mkCfg(dir)
+  let phase = 'locked'
+  const r = rig(dir, () => phase === 'locked' ? status(403, { error: 'login_required' }) : ok(), { v: snap(1) })
+  await r.step()
+  assert.equal(r.pub.state().state, 'paused')
+  assert.equal(readConfig(dir).revoked, undefined)
+  await r.run(290000)
+  assert.equal(r.calls.length, 1, 'no resend before 300 s')
+  phase = 'ok'
+  await r.run(15000)
+  assert.equal(r.calls.length, 2)
+  assert.equal(r.pub.state().state, 'sending')
+  assert.equal(r.logs.filter((l) => /sign in/.test(l)).length, 1)
+  assert.ok(r.logs.some((l) => l === 'terrarium: sign in to http://127.0.0.1:9 again to resume publishing'))
+  r.pub.stop()
+})
+
+test('a 403 without login_required behaves like a server error', async () => {
+  const dir = tmp(); mkCfg(dir)
+  const r = rig(dir, () => status(403, { error: 'other' }), { v: snap(1) })
+  await r.step()
+  assert.equal(r.pub.state().state, 'offline')
+  r.pub.stop()
+})
+
+const joinHub = (extra) => {
+  const calls = []
+  const fetch = async (url, opts) => {
+    calls.push({ url, opts, fileExists: extra && extra.dir ? readConfig(extra.dir) : null })
+    const j = (s, b) => ({ status: s, json: async () => b })
+    if (url.endsWith('/api/device/start')) return j(200, { device_code: 'DC', user_code: 'KHMT-BQXP', verification_uri: 'https://hub.example/device', expires_in: 600, interval: 5 })
+    if (url.endsWith('/api/device/token')) return j(200, { token: 'trd_new', device_id: 'dn', island_id: 'in' })
+    return { status: 204 }
+  }
+  return { fetch, calls }
+}
+
+test('join revokes the previous token on the hub', async () => {
+  const dir = tmp(); mkCfg(dir, { hub: 'https://old.example', token: 'trd_old' })
+  const h = joinHub({ dir })
+  await join('https://hub.example', { dir, fetch: h.fetch, log() {}, openBrowser() {}, sleep: async () => {} })
+  const rev = h.calls.filter((c) => c.url.endsWith('/api/device/revoke-self'))
+  assert.equal(rev.length, 1)
+  assert.equal(rev[0].url, 'https://old.example/api/device/revoke-self')
+  assert.equal(rev[0].opts.method, 'POST')
+  assert.equal(rev[0].opts.headers.authorization, 'Bearer trd_old')
+  assert.equal(rev[0].fileExists.token, 'trd_new', 'the new config was written before the old token was revoked')
+  assert.equal(h.calls.at(-1), rev[0])
+})
+
+test('join with no previous config revokes nothing', async () => {
+  const dir = tmp()
+  const h = joinHub()
+  await join('https://hub.example', { dir, fetch: h.fetch, log() {}, openBrowser() {}, sleep: async () => {} })
+  assert.equal(h.calls.filter((c) => c.url.endsWith('/revoke-self')).length, 0)
+  // a previously revoked config is not revoked again
+  const dir2 = tmp(); mkCfg(dir2, { token: 'trd_old', revoked: true })
+  const h2 = joinHub()
+  await join('https://hub.example', { dir: dir2, fetch: h2.fetch, log() {}, openBrowser() {}, sleep: async () => {} })
+  assert.equal(h2.calls.filter((c) => c.url.endsWith('/revoke-self')).length, 0)
+})

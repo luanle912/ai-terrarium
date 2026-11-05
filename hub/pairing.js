@@ -124,6 +124,20 @@ function routes(ctx) {
     },
   });
 
+  // The machine retires its own token (leave / re-join). Bearer only: cookies are never read here.
+  list.push({
+    method: 'POST', path: '/api/device/revoke-self',
+    handler(req, res) {
+      const m = /^Bearer (\S{1,200})$/.exec(String(req.headers.authorization || ''));
+      const device = m && db.getDeviceByTokenHash(sha256hex(m[1]));
+      if (!device || device.revoked_at != null) throw new HttpError(401, 'unauthorized');
+      db.revokeDevice(device.id, device.user_id, deps.now());
+      ctx.world.removeDevice(device.id);
+      ctx.accounts.audit('device_revoked', { actorId: null, target: 'device:' + device.id + ' user:' + device.user_id, ip: helpers.clientIp(req) });
+      send(res, 204, '');
+    },
+  });
+
   list.push({
     method: 'GET', path: '/device',
     handler(req, res) {

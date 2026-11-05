@@ -475,3 +475,15 @@ test('re-login closes the event stream of the old session', async () => {
     } finally { st.close(); }
   } finally { await h.close(); }
 });
+
+test('more than 16 letter rooms over two machines keep distinct labels', () => {
+  const w = createWorld({ now: () => NOW });
+  const L = 'ABCDEFGHIJKL';
+  const mk = (base) => [...L].map((l, i) => sess(base + i, { dept: l }));
+  const isl = { id: 'isl1', name: 'x', color: '#000000' };
+  w.publish(isl, 'dev1', 'kin', { seq: 1, sessions: mk(100) });
+  w.publish(isl, 'dev2', 'kin', { seq: 1, sessions: mk(200) });
+  const labels = w.snapshotFor('isl1').map((s) => s.project);
+  assert.equal(labels.length, 24);
+  assert.equal(new Set(labels).size, 24);
+});

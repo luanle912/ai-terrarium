@@ -219,3 +219,36 @@ test('db holds only hashes of the token and device code, and logs hold neither',
     assert.ok(!logs.includes(t.token) && !logs.includes(s.device_code) && !logs.includes(s.user_code));
   } finally { await h.close(); }
 });
+
+const pub = (h, token) => fetch(h.url + '/api/publish', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token }, body: JSON.stringify({ v: 1, seq: 0, sessions: [] }) });
+const audits = (h, action) => h.hub.db.listAudit(500).filter((a) => a.action === action);
+
+test('revoke-self revokes only the calling device', async () => {
+  const h = await startDevHub();
+  try {
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const d1 = await pairDevice(h.url, login, 'One');
+    const d2 = await pairDevice(h.url, login, 'Two');
+    assert.equal((await pub(h, d1.token)).status, 204);
+    const r = await postJson(h.url, '/api/device/revoke-self', {}, { authorization: 'Bearer ' + d1.token });
+    assert.equal(r.status, 204);
+    assert.equal((await pub(h, d1.token)).status, 401);
+    assert.equal((await pub(h, d2.token)).status, 204);
+    const a = audits(h, 'device_revoked');
+    assert.equal(a.length, 1); assert.equal(a[0].actor_id, null); assert.match(a[0].target, new RegExp('device:' + d1.device_id));
+    // already revoked and unknown tokens -> 401
+    assert.equal((await postJson(h.url, '/api/device/revoke-self', {}, { authorization: 'Bearer ' + d1.token })).status, 401);
+    assert.equal((await postJson(h.url, '/api/device/revoke-self', {}, { authorization: 'Bearer trd_nope' })).status, 401);
+  } finally { await h.close(); }
+});
+
+test('revoke-self ignores cookies', async () => {
+  const h = await startDevHub();
+  try {
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const d1 = await pairDevice(h.url, login, 'One');
+    const r = await postJson(h.url, '/api/device/revoke-self', {}, { cookie: login.cookie });
+    assert.equal(r.status, 401);
+    assert.equal((await pub(h, d1.token)).status, 204);
+  } finally { await h.close(); }
+});
