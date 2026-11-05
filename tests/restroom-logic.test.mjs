@@ -76,12 +76,52 @@ test('points on the block floor are on the raised floor; the lawn around it is n
 
 // ---- scale ----
 
-test('heights follow the office: full back wall, solid room walls above a person but under the full wall, knee-high front', () => {
+test('heights follow the office: full outer walls, solid room walls above a person, doors under the full wall', () => {
   const h = wc.heights
-  assert.equal(h.full, WALL, 'the back wall is as tall as the office walls (3 tiles)')
-  assert.ok(h.room > 25 && h.room <= h.full * 0.6, `room walls ${h.room}: hide a person, keep the room readable`)
+  assert.equal(h.full, WALL, 'back, front and east walls are as tall as the office walls (3 tiles)')
+  assert.ok(h.room > 25 && h.room <= h.full * 0.6, `room walls ${h.room}: hide a person`)
   assert.ok(h.stall > 25 && h.stall <= h.room, `stall panels ${h.stall} hide whoever is inside`)
-  assert.ok(h.knee < h.room / 2, `knee wall ${h.knee}`)
+  assert.ok(h.door > 30 && h.door < h.full, `doors ${h.door} are taller than a person, with wall above them`)
+  // the east wall runs the whole side of the women's room, from behind the back wall line to the front wall
+  assert.ok(wc.walls.east.y0 <= wc.y0 - wc.back + 1e-9 && wc.walls.east.y1 >= wc.walls.front.y + wc.walls.front.t - 1e-9)
+})
+
+test('accents are muted versions of the brief colours: same hue family, softer and lighter', () => {
+  const hsl = (h) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn
+    return { l, s: d ? d / (1 - Math.abs(2 * l - 1)) : 0, blue: b > r } }
+  for (const [r, brief] of [['m', '#173DC9'], ['f', '#D9467A']]) {
+    const a = hsl(wc.rooms[r].accent), s = hsl(wc.rooms[r].sign), o = hsl(brief)
+    assert.ok(a.s < o.s - 0.2 && a.l > o.l, `${r} door colour ${wc.rooms[r].accent} is not muted`)
+    assert.ok(s.s > a.s && s.s < o.s + 1e-9, `${r} sign colour ${wc.rooms[r].sign} sits between the door colour and the brief`)
+    assert.equal(a.blue, o.blue, `${r} keeps its hue family`)
+  }
+})
+
+// ---- the swing doors ----
+
+test('one swing door in each doorway of the front wall', () => {
+  assert.deepEqual(wc.doors.map((d) => [d.room, d.x0, d.x1, d.y]), [['m', ...wc.rooms.m.door, wc.front], ['f', ...wc.rooms.f.door, wc.front]])
+})
+
+test('a door is shut with nobody in its doorway, and swings away from whoever is in it', () => {
+  const [m, f] = wc.doors, mid = (d) => (d.x0 + d.x1) / 2
+  assert.deepEqual(RestroomLogic.doorSwing(wc, []), [0, 0])
+  assert.deepEqual(RestroomLogic.doorSwing(wc, [{ x: mid(m), y: wc.front + 0.4 }]), [-1, 0], 'pushed in from the lobby')
+  assert.deepEqual(RestroomLogic.doorSwing(wc, [{ x: mid(f), y: wc.front - 0.4 }]), [0, 1], 'pushed out from the room')
+  assert.deepEqual(RestroomLogic.doorSwing(wc, [{ x: mid(m), y: wc.front + 1.2 }, { x: mid(f), y: wc.front - 2 }]), [0, 0], 'people further away leave the doors shut')
+  assert.deepEqual(RestroomLogic.doorSwing(wc, [{ x: m.x1 + 0.2, y: wc.front }]), [0, 0], 'beside the opening, not in it')
+  // the first person in the doorway decides, so the answer never flickers between frames with the same people
+  const both = [{ x: mid(m), y: wc.front - 0.3 }, { x: mid(m), y: wc.front + 0.3 }]
+  assert.deepEqual(RestroomLogic.doorSwing(wc, both), RestroomLogic.doorSwing(wc, both))
+  assert.deepEqual(RestroomLogic.doorSwing(wc, both), [1, 0])
+})
+
+test('every route into a room passes through its doorway, so the door swings for everyone going in', () => {
+  for (const s of wc.spots) {
+    const d = wc.doors.find((o) => o.room === s.room), r = route([26, 5], s.tile)
+    const pts = r.map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 }))
+    assert.ok(pts.some((p) => RestroomLogic.doorSwing(wc, [p])[wc.doors.indexOf(d)] !== 0), `the way to ${s.tile} never opens the ${s.room} door`)
+  }
 })
 
 test('fixtures are sized against a desk (2×1 tiles)', () => {
