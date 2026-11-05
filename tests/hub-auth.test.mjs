@@ -170,6 +170,9 @@ test('callback refuses a token with a bad signature', async () => {
   assert.ok(!cookiesOf(cb).some((c) => c.startsWith('__Host-tr_sess=')), 'no session cookie');
   assert.equal(h.hub.db.getUserBySub('s1'), undefined);
   assert.equal(h.hub.db.raw.prepare('SELECT count(*) c FROM sessions').get().c, 0);
+  const logged = h.logs.filter((x) => /jwt: bad signature/.test(x));
+  assert.equal(logged.length, 1);
+  assert.ok(!logged[0].includes(claims.nonce) && !logged[0].includes('eyJ'), 'the token is not logged');
   // and a token with no signature at all
   const l2 = await startLogin(h);
   h.google.onToken = () => ({ status: 200, body: { id_token: h.google.sign(good({ nonce: l2.nonce })).split('.').slice(0, 2).join('.') + '.' } });

@@ -44,19 +44,22 @@ function createJwks({ fetch, now, url = GOOGLE_JWKS, minRefetchMs = 60000 }) {
   }
 
   async function getKey(kid) {
-    if (inflight) await inflight;
+    if (inflight) { try { await inflight; } catch (e) { if (keys.size === 0) throw e; } }
     const t = now();
     const fresh = lastFetchAt !== null && t < expiresAt;
     if (fresh && keys.has(kid)) return keys.get(kid);
     const canFetch = lastFetchAt === null || t - lastFetchAt >= minRefetchMs;
-    if (canFetch) await load();
-    else if (!fresh) return null; // expired but throttled after a failed fetch: use no stale keys
+    if (canFetch) {
+      // A failed refetch keeps the keys of the last good fetch; only a hub that never fetched successfully has none.
+      try { await load(); } catch (e) { if (keys.size === 0) throw e; }
+    }
+    // Throttled (or failed) refetches fall back to the last successful keys, even if their max-age has passed.
     return keys.get(kid) || null;
   }
 
   async function verify(jwt) {
     const parts = String(jwt || '').split('.');
-    if (parts.length !== 3) throw new Error('jwt: malformed');
+    if (parts.length !== 3 || !parts.every((x) => /^[A-Za-z0-9_-]+$/.test(x))) throw new Error('jwt: malformed');
     let header;
     try { header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8')); } catch { throw new Error('jwt: bad header'); }
     if (!header || typeof header !== 'object' || Array.isArray(header)) throw new Error('jwt: bad header');

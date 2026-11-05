@@ -169,7 +169,11 @@ function routes(ctx) {
       let idToken;
       try { idToken = (await tokenRes.json()).id_token; } catch { throw new HttpError(400, 'sign-in failed'); }
       let claims;
-      try { claims = await ctx.jwks.verify(idToken); } catch { throw new HttpError(403, 'this account is not allowed to sign in'); }
+      try { claims = await ctx.jwks.verify(idToken); } catch (e) {
+        // The reason only (never the token), so operators can tell a JWKS outage from a rejected token.
+        deps.log('id token rejected: ' + ((e && e.message) || 'error'));
+        throw new HttpError(403, 'this account is not allowed to sign in');
+      }
       const r = checkClaims(claims, { clientId: config.googleClientId, domains: config.allowedDomains, nonce: row.nonce, now: deps.now() });
       if (!r.ok) throw new HttpError(403, 'this account is not allowed to sign in');
       finishLogin(res, r);
