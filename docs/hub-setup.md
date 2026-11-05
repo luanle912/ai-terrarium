@@ -1,7 +1,8 @@
 # Cài đặt hub (nhiều đảo, một bầu trời)
 
-Hub là một server Node nhỏ (`hub/server.js`, không cần cài package) cho nhân viên newera.inc đăng nhập bằng Google,
-ghép máy của mình rồi xem đảo của cả công ty. Thiết kế đầy đủ ở `docs/specs/2026-11-04-multi-island-design.md`.
+Hub là một server Node nhỏ (`hub/server.js`, không cần cài package) cho mọi người đăng nhập bằng Google, ghép máy của
+mình rồi xem đảo của nhau. Hub công khai đang chạy ở https://terrarium.openlabs.click; tài liệu này dành cho ai muốn
+dựng hub riêng, ví dụ chỉ cho tài khoản một công ty. Thiết kế đầy đủ ở `docs/specs/2026-11-04-multi-island-design.md`.
 Tài liệu này mô tả hub ở giai đoạn 2 (GĐ2): tự quản lý đảo, mất quyền tự động khi Google thu hồi, nhật ký.
 
 Yêu cầu: **Node ≥ 22.13** cho hub, vì hub dùng `node:sqlite` có sẵn trong Node. Plugin local trên máy từng người vẫn chạy
@@ -9,12 +10,15 @@ Yêu cầu: **Node ≥ 22.13** cho hub, vì hub dùng `node:sqlite` có sẵn tr
 
 ## 1. Tạo OAuth client trong Google Cloud
 
-1. Vào Google Cloud project thuộc Workspace newera.inc, mở **APIs & Services → OAuth consent screen**.
-2. Chọn kiểu người dùng **Internal**, để chỉ tài khoản trong Workspace đăng nhập được.
-   Hub vẫn chỉ xin scope `openid email profile`, không xin thêm quyền nào.
+1. Mở **APIs & Services → OAuth consent screen** (Google Auth Platform) trong Google Cloud project của bạn.
+2. Chọn kiểu người dùng:
+   - **Internal** nếu hub chỉ dành cho một Google Workspace (đặt `HUB_ALLOWED_DOMAINS` là tên miền đó);
+   - **External** nếu mở cho mọi tài khoản Google (đặt `HUB_ALLOWED_DOMAINS=*`), rồi **Publish app** ở mục Audience.
+     Hub chỉ xin `openid email profile` là các quyền không nhạy cảm, nên không phải chờ Google duyệt mới đăng nhập được;
+     phần duyệt branding (logo trên màn hình đồng ý) là tuỳ chọn, logo dùng `assets/logo.png`.
 3. Mở **Credentials → Create credentials → OAuth client ID**, loại **Web application**.
 4. Thêm **Authorized redirect URI**: `<HUB_PUBLIC_URL>/auth/callback`
-   (ví dụ `https://terrarium.newera.inc/auth/callback`).
+   (ví dụ `https://terrarium.example.com/auth/callback`).
 5. Lấy `Client ID` và `Client secret` đặt vào `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Chỉ đặt qua biến môi trường,
    không ghi vào file trong repo.
 
@@ -24,8 +28,8 @@ Thiếu hoặc sai biến thì hub từ chối khởi động và in ra **mọi*
 
 | Biến | Bắt buộc | Mặc định | Ý nghĩa |
 |---|---|---|---|
-| `HUB_PUBLIC_URL` | ✔ | | URL công khai của hub, ví dụ `https://terrarium.newera.inc`. Phải là `https://`; `http://` chỉ được dùng với localhost |
-| `HUB_ALLOWED_DOMAINS` | ✔ | | Tên miền email được đăng nhập, cách nhau bằng dấu phẩy, ví dụ `newera.inc` |
+| `HUB_PUBLIC_URL` | ✔ | | URL công khai của hub, ví dụ `https://terrarium.example.com`. Phải là `https://`; `http://` chỉ được dùng với localhost |
+| `HUB_ALLOWED_DOMAINS` | ✔ | | Tên miền email được đăng nhập, cách nhau bằng dấu phẩy, ví dụ `example.com`. `*` cho mọi tài khoản Google đã xác minh email (kể cả Gmail cá nhân) |
 | `HUB_OWNER_EMAILS` | ✔ | | Email chủ hub (owner), cách nhau bằng dấu phẩy. Xem mục 3 |
 | `HUB_SECRET_KEY` | ✔ (cả khi dev) | | 32 byte ngẫu nhiên mã hoá base64, dùng mã hoá refresh token Google khi lưu (AES-256-GCM). Sai độ dài hoặc không phải base64 thì hub không khởi động. Xem mục 2b |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | ✔ (trừ khi `HUB_DEV_LOGIN=1`) | | OAuth client ở mục 1 |
@@ -76,8 +80,8 @@ khỏi DB.
 Chạy thử:
 
 ```bash
-HUB_PUBLIC_URL=https://terrarium.newera.inc \
-HUB_ALLOWED_DOMAINS=newera.inc HUB_OWNER_EMAILS=kiet.nc@newera.inc \
+HUB_PUBLIC_URL=https://terrarium.example.com \
+HUB_ALLOWED_DOMAINS=example.com HUB_OWNER_EMAILS=owner@example.com \
 GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... \
 HUB_TRUST_PROXY=1 HUB_DB=/var/lib/terrarium/hub.sqlite \
 node hub/server.js
@@ -90,7 +94,7 @@ Hub nghe ở `127.0.0.1` và không tự lo HTTPS. Đặt một proxy phía trư
 Caddy:
 
 ```
-terrarium.newera.inc {
+terrarium.example.com {
   reverse_proxy 127.0.0.1:4318
 }
 ```
@@ -143,10 +147,16 @@ sqlite3 hub.sqlite ".backup 'hub-backup.sqlite'"
 
 ## 5. Cách người dùng tham gia
 
-Trên máy của mỗi người, trong thư mục plugin (hoặc bản clone của repo):
+Cách dễ nhất: trên trang local `http://localhost:4317`, mở ⚙ Cài đặt, mục **Thế giới**, bấm **Tham gia thế giới**.
+Máy xin mã từ hub rồi mở trang duyệt với mã đã điền sẵn; người dùng đăng nhập (nếu chưa) và bấm **Cho phép**. Mở link
+không tự duyệt gì: vẫn phải bấm "Cho phép", và mã sai trong link bị tính vào giới hạn 5 lần như khi gõ tay. **Thoát
+thế giới** trong cùng mục làm việc của `leave`. Nút này trỏ về `https://terrarium.openlabs.click`; hub riêng thì đặt
+`TERRARIUM_HUB=https://terrarium.example.com` cho server local.
+
+Từ terminal, trong thư mục plugin (hoặc bản clone của repo):
 
 ```bash
-node server.js join https://terrarium.newera.inc     # Pair this machine: prints a device code and opens the approval page (optional: --name "My Mac")
+node server.js join https://terrarium.example.com    # Pair this machine: prints a device code and opens the approval page (optional: --name "My Mac")
 node server.js share kin                            # Private level (default): status, department letter and task type only
 node server.js share co-ban                         # Basic level: also shares tool and model names; project names only if listed via `share projects`
 node server.js share projects a,b                   # Allow these project names to be shown (Basic level only)

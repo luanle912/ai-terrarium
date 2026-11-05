@@ -150,37 +150,46 @@ https://claude.ai/artifact/7rKQWsQxG8WttUXiWqEUt6?server=localhost:4317
 | `CLAUDE_DIR` | `~/.claude/projects` | Transcript directory |
 | `ACTIVE_MIN` | `120` | Minutes before a session is considered inactive |
 
+### Language
+
+The page is available in Tiếng Việt, English, 日本語, 한국어, 简体中文 and Español. It starts in your browser's language (English if it is not one of these); pick another under **Language** at the top of the ⚙ panel and the page reloads in it and remembers the choice. The hub sign-in pages and the `server.js` command-line messages are still Vietnamese.
+
 ### Weather
 
 Open the ⚙ panel in the bottom-right corner of the office:
 
-- **Thời tiết** picks the mode: *Ngẫu nhiên* (random, the default), *Thời tiết thật* (real weather) or *Tắt* (always clear).
-- *Thời tiết thật* asks for a city. The page looks it up with [Open-Meteo](https://open-meteo.com/) (free for non-commercial use, no key) and refreshes every 15 minutes. If the lookup fails, the panel says why and the page falls back to random weather.
-- The preview buttons (*Quang, Mây, Mưa, Giông, Tuyết, Sương*) show a weather right away.
+- **Weather** picks the mode: *Random* (the default), *Real weather* or *Off (always clear)*.
+- *Real weather* asks for a city. The page looks it up with [Open-Meteo](https://open-meteo.com/) (free for non-commercial use, no key) and refreshes every 15 minutes. If the lookup fails, the panel says why and the page falls back to random weather.
+- The preview buttons (*Clear, Cloudy, Rain, Storm, Snow, Fog*) show a weather right away.
 - The mode and city are remembered in this browser. With "reduce motion" turned on in your OS, lightning does not flash and rain and snow are lighter.
 
 ---
 
 ## 🏝️ Chia sẻ đảo
 
-Nhân viên newera.inc có thể đưa đảo của mình lên một bầu trời chung (hub). Chỉ trạng thái đã lọc rời khỏi máy: không có
-nội dung, đường dẫn hay tên agent. Mức Cơ bản gửi thêm tên tool và model; tên project chỉ gửi khi bạn chọn
-(xem `docs/hub-setup.md`).
+Ai có tài khoản Google cũng đưa được đảo của mình lên bầu trời chung tại **https://terrarium.openlabs.click**.
+Chỉ trạng thái đã lọc rời khỏi máy: không có nội dung, đường dẫn hay tên agent. Mức Cơ bản gửi thêm tên tool và model;
+tên project chỉ gửi khi bạn chọn.
+
+**Tham gia:** mở ⚙ Cài đặt ở góc phải dưới trang `http://localhost:4317`, mục **Thế giới**, bấm **Tham gia thế giới**.
+Trang hub mở ra với mã đã điền sẵn: đăng nhập Google (lần đầu) rồi bấm **Cho phép**. Vài giây sau đảo của bạn xuất hiện
+và chip "Thế giới" trên header chuyển xanh; bấm chip để mở thế giới. Muốn rút ra thì bấm **Thoát thế giới** trong cùng mục.
+
+Trang local có công tắc **Xem như người khác** trong Cài đặt để xem đúng phần người khác thấy, kể cả khi chưa tham gia.
+Trên hub, ở chế độ **Của tôi** và trang `/me`, bạn đổi tên và màu đảo, xem và thu hồi từng máy, hoặc rời hub.
+
+Vẫn dùng được từ terminal:
 
 ```bash
-node server.js join https://terrarium.newera.inc   # Pair this machine; approve the code in your browser
-node server.js share kin|co-ban                    # Set the share level (Private or Basic)
-node server.js private on|off                      # Hide or show your agents to others
-node server.js status                              # Show the current hub connection and settings
-node server.js leave                               # Revoke this device on the hub and remove the local config
+node server.js join https://terrarium.openlabs.click   # Pair this machine; approve it in your browser
+node server.js share kin|co-ban                         # Set the share level (Private or Basic)
+node server.js private on|off                           # Hide or show your agents to others
+node server.js status                                   # Show the current hub connection and settings
+node server.js leave                                    # Revoke this device on the hub and remove the local config
 ```
 
-Trên trang của hub, ở chế độ **Của tôi** và trang `/me`, bạn tự đổi tên và màu đảo, xem và thu hồi từng máy, và rời hub
-(xoá đảo, máy, phiên). Trang local có công tắc **Xem như người khác** trong Cài đặt để xem đúng phần người khác thấy,
-kể cả khi chưa ghép máy. Owner của hub có thêm quyền "Xoá đảo" của một member. Người nghỉ việc mất quyền trong vòng
-24 giờ, tự động (hub dùng quyền truy cập offline của Google, nên lần đăng nhập đầu có màn hình đồng ý).
-
-Hướng dẫn dựng hub và biến môi trường: [docs/hub-setup.md](docs/hub-setup.md).
+Muốn dựng hub riêng (giới hạn theo tên miền công ty, owner, sao lưu): [docs/hub-setup.md](docs/hub-setup.md).
+Đặt `TERRARIUM_HUB=<url>` để nút Tham gia trỏ về hub của bạn.
 
 ---
 

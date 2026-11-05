@@ -77,8 +77,9 @@ function clientIp(req, trustProxy) {
 
 // routes: [{method, path: string | RegExp, handler(req, res, rc)}]; rc = {url, path, query, match}.
 // No match -> 404. A handler error with .status maps to that status, anything else is a bare 500
-// (details are never sent to the client or logged).
-function createRouter(routes, { log = () => {}, now = Date.now, hsts = false } = {}) {
+// (details are never sent to the client or logged). htmlError(status, message) -> {body, headers} renders a page
+// for browsers that navigate into an error (Accept: text/html, outside /api/); everyone else keeps plain text.
+function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, htmlError = null } = {}) {
   return function handle(req, res) {
     const t0 = now();
     if (hsts && typeof res.setHeader === 'function') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
@@ -90,6 +91,13 @@ function createRouter(routes, { log = () => {}, now = Date.now, hsts = false } =
       try { log(`${new Date(t0).toISOString()} ${req.method} ${pathname} ${res.statusCode} ${now() - t0}ms`); } catch { /* ignore */ }
       if (req._tooLarge) req.destroy();
     });
+    const sendError = (status, message, headers = {}) => {
+      if (htmlError && !pathname.startsWith('/api/') && /\btext\/html\b/i.test(String(req.headers.accept || ''))) {
+        const p = htmlError(status, message);
+        return send(res, status, p.body, { ...p.headers, ...headers });
+      }
+      send(res, status, message, { 'Content-Type': 'text/plain; charset=utf-8', ...headers });
+    };
     const fail = (e) => {
       try {
         // Only our own HttpError (status 400-599) may choose status/message; anything else is a bare 500.
@@ -97,7 +105,7 @@ function createRouter(routes, { log = () => {}, now = Date.now, hsts = false } =
         const status = ok ? e.status : 500;
         if (status === 500) { try { log(`handler error ${(e && e.name) || 'Error'} ${pathname}`); } catch { /* ignore */ } }
         const headers = status === 413 ? { Connection: 'close' } : {};
-        send(res, status, status === 500 ? 'internal error' : (e.message || ''), { 'Content-Type': 'text/plain; charset=utf-8', ...headers });
+        sendError(status, status === 500 ? 'internal error' : (e.message || ''), headers);
       } catch { try { res.destroy(); } catch { /* ignore */ } }
     };
     if (!url) return fail(new HttpError(400, 'bad request'));
@@ -108,7 +116,7 @@ function createRouter(routes, { log = () => {}, now = Date.now, hsts = false } =
       if (typeof r.path === 'string') { if (r.path === pathname) { route = r; break; } }
       else { const m = r.path.exec(pathname); if (m) { route = r; match = m; break; } }
     }
-    if (!route) return send(res, 404, 'not found', { 'Content-Type': 'text/plain; charset=utf-8' });
+    if (!route) return sendError(404, 'not found');
     try {
       const out = route.handler(req, res, { url, path: pathname, query: url.searchParams, match });
       if (out && typeof out.then === 'function') out.catch(fail);

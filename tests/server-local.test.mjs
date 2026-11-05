@@ -45,6 +45,80 @@ test('handler rejects foreign hosts, unknown paths and non-GET methods', async (
   } finally { await close(server); }
 });
 
+test('POST /api/join only answers this page: own Origin and the X-Terrarium header', async () => {
+  const server = http.createServer();
+  const port = await listen(server);
+  let starts = 0;
+  const joinFlow = { start: async () => { starts++; return { phase: 'pending', code: 'KHMT-BQXP', url: 'https://hub.example/device?code=KHMT-BQXP' }; }, status: () => ({ phase: 'idle' }) };
+  server.on('request', createHandler({ snapshot: () => ({ sessions: [] }), scan: () => {}, htmlFile: '/nonexistent.html', port, allowedHosts: [], allowedOrigin: 'https://evil.example', joinFlow }));
+  const post = (headers) => request(port, { method: 'POST', path: '/api/join', headers });
+  try {
+    assert.equal((await post({ Origin: 'https://evil.example', 'X-Terrarium': 'join' })).status, 403, 'even the CORS-allowed origin may not pair');
+    assert.equal((await post({ Origin: `http://localhost:${port}` })).status, 403, 'header missing');
+    assert.equal((await post({ Origin: 'http://localhost:1', 'X-Terrarium': 'join' })).status, 403, 'other port');
+    assert.equal((await request(port, { method: 'OPTIONS', path: '/api/join', headers: { Origin: 'https://evil.example' } })).status, 405, 'no preflight answer');
+    assert.equal(starts, 0);
+    const ok = await post({ Origin: `http://localhost:${port}`, 'X-Terrarium': 'join' });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(JSON.parse(ok.body), { phase: 'pending', code: 'KHMT-BQXP', url: 'https://hub.example/device?code=KHMT-BQXP' });
+    assert.equal(starts, 1);
+    assert.deepEqual(JSON.parse((await request(port, { path: '/api/join' })).body), { phase: 'idle' });
+  } finally { await close(server); }
+});
+
+test('makeJoinFlow: pending, reuse while pending, joined, already joined, error', async () => {
+  const { makeJoinFlow } = require('../server.js');
+  let t = 1000, cfg = null, finish, fail;
+  const opened = [], calls = [];
+  const join = (hub, o) => new Promise((res, rej) => { calls.push(hub); o.onStart({ userCode: 'KHMT-BQXP', url: hub + '/device?code=KHMT-BQXP', expiresIn: 600 }); finish = res; fail = rej; });
+  const flow = makeJoinFlow({ join, readCfg: () => cfg, openBrowser: u => opened.push(u), hub: 'https://hub.example', name: 'Mac', now: () => t });
+  assert.deepEqual(await flow.start(), { phase: 'pending', code: 'KHMT-BQXP', url: 'https://hub.example/device?code=KHMT-BQXP', expiresAt: 601000 });
+  assert.equal((await flow.start()).code, 'KHMT-BQXP');
+  assert.equal(calls.length, 1, 'a second click reuses the pending code');
+  finish({}); await new Promise(r => setImmediate(r));
+  assert.deepEqual(flow.status(), { phase: 'joined', hub: 'https://hub.example' });
+  cfg = { hub: 'https://hub.example', token: 'trd_x' };
+  assert.deepEqual(await flow.start(), { phase: 'joined', hub: 'https://hub.example' });
+  assert.deepEqual(opened, ['https://hub.example'], 'already joined: just open the world');
+  cfg = { hub: 'https://hub.example', token: 'trd_x', revoked: true };
+  await flow.start();
+  assert.equal(calls.length, 2, 'a revoked device pairs again');
+  fail(new Error('pairing was denied')); await new Promise(r => setImmediate(r));
+  assert.deepEqual(flow.status(), { phase: 'error', error: 'pairing was denied' });
+});
+
+test('makeJoinFlow.leave cancels a pending join and the old attempt cannot write back', async () => {
+  const { makeJoinFlow } = require('../server.js');
+  let stop, finish;
+  const join = (hub, o) => new Promise((res) => { stop = o.shouldStop; o.onStart({ userCode: 'AAAA-BBBB', url: null, expiresIn: 600 }); finish = res; });
+  const leaves = [];
+  const flow = makeJoinFlow({ join, leave: async (log) => { leaves.push(1); log('Left the hub. Local config removed.'); return 0; }, readCfg: () => null, openBrowser() {}, hub: 'https://hub.example', name: 'Mac' });
+  assert.equal((await flow.start()).phase, 'pending');
+  assert.deepEqual(await flow.leave(), { phase: 'left' });
+  assert.equal(stop(), true, 'the polling loop is told to stop');
+  finish({}); await new Promise(r => setImmediate(r));
+  assert.deepEqual(flow.status(), { phase: 'idle' }, 'a late success of the cancelled join is ignored');
+  assert.equal(leaves.length, 1);
+  const flow2 = makeJoinFlow({ join, leave: async (log) => { log('Could not reach the hub; revoke this device at https://hub.example/me.'); log('Left the hub. Local config removed.'); return 0; }, readCfg: () => null, openBrowser() {}, hub: 'https://hub.example', name: 'Mac' });
+  assert.deepEqual(await flow2.leave(), { phase: 'left', warn: 'hub_unreachable' });
+});
+
+test('POST /api/leave needs X-Terrarium: leave from this page', async () => {
+  const server = http.createServer();
+  const port = await listen(server);
+  let left = 0;
+  const joinFlow = { start: async () => ({}), leave: async () => { left++; return { phase: 'left' }; }, status: () => ({ phase: 'idle' }) };
+  server.on('request', createHandler({ snapshot: () => ({ sessions: [] }), scan: () => {}, htmlFile: '/nonexistent.html', port, allowedHosts: [], allowedOrigin: '', joinFlow }));
+  const post = (headers) => request(port, { method: 'POST', path: '/api/leave', headers });
+  try {
+    assert.equal((await post({ Origin: `http://localhost:${port}`, 'X-Terrarium': 'join' })).status, 403, 'the join header does not leave');
+    assert.equal((await post({ Origin: 'https://evil.example', 'X-Terrarium': 'leave' })).status, 403);
+    assert.equal(left, 0);
+    const ok = await post({ Origin: `http://127.0.0.1:${port}`, 'X-Terrarium': 'leave' });
+    assert.equal(ok.status, 200); assert.equal(left, 1);
+  } finally { await close(server); }
+});
+
 test('a second server waits for the port and takes over', async () => {
   const a = http.createServer(), b = http.createServer();
   const x = await listen(a);
