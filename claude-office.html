@@ -37,7 +37,20 @@ button{font-family:inherit}
 .sky-back kbd{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:500;color:var(--muted);border:1px solid var(--border);border-bottom-width:2px;padding:2px 4px}
 @media (hover:none){.sky-back kbd{display:none}}
 @keyframes sky-back-in{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.sky-back{animation:none}}
+/* The island's panel: top right on a wide stage, a bottom sheet on a phone (collapsed to its title bar until tapped).
+   It arrives with the plaque, as the clouds part. */
+.sky-sheet{position:absolute;z-index:10;top:12px;right:12px;width:300px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);box-sizing:border-box;display:flex;flex-direction:column;background:var(--surface);border:3px solid var(--fg);box-shadow:6px 6px 0 rgba(0,0,0,0.45);font-size:12px;animation:sky-panel-in .28s .16s both steps(4,end)}
+.sky-sheet.is-phone{top:auto;left:12px;right:12px;bottom:12px;width:auto;max-width:none;max-height:72%;animation-name:sky-sheet-up}
+.sky-sheet-head{display:flex;align-items:center;gap:4px;padding-right:8px;flex:none}
+.sky-sheet-bar{flex:1;min-width:0;display:flex;align-items:center;gap:10px;min-height:46px;padding:6px 4px 6px 12px;background:transparent;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.sky-sheet-bar:focus-visible{outline:2px solid var(--warn);outline-offset:-5px}
+.sky-sheet-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.sky-sheet-chev{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:2px solid var(--border);color:var(--muted);font-size:10px;line-height:1}
+.sky-sheet-bar:hover .sky-sheet-chev{border-color:var(--fg);color:#ffffff}
+.sky-sheet-body{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px;border-top:2px solid var(--border)}
+@keyframes sky-panel-in{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+@keyframes sky-sheet-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.sky-back,.sky-sheet{animation:none}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
@@ -3059,6 +3072,29 @@ globalThis.WorldLogic = (() => {
     return { left, right: stageW - left }
   }
   const canNavigate = (trans, nowMs, reduced) => !trans || cloudPhase(nowMs - trans.start, reduced).done
+  // The transition a navigation starts, or null: refused while one runs (dropped, not queued) and when already there.
+  // cur = {trans, reduced (of the running one), view, focus}.
+  function beginTrans(cur, to, nowMs, reduced) {
+    if (!canNavigate(cur.trans, nowMs, cur.reduced)) return null
+    if (cur.view === to.view && (to.view !== 'one' || cur.focus === to.focus)) return null
+    return { start: nowMs, to, swapped: false }
+  }
+  // The part of the stage the one-island view fits the island into. A phone keeps it between the back control (top)
+  // and the collapsed bottom sheet (bottom). A wide stage with the panel open gives up the panel's column (panelW)
+  // when the island keeps at least 70 % of its size that way; else the island stays full size under the panel.
+  // lw / fh: the scene's width and fitted height (the local page's LW / FH).
+  function oneArea(sw, sh, o) {
+    if (o.phone) return { x: 0, y: o.top, w: sw, h: Math.max(0, sh - o.top - o.bottom) }
+    const full = { x: 0, y: 0, w: sw, h: sh }
+    if (!o.panelOpen) return full
+    const side = { x: 0, y: 0, w: Math.max(0, sw - o.panelW), h: sh }, z = (a) => Math.min(a.w, a.h * o.lw / o.fh)
+    return z(side) >= 0.7 * z(full) ? side : full
+  }
+  // The island in an area: as wide as fits with its top (fh) inside, centred; lh is the full scene height.
+  function fitOne(area, lw, fh, lh) {
+    const z = Math.max(0, Math.min(area.w, area.h * lw / fh)), s = z / lw
+    return { x: area.x + (area.w - z) / 2, y: area.y + (area.h - fh * s) / 2, w: z, h: lh * s, fh: fh * s }
+  }
   // One frame of a running transition ({start, swapped}): the phase to draw, whether this frame swaps the view (only
   // the first one past the swap point) and whether the clouds are gone.
   function transStep(trans, nowMs, reduced) {
@@ -3074,8 +3110,9 @@ globalThis.WorldLogic = (() => {
   }
   // The island on screen (one island, or mine in "Của tôi") was removed from the world.
   const viewGone = (view, shownId, has) => (view === 'one' || view === 'mine') && shownId != null && !has(shownId)
-  // Esc: nothing on "Toàn cảnh", while typing or with the settings open; else close an open confirm, else go back.
-  const escAction = ({ view, typing, settings, confirm }) => view === 'all' || typing || settings ? 'none' : confirm ? 'confirm' : 'back'
+  // Esc: nothing on "Toàn cảnh", while typing, with the settings open or with Ctrl, Meta or Alt held (mod); else close
+  // an open confirm, else go back.
+  const escAction = ({ view, typing, settings, confirm, mod }) => view === 'all' || typing || settings || mod ? 'none' : confirm ? 'confirm' : 'back'
   // Without an island of my own, an island never seen before may be mine (paired on another tab), so /api/me is asked
   // again: at most once per `every` ms, only while the tab is visible. A new island inside the window is not lost: the
   // probe stays pending and retryIn says when to call again. The first world list is only remembered.
@@ -3105,7 +3142,7 @@ globalThis.WorldLogic = (() => {
     return out
   }
   return { SLOTS, PHONE_MAX_W, CENTRE_SCALE, HOVER_LIFT, GUTTER, CLOUD_IN_MS, CLOUD_HOLD_MS, CLOUD_OUT_MS, CLOUD_MS, FADE_MS, skyLayout, skyHit, easeInOut, cloudPhase, cloudBands, canNavigate,
-    transStep, landingView, viewGone, escAction, meProbeState, meProbeStep, ISLAND_ASPECT, clientSessions }
+    beginTrans, oneArea, fitOne, transStep, landingView, viewGone, escAction, meProbeState, meProbeStep, ISLAND_ASPECT, clientSessions }
 })()
 </script>
 <script id="sky-render">
@@ -3362,7 +3399,8 @@ function drawFront(ctx,w,h,t,env){
 const CURTAINS=new Map();
 function curtainEdge(seed,wa,ha,lit,shade,rim){
   const key=seed+'|'+wa+'|'+ha+'|'+lit+shade+rim;let c=CURTAINS.get(key);if(c)return c;
-  if(CURTAINS.size>=16)CURTAINS.clear();
+  // Six edges a frame (three per bank); evicting the oldest keeps the set in use when the colours drift.
+  if(CURTAINS.size>=18)CURTAINS.delete(CURTAINS.keys().next().value);
   c=document.createElement('canvas');c.width=wa;c.height=ha;const g=c.getContext('2d');
   // One row of puffs from x0, top to bottom; each puff overlaps the one above, so only the shaded underside of a puff
   // that reaches further than the next one shows: the stagger reads as layered cloud.
@@ -4334,7 +4372,9 @@ class ClaudeOffice extends React.Component{
   }
   componentWillUnmount(){const st=this.stageEl;if(st){st.removeEventListener('wheel',this.onWheel);st.removeEventListener('pointerdown',this.onDown);st.removeEventListener('pointermove',this.onDrag);st.removeEventListener('pointerup',this.onUp);st.removeEventListener('pointercancel',this.onUp);}
     this.ro&&this.ro.disconnect();clearTimeout(this.kTimer);clearInterval(this.simTimer);clearInterval(this.uiTimer);clearInterval(this.realTimer);cancelAnimationFrame(this.raf);this.es&&this.es.close();
-    clearInterval(this.previewTimer);clearTimeout(this.joinTimer);clearTimeout(this.armTimer);this.world&&this.world.es&&this.world.es.close();if(this.onWorldKey)window.removeEventListener('keydown',this.onWorldKey);}
+    clearInterval(this.previewTimer);clearTimeout(this.joinTimer);clearTimeout(this.armTimer);this.world&&this.world.es&&this.world.es.close();if(this.onWorldKey)window.removeEventListener('keydown',this.onWorldKey);
+    if(this.world){clearTimeout(this.world.probeTimer);clearTimeout(this.world.meTimer);clearTimeout(this.world.waitTimer);}
+    if(this.onWorldVisible)document.removeEventListener('visibilitychange',this.onWorldVisible);}
   // ---- weather settings ----
   setWeather(patch){
     this.setState(patch,()=>{
@@ -5600,7 +5640,6 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
   const releaseCanvas=sc=>{sc.canvas.width=sc.canvas.height=0;sc.k=null;sc.lod=null;sc.drawnAt=-Infinity;};
   const okColor=c=>typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c)?c:'#8b8fa3';
   const clip=(s,n)=>{s=String(s==null?'':s);return s.length>n?s.slice(0,n-1)+'…':s;};
-  const zFit=(sw,sh)=>Math.min(sw,sh*LW/FH);// island top fills the stage, like the local page
   const validSlot=s=>Number.isInteger(s)&&s>=0&&s<WorldLogic.SLOTS;
   // How many sessions of an island are at work, and whether one waits for approval or for another session.
   const tally=sc=>{let busy=0,alert=false;if(sc)for(const s of sc.raw.values()){if(BUSY.has(s.status))busy++;else if(s.status==='permission'||s.status==='waiting')alert=true;}return{busy,alert};};
@@ -5678,14 +5717,18 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     lines.forEach(([s,f,c],i)=>{ctx.font=f;ctx.fillStyle=c;ctx.fillText(s,px+pw/2,py+4+lh*i+lh/2+1);});
     ctx.restore();
   }
-  // --panel-top: on a narrow stage the panel starts under the "← Toàn cảnh" control (set on the stage).
-  const PANEL={position:'absolute',zIndex:10,top:'var(--panel-top, 12px)',right:12,width:300,maxWidth:'calc(100% - 24px)',maxHeight:'calc(100% - var(--panel-top, 12px) - 56px)',overflowY:'auto',boxSizing:'border-box',background:'var(--surface)',border:'3px solid var(--fg)',boxShadow:'6px 6px 0 rgba(0,0,0,0.45)',padding:14,display:'flex',flexDirection:'column',gap:12,fontSize:12};
+  // The connection panels ("Thử lại", "Phiên đã hết"); the island's own panel is worldSheet.
+  const PANEL={position:'absolute',zIndex:10,top:12,right:12,width:300,maxWidth:'calc(100% - 24px)',maxHeight:'calc(100% - 68px)',overflowY:'auto',boxSizing:'border-box',background:'var(--surface)',border:'3px solid var(--fg)',boxShadow:'6px 6px 0 rgba(0,0,0,0.45)',padding:14,display:'flex',flexDirection:'column',gap:12,fontSize:12};
   const TITLE={fontFamily:"'Pixelify Sans',monospace",fontSize:17,fontWeight:600,color:'#ffffff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'};
   const MUTED={fontSize:10,color:'var(--muted)'};
+  const swatch=c=>h('span',{style:{width:14,height:14,background:okColor(c),flex:'none'}});
   const field=(label,val,key)=>h('div',{key:key||label,style:{display:'flex',flexDirection:'column',gap:2,minWidth:0}},h('span',{style:MUTED},label),h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},val));
   // "Của tôi" refreshes every 30 s ±20 % while the tab is visible: the hub's general limit is 120 a minute per
   // user (per IP when signed out), shared with everything else the page asks.
   const ME_EVERY_MS=30000,ME_JITTER=0.2,STALL_MS=10000,MAX_STALLS=2,REMOVE_WAIT_MS=5000,PROBE_MS=8000,RETRY_CAP_S=60,HEX_ID=/^[0-9a-f]{16}$/;
+  // One-island layout: the panel's column on a wide stage, and on a phone the room under the back control (top) and
+  // above the collapsed sheet (its 46 px bar + borders, 12 px from the bottom).
+  const PANEL_COL=324,ONE_TOP=54,ONE_BOTTOM=74;
   const SEND_LABEL=new Map([['sending',[tr('world.send.sending'),'#46a758']],['private',[tr('world.send.private'),'#8b8fa3']],['offline',[tr('world.send.offline'),'#e5484d']],['revoked',[tr('world.send.revoked'),'#8b8fa3']]]);
   const NAME_ERR=tr('world.nameErr');
   const LINK={color:'#9fd3ff'};
@@ -5870,7 +5913,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       // Esc: closes an open confirm first, else goes back to "Toàn cảnh"; never while typing or with settings open.
       if(!this.onWorldKey){this.onWorldKey=e=>{const x=this.world;if(e.key!=='Escape'||!x||x.dead)return;
           const el=e.target,typing=!!el&&(/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)||el.isContentEditable);
-          const act=WorldLogic.escAction({view:x.view,typing,settings:!!this.state.showSettings,confirm:!!x.confirm});
+          const act=WorldLogic.escAction({view:x.view,typing,settings:!!this.state.showSettings,confirm:!!x.confirm,mod:e.ctrlKey||e.metaKey||e.altKey});
           if(act==='confirm'){if(x.confirm.busy)return;clearTimeout(x.confirm.timer);x.confirm=null;this.forceUpdate();}
           else if(act==='back')this.navigate({view:'all'});};
         window.addEventListener('keydown',this.onWorldKey);}
@@ -6019,9 +6062,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     navigate(to){
       const w=this.world;if(!w||w.dead)return;
       const now=performance.now(),reduced=!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-      if(!WorldLogic.canNavigate(w.trans,now,w.transReduced))return;
-      if(w.view===to.view&&(to.view!=='one'||w.focus===to.focus))return;
-      w.trans={start:now,to,swapped:false};w.transReduced=reduced;
+      const t=WorldLogic.beginTrans({trans:w.trans,reduced:w.transReduced,view:w.view,focus:w.focus},to,now,reduced);if(!t)return;
+      w.trans=t;w.transReduced=reduced;
       w.hover=null;const el=this.worldScroller;if(el&&el.style.cursor!=='default')el.style.cursor='default';
     },
     // Called once per transition, behind full cover. An island removed meanwhile lands on "Toàn cảnh".
@@ -6029,14 +6071,23 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const w=this.world,{view,focus}=WorldLogic.landingView(to,id=>w.islands.some(i=>i.id===id));
       const old=w.shown&&w.scenes.get(w.shown);
       if(old)releaseCanvas(old);
-      w.view=view;w.focus=focus;w.hover=null;w.shown=null;
+      w.view=view;w.focus=focus;w.hover=null;w.shown=null;w.oneR=null;w.sheetOpen=null;
       if(view!=='one')try{this.storage&&this.storage.setItem(VIEW_KEY,view);}catch(_){}
       if(w.confirm)clearTimeout(w.confirm.timer);w.confirm=null;
       this.setState({sel:null,selIsland:focus});
       if(view==='mine'&&!w.dead)this.loadMe();
     },
-    // One island alone, centred and as wide as the local page draws it (no camera).
-    oneIslandRect(sw,sh){const z=zFit(sw,sh),s=z/LW;return{x:(sw-z)/2,y:(sh-FH*s)/2,w:z,h:LH*s,fh:FH*s};},
+    // One island alone, as wide as the local page draws it (no camera), in the room the controls leave
+    // (WorldLogic.oneArea): between the back control and the collapsed sheet on a phone, beside an open panel on a
+    // wide stage when that keeps it large.
+    oneIslandRect(sw,sh){const phone=this.phoneStage(sw);
+      const a=WorldLogic.oneArea(sw,sh,{phone,panelOpen:!phone&&this.sheetOpen(),panelW:PANEL_COL,top:ONE_TOP,bottom:ONE_BOTTOM,lw:LW,fh:FH});
+      return WorldLogic.fitOne(a,LW,FH,LH);},
+    phoneStage(sw){return sw>0&&sw<=WorldLogic.PHONE_MAX_W;},
+    // The island panel: open unless the viewer collapsed it; a phone starts collapsed (but open with nothing to see:
+    // "Của tôi" without an island). An open question (confirm) always shows.
+    sheetOpen(){const w=this.world;if(w.confirm)return true;if(w.sheetOpen!=null)return w.sheetOpen;
+      return!this.phoneStage(w.sw)||(w.view==='mine'&&!this.myIslandId());},
 
     worldFrame(ts){
       const w=this.world,dt=Math.min(0.05,Math.max(0,(ts-this.last)/1000));this.last=ts;
@@ -6044,6 +6095,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const st=this.stageEl;w.sw=st?st.clientWidth:0;w.sh=st?st.clientHeight:0;
       // The sky is laid out in the scroller's width: a classic scrollbar (desktop, narrow window) takes its own room.
       const sc_=this.worldScroller;w.lw=sc_&&sc_.clientWidth?Math.min(w.sw,sc_.clientWidth):w.sw;
+      const phone=this.phoneStage(w.sw);if(phone!==w.phone){w.phone=phone;w.oneR=null;this.forceUpdate();}
       // The view swaps on the first frame the clouds cover it (the hold, when nothing moves, so a slow first full
       // draw of the new island does not show as a stutter).
       const step=WorldLogic.transStep(w.trans,performance.now(),w.transReduced);
@@ -6076,15 +6128,19 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     drawOne(ctx,t,dt,sw,sh,now){
       const w=this.world,id=w.view==='mine'?this.myIslandId():w.focus,sc=id&&w.scenes.get(id),meta=sc&&w.islands.find(i=>i.id===id);
       if(!sc||!meta)return null;
-      const dpr=window.devicePixelRatio||1,r=this.oneIslandRect(sw,sh),simDt=Math.min(1,(now-(sc.simAt||now))/1000)||dt;
+      const dpr=window.devicePixelRatio||1,target=this.oneIslandRect(sw,sh),simDt=Math.min(1,(now-(sc.simAt||now))/1000)||dt;
+      // The island glides to its new place when the panel opens or closes (the bake keeps the target's resolution).
+      const o=w.oneR,ease=o&&!(this.env&&this.env.reduced)?1-Math.exp(-dt*14):1;
+      const r=w.oneR=o?{x:o.x+(target.x-o.x)*ease,y:o.y+(target.y-o.y)*ease,w:o.w+(target.w-o.w)*ease,h:o.h+(target.h-o.h)*ease,fh:target.fh}:target;
+      if(Math.abs(r.x-target.x)+Math.abs(r.y-target.y)+Math.abs(r.w-target.w)<0.5)w.oneR=target;
       sc.simAt=now;sc.frame(Math.min(0.05,simDt));
-      sc.lodK=Math.min(4,Math.max(0.5,r.w*dpr/LW));sc.lod='full';
+      sc.lodK=Math.min(4,Math.max(0.5,target.w*dpr/LW));sc.lod='full';
       sc.state.sel=this.state.selIsland===sc.id?this.state.sel:null;sc.draw(t);sc.drawnAt=now;
       const bob=this.env&&this.env.reduced?0:Math.round(Math.sin(t*0.7)*3);
       ctx.globalAlpha=meta.online===false?OFFLINE_ALPHA:1;ctx.imageSmoothingEnabled=r.w<sc.canvas.width/dpr;
       ctx.drawImage(sc.canvas,r.x,r.y+bob,r.w,r.h);
       ctx.globalAlpha=1;ctx.imageSmoothingEnabled=true;
-      const c=tally(sc);this.drawIslandLabel(ctx,meta,c.busy,c.alert,r.x+r.w/2,r.y+bob+r.fh*0.04);
+      // no name plate here: the panel title and the back control already name the island
       w.shown=id;// so a later removal of this island (mine included) takes the view back to "Toàn cảnh"
       return id;
     },
@@ -6185,7 +6241,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     // The agent under a stage point on the island drawn in full ("Của tôi" or one island), if any.
     oneHit(px,py){
       const w=this.world,id=w.view==='mine'?this.myIslandId():w.focus,sc=id&&w.scenes.get(id);if(!sc||sc.k==null)return null;
-      const r=this.oneIslandRect(w.sw,w.sh);
+      const r=w.oneR||this.oneIslandRect(w.sw,w.sh);
       return sc.hit({currentTarget:{getBoundingClientRect:()=>({left:r.x,top:r.y,width:r.w,height:r.h})},clientX:px,clientY:py});
     },
     worldHover(e){
@@ -6201,6 +6257,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const w=this.world;if(!this.worldScroller||w.dead||w.trans)return;// clicks are dropped while the clouds run
       const[px,py]=this.worldPt(e);
       if(w.view!=='all'){const a=this.oneHit(px,py),id=w.view==='mine'?this.myIslandId():w.focus;
+        if(a&&this.phoneStage(w.sw))w.sheetOpen=true;
         this.setState(a?{selIsland:id,sel:a.id}:{sel:null});return;}
       const hit=WorldLogic.skyHit(this.skyNow(),px,py);if(!hit)return;
       if(hit.kind==='mine'||hit.kind==='yours')return this.navigate({view:'mine'});
@@ -6245,8 +6302,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
             // Settings live in the header here: the sky uses the whole stage, down to its bottom corners.
             h('button',{className:'btn'+(showSettings?' btn-active':''),'aria-label':tr('world.settings.label'),'aria-expanded':!!showSettings,title:tr('world.settings.title'),
               style:{...hdrCtl,width:30,padding:'4px 0'},onClick:()=>this.setState(p=>({showSettings:!p.showSettings}))},'⚙'))),
-        h('div',{ref:this.setWorldStage,style:{position:'relative',flex:'1 1 0',minHeight:0,border:'3px solid #232a39',overflow:'hidden',
-          '--panel-top':back&&w.sw>0&&w.sw<=WorldLogic.PHONE_MAX_W?'62px':'12px'}},
+        h('div',{ref:this.setWorldStage,style:{position:'relative',flex:'1 1 0',minHeight:0,border:'3px solid #232a39',overflow:'hidden'}},
           h('canvas',{ref:this.setBack,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:0,display:'block'}}),
           h('canvas',{ref:this.setWorldCanvas,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:1,display:'block'}}),
           h('canvas',{ref:this.setFront,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:2,pointerEvents:'none',display:'block'}}),
@@ -6283,30 +6339,27 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const a=sc&&sel!=null&&sc.byId(sel);
       if(a){// Hub data has no names, prompts or folders: status, kind of work, room, and tool / model on "Cơ bản".
         const raw=sc.raw.get(a.sid)||{},Dp=sc.depts.get(a.dept),stx=ST[a.status]||ST.working,par=a.parent&&sc.byId(a.parent);
-        return h('div',{style:PANEL},
-          h('div',{style:{display:'flex',alignItems:'center',gap:10}},
-            h('div',{style:{width:34,height:34,background:Dp?Dp.color:'#8b8fa3',color:'#ffffff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Pixelify Sans',monospace",fontSize:13,fontWeight:700,flex:'none'}},clip(a.short,4)),
-            h('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:2}},h('div',{style:TITLE},clip(a.dept,40)),h('div',{style:MUTED},meta?clip(meta.name,40):'')),
-            close),
+        return this.worldSheet({label:'Nhân viên '+clip(a.dept,40),
+          icon:h('div',{style:{width:34,height:34,background:Dp?Dp.color:'#8b8fa3',color:'#ffffff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Pixelify Sans',monospace",fontSize:13,fontWeight:700,flex:'none'}},clip(a.short,4)),
+          title:clip(a.dept,40),sub:(meta?clip(meta.name,40)+' · ':'')+stx[0],extra:close},[
           h('div',{style:{display:'flex',flexDirection:'column',gap:4,padding:10,background:'var(--bg)',borderLeft:'4px solid '+stx[1]}},h('span',{style:{fontWeight:600,color:stx[1]}},stx[0])),
           h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:'10px 14px'}},
             field(tr('world.agent.field.kind'),KIND_LABEL.get(raw.kind)||'—'),
             field(tr('world.field.dept'),clip(a.dept,40)),
             raw.tool?field(tr('world.agent.field.tool'),clip(raw.tool,32)):null,
             raw.model?field(tr('world.agent.field.model'),clip(raw.model,48)):null,
-            field(tr('world.agent.field.role'),par?tr('world.agent.role.sub',{parent:par.short}):tr('world.agent.role.main'))));
+            field(tr('world.agent.field.role'),par?tr('world.agent.role.sub',{parent:par.short}):tr('world.agent.role.main')))]);
       }
       if(w.view==='one'&&sc&&meta){
-        const head=h('div',{style:{display:'flex',alignItems:'center',gap:10}},
-          h('span',{style:{width:14,height:14,background:okColor(meta.color),flex:'none'}}),
-          h('div',{style:{...TITLE,flex:1,minWidth:0}},meta.name||tr('world.island.fallbackName')),close);
+        const tl=tally(sc),bar={label:'Đảo '+(meta.name||''),icon:swatch(meta.color),title:meta.name||'Đảo',extra:close,
+          sub:(meta.online===false?'Offline':'Online')+' · '+(meta.private?'riêng tư':tl.busy+' đang làm')};
         // Owners may remove anyone's island but their own (the hub also refuses another owner's).
         const canRemove=w.me.role==='owner'&&meta.id!==this.myIslandId()&&meta.id!==w.me.islandId;
         const ask=canRemove&&w.confirm&&w.confirm.kind==='remove'&&w.confirm.id===meta.id?w.confirm:null;
-        if(ask)return h('div',{style:PANEL},head,
-          confirmRow(tr('world.island.remove.confirm'),tr('world.island.remove.ok'),ask,()=>this.removeIsland(meta.id),()=>{w.confirm=null;this.forceUpdate();}));
+        if(ask)return this.worldSheet(bar,[
+          confirmRow(tr('world.island.remove.confirm'),tr('world.island.remove.ok'),ask,()=>this.removeIsland(meta.id),()=>{w.confirm=null;this.forceUpdate();})]);
         const counts=new Map();for(const x of sc.agents)if(!x.leaving)counts.set(x.dept,(counts.get(x.dept)||0)+1);
-        return h('div',{style:PANEL},head,
+        return this.worldSheet(bar,[
           h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:'10px 14px'}},
             field(tr('world.field.status'),meta.online===false?tr('world.island.offline'):tr('world.island.online')),
             field(tr('world.field.shareLevel'),meta.private?tr('world.island.private'):SHARE_LABEL.get(meta.share)||'—'),
@@ -6319,7 +6372,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
               h('span',{style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},dk),h('strong',{style:{color:'#ffffff'}},n));})
             :h('span',{style:{color:'var(--muted)'}},tr('world.island.noSessions'))),
           canRemove&&h('button',{className:'btn',onClick:()=>{w.confirm={kind:'remove',id:meta.id};this.forceUpdate();},
-            style:{...SMALL_BTN,alignSelf:'flex-start',borderColor:'#e5484d',color:'#ff9b9e'}},tr('world.island.remove.button')));
+            style:{...SMALL_BTN,alignSelf:'flex-start',borderColor:'#e5484d',color:'#ff9b9e'}},tr('world.island.remove.button'))]);
       }
       if(w.view!=='mine')return null;
       const fullLink=h('a',{href:'http://localhost:4317',target:'_blank',rel:'noopener noreferrer',style:LINK},tr('world.mine.link.full'));
@@ -6327,8 +6380,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const leaveLink=h('a',{href:'/me/leave',style:LINK},tr('world.mine.link.leave'));
       const isl=w.mine?w.mine.island:null;
       if(w.mine?!isl:!w.me.islandId){const origin=location.origin;
-        return h('div',{style:PANEL},
-          h('div',{style:TITLE},tr('world.join.title')),
+        return this.worldSheet({icon:swatch(GOLD),title:tr('world.join.title'),sub:'Ghép một máy để có đảo'},[
           h('span',{style:{lineHeight:1.5}},tr('world.join.intro')),
           h('ol',{style:{margin:0,paddingLeft:18,display:'flex',flexDirection:'column',gap:6,lineHeight:1.5}},
             h('li',null,tr('world.join.step1'),h('code',{style:{display:'block',marginTop:4,background:'var(--bg)',padding:'6px 8px',color:'#ffd166',fontSize:11,wordBreak:'break-all',userSelect:'all'}},'node server.js join '+origin)),
@@ -6336,7 +6388,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
             h('li',null,tr('world.join.step3')),
             h('li',null,tr('world.join.step4'))),
           w.meErr&&h('span',{role:'alert',style:ERR},tr('world.mine.devicesError')),
-          meLink,leaveLink);
+          meLink,leaveLink]);
       }
       const devs=w.mine?w.mine.devices:[],colors=w.mine?w.mine.colors:[],d=w.draft,sending=mine&&mine.online!==false;
       const asking=(x,where)=>{const c=w.confirm;return c&&c.kind==='revoke'&&c.id===x.id&&c.where===where?c:null;};
@@ -6346,10 +6398,9 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const askRevoke=(x,where)=>h('button',{className:'btn',style:SMALL_BTN,onClick:()=>{w.confirm={kind:'revoke',id:x.id,where};this.forceUpdate();}},tr('world.mine.revoke.button'));
       const revokeAsk=(x,c)=>confirmRow(tr('world.mine.revoke.confirm',{name:clip(x.name,40)||tr('world.mine.revoke.thisDevice')}),tr('world.mine.revoke.button'),c,()=>this.revokeDevice(x.id),()=>{w.confirm=null;this.forceUpdate();});
       const edit=patch=>{const dr=w.draft;if(!dr)return;Object.assign(dr,patch,{dirty:true});w.saveMsg=null;this.forceUpdate();};
-      return h('div',{style:PANEL},
-        h('div',{style:{display:'flex',alignItems:'center',gap:10}},
-          h('span',{style:{width:14,height:14,background:okColor(mine?mine.color:isl&&isl.color),flex:'none'}}),
-          h('div',{style:{...TITLE,flex:1,minWidth:0}},(mine?mine.name:isl&&isl.name)||tr('world.mine.fallbackName'))),
+      const mt=mine&&tally(w.scenes.get(mine.id));
+      return this.worldSheet({label:'Của tôi',icon:swatch(mine?mine.color:isl&&isl.color),title:(mine?mine.name:isl&&isl.name)||tr('world.mine.fallbackName'),
+        sub:!mine?'Chưa máy nào gửi':(sending?'Đang gửi':'Mất kết nối')+' · '+(mine.private?'riêng tư':mt.busy+' đang làm')},[
         // A device paired in the last 7 days: say so, in case it was not this person.
         fold?h('div',{key:'new-fold',style:{display:'flex',alignItems:'center',gap:8,padding:8,background:'var(--bg)',borderLeft:'4px solid #ffd166'}},
           h('span',{style:{flex:1,minWidth:0,lineHeight:1.4}},tr('world.mine.newDevices',{n:fresh.length})),
@@ -6393,7 +6444,23 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
           field(tr('world.mine.field.sendStatus'),sending?tr('world.mine.sending'):tr('world.mine.disconnected')),
           field(tr('world.field.sessions'),String((w.scenes.get(mine.id)||{raw:new Map()}).raw.size))),
         h('span',{style:{color:'var(--muted)',lineHeight:1.5}},tr('world.mine.filteredNote')),
-        fullLink,meLink,leaveLink);
+        fullLink,meLink,leaveLink]);
+    },
+    // The island's panel (worldSheet): a title bar (icon, title, one line of status, a chevron, an optional close
+    // button) and the body. On a wide stage it sits top right and the bar collapses it; on a phone it is a bottom sheet
+    // that starts as the bar alone. Keyed by view, so it enters with the back control at each swap, not on every change.
+    worldSheet(o,children){
+      const w=this.world,phone=this.phoneStage(w.sw),open=this.sheetOpen(),id='sky-sheet-body';
+      const chev=phone===open?'▾':'▴';
+      return h('section',{key:'sheet:'+w.view+':'+(w.focus||''),className:'sky-sheet'+(phone?' is-phone':''),'aria-label':o.label||o.title},
+        h('div',{className:'sky-sheet-head'},
+          h('button',{type:'button',className:'sky-sheet-bar','aria-expanded':open,'aria-controls':id,title:open?'Thu gọn':'Mở rộng',
+            onClick:()=>{w.sheetOpen=!open;this.forceUpdate();}},
+            o.icon,
+            h('span',{className:'sky-sheet-name'},h('span',{style:TITLE},o.title),o.sub&&h('span',{style:{...MUTED,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},o.sub)),
+            h('span',{className:'sky-sheet-chev','aria-hidden':true},chev)),
+          o.extra||null),
+        open&&h('div',{id,className:'sky-sheet-body'},...children));
     },
     worldSettings(){
       const st=this.state;
