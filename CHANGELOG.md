@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **"Xem như người khác"** — A setting on the local page that draws exactly what others would see, usable before the machine has joined a hub
 - **Automatic access loss** — The hub asks Google for offline access (`access_type=offline`, scope still `openid email profile`), stores the refresh token encrypted, checks it hourly and bans anyone whose Google access was revoked or who left the allowed domain; people without a refresh token are cut after 24 hours until they sign in again
 - **Audit log** — An `audit` table in the hub DB records bans, island removals, renames, device pairing and revocation, and leaving
+- **Restroom** — A small restroom stands on the east lawn against the pantry wall, where the smoking corner used to be: two doors with pictograms and a vacant/occupied light under a teal awning, a wash basin with a mirror and a WC plate, a lamp that glows at night and a frosted window that lights up when someone is inside; now and then an idle agent walks over ("đi vệ sinh"), steps inside for a few seconds and then moves on, and the dogs leave them be
 
 ### Changed
 
@@ -28,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Local server hardening** — The local server only trusts loopback host names on its own port (extra names via `ALLOWED_HOSTS`) and no longer answers cross-origin requests unless `ALLOWED_ORIGIN` is set
 - **World view performance** — Small islands keep their canvas and first draws are spread over frames, so "Toàn cảnh" with 10 islands stays under 1 ms of script per frame even without a GPU, and switching back from "Của tôi" no longer stutters
 - **Hub islands follow v1.4.x drawing** — Islands in the world view use the new desk design, pantry and office dogs; the 5H/7D usage board is left off on hub islands and in "Xem như người khác" because those carry no usage data
+- **Smoking corner moved down the east lawn** — The whole corner (pad, pergola, bench, ash bin, planted screen, light, extinguisher and sign) now stands further down the lawn, beside the garden path from the east stairs, so its smoke stays away from the restroom; smokers come in only through its entrance, never over the bench back, and the dogs still keep out
 
 ### Fixed
 
