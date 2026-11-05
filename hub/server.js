@@ -5,7 +5,7 @@
 // array of {method, path (string | RegExp), handler(req, res, rc)}. Add the module to ROUTE_MODULES below;
 // createHub builds one shared ctx and concatenates all arrays into one router. Tests may also pass
 // `deps.routeModules` (array of such functions) which are appended after the built-in ones.
-//   ctx = { config, db, deps: {fetch, now, log}, limiters, world, helpers, jwks }
+//   ctx = { config, db, deps: {fetch, now, log}, limiters, world, helpers, jwks, accounts, googleCheck }
 // Handlers may be async; throwing/rejecting with an error that has `.status` replies with that status.
 
 const http = require('node:http');
@@ -15,6 +15,8 @@ const { createRouter, clientIp, readBody, send, sendJson, parseCookies, HttpErro
 const { createLimiter } = require('./limits.js');
 const { createWorld } = require('./world.js');
 const { createJwks } = require('./jwt.js');
+const { createAccounts } = require('./accounts.js');
+const { createGoogleCheck } = require('./google-check.js');
 
 const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes, require('./publish.js').routes];
 
@@ -42,17 +44,24 @@ function createHub(config, deps = {}) {
   ctx.world = world;
   ctx.helpers = { readBody, send, sendJson, parseCookies, clientIp: (req) => clientIp(req, config.trustProxy), HttpError };
 
+  ctx.accounts = createAccounts(ctx);
+  ctx.googleCheck = createGoogleCheck(ctx);
+
   const routes = [...ROUTE_MODULES, ...(deps.routeModules || [])].flatMap((m) => m(ctx));
   const server = http.createServer(createRouter(routes, { log: d.log, now: d.now }));
 
   const sweep = setInterval(() => { try { db.cleanup(d.now()); } catch { d.log('cleanup failed'); } }, HOUR);
   sweep.unref();
+  // B12: hourly Google check; failures are logged without detail.
+  const googleTimer = setInterval(() => { ctx.googleCheck.runOnce().catch(() => d.log('google check failed')); }, HOUR);
+  googleTimer.unref();
 
   let closed = false;
   async function close() {
     if (closed) return;
     closed = true;
     clearInterval(sweep);
+    clearInterval(googleTimer);
     for (const fn of ctx.closers) { try { fn(); } catch { /* ignore */ } }
     await new Promise((resolve) => {
       if (!server.listening) return resolve();

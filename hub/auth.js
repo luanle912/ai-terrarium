@@ -34,7 +34,7 @@ function safeEqual(a, b) {
 }
 
 // now is in ms; exp/iat are in seconds.
-function checkClaims(claims, { clientId, domains, nonce, now }) {
+function checkClaims(claims, { clientId, domains, nonce, now, requireNonce = true }) {
   const bad = (reason) => ({ ok: false, reason });
   if (!claims || typeof claims !== 'object') return bad('no claims');
   if (!ISSUERS.has(claims.iss)) return bad('iss');
@@ -43,7 +43,7 @@ function checkClaims(claims, { clientId, domains, nonce, now }) {
   const nowS = Math.floor(now / 1000);
   if (typeof claims.exp !== 'number' || claims.exp <= nowS) return bad('exp');
   if (typeof claims.iat !== 'number' || claims.iat > nowS + IAT_SKEW_S) return bad('iat');
-  if (typeof nonce !== 'string' || !nonce || claims.nonce !== nonce) return bad('nonce');
+  if (requireNonce && (typeof nonce !== 'string' || !nonce || claims.nonce !== nonce)) return bad('nonce');
   if (claims.email_verified !== true) return bad('email_verified');
   const allowed = (domains || []).map((d) => String(d).toLowerCase());
   if (typeof claims.hd !== 'string' || !allowed.includes(claims.hd.toLowerCase())) return bad('hd');
@@ -108,12 +108,14 @@ function routes(ctx) {
 
   // Creates/updates the user, refuses banned ones, starts a session and redirects home.
   // who.refreshToken (optional) is sealed into the user's row. A fresh login also ends this browser's old session.
-  function finishLogin(req, res, who) {
+  async function finishLogin(req, res, who) {
     const now = deps.now();
     let user = db.upsertUser({ googleSub: who.sub, email: who.email, name: who.name, now });
     if (user.banned_at != null) {
       // A ban set because Google revoked access is undone by a successful Google sign-in; any other ban stays.
       if (user.ban_reason !== 'google_revoked') {
+        // Google just granted a refresh token for a blocked account: hand it back instead of dropping it silently.
+        if (who.refreshToken) await ctx.accounts.revokeToken(who.refreshToken);
         return send(res, 403, 'This account has been blocked.', { 'Content-Type': 'text/plain; charset=utf-8', ...noStore });
       }
       db.liftBan(user.id);
@@ -211,7 +213,7 @@ function routes(ctx) {
           return send(res, 302, '', { Location: '/auth/login?consent=1', ...noStore, 'Set-Cookie': cookie(loginName, '', 0) });
         }
       }
-      finishLogin(req, res, r);
+      await finishLogin(req, res, r);
     },
   });
 
@@ -250,7 +252,7 @@ function routes(ctx) {
     // S20: no Google, but the same claim checks (hd comes from the email's domain).
     list.push({
       method: 'GET', path: '/auth/dev',
-      handler(req, res, rc) {
+      async handler(req, res, rc) {
         const email = String(rc.query.get('email') || '').toLowerCase();
         const name = rc.query.get('name') || '';
         const nowS = Math.floor(deps.now() / 1000);
@@ -261,7 +263,7 @@ function routes(ctx) {
         };
         const r = checkClaims(claims, { clientId: claims.aud, domains: config.allowedDomains, nonce, now: deps.now() });
         if (!r.ok) throw new HttpError(403, 'this account is not allowed to sign in');
-        finishLogin(req, res, r);
+        await finishLogin(req, res, r);
       },
     });
   }

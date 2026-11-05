@@ -28,6 +28,13 @@ test('checkClaims accepts good claims and lowercases the email', () => {
   assert.deepEqual(r, { ok: true, sub: 's1', email: 'a@newera.inc', name: 'Ann' });
 });
 
+test('checkClaims requireNonce:false skips only the nonce check', () => {
+  const o = { clientId: CID, domains: ['newera.inc'], nonce: null, now: NOW, requireNonce: false };
+  assert.equal(checkClaims(good({ nonce: undefined }), o).ok, true);
+  assert.equal(checkClaims(good({ nonce: undefined, hd: 'gmail.com' }), o).ok, false);
+  assert.equal(checkClaims(good({ nonce: undefined }), { ...o, requireNonce: true }).ok, false);
+});
+
 test('checkClaims rejects each bad case', () => {
   const cases = {
     aud: { aud: 'other' }, iss: { iss: 'https://evil.com' }, exp: { exp: NOW / 1000 - 1 },
@@ -410,6 +417,26 @@ test('a ban without reason stays', async () => {
   assert.equal(cb.status, 403);
   assert.notEqual(h.hub.db.getUserBySub('s1').banned_at, null);
   assert.ok(!h.hub.db.listAudit().some((a) => a.action === 'ban_lifted'));
+  await h.hub.close();
+});
+
+test('a refused login for a banned user revokes the refresh token Google just granted', async () => {
+  const h = setup();
+  await signIn(h);
+  const u = h.hub.db.getUserBySub('s1');
+  h.hub.db.banUser(u.id, 'abuse', NOW);
+  h.hub.db.setRefreshToken(u.id, null);
+  h.google.calls.length = 0;
+  const { cb, cookie } = await signIn(h);
+  assert.equal(cb.status, 403);
+  assert.equal(cookie, null);
+  const revokes = h.google.calls.filter((c) => c.url === 'https://oauth2.googleapis.com/revoke');
+  assert.equal(revokes.length, 1);
+  assert.match(revokes[0].params.token, /^rt-/);
+  assert.equal(h.hub.db.getUserBySub('s1').refresh_enc, null, 'nothing stored for a banned user');
+  // the revoke endpoint being down must not change the answer
+  h.hub.ctx.deps.fetch = async (url, o) => { if (String(url).endsWith('/revoke')) throw new Error('offline'); return h.google.fetch(url, o); };
+  assert.equal((await signIn(h)).cb.status, 403);
   await h.hub.close();
 });
 
