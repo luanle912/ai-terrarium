@@ -88,6 +88,7 @@ function openDb(dbPath) {
   }
   const raw = new DatabaseSync(dbPath);
   raw.exec('PRAGMA journal_mode=WAL');
+  raw.exec('PRAGMA busy_timeout=5000'); // a second process waits for the write lock (claimIsland) instead of failing at once
   raw.exec('PRAGMA foreign_keys=ON');
   raw.exec(SCHEMA);
   migrate(raw, Date.now());
@@ -198,7 +199,7 @@ function openDb(dbPath) {
       } catch (e) {
         try { raw.exec('ROLLBACK'); } catch { /* nothing to roll back */ }
         // The unique slot index is a last-resort guard: treat a lost race as a full hub.
-        if (/UNIQUE/.test(String(e && e.message))) return { full: true };
+        if (/UNIQUE[^]*islands\.slot/.test(String(e && e.message))) return { full: true };
         throw e;
       }
     },
