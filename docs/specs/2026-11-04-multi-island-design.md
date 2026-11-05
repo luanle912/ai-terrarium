@@ -80,6 +80,79 @@ và bỏ cấm bằng tay (§2 mục 7, C1, B6, §8.1 dòng `hub/pages.js`, §9.
   - tạo bảng `audit` như §10.3, kèm chỉ mục theo `at`;
   - phiên của người chưa có refresh token bị rút về tối đa 24 giờ kể từ lúc tạo.
 
+**GĐ3: Bầu trời 8 đảo** (anh Kiet duyệt 2026-11-05: "Duyệt cả 3", sau đó đổi quyết định 2 sang bố cục lấy người xem
+làm tâm; plan: `docs/plans/2026-11-05-sky8-plan.md`)
+
+Các quyết định dưới đây **ghi đè** §12.2 (vòng xoắn, camera bay tới đảo, bản đồ nhỏ), §12.3 (bảng LOD bốn mức) và mọi
+chỗ khác còn nói tới kéo, zoom, bản đồ nhỏ hay "Toàn cảnh" 10 đảo.
+
+- **Hub chứa tối đa 8 đảo.**
+  - Hằng `MAX_ISLANDS = 8` trong `hub/db.js`. Không có biến môi trường để nâng.
+  - Mỗi người có đảo (bản ghi `islands`) chiếm một chỗ, kể cả khi offline hay bị cấm `google_revoked` (cấm giữ bản ghi
+    `islands`, xem khối GĐ2).
+  - Duyệt mã thiết bị mà việc đó sẽ **tạo đảo thứ 9** thì hub từ chối:
+    - trang `/device` hiện "Hub đã đủ 8 đảo, nhờ owner xoá bớt" (400);
+    - mã bị đánh dấu từ chối với lý do `hub_full`. `/api/device/token` trả 403 `{error:'hub_full'}`, và `join` in một
+      lỗi rõ ràng (tiếng Anh như các dòng khác của lệnh con) rồi thoát.
+  - Người **đã có đảo** ghép thêm máy thì vẫn được, kể cả khi hub đủ 8.
+  - Kiểm đủ chỗ và tạo đảo nằm trong **một transaction**, cộng chỉ mục `UNIQUE` trên `slot`. Hai người tranh chỗ cuối
+    thì đúng một người được.
+  - "Xoá đảo" của owner và "Rời hub" xoá bản ghi `islands`, nên trả lại một chỗ.
+  - Hub đang có **hơn 8 đảo** (dữ liệu cũ) thì giữ nguyên, không xoá gì. Đảo thứ 9 trở đi có `slot = NULL`, không hiện
+    ở "Toàn cảnh", và hub vẫn tính là đủ. Owner xoá bớt các đảo đang hiện.
+- **Chỗ cố định (`slot`).**
+  - Mỗi đảo có `islands.slot` từ 0 đến 7. Đảo mới nhận **slot trống nhỏ nhất**. Một đảo không bao giờ đổi slot.
+  - Migration DB lên **v3** gán slot theo thứ tự tạo (`created_at`, rồi `id`). Đảo thứ 9 trở đi nhận `NULL`.
+  - Em chọn: khi một slot được trả lại mà còn đảo `slot = NULL`, đảo cũ nhất trong số đó nhận slot vừa trống. Đây không
+    phải "đổi slot" (đảo đó chưa có slot), và nhờ vậy đảo ẩn không bị kẹt mãi khi hub đã còn chỗ.
+  - Sự kiện SSE `world` gửi `slot` của từng đảo và `capacity: 8`. Danh sách đảo gồm **mọi đảo có slot trong DB**: đảo
+    không có máy nào đang gửi (ví dụ sau khi hub khởi động lại) được gửi ở dạng offline, không có nhân viên. Nhờ vậy ô của
+    một người đang offline không bị vẽ thành "chỗ trống".
+  - Em chọn: thu hồi máy cuối cùng của một người (hay cấm `google_revoked`) không còn gỡ đảo khỏi bầu trời. Đảo chuyển
+    sang offline và hết nhân viên (S19 vẫn đúng: máy bị chặn ngay, không còn dữ liệu nào của máy đó được hiện). Chỉ
+    "Xoá đảo" và "Rời hub" mới phát `remove`.
+- **"Toàn cảnh" lấy người xem làm tâm** (anh Kiet đổi quyết định 2, 2026-11-05).
+  - **Đảo của mình ở giữa**, to hơn và hơi nhô về phía trước (vẽ sau cùng, thấp hơn một chút). 7 chỗ còn lại xếp thành
+    vòng quanh nó. Trên stage rộng (16:9): 3 ở trên, 1 mỗi bên, 2 ở dưới.
+  - Thứ tự quanh vòng lấy từ `slot`, bỏ slot của mình: đi theo chiều kim đồng hồ từ ô trên cùng bên trái là các slot
+    `mySlot+1, mySlot+2, …, mySlot+7` (mod 8). Mọi người thấy cùng một vòng tròn 8 chỗ, chỉ xoay về phía mình, nên hàng
+    xóm của mỗi đảo là cố định.
+  - Slot không có đảo vẽ thành **"chỗ trống"**.
+  - Người xem **chưa có đảo** (hoặc đảo của họ có `slot = NULL`):
+    - hub còn chỗ → ô giữa là **"chỗ của bạn"**, đứng ở slot trống nhỏ nhất (chỗ người đó sẽ nhận khi ghép máy, nếu
+      không ai ghép trước). Bấm thì mở hướng dẫn ghép máy có sẵn (§9.2);
+    - hub đủ 8 → ô giữa ghi **"Hub đã đủ 8 đảo"** (bấm không làm gì). Vòng quanh có 8 chỗ (3 trên, 1 mỗi bên, 3 dưới),
+      bắt đầu từ slot 0.
+  - Không kéo, không zoom, không bản đồ nhỏ. Rê chuột lên một đảo thì đảo nhô lên nhẹ (6px) và con trỏ thành bàn tay.
+  - Đảo vẽ **dạng đơn giản**, một hàm vẽ mới, nhẹ: khối đảo, một toà nhà một khối với mái theo màu đảo, nhãn tên, chấm
+    vàng cho số người đang làm (tối đa 6 chấm), chấm báo khi có `permission`/`waiting`, đảo offline mờ đi, đảo riêng tư
+    ghi "riêng tư". Đảo của mình có viền vàng ở nhãn như hôm nay.
+  - **Màn hẹp** (stage rộng ≤ 520px): ô của mình (hoặc "chỗ của bạn"/"Hub đã đủ 8 đảo") ở trên cùng, rộng hết khung;
+    các ô còn lại xếp **2 cột** bên dưới theo cùng thứ tự vòng. Không kéo, không zoom; cho phép cuộn dọc khi không vừa.
+  - Bấm một đảo → hiệu ứng mây → màn **một đảo**.
+- **Màn một đảo và "Của tôi".**
+  - Đảo vẽ đầy đủ chi tiết (như mức `full` hôm nay) và lấp kín khung như trang local. Không kéo, không zoom. Bấm nhân
+    viên vẫn mở bảng chi tiết nhân viên.
+  - Bảng thông tin đảo bên phải giữ nguyên (tên, mức chia sẻ, đếm theo phòng ban, "Xoá đảo" cho owner).
+  - Nút "← Toàn cảnh" ở góc trên trái và phím **Esc** đi về "Toàn cảnh" với hiệu ứng mây ngược lại.
+  - Nút "Của tôi" mở đảo của mình theo cách này, cùng bảng "Của tôi" hiện có. Chưa có đảo thì vẫn hiện hướng dẫn ghép
+    máy như hôm nay.
+  - Đảo đang xem bị xoá (owner xoá, hay chính mình rời hub ở tab khác) → tự về "Toàn cảnh" bằng hiệu ứng mây. Đảo của
+    mình bị xoá thì ô giữa đổi thành "chỗ của bạn".
+- **Hiệu ứng mây chuyển cảnh.**
+  - 0–350ms: hai dải mây từ trái và phải trôi vào, gặp nhau ở giữa, phủ kín khung.
+  - 350–450ms: mây phủ kín; phía sau, đổi sang màn đích.
+  - 450–850ms: mây tách ra hai bên và trôi khỏi khung.
+  - Mây là mây pixel của mình, cùng kiểu khối (`slab`) với mây trên trời hiện có, theo màu trời lúc đó. Chỉ lấy ý
+    tưởng "mây khép rồi mở", không sao chép hình ảnh của game nào.
+  - `prefers-reduced-motion: reduce` → thay bằng mờ dần 200ms (đổi màn ở giữa, lúc 100ms).
+  - Trong lúc chuyển cảnh, mọi lệnh chuyển mới (bấm đảo, nút, Esc) bị **bỏ qua**, không xếp hàng.
+- **Trang local (cổng 4317) giống từng pixel như trước.** `CameraLogic` (kéo, zoom của trang local) giữ nguyên.
+- **Schema GĐ3** (DB nâng tại chỗ từ v2 lên v3, hay từ GĐ1 thẳng lên v3):
+  - `islands`: thêm `slot INTEGER CHECK(slot BETWEEN 0 AND 7)`, chỉ mục
+    `CREATE UNIQUE INDEX islands_slot ON islands(slot) WHERE slot IS NOT NULL`;
+  - `device_codes`: thêm `deny_reason TEXT` (`NULL` = người duyệt bấm từ chối, `'hub_full'` = hub đủ 8 đảo).
+
 ## 1. Ý định và lý do
 
 Hiện tại terrarium chỉ cho **chính chủ máy** xem các session Claude Code của mình: `server.js` nghe ở
@@ -446,7 +519,8 @@ users(id INTEGER PRIMARY KEY, google_sub TEXT UNIQUE NOT NULL, email TEXT, name 
       role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','admin','member')),
       banned_at INTEGER, created_at INTEGER NOT NULL, last_login_at INTEGER)
 islands(id TEXT PRIMARY KEY, user_id INTEGER UNIQUE NOT NULL REFERENCES users(id),
-        name TEXT NOT NULL, color TEXT NOT NULL, created_at INTEGER NOT NULL)
+        name TEXT NOT NULL, color TEXT NOT NULL, created_at INTEGER NOT NULL,
+        slot INTEGER CHECK(slot BETWEEN 0 AND 7))          -- GĐ3, UNIQUE khi khác NULL
 devices(id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL,
         token_hash TEXT UNIQUE NOT NULL, created_at INTEGER NOT NULL, last_used_at INTEGER, revoked_at INTEGER)
 device_codes(code_hash TEXT PRIMARY KEY, user_code TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
@@ -559,27 +633,32 @@ audit(id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER, action TEXT
 
 ### 12.2 Chế độ thế giới
 
-- Mỗi đảo là một `IslandScene` với ảnh chụp từ hub. Vị trí đặt theo vòng xoắn quanh tâm: đảo của mình ở tâm, các
-  đảo khác theo thứ tự tạo (`islands.created_at`). Vị trí ổn định giữa các lần tải trang.
+- Mỗi đảo là một `IslandScene` với ảnh chụp từ hub. ~~Vị trí đặt theo vòng xoắn quanh tâm~~ **GĐ3:** vị trí lấy từ
+  `slot` (0–7) và người xem: đảo của mình ở giữa, 7 chỗ còn lại thành vòng theo slot (khối GĐ3 ở §0). Vị trí ổn định
+  giữa các lần tải trang.
 - Không có dữ liệu `name`, `detail`, `recent`, `cwd` nên bảng chi tiết agent chỉ hiện: trạng thái, nhóm việc,
   phòng ban, và tool, model nếu đảo đó ở mức Cơ bản. Không có bong bóng chữ cho đảo người khác.
 - Đảo của mình trong chế độ thế giới cũng hiện **phiên bản đã lọc** (đúng như người khác thấy), vì nguồn là hub.
 - Nhãn trên mỗi đảo: tên, số đang làm, chấm vàng nếu có `permission` hoặc `waiting`. Offline thì mờ 35%. Riêng tư thì
   hiện chữ "riêng tư", không có nhân viên.
 - **Hai chế độ xem, chuyển bằng nút gạt trên thanh trên: "Toàn cảnh" và "Của tôi"** (anh Kiet chốt):
-  - **Toàn cảnh**: mọi đảo trên bầu trời. Bấm đảo thì camera bay tới, bảng bên phải hiện tên đảo, mức chia sẻ, đếm
-    theo phòng ban. Có bản đồ nhỏ ở góc dưới trái.
-  - **Của tôi**: chỉ đảo của mình, camera đặt vào đảo đó như chế độ local hôm nay. Các đảo khác **không vẽ** (cũng
-    không tính vào ngân sách vẽ). Bảng bên phải là thông tin quản lý đảo của mình: mức chia sẻ, riêng tư hay không,
-    danh sách máy và trạng thái gửi, link tới `/me`. Người chưa có đảo thì thấy hướng dẫn ghép máy (§9.2).
-  - Chế độ đang chọn lưu trong `localStorage`. Mặc định là "Toàn cảnh".
+  - **Toàn cảnh** (**GĐ3 thay thế**): 8 chỗ cố định trong một khung, đảo vẽ dạng đơn giản, đảo của mình ở giữa.
+    Không kéo, không zoom, **không có bản đồ nhỏ**, không có camera bay tới. Bấm đảo thì chạy hiệu ứng mây rồi sang
+    **màn một đảo**: đảo đó vẽ đầy đủ, lấp kín khung, bảng bên phải hiện tên đảo, mức chia sẻ, đếm theo phòng ban.
+    "← Toàn cảnh" hoặc Esc để quay ra. Chi tiết ở khối GĐ3 của §0.
+  - **Của tôi**: màn một đảo cho đảo của mình (vào bằng hiệu ứng mây), kèm bảng quản lý đảo của mình: mức chia sẻ,
+    riêng tư hay không, danh sách máy và trạng thái gửi, link tới `/me`. Các đảo khác **không vẽ**. Người chưa có đảo
+    thì thấy hướng dẫn ghép máy (§9.2).
+  - Chế độ đang chọn lưu trong `localStorage` (`all` hoặc `mine`). Mặc định là "Toàn cảnh". GĐ3: màn một đảo của người
+    khác không lưu; tải lại trang thì về "Toàn cảnh".
 - **Bổ sung GĐ2** (anh Kiet chốt 2026-11-05, thay cho trang `/admin`):
   - **"Của tôi"**, bảng bên phải lấy dữ liệu từ `GET /api/me`:
     - danh sách máy, mỗi máy có trạng thái gửi (đang gửi / riêng tư / mất kết nối / đã thu hồi) và mức chia sẻ;
     - thông báo "Máy mới: <tên>, lúc <giờ>" cho máy thêm trong 7 ngày (B10), kèm nút "Thu hồi" có bước xác nhận;
     - đổi tên đảo và chọn một trong 8 màu ngay trong bảng;
     - link "Rời hub" tới `/me/leave`. Việc rời hub chỉ làm ở trang `/me`, có trang xác nhận riêng.
-  - **"Toàn cảnh", khi người xem là owner** (`me.role === 'owner'`) và đảo đang chọn không phải của mình: bảng đảo có
+  - **"Toàn cảnh", khi người xem là owner** (`me.role === 'owner'`; GĐ3: ở **màn một đảo** mở từ "Toàn cảnh") và đảo
+    đang chọn không phải của mình: bảng đảo có
     thêm nút "Xoá đảo". Bấm thì bảng đổi thành câu xác nhận ("Xoá đảo này? Mọi máy của người đó bị thu hồi. Họ vẫn
     ghép lại được.") với hai nút "Xoá" và "Huỷ". Hub từ chối đảo của owner khác thì bảng hiện lý do.
   - Khi luồng SSE bị từ chối nhưng `/api/config` vẫn trả chế độ thế giới (ví dụ mở quá 5 tab), hoặc `/api/config` lỗi
@@ -589,9 +668,23 @@ audit(id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER, action TEXT
     câu lệnh, bong bóng chữ) vẫn ở trang local `http://localhost:4317`. "Của tôi" có link "Mở bản đầy đủ trên máy
     này" trỏ tới đó (em chọn: trang hub **không** đọc dữ liệu từ server local, để một lỗi XSS trên hub không thể lộ
     dữ liệu đầy đủ của máy).
-- Thanh trên: tên hub, số đảo online trên tổng, số người đang xem, link "Đảo của tôi" (tới `/me`).
+- Thanh trên: tên hub, số đảo online trên tổng, số người đang xem, link "Đảo của tôi" (tới `/me`). GĐ3: chip đảo ghi
+  "Đảo <số đảo có slot>/8 · <số online> online".
 
 ### 12.3 Mức chi tiết khi vẽ (LOD)
+
+**GĐ3 thay bảng dưới đây bằng hai mức** (bảng cũ và số chốt GĐ2 giữ lại làm lịch sử):
+
+| Màn | Cách vẽ |
+|---|---|
+| "Toàn cảnh" | Tối đa 8 đảo **dạng đơn giản** (hàm vẽ mới, vài hình khối, không dùng `IslandScene.draw`). Không còn mức `mid`, `thumb`, ngân sách vẽ (`pickRedraws`) hay `THUMB_PX`, `MID_MS`. |
+| Một đảo / "Của tôi" | Một đảo **đầy đủ**, mọi khung, `k` theo bề ngang thật như mức `full` hôm nay. Canvas `full` được trả (`releaseCanvas`) khi rời màn này. |
+| Đảo không vẽ | Vẫn mô phỏng với `dt` lớn, tối đa 4 lần/giây (`OFF_MS`), để vào màn một đảo không thấy nhân viên đứng im. |
+
+Mục tiêu vẫn là **JS mỗi khung p95 ≤ 8ms** ở "Toàn cảnh" 8 đảo × 6 session và ở màn một đảo, đo như GĐ2. Khung dài nhất
+trong lúc chuyển cảnh mây (gồm khung đổi màn, khi đảo đầy đủ được vẽ lần đầu) ghi lại vào đây khi đo xong.
+
+Bảng và số GĐ1–GĐ2 (không còn áp dụng từ GĐ3):
 
 | Đảo | Cách vẽ |
 |---|---|
