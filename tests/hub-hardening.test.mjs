@@ -97,6 +97,34 @@ test('other routes are limited to 120 a minute per ip', async () => {
   } finally { await h.close(); }
 });
 
+test('the general limit is per user when signed in, per ip otherwise', async () => {
+  const h = await startDevHub(); // the clock is frozen, so no bucket refills during the test
+  try {
+    const a = await devLogin(h.url, 'a@newera.inc');
+    const b = await devLogin(h.url, 'b@newera.inc');
+    const paired = await pairDevice(h.url, a);
+    const drain = async (headers) => {
+      let k = 0;
+      let r;
+      do { r = await fetch(h.url + '/api/config', { headers }); k++; } while (r.status !== 429 && k < 200);
+      assert.equal(r.status, 429);
+      return k - 1;
+    };
+    // an unauthenticated flood from the shared ip empties the ip bucket
+    await drain({});
+    // a cookie that is not a valid session is not a user: it still counts against the ip
+    assert.equal((await fetch(h.url + '/api/config', { headers: { cookie: 'tr_sess=nope' } })).status, 429);
+    // a device token counts against its owner, not the ip
+    const self = await fetch(h.url + '/api/device/revoke-self', { method: 'POST', headers: { authorization: 'Bearer ' + paired.token } });
+    assert.equal(self.status, 204);
+    // each signed-in user behind that ip still has a whole budget of their own
+    const usedA = await drain({ cookie: a.cookie });
+    assert.ok(usedA >= 115 && usedA <= 120, `a got ${usedA}`);
+    const usedB = await drain({ cookie: b.cookie });
+    assert.ok(usedB >= 115 && usedB <= 120, `b got ${usedB}`);
+  } finally { await h.close(); }
+});
+
 async function openRaw(url, cookie) {
   const ac = new AbortController();
   const r = await fetch(url + '/api/world/stream', { headers: { cookie }, signal: ac.signal });
