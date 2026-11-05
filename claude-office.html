@@ -490,7 +490,7 @@ globalThis.WorldLogic = (() => {
     return out
   }
   // Level of detail from an island's on-screen width.
-  const THUMB_PX = 120
+  const THUMB_PX = 130
   const lodFor = (screenW, stageW) => (screenW >= 0.5 * stageW ? 'full' : screenW >= THUMB_PX ? 'mid' : 'thumb')
 
   // Redraw budget: of the islands due for a redraw, take the `budget` that have waited longest.
@@ -2617,7 +2617,9 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
   const KIND_LABEL=new Map([['shell','Chạy lệnh'],['edit','Sửa code'],['read','Đọc code'],['web','Tra web'],['agent','Giao sub-agent'],['mcp','Công cụ MCP'],['other','Việc khác'],['none','—']]);
   const SHARE_LABEL=new Map([['kin','Kín'],['co-ban','Cơ bản']]);
   const BUSY=new Set(['working','thinking','talking']);
-  const releaseCanvas=sc=>{sc.canvas.width=sc.canvas.height=0;sc.k=null;sc.lod=null;};
+  // Lets go of a full-detail canvas (~20 MB at k=4). Mid and thumbnail canvases are small and kept, so coming back to
+  // them needs no redraw. An island left without a canvas goes to the front of the redraw queue.
+  const releaseCanvas=sc=>{sc.canvas.width=sc.canvas.height=0;sc.k=null;sc.lod=null;sc.drawnAt=-Infinity;};
   const okColor=c=>typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c)?c:'#8b8fa3';
   const clip=(s,n)=>{s=String(s==null?'':s);return s.length>n?s.slice(0,n-1)+'…':s;};
   const zFit=(sw,sh)=>Math.min(sw,sh*LW/FH);// island top fills the stage, like the local page
@@ -2763,16 +2765,20 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
         let k=lod==='mid'?MID_K:lod==='thumb'?THUMB_K:Math.min(4,Math.max(0.5,r.w*dpr/LW));
         if(lod==='full'&&moving)k=sc.lod==='full'?sc.lodK:Math.max(MID_K,sc.lodK);
         const age=now-sc.drawnAt,stale=sc.lod!==lod||sc.lodK!==k;
-        if(sc.lod==='full'&&lod!=='full')releaseCanvas(sc);// a full-detail canvas can be ~20 MB; a smaller one is made at once
+        if(sc.lod==='full'&&lod!=='full')releaseCanvas(sc);
         if(lod==='full')it.redraw={k,lod,force:true};
+        // While the camera moves, a mid or thumbnail canvas is kept at the detail it has; it changes once the camera rests.
+        else if(moving&&sc.k!=null&&sc.lod!=='full'){if(age>=(sc.lod==='mid'?MID_MS:THUMB_MS)){it.redraw={k:sc.lodK,lod:sc.lod};due.push(it);}}
         else if(stale||age>=(lod==='mid'?MID_MS:THUMB_MS)){it.redraw={k,lod};due.push(it);}
       }
-      // Mid and thumbnail islands share a small per-frame budget, longest-waiting first (one while an island is full size).
+      // Mid and thumbnail islands share a small per-frame budget, longest-waiting first (one while an island is full
+      // size). Islands without a canvas wait their turn too, and are left out (no label) until it comes.
       const budget=shown.some(it=>it.vis&&it.redraw&&it.redraw.force)?1:REDRAWS_PER_FRAME;
-      due.sort((a,b)=>a.sc.drawnAt-b.sc.drawnAt).slice(budget).forEach(it=>{if(it.sc.k!=null)it.redraw=null;});
+      const picked=WorldLogic.pickRedraws(due.map(it=>({id:it.id,drawnAt:it.sc.drawnAt})),budget);
+      for(const it of due)if(!picked.has(it.id))it.redraw=null;
       // Islands not drawn (off screen, or other islands in "Của tôi") still walk, a few times a second.
-      // Their backing canvas is let go; the next draw makes a new one.
-      for(const sc of w.scenes.values())if(!drawn.has(sc.id)){if(sc.k!=null)releaseCanvas(sc);
+      // Only a full-detail canvas is let go; the next draw makes a new one.
+      for(const sc of w.scenes.values())if(!drawn.has(sc.id)){if(sc.lod==='full')releaseCanvas(sc);
         if(now-sc.simAt>=OFF_MS){const d=Math.min(1,(now-(sc.simAt||now))/1000);sc.simAt=now;if(d>0)sc.frame(d);}}
       const selIsl=this.state.selIsland,sel=this.state.sel,labels=[];
       shown.forEach((it,i)=>{if(!it.vis)return;const sc=it.sc,r=it.r;

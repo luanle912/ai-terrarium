@@ -37,8 +37,8 @@ test('a missing own island leaves the centre free and does not throw', () => {
 test('lodFor thresholds', () => {
   assert.equal(W.lodFor(500, 1000), 'full')
   assert.equal(W.lodFor(499, 1000), 'mid')
-  assert.equal(W.lodFor(120, 1000), 'mid')
-  assert.equal(W.lodFor(119, 1000), 'thumb')
+  assert.equal(W.lodFor(W.THUMB_PX, 1000), 'mid')
+  assert.equal(W.lodFor(W.THUMB_PX - 1, 1000), 'thumb')
 })
 
 test('toWorld inverts toScreen', () => {
@@ -80,7 +80,8 @@ test('camStep converges in about 0.4 s and snaps', () => {
   assert.deepEqual(cam, goal)
 })
 
-test('lodFor uses THUMB_PX', () => {
+test('lodFor uses THUMB_PX, tuned within 120..160 (spec §12.3)', () => {
+  assert.ok(W.THUMB_PX >= 120 && W.THUMB_PX <= 160, String(W.THUMB_PX))
   assert.equal(W.lodFor(W.THUMB_PX, 1000), 'mid')
   assert.equal(W.lodFor(W.THUMB_PX - 1, 1000), 'thumb')
 })
