@@ -3,6 +3,7 @@
 // createWorld({now, onChange}); onChange gets {type:'world'} | {type:'island', id} | {type:'remove', id}.
 //   publish(island{id,name,color}, deviceId, share, value) -> {accepted}
 //   removeDevice(deviceId), removeIsland(id), snapshotFor(id) -> ClientSession[], islands() -> IslandMeta[], tick()
+//   devicesOf(islandId) -> [{deviceId, online, share, private}]   setIslandMeta(id, {name, color})
 
 const OFFLINE_MS = 90 * 1000;
 const LETTERS = 'ABCDEFGHIJKLMNOP';
@@ -95,6 +96,16 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
       islands.delete(id);
       emit({ type: 'remove', id });
       emit({ type: 'world' });
+    },
+    devicesOf(id) {
+      const isl = islands.get(id);
+      return isl ? [...isl.devices.entries()].map(([deviceId, d]) => ({ deviceId, online: online(d), share: d.share, private: d.private })) : [];
+    },
+    setIslandMeta(id, { name, color }) {
+      const isl = islands.get(id);
+      if (!isl) return;
+      isl.name = name; isl.color = color;
+      refresh(isl); // emits `world` only when the meta really changed
     },
     snapshotFor(id) { const isl = islands.get(id); return isl ? sessionsOf(isl) : []; },
     islands() { return [...islands.values()].map(metaOf); },

@@ -2,7 +2,6 @@
 // Publish, live world and viewer pages (spec 9.3-9.5).
 //   POST /api/publish          Bearer device token, JSON <= 16KB. Cookies are never read here (S11).
 //   GET  /api/world/stream     SSE for signed-in viewers: `world`, `island`, `remove` events, `: ping` every 25 s
-//   GET  /me, POST /me/devices/revoke
 //   GET  /                     redirect to login, or the claude-office.html page
 // ctx.streams = {check(), count()} is exposed for tests and the periodic session check (B8).
 
@@ -11,10 +10,8 @@ const path = require('node:path');
 const { HttpError, send, sendJson, SECURITY_HEADERS } = require('./http.js');
 const { sha256hex, NO_REFRESH_TTL_MS } = require('./auth.js');
 const { validatePublish } = require('./validate.js');
-const { mePage, PAGE_CSP } = require('./pages.js');
 
 const PUBLISH_LIMIT = 16 * 1024;
-const FORM_LIMIT = 4096;
 const PING_MS = 25 * 1000;
 const CHECK_MS = 60 * 1000;
 const TICK_MS = 5 * 1000;
@@ -22,7 +19,6 @@ const ISLAND_EVERY_MS = 500; // at most 2 island events per second per island
 const MAX_BUFFERED = 1024 * 1024;
 const TOUCH_EVERY_MS = 30 * 1000;
 const NO_STORE = { 'Cache-Control': 'no-store' };
-const HTML = { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, ...NO_STORE };
 // The big page loads React from cdnjs and fonts today; the hash-based CSP comes in phase 2.
 const OFFICE_CSP = "default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline' https://fonts.googleapis.com; " +
   "font-src https://fonts.gstatic.com; connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com; img-src 'self' data:; " +
@@ -132,7 +128,6 @@ function routes(ctx) {
   }
 
   const redirect = (res, to) => send(res, 302, '', { Location: to, ...NO_STORE });
-  const html = (res, body) => send(res, 200, body, HTML);
 
   const list = [];
 
@@ -175,30 +170,6 @@ function routes(ctx) {
       res.write('retry: 3000\n\n');
       broadcast('world', worldPayload()); // everybody learns the new viewer count; the newcomer gets its first world
       for (const m of world.islands()) write(stream, frame('island', islandPayload(m.id)));
-    },
-  });
-
-  list.push({
-    method: 'GET', path: '/me',
-    handler(req, res) {
-      const s = helpers.requireSession(req);
-      if (!s) return redirect(res, '/auth/login');
-      html(res, mePage({ csrf: s.session.csrf, user: s.user, island: db.getIslandByUser(s.user.id), devices: db.listDevices(s.user.id) }));
-    },
-  });
-
-  list.push({
-    method: 'POST', path: '/me/devices/revoke',
-    async handler(req, res) {
-      const s = helpers.requireSession(req);
-      if (!s) throw new HttpError(401, 'not signed in');
-      const form = new URLSearchParams((await helpers.readBody(req, FORM_LIMIT)).toString('utf8'));
-      if (!helpers.requireCsrf(req, s.session, form.get('csrf') || '')) throw new HttpError(403, 'forbidden');
-      const id = form.get('device_id') || '';
-      if (id.length > 64) throw new HttpError(400, 'bad request');
-      // Owner-scoped: someone else's device id changes nothing. S19: effective at once.
-      if (db.revokeDevice(id, s.user.id, deps.now())) world.removeDevice(id);
-      redirect(res, '/me');
     },
   });
 

@@ -63,4 +63,12 @@ function validatePublish(body) {
   return { ok: true, value: { v: 1, seq: body.seq, share, private: priv, sessions } };
 }
 
-module.exports = { validatePublish, MAX_SESSIONS };
+// Island name typed by a user: NFC, collapsed whitespace, trimmed; 1-24 letters, marks, digits, space . _ -
+const ISLAND_NAME_RE = /^[\p{L}\p{M}\p{N} ._-]{1,24}$/u;
+function validIslandName(s) {
+  if (typeof s !== 'string') return null;
+  const t = s.normalize('NFC').replace(/\s+/g, ' ').trim();
+  return ISLAND_NAME_RE.test(t) ? t : null;
+}
+
+module.exports = { validatePublish, validIslandName, MAX_SESSIONS };
