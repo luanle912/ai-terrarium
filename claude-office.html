@@ -105,11 +105,7 @@ vi:{
 "office.act.snack":"chọn snack",
 "office.act.smoke":"hút thuốc",
 "office.act.wc":"đi vệ sinh",
-"office.wc.men":"WC NAM",
-"office.wc.women":"WC NỮ",
 "office.wc.lobby":"SẢNH CHUNG",
-"office.wc.signMen":"NAM",
-"office.wc.signWomen":"NỮ",
 "office.act.phone":"lướt điện thoại",
 "office.act.stretch":"vươn vai",
 "office.act.bath":"tắm hồ",
@@ -435,11 +431,7 @@ en:{
 "office.act.snack":"picking a snack",
 "office.act.smoke":"smoke break",
 "office.act.wc":"restroom break",
-"office.wc.men":"MEN",
-"office.wc.women":"WOMEN",
-"office.wc.lobby":"SHARED LOBBY",
-"office.wc.signMen":"M",
-"office.wc.signWomen":"W",
+"office.wc.lobby":"LOBBY",
 "office.act.phone":"scrolling the phone",
 "office.act.stretch":"stretching",
 "office.act.bath":"taking a dip",
@@ -765,11 +757,7 @@ ja:{
 "office.act.snack":"おやつ選び中",
 "office.act.smoke":"タバコ休憩",
 "office.act.wc":"トイレ休憩",
-"office.wc.men":"男性用",
-"office.wc.women":"女性用",
 "office.wc.lobby":"共用ロビー",
-"office.wc.signMen":"男",
-"office.wc.signWomen":"女",
 "office.act.phone":"スマホいじり中",
 "office.act.stretch":"ストレッチ中",
 "office.act.bath":"池で水浴び中",
@@ -1095,11 +1083,7 @@ ko:{
 "office.act.snack":"간식 고르는 중",
 "office.act.smoke":"담배 타임",
 "office.act.wc":"화장실 가는 중",
-"office.wc.men":"남성용",
-"office.wc.women":"여성용",
 "office.wc.lobby":"공용 로비",
-"office.wc.signMen":"남",
-"office.wc.signWomen":"여",
 "office.act.phone":"폰 보는 중",
 "office.act.stretch":"기지개 켜는 중",
 "office.act.bath":"연못에서 물놀이",
@@ -1425,11 +1409,7 @@ zh:{
 "office.act.snack":"挑零食",
 "office.act.smoke":"抽根烟",
 "office.act.wc":"上洗手间",
-"office.wc.men":"男卫生间",
-"office.wc.women":"女卫生间",
 "office.wc.lobby":"公共大厅",
-"office.wc.signMen":"男",
-"office.wc.signWomen":"女",
 "office.act.phone":"刷手机",
 "office.act.stretch":"伸懒腰",
 "office.act.bath":"去池塘泡澡",
@@ -1755,11 +1735,7 @@ es:{
 "office.act.snack":"eligiendo un snack",
 "office.act.smoke":"pausa para fumar",
 "office.act.wc":"en el baño",
-"office.wc.men":"HOMBRES",
-"office.wc.women":"MUJERES",
 "office.wc.lobby":"VESTÍBULO",
-"office.wc.signMen":"H",
-"office.wc.signWomen":"M",
 "office.act.phone":"mirando el móvil",
 "office.act.stretch":"estirándose",
 "office.act.bath":"dándose un chapuzón",
@@ -4336,7 +4312,7 @@ const VACANT_CACHE=new Map();
 const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);if(v)return v;const sat=th.stroke?0.9:0.85,bri=th.stroke?1.08:0.7;v={};for(const k in th)v[k]=typeof th[k]==='string'?greyHex(th[k],sat,bri):th[k];v._metal=greyHex(th.stroke?'#ffffff':'#2d3142',sat,bri);v._mouse=greyHex(th.stroke?'#ffffff':'#d9dbe2',sat,bri);if(VACANT_CACHE.size>64)VACANT_CACHE.clear();VACANT_CACHE.set(key,v);return v;};
 const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','·':'000000010000000','/':'001001010100100','%':'101001010100101','-':'000000111000000','_':'000000000000111','.':'000000000000010'};
 // Rows of a 3×5 FONT letter for the restroom's sign and floor paint, plus Ữ and Ả with their marks above (7 rows).
-const RESTROOM_GLYPH=ch=>{if(ch==='Ữ')return['.##.','##..','#.##','#.#.','#.#.','#.#.','###.'];if(ch==='Ả')return['##.','.#.','.#.','#.#','###','#.#','#.#'];
+const RESTROOM_GLYPH=ch=>{if(ch==='\u1EEE')return['.##.','##..','#.##','#.#.','#.#.','#.#.','###.'];if(ch==='\u1EA2')return['##.','.#.','.#.','#.#','###','#.#','#.#'];
   const f=FONT[ch];if(!f)return[];const r=[];for(let i=0;i<5;i++)r.push(f.slice(i*3,i*3+3).replace(/1/g,'#').replace(/0/g,'.'));return r;};
 function text3(ctx,str,x,y,col){ctx.fillStyle=col;x=Math.round(x);y=Math.round(y);[...String(str).toUpperCase()].forEach((ch,i)=>{const f=FONT[ch];if(!f)return;for(let b=0;b<15;b++)if(f[b]==='1')ctx.fillRect(x+i*4+(b%3),y+Math.floor(b/3),1,1);});}
 const PANTS=['#2d3142','#3b4a6b','#4a3b2f','#22303a','#5a5f73'];
@@ -5019,7 +4995,7 @@ class ClaudeOffice extends React.Component{
     [[0.45,0.06],[0.22,0.1]].forEach(([b,a])=>{const sh='rgba(0,0,0,'+a+')';poly([P(X,Y),P(X1,Y),P(X1,Y+b),P(X,Y+b)],sh,null);
       for(const wx of[L.walls.pantry.x+L.walls.pantry.t,L.walls.split.x+L.walls.split.t])poly([P(wx,Y),P(wx+b,Y),P(wx+b,F),P(wx,F)],sh,null);});
     // the lobby's name painted on its planks along the walkway, in the same paint as PANTRY
-    {const[lx,ly]=L.lobby.label;this.restroomPaint(ctx,P(lx,ly),'SẢNH CHUNG',df>0.5?'#8a5a2a':'#a8763e',2);}
+    {const[lx,ly]=L.lobby.label;this.restroomPaint(ctx,P(lx,ly),tr('office.wc.lobby'),df>0.5?'#8a5a2a':'#a8763e',2);}
 
     // ---- the back wall, exactly the office's: wall, skirting, top band and cap, cut end ----
     {const WT=0.35,ZT=WALL+3;
@@ -5128,10 +5104,14 @@ class ClaudeOffice extends React.Component{
       fL(tx-0.36,tx+0.36,ty+0.031,20,28,WHITE);picto(tx-0.34,ty+0.032,27.5,PICTO.m,ACC.m);picto(tx+0.04,ty+0.032,27.5,PICTO.f,ACC.f);}});}
   }
   // Words painted on the floor like PANTRY (in the office's floor paint): reading along +x, `s` px per font pixel.
+  // A label in another language may have letters the 3×5 font lacks (CJK, Í…): it is then painted with fillText, in the
+  // same floor plane and size.
   restroomPaint(ctx,[px,py],txt,col,s){
     ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.transform(1,0.5,-1,0.5,0,0);ctx.scale(s,s);ctx.globalAlpha=0.6;ctx.fillStyle=col;
+    if(![...txt].every(ch=>ch===' '||RESTROOM_GLYPH(ch).length)){ctx.font="bold 6px 'JetBrains Mono',sans-serif";ctx.textBaseline='top';ctx.fillText(txt,0,-1);
+      ctx.restore();ctx.globalAlpha=1;return;}
     let x=0;for(const ch of txt){if(ch===' '){x+=3;continue;}const g=RESTROOM_GLYPH(ch),up=g.length>5?g.length-5:0;
-      g.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(x+i,j-up,1,1);});x+=(ch==='Ữ'?4:3)+1;}
+      g.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(x+i,j-up,1,1);});x+=(ch==='\u1EEE'?4:3)+1;}
     ctx.restore();ctx.globalAlpha=1;
   }
   drawDesk(G,d,i){
