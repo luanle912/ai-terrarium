@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Thai** — The office page also speaks Thai (ไทย); a browser set to Thai picks it on its own, and it is in the **Language** picker in ⚙
+
 ### Changed
 
 - **Clouds follow the zoom** — Zooming and panning the island now carries the sky with it by depth: the sky colour, sun, moon and stars stay put, far clouds and islands drift a little, the cloud sea grows toward the island's own zoom, the mist over the island moves with it exactly and the near mist bank a little more
