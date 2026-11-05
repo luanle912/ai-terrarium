@@ -417,41 +417,45 @@ Tường sau khối phải đứng trên đất. Ở bản 2, hàng `y = −1` c
 - Không đổi khung cảnh (`sceneFrame`). Không đổi pixel nào ngoài vùng pantry phía đông, khối, khu hút thuốc và đất mới
   (kiểm bằng pixel diff, CPU raster, ngày/đêm/tuyết).
 
-## C9. Sửa sau review bản 3 (anh Kiệt)
+## C9. Sửa sau review bản 3 (anh Kiệt, hai lượt)
 
 Các điểm dưới đây thay cho những dòng tương ứng ở C3 và C5.
 
 | Góp ý | Xử lý |
 |---|---|
-| Màu cửa buồng quá rực | Giảm bão hoà, tăng sáng (cùng hue): nam `#173DC9` → **`#7989c3`** (xanh bụi), nữ `#D9467A` → **`#c37993`** (hồng bụi). Biển neon sáng hơn cửa một chút: **`#6c84da`**, **`#da6c93`**. Cột chỉ dẫn ở sảnh dùng màu biển |
-| Tường trước (có cửa ra vào) phải cao đủ tường | Tường trước `y 4.93 → 5.07`, cao **`WALL` (56)** + nẹp 3, đúng công thức tường sau: mặt `th.wr`, nẹp chân `th.trim` cao 4, dải nẹp đỉnh, mặt đỉnh `shade(th.trim, 18)`. Hai ô cửa `x 28 → 29` và `x 31 → 32`, cao **40**, phần tường phía trên cửa là một đoạn tường liền |
-| Cửa thật, đẩy được hai chiều | Mỗi ô cửa một cánh cửa lò xo, bản lề ở mép tây. Màu và kiểu theo cửa văn phòng (`doorDraw`): khung `#5c4330`, cánh `#8a5a3a`, ô kính nhỏ `#9fd3ff`, tấm đá chân `#7a4f2f`; thay tay nắm bằng **tấm đẩy inox** `#c9d3e3`. Khung cửa nâu viền quanh ô cửa trên mặt tường |
-| Thêm tường phải (tường đông phòng nữ) đủ cao | Tường đông `x 32.88 → 33`, cao `WALL` + nẹp, chạy từ `y −0.35` (che mặt cắt cuối tường sau) tới `y 5.07` (gặp tường trước). Mặt nhìn thấy `th.wl`, như mặt hướng `+x` của tường văn phòng. Khu hút thuốc tựa vào mặt ngoài |
+| Màu cửa buồng quá rực | Giảm bão hoà, tăng sáng, giữ hue: nam `#173DC9` → **`#7989c3`** (xanh bụi), nữ `#D9467A` → **`#c37993`** (hồng bụi). Dùng cho vách/cửa buồng, hình người trên biển cửa và cột chỉ dẫn |
+| Tường trước (có cửa) và tường phải (tường đông phòng nữ) phải là tường thật | Cả hai là tường đặc, vẽ đúng công thức tường sau: mặt tường, nẹp chân `th.trim` cao 4, dải nẹp đỉnh, mặt đỉnh `shade(th.trim, 18)` |
+| … nhưng chỉ cao khoảng **70%** tường đầy | Cao **`round(WALL × 0.7)` = 39** + nẹp 3. Tường sau giữ `WALL` (56). Phần trên buồng, gương và bàn trang điểm lộ qua mép tường, như ảnh cận |
+| Cửa ra vào thật, đẩy được hai chiều | Hai ô cửa `x 28 → 29`, `x 31 → 32`, cửa cao **31**. Phía trên mỗi cửa còn **một dải tường lanh tô cao 8**: trông gọn hơn cho cửa chạm đỉnh tường. Cánh cửa lò xo, bản lề ở mép tây, màu và kiểu theo cửa văn phòng (`doorDraw`): khung `#5c4330`, cánh `#8a5a3a`, ô kính nhỏ `#9fd3ff`, tấm đá chân `#7a4f2f`, **tấm đẩy inox** `#c9d3e3` thay tay nắm. Các ô trên cánh co theo chiều cao cửa. Khung nâu viền quanh ô cửa trên mặt tường |
+| Bỏ 2 biển neon `WC NAM` / `WC NỮ` trên tường sau | Đã bỏ |
+| Biển nhỏ ở mỗi cửa | Tấm biển trắng khung nẹp, cỡ biển cửa thật (≈ 0.42 ô × 10 px), gắn trên tường trước **ngay bên trái mỗi cửa**, tầm mắt (`z 19 → 29`). Trên biển là hình người pixel 5×7 (nam/nữ) màu nhấn đã giảm. **Không có chữ:** biển chỉ rộng ≈ 7 px, chữ `NAM` cần 11 px nên không vừa. Đặt bên trái vì bên phải cửa nam có trạm sát khuẩn che |
+| Cột chỉ dẫn ở sảnh khớp với biển cửa | Cột inox, tấm biển trắng khung nẹp (≈ 0.8 ô), hai hình người nam/nữ cạnh nhau, cùng kiểu với biển cửa |
+
+**Tường đông** `x 32.88 → 33`, chạy từ `y −0.35` tới `y 5.07`, nên gặp tường trước. Mặt nhìn thấy `th.wl`, như mặt hướng `+x`
+của tường văn phòng. Tường sau cao hơn nên đầu cắt của nó vẫn lộ phía trên tường đông. Khu hút thuốc tựa vào mặt
+ngoài tường đông.
 
 **Cánh cửa đẩy (`RestroomLogic.doorSwing(L, người)`)** là hàm thuần, chạy mỗi khung hình:
 - Cửa **đóng** khi không ai ở ô cửa.
 - Ai đứng trong khoảng mở (`x0 < x < x1`) và cách mặt tường dưới `DOORWAY = 0.75` ô thì cửa mở khoảng 70°, **ra xa người đó**:
   - người trong phòng (`y < 5`) đẩy cửa ra phía sảnh (`+1`);
   - người ở sảnh đẩy cửa vào trong (`−1`).
-- Người đầu tiên trong danh sách quyết định, nên cùng một nhóm người luôn cho cùng kết quả, không nhấp nháy.
+- Người đầu tiên trong danh sách quyết định, nên cùng một nhóm người luôn cho cùng kết quả.
 - Chi phí: mỗi khung hình duyệt danh sách người một lần.
 
-**Thứ tự vẽ:**
-- Cửa mở ra sảnh vẽ sau lanh tô.
-- Cửa mở vào trong vẽ trước lanh tô và khung, nên nó khuất sau phần tường phía trên.
+**Thứ tự vẽ:** cửa mở vào trong vẽ trước lanh tô và khung, nên nó khuất sau dải tường phía trên.
 
-**Biển neon phòng nữ** dừng cách tường đông 1.2 ô. Tường đông cao đủ nên trên màn hình đứng trước đoạn cuối tường sau.
-
-**Cách vẽ tường quay về phía người xem.** Văn phòng không có tường như vậy: nó để trống mặt trước và mặt đông, chỉ có
-tường sau và tường trái. Nên không có kiểu riêng nào để chép. Anh Kiệt xác nhận không cần nhìn thấy bên trong.
-- Tường trước và tường đông vẽ đặc, y như tường sau văn phòng. Không có đường cắt đỉnh, không trong suốt.
-- Bên trong khuất phần lớn. Chỉ phần trên của buồng phòng nam và các biển trên tường sau còn lộ qua mép tường.
-- Người đi qua cửa rồi khuất vào trong. Đó là chủ ý: kín đáo và gọn hơn.
+**Cách vẽ tường quay về phía người xem.** Văn phòng không có tường như vậy: nó để trống mặt trước và mặt đông. Nên
+không có kiểu riêng nào để chép, và tường trước/đông vẽ đặc như tường sau. Anh Kiệt xác nhận không cần thấy hết bên
+trong. Với chiều cao 70%, phần trên của nội thất lộ ra một cách tự nhiên. Người đi qua cửa rồi khuất dần sau tường.
 
 **Chiều cao mới** (thay dòng chiều cao ở C5):
-- tường sau, tường trước, tường đông: 56 + nẹp 3;
+- tường sau: 56 + nẹp 3;
+- tường trước và tường đông: 39 + nẹp 3;
 - vách giữa các phòng: 32;
-- cửa ra vào: 40;
+- cửa: 31;
 - vách buồng: `3 → 28`.
 
-Bỏ tường đầu gối.
+Bỏ tường đầu gối, biển neon và các màu "biển sáng hơn".
+
+**Chữ vẽ trên canvas còn lại:** `SẢNH CHUNG` sơn trên sàn sảnh. Biển cửa và cột chỉ dẫn chỉ có hình người.
