@@ -12,6 +12,7 @@ button{font-family:inherit}
 .btn{border:2px solid var(--border);background:var(--surface);color:var(--fg);padding:7px 12px;font-size:12px;cursor:pointer;font-family:inherit}
 .btn:hover{background:#1d2433}
 .btn-active{background:var(--fg);color:var(--bg)}
+.btn.btn-active:hover{background:#ffffff}
 .btn-accent{border-color:var(--warn);background:var(--warn);color:#1a1300;font-weight:600}
 .btn-accent:hover{background:#ffe08f}
 /* a single-row strip that scrolls sideways on small screens, without a visible scrollbar */
@@ -1086,6 +1087,19 @@ globalThis.WorldLogic = (() => {
   const viewGone = (view, shownId, has) => (view === 'one' || view === 'mine') && shownId != null && !has(shownId)
   // Esc: nothing on "Toàn cảnh", while typing or with the settings open; else close an open confirm, else go back.
   const escAction = ({ view, typing, settings, confirm }) => view === 'all' || typing || settings ? 'none' : confirm ? 'confirm' : 'back'
+  // Without an island of my own, an island never seen before may be mine (paired on another tab), so /api/me is asked
+  // again: at most once per `every` ms, only while the tab is visible. A new island inside the window is not lost: the
+  // probe stays pending and retryIn says when to call again. The first world list is only remembered.
+  const meProbeState = () => ({ seen: new Set(), pending: false, lastAt: -Infinity })
+  function meProbeStep(st, ids, nowMs, o) {
+    for (const id of ids) if (!st.seen.has(id)) { st.seen.add(id); if (!o.first) st.pending = true }
+    if (o.hasMine) st.pending = false
+    if (!st.pending || !o.visible) return { fire: false, retryIn: null }
+    const wait = st.lastAt + o.every - nowMs
+    if (wait > 0) return { fire: false, retryIn: wait }
+    st.pending = false; st.lastAt = nowMs
+    return { fire: true, retryIn: null }
+  }
 
   const ISLAND_ASPECT = 0.62  // island height / width
 
@@ -1102,7 +1116,7 @@ globalThis.WorldLogic = (() => {
     return out
   }
   return { SLOTS, PHONE_MAX_W, CENTRE_SCALE, HOVER_LIFT, GUTTER, CLOUD_IN_MS, CLOUD_HOLD_MS, CLOUD_OUT_MS, CLOUD_MS, FADE_MS, skyLayout, skyHit, easeInOut, cloudPhase, cloudBands, canNavigate,
-    transStep, landingView, viewGone, escAction, ISLAND_ASPECT, clientSessions }
+    transStep, landingView, viewGone, escAction, meProbeState, meProbeStep, ISLAND_ASPECT, clientSessions }
 })()
 </script>
 <script id="sky-render">
@@ -3588,7 +3602,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
   // scene's look: 2:1 isometric, three flat shades per block (top, left 12 % darker, right 30 % darker), 1 px outline.
   // Island: grass diamond, an earth-and-stone underside tapering to the front corner, one office block roofed in the
   // island colour with six windows (one lit per session at work, at most six), two trees, a path, a gold pennant on mine.
-  const ART_W=88,ART_H=59,LABEL_H=26,ISL={cx:44,cy:26,hw:40},BLD={cx:42,cy:24,hw:14,h:12};
+  const ART_W=88,ART_H=59,LABEL_H=26,LABEL_H2=38,ISL={cx:44,cy:26,hw:40},BLD={cx:42,cy:24,hw:14,h:12};
   const OUTLINE='#141a26',GOLD='#ffd166';
   const ART=new Map();
   const art=(key,paint)=>{let c=ART.get(key);if(c)return c;if(ART.size>=96)ART.clear();
@@ -3604,11 +3618,13 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
   const faceCols=(cx,cy,hw,fn)=>{const hh=hw/2;
     for(let x=cx-hw;x<cx+hw;x++){const left=x<cx,i=left?cx-x:x-cx+1;fn(x,cy+hh-Math.ceil(i/2),left,i);}};
   const hash=(x,s)=>{const v=Math.sin(x*127.1+s*311.7)*43758.5453;return v-Math.floor(v);};
-  // Every clear pixel next to a solid one becomes the outline (a sprite outline that follows any silhouette);
-  // dashed keeps every other run of three columns.
+  // Every clear pixel next to a solid one becomes the outline (a sprite outline that follows any silhouette).
+  // dashed (empty places): dashes run along the diamond's edges, four columns (two rows) on and four off, counted out
+  // from the centre so both sides match; the columns past the two side corners are left out, so no vertical runs.
   const outline=(g,col,dashed)=>{const a=g.getImageData(0,0,ART_W,ART_H).data,solid=(x,y)=>x>=0&&y>=0&&x<ART_W&&y<ART_H&&a[(y*ART_W+x)*4+3]>=24;
     g.fillStyle=col;
-    for(let y=0;y<ART_H;y++)for(let x=0;x<ART_W;x++){if(solid(x,y)||(dashed&&Math.floor(x/3)%2))continue;
+    const off=x=>{const u=x<ISL.cx?ISL.cx-1-x:x-ISL.cx;return u>=ISL.hw||Math.floor(u/4)%2===1;};
+    for(let y=0;y<ART_H;y++)for(let x=0;x<ART_W;x++){if(solid(x,y)||(dashed&&off(x)))continue;
       if(solid(x-1,y)||solid(x+1,y)||solid(x,y-1)||solid(x,y+1))g.fillRect(x,y,1,1);}};
   const tree=(g,x,y,df)=>{const N=SkyRender.night,leaf=N('#3e9a45',df);
     px1(g,'rgba(0,0,0,0.2)',x-3,y,6,1);px1(g,N('#6b4a2a',df),x,y-3,1,3);
@@ -3717,9 +3733,9 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
 
     startWorld(cfg){
       let view='all';try{const v=this.storage&&this.storage.getItem(VIEW_KEY);if(v==='mine'||v==='all')view=v;}catch(_){}
-      if(this.world){clearTimeout(this.world.meTimer);clearTimeout(this.world.waitTimer);}// "Thử lại" starts a fresh world
+      if(this.world){clearTimeout(this.world.meTimer);clearTimeout(this.world.waitTimer);clearTimeout(this.world.probeTimer);}// "Thử lại" starts a fresh world
       this.world={me:cfg.me,csrf:typeof cfg.csrf==='string'?cfg.csrf:'',islands:[],scenes:new Map(),viewers:0,capacity:WorldLogic.SLOTS,conn:'connecting',view,focus:null,hover:null,sw:0,sh:0,sky:null,
-        dead:false,errAt:0,mine:null,meErr:false,meSeq:0,draft:null,confirm:null,seen:new Set(),meProbeAt:0};
+        dead:false,errAt:0,mine:null,meErr:false,meSeq:0,draft:null,confirm:null,probe:WorldLogic.meProbeState()};
       this.setState({sel:null,selIsland:null,live:'off'});
       // The pointer handlers bound at mount drive the local camera; the world has none of it (no drag, no zoom).
       // Hover and clicks go to a scroller over the canvases, which on a phone also scrolls the sky.
@@ -3753,7 +3769,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
         w.meTimer=setTimeout(tick,ME_EVERY_MS*(1-ME_JITTER+Math.random()*2*ME_JITTER));};
       w.meTimer=setTimeout(tick,ME_EVERY_MS*(1-ME_JITTER+Math.random()*2*ME_JITTER));
       if(!this.onWorldVisible){this.onWorldVisible=()=>{const x=this.world;
-        if(x&&!x.dead&&x.view==='mine'&&document.visibilityState==='visible')this.loadMe();};
+        if(x&&!x.dead&&x.view==='mine'&&document.visibilityState==='visible')this.loadMe();
+        if(x&&!x.dead&&document.visibilityState==='visible')this.meProbe([],false);};
         document.addEventListener('visibilitychange',this.onWorldVisible);}
       // Phones (<= 480 px) fold the "Máy mới" notices into one line and use a 16 px name field (no zoom on focus).
       if(!this.phoneMq&&window.matchMedia){this.phoneMq=window.matchMedia('(max-width: 480px)');
@@ -3767,6 +3784,14 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
           if(act==='confirm'){if(x.confirm.busy)return;clearTimeout(x.confirm.timer);x.confirm=null;this.forceUpdate();}
           else if(act==='back')this.navigate({view:'all'});};
         window.addEventListener('keydown',this.onWorldKey);}
+    },
+    // Asks /api/me when an unseen island may be mine (WorldLogic.meProbeStep), with one trailing call when throttled.
+    meProbe(ids,first){
+      const w=this.world;if(!w||w.dead)return;
+      const r=WorldLogic.meProbeStep(w.probe,ids,performance.now(),{first:!!first,visible:document.visibilityState==='visible',hasMine:!!this.myIslandId(),every:ME_PROBE_MS});
+      clearTimeout(w.probeTimer);w.probeTimer=null;
+      if(r.fire)this.loadMe();
+      else if(r.retryIn!=null)w.probeTimer=setTimeout(()=>{if(this.world===w)this.meProbe([],false);},Math.ceil(r.retryIn)+20);
     },
     // Forget a selection or an owner's "Xoá đảo" question whose island is no longer in the world.
     dropGone(){
@@ -3786,8 +3811,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       w.capacity=Number.isInteger(d.capacity)&&d.capacity>0?d.capacity:WorldLogic.SLOTS;
       // Without an island of my own, an island never seen before may be mine (just paired on another tab): ask
       // /api/me, at most once every ME_PROBE_MS, so the centre turns from "chỗ của bạn" into my island by itself.
-      const fresh=w.islands.some(i=>!w.seen.has(i.id));for(const i of w.islands)w.seen.add(i.id);
-      if(fresh&&w.metaSeen&&!this.myIslandId()&&performance.now()-w.meProbeAt>=ME_PROBE_MS){w.meProbeAt=performance.now();this.loadMe();}
+      this.meProbe(w.islands.map(i=>i.id),!w.metaSeen);
       const ids=new Set(w.islands.map(i=>i.id));
       for(const[id,sc]of[...w.scenes])if(!ids.has(id)){releaseCanvas(sc);w.scenes.delete(id);}
       for(const i of w.islands)if(!w.scenes.has(i.id))w.scenes.set(i.id,new IslandScene(this,i.id));
@@ -3895,8 +3919,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     myIsland(){const id=this.myIslandId();return id?this.world.islands.find(i=>i.id===id):null;},
     // The 8-slot layout for the current islands and stage, remembered until one of its inputs changes.
     skyNow(){
-      const w=this.world,slots=w.islands.map(i=>i.slot),mine=this.mySlot(),key=slots.join(',')+'|'+mine+'|'+w.sw+'|'+w.sh;
-      if(!w.sky||w.sky.key!==key)w.sky={key,L:WorldLogic.skyLayout(slots,mine,w.sw,w.sh)};
+      const w=this.world,slots=w.islands.map(i=>i.slot),mine=this.mySlot(),lw=w.lw||w.sw,key=slots.join(',')+'|'+mine+'|'+lw+'|'+w.sh;
+      if(!w.sky||w.sky.key!==key)w.sky={key,L:WorldLogic.skyLayout(slots,mine,lw,w.sh)};
       return w.sky.L;
     },
     // Moves between "Toàn cảnh" ('all'), one island ('one', focus = its id) and "Của tôi" ('mine') through the cloud
@@ -3928,6 +3952,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const w=this.world,dt=Math.min(0.05,Math.max(0,(ts-this.last)/1000));this.last=ts;
       this.env=this.envNow();this.frameTheme=this.theme;
       const st=this.stageEl;w.sw=st?st.clientWidth:0;w.sh=st?st.clientHeight:0;
+      // The sky is laid out in the scroller's width: a classic scrollbar (desktop, narrow window) takes its own room.
+      const sc_=this.worldScroller;w.lw=sc_&&sc_.clientWidth?Math.min(w.sw,sc_.clientWidth):w.sw;
       // The view swaps on the first frame the clouds cover it (the hold, when nothing moves, so a slow first full
       // draw of the new island does not show as a stutter).
       const step=WorldLogic.transStep(w.trans,performance.now(),w.transReduced);
@@ -3980,14 +4006,16 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const top=tall&&sc_?sc_.scrollTop:0,reduced=!!(this.env&&this.env.reduced),bySlot=new Map();
       for(const i of w.islands)if(!bySlot.has(i.slot))bySlot.set(i.slot,i);
       const at=r=>({x:r.x,y:r.y-top,w:r.w,h:r.h}),seen=r=>r.y-top<sh&&r.y-top+r.h>0;
+      // Phone cells keep room for a two-line plate, so plates in a row line up whatever their length.
+      const labelH=L.phone?LABEL_H2:LABEL_H;
       const island=(r,meta,mine)=>{const sc=w.scenes.get(meta.id),c=tally(sc);
-        this.drawSimpleIsland(ctx,at(r),meta,{busy:c.busy,alert:c.alert,hover:w.hover===meta.slot,mine,t,reduced});};
+        this.drawSimpleIsland(ctx,at(r),meta,{busy:c.busy,alert:c.alert,hover:w.hover===meta.slot,mine,t,reduced,labelH});};
       for(const c of[...L.cells].sort((a,b)=>a.rect.y-b.rect.y)){if(!seen(c.rect))continue;
         const meta=c.kind==='island'&&bySlot.get(c.slot);
-        if(meta)island(c.rect,meta,false);else this.drawSlotTile(ctx,at(c.rect),'empty');}
+        if(meta)island(c.rect,meta,false);else this.drawSlotTile(ctx,at(c.rect),'empty',{labelH});}
       const C=L.centre;
       if(seen(C.rect)){const meta=C.kind==='mine'&&bySlot.get(C.slot);
-        if(meta)island(C.rect,meta,true);else this.drawSlotTile(ctx,at(C.rect),C.kind==='mine'?'yours':C.kind,{hover:C.kind==='yours'&&w.hover===C.slot,t,reduced});}
+        if(meta)island(C.rect,meta,true);else this.drawSlotTile(ctx,at(C.rect),C.kind==='mine'?'yours':C.kind,{hover:C.kind==='yours'&&w.hover===C.slot,t,reduced,labelH});}
     },
     // A content height to scroll through, or 0 for none (back at the top, so hit tests need no offset).
     setScroll(height){
@@ -3996,11 +4024,16 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       if(sp&&sp.style.height!==hs)sp.style.height=hs;
     },
     // Where a simple island (or an empty place) goes inside its rect, in device px: s device px per art px, the art's
-    // top left (ax, ay), and whether its name plate fits under it (else the plate sits over the island's underside).
-    artPlace(rect){
-      const dpr=window.devicePixelRatio||1,W=rect.w*dpr,H=rect.h*dpr;
-      const fit=Math.max(1,Math.floor(Math.min(W/ART_W,H/ART_H))),below=Math.floor(Math.min(W/ART_W,(H-LABEL_H*dpr)/ART_H));
-      const under=below>=1&&below*4>=fit*3,s=under?below:fit,aw=ART_W*s,ah=ART_H*s,block=ah+(under?LABEL_H*dpr:0);
+    // top left (ax, ay), and whether its name plate (labelH CSS px) fits under it. The scale is a whole number, except
+    // that 1.25 or 1.5 is used where 2 does not fit, and a little under 1 (down to 0.85) keeps the plate under the art in
+    // the smallest phone cells at DPR 1; stamped with smoothing off either way.
+    // Only a cell smaller still puts the plate over the island.
+    artPlace(rect,labelH){
+      const dpr=window.devicePixelRatio||1,W=rect.w*dpr,H=rect.h*dpr,lh=(labelH||LABEL_H)*dpr;
+      const room=Math.min(W/ART_W,(H-lh)/ART_H),under=room>=0.85;
+      let s=under?Math.floor(room):Math.max(1,Math.floor(Math.min(W/ART_W,H/ART_H)));
+      if(under&&s<=1)s=room>=1.5?1.5:room>=1.25?1.25:Math.min(1,room);
+      const aw=Math.round(ART_W*s),ah=Math.round(ART_H*s),block=ah+(under?lh:0);
       return{dpr,s,aw,ah,under,ax:Math.round(rect.x*dpr+(W-aw)/2),ay:Math.round(rect.y*dpr+(H-block)/2)};
     },
     // Lift on hover and a ±1 px bob (none with reduced motion), in whole device px.
@@ -4011,17 +4044,18 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.imageSmoothingEnabled=false;ctx.globalAlpha=alpha;
       ctx.drawImage(img,p.ax,p.ay+dy,p.aw,p.ah);ctx.restore();
     },
-    drawSimpleIsland(ctx,rect,meta,{busy,alert,hover,mine,t,reduced}){
+    drawSimpleIsland(ctx,rect,meta,{busy,alert,hover,mine,t,reduced,labelH}){
       const df=Math.round((this.env?this.env.df:1)*10)/10,lit=Math.min(6,busy|0),color=okColor(meta.color);
       const img=art('i'+color+df+lit+(mine?'m':''),g=>paintIsland(g,color,df,lit,!!mine));
-      const p=this.artPlace(rect),dy=this.artShift(p,hover,t,meta.slot,reduced);
+      const p=this.artPlace(rect,labelH),dy=this.artShift(p,hover,t,meta.slot,reduced),lh=labelH||LABEL_H;
       this.stampArt(ctx,img,p,dy,meta.online===false?OFFLINE_ALPHA:1);
-      // the name plate: under the island when there is room, else over its underside
-      const y=p.under?(p.ay+p.ah+dy)/p.dpr+4+28:Math.min(rect.y+rect.h+4,(p.ay+p.ah+dy)/p.dpr+4);
-      this.drawIslandLabel(ctx,meta,busy,alert,rect.x+rect.w/2,y,hover,rect.w+8);
+      // the name plate hangs from its top edge just under the art (one or two lines), or over the underside when the
+      // cell has no room for it
+      const top=p.under?(p.ay+p.ah+dy)/p.dpr+4:Math.min(rect.y+rect.h-lh,(p.ay+p.ah+dy)/p.dpr-lh);
+      this.drawIslandLabel(ctx,meta,busy,alert,rect.x+rect.w/2,top,hover,rect.w+8,true);
     },
     drawSlotTile(ctx,rect,kind,o){
-      o=o||{};const img=art('t'+kind,g=>paintTile(g,kind)),p=this.artPlace(rect),hover=!!o.hover&&kind==='yours';
+      o=o||{};const img=art('t'+kind,g=>paintTile(g,kind)),p=this.artPlace(rect,o.labelH),hover=!!o.hover&&kind==='yours';
       const dy=kind==='yours'?this.artShift(p,hover,o.t||0,0,o.reduced||kind!=='yours'):0;
       this.stampArt(ctx,img,p,dy,1);
       const x=rect.x+rect.w/2,y=(p.ay+(ISL.cy+2)*p.s+dy)/p.dpr;
@@ -4030,27 +4064,28 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       else if(kind==='yours')plate(ctx,x,y,[['chỗ của bạn',B,'#ffffff'],['Bấm để ghép máy',S,GOLD]],hover?'#ffe08f':GOLD);
       else plate(ctx,x,y,[['Hub đã đủ 8 đảo',B,'#ffffff'],['Nhờ owner xoá bớt',S,'#aab2c5']],'#4a5468');
     },
-    // Name, how many are working, a yellow dot when someone waits for approval or another session; dimmer offline.
+    // Name, how many are working (muted when offline), a yellow dot when someone waits for approval or another session.
     // Mine has a gold edge; a hovered one a light edge and a darker plate. Wider than maxW (a narrow phone cell), the
-    // count goes on a second line and the name is shortened to fit.
-    drawIslandLabel(ctx,m,busy,alert,x,y,hover,maxW){
+    // count goes on a second line and the name is shortened to fit. y is the plate's bottom (6 px above), or with
+    // fromTop its top edge, so a two-line plate grows downwards and never climbs over the island.
+    drawIslandLabel(ctx,m,busy,alert,x,y,hover,maxW,fromTop){
       const NF="600 12px 'JetBrains Mono',monospace",SF="500 11px 'JetBrains Mono',monospace";
       let name=clip(m.name||'Đảo',24);const sub=m.private?'riêng tư':busy+' đang làm'+(m.online===false?' · offline':'');
-      ctx.save();ctx.globalAlpha=m.online===false&&!hover?OFFLINE_ALPHA:1;
+      ctx.save();
       ctx.font=NF;let nw=ctx.measureText(name).width;
       ctx.font=SF;const sw_=ctx.measureText(sub).width,dot=alert?14:0;
       let pw=Math.ceil(14+nw+10+sw_+dot+10),two=false;
       if(maxW&&pw>maxW){two=true;ctx.font=NF;
         while(name.length>2&&14+nw+dot+10>maxW){name=clip(name,name.length-1);nw=ctx.measureText(name).width;}
         pw=Math.ceil(14+Math.max(nw+dot,sw_)+10);}
-      const ph=two?36:22,px=Math.round(x-pw/2),py=Math.round(y-ph-6),l1=two?py+11:py+ph/2;
+      const ph=two?36:22,px=Math.round(x-pw/2),py=Math.round(fromTop?y:y-ph-6),l1=two?py+11:py+ph/2;
       ctx.fillStyle=hover?'rgba(10,13,20,0.94)':'rgba(16,20,30,0.82)';ctx.fillRect(px,py,pw,ph);
       ctx.fillStyle=okColor(m.color);ctx.fillRect(px,py,4,ph);
       const mine=this.myIslandId()===m.id;
       if(mine||hover){ctx.strokeStyle=mine?GOLD:'#e6e9ef';ctx.lineWidth=1;ctx.strokeRect(px+0.5,py+0.5,pw-1,ph-1);}
       ctx.textBaseline='middle';
       ctx.font=NF;ctx.fillStyle='#ffffff';ctx.fillText(name,px+12,l1+1);
-      ctx.font=SF;ctx.fillStyle=m.private?'#c9cfdc':'#aab2c5';ctx.fillText(sub,two?px+12:px+12+nw+10,two?py+26:l1+1);
+      ctx.font=SF;ctx.fillStyle=m.private?'#c9cfdc':m.online===false?'#7d8599':'#aab2c5';ctx.fillText(sub,two?px+12:px+12+nw+10,two?py+26:l1+1);
       if(alert){ctx.fillStyle=GOLD;ctx.beginPath();ctx.arc(px+pw-12,l1,4,0,Math.PI*2);ctx.fill();}
       ctx.restore();
     },
