@@ -57,7 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Per-user rate limit when signed in** — The hub's general limit (120 requests a minute) now counts per signed-in user or paired device instead of per IP, so an office behind one NAT no longer shares a single budget; anonymous requests still count per IP
 - **World view performance** — Small islands keep their canvas and first draws are spread over frames, so "Toàn cảnh" with 10 islands stays under 1 ms of script per frame even without a GPU, and switching back from "Của tôi" no longer stutters
 - **Hub islands follow v1.4.x drawing** — Islands in the world view use the new desk design, pantry and office dogs; the 5H/7D usage board is left off on hub islands and in "Xem như người khác" because those carry no usage data
-- **Smoking corner moved beside the restroom** — The whole corner (pad, pergola, bench, ash bin, planted screen, light, extinguisher and sign) now stands right against the restroom block's east side on a new strip of land, its planted screen facing the block; a stepping-stone path runs from the east stairs along the front of the block to its entrance, smokers come in only through that entrance, never over the bench back, and the dogs still keep out
+- **Smoking corner moved down the east lawn** — The whole corner (pad, pergola, bench, ash bin, planted screen, light, extinguisher and sign) now stands further down the lawn, beside the garden path from the east stairs, so its smoke stays away from the restroom; smokers come in only through its entrance, never over the bench back, and the dogs still keep out
 
 ### Fixed
 
