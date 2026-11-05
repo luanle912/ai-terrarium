@@ -3010,7 +3010,12 @@ globalThis.SkyLogic={annexLand,stepSnow,stairs,canCross,lawnWalk,lawnPaths,cheap
     const base=clientW*dpr/LW;
     return clampN(z<=1?base:Math.ceil(base*z*2)/2,1,4);
   }
-  globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,PAN_MARGIN_X,wheelFactor,clamp,zoomAt,panBy,pinch,isDrag,dragOffset,renderScale};
+  // The wrapper's transform as one map for the stage-sized sky canvases: stage point = (ax, ay) + z · p.
+  function skyView(cam,b){return{z:cam.z,ax:b.ox+cam.tx-cam.z*b.ox,ay:b.oy+cam.ty-cam.z*b.oy};}
+  // The view of a sky layer at depth k (0 = the fixed sky, 1 = moves with the island, >1 = nearer than it): zoom and
+  // pan scale with k around the same fixed point, so far layers drift less than near ones (parallax).
+  function parallax(v,k){return{z:1+(v.z-1)*k,ax:v.ax*k,ay:v.ay*k};}
+  globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,PAN_MARGIN_X,wheelFactor,clamp,zoomAt,panBy,pinch,isDrag,dragOffset,renderScale,skyView,parallax};
 })();
 </script>
 <script id="world-logic">
@@ -3333,25 +3338,46 @@ function mistWisp(ctx,x,y,cw,ch,v,lit,shade,a){
 }
 // The cloud sea stacks ~180 big overlapping wisps, so it is painted into a low-res layer and scaled up once. The blit
 // fills its whole strip, so sparser mist (sky rows, front wisps, fog banks) is cheaper drawn directly.
-// A layer covers the strip y0..y1 in CSS px.
+// A layer is sized to the whole stage, so zooming and panning never reallocate it; each frame clears and blits only
+// the strip from y0 (CSS px) down to the bottom, where its content lies.
 const MIST_SCALE=0.5,mistLayers=new Map();
-function mistLayer(name,w,y0,y1){
-  const lw=Math.max(1,Math.ceil(w*MIST_SCALE)),lh=Math.max(1,Math.ceil((y1-y0)*MIST_SCALE));
+function mistLayer(name,w,h,y0){
+  const lw=Math.max(1,Math.ceil(w*MIST_SCALE)),lh=Math.max(1,Math.ceil(h*MIST_SCALE)),sy=Math.min(lh,Math.floor(y0*MIST_SCALE));
   let c=mistLayers.get(name);if(!c){c=document.createElement('canvas');mistLayers.set(name,c);}
   if(c.width!==lw||c.height!==lh){c.width=lw;c.height=lh;}
-  const g=c.getContext('2d');g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,lw,lh);g.setTransform(MIST_SCALE,0,0,MIST_SCALE,0,-y0*MIST_SCALE);
+  const g=c.getContext('2d');g.setTransform(1,0,0,1,0,0);g.clearRect(0,sy,lw,lh-sy);g.setTransform(MIST_SCALE,0,0,MIST_SCALE,0,0);
   return g;
 }
-function blitMist(ctx,g,w,y0,y1){ctx.imageSmoothingEnabled=true;ctx.drawImage(g.canvas,0,y0,w,y1-y0);}
+function blitMist(ctx,g,w,y0){
+  const c=g.canvas,sy=Math.min(c.height,Math.floor(y0*MIST_SCALE));if(sy>=c.height)return;
+  ctx.imageSmoothingEnabled=true;ctx.drawImage(c,0,sy,c.width,c.height-sy,0,sy/MIST_SCALE,w,(c.height-sy)/MIST_SCALE);
+}
+// ---- camera: sky layers zoom and pan with the island, each by its depth ----
+// v is a view {z, ax, ay} (CameraLogic.skyView/parallax): a layer point p is drawn at (ax, ay) + z · p.
+const NO_VIEW={z:1,ax:0,ay:0};
+const layerView=(view,k)=>view&&globalThis.CameraLogic?CameraLogic.parallax(view,k):NO_VIEW;
+function inView(ctx,v,draw){
+  if(v===NO_VIEW){draw();return;}
+  ctx.save();ctx.translate(v.ax,v.ay);ctx.scale(v.z,v.z);draw();ctx.restore();
+}
+// The stage's x range in a layer's own coordinates, to skip wisps that are off screen.
+const visibleX=(v,w)=>[-v.ax/v.z,(w-v.ax)/v.z];
+// Wisps are spread over a band much wider than the stage, so panning never shows an empty edge or a wisp wrapping
+// around on screen: an island narrower than a wide stage pans by its side gap plus 10 %, up to about 0.6 of the width.
+// Positions live in the layer, so they move with the camera instead of sticking to the screen.
+const BAND_X0=-0.75,BAND_W=2.5;
+// Count for a band of wisps that used to span w+avg, keeping the same density over the wider band.
+const bandCount=(n,w,avg)=>Math.round(n*(BAND_W*w+avg)/(w+avg));
 // One band of mist at depth d (0 far at the horizon .. 1 near): far bands are thin, hazy and slow.
 // cover scales how much of the band's width the wisps fill, so the count follows the screen width.
 // withShade=false drops the shaded copy, for the far sea bands where it is lost in the haze and would double the draws.
-function mistRow(ctx,w,y,d,t,seed,cover,col,S,speedK,alpha,withShade=true){
-  const s=(0.25+d*1.3)*S,lit=mix(col.cloud,col.haze,(1-d)*0.4),shade=withShade?mix(col.cloudShade,col.haze,(1-d)*0.7):null,maxW=300*s,span=w+maxW;
-  const count=Math.min(40,Math.ceil(span/(210*s)*cover));
+function mistRow(ctx,w,y,d,t,seed,cover,col,S,speedK,alpha,withShade=true,v=NO_VIEW){
+  const s=(0.25+d*1.3)*S,lit=mix(col.cloud,col.haze,(1-d)*0.4),shade=withShade?mix(col.cloudShade,col.haze,(1-d)*0.7):null,maxW=300*s,span=BAND_W*w+maxW;
+  const count=Math.min(150,Math.ceil(span/(210*s)*cover)),[vx0,vx1]=visibleX(v,w);
   for(let i=0;i<count;i++){
     const cw=(150+hash(i,seed,1)*150)*s,ch=cw*(0.2+0.12*hash(i,seed,4)),speed=(3+2.5*hash(i,seed,5))*s*speedK;
-    const x=((hash(i,seed,2)*span+t*speed)%span)-maxW,bob=Math.sin(t*0.25*speedK+i*1.9+seed)*2*s;
+    const x=BAND_X0*w-maxW+((hash(i,seed,2)*span+t*speed)%span),bob=Math.sin(t*0.25*speedK+i*1.9+seed)*2*s;
+    if(x+cw<vx0||x>vx1)continue;
     const breath=0.7+0.3*(0.5+0.5*Math.sin(t*0.15*speedK+hash(i,seed,6)*6.28));
     mistWisp(ctx,x,y-ch*0.5+bob,cw,ch,Math.floor(hash(i,seed,3)*MIST_VARIANTS),lit,shade,alpha*breath);
   }
@@ -3361,9 +3387,10 @@ function farIsland(ctx,x,y,sc,col){
   ctx.fillStyle=under;ctx.beginPath();ctx.moveTo(x-22*sc,y);ctx.lineTo(x+22*sc,y);ctx.lineTo(x+6*sc,y+20*sc);ctx.lineTo(x-2*sc,y+30*sc);ctx.lineTo(x-10*sc,y+16*sc);ctx.closePath();ctx.fill();
   ctx.fillStyle=top;ctx.beginPath();ctx.moveTo(x-22*sc,y);ctx.lineTo(x,y-7*sc);ctx.lineTo(x+22*sc,y);ctx.lineTo(x,y+7*sc);ctx.closePath();ctx.fill();
 }
-// env: {df, hour, fx:{cloud,rain,snow,storm,fog}, col: SkyLogic.skyColors(...), reduced}
+// env: {df, hour, fx:{cloud,rain,snow,storm,fog}, col: SkyLogic.skyColors(...), reduced, view?: island camera view}
+// The gradient, sun, moon and stars stay put; clouds, far islands and birds follow the camera by depth.
 function drawBack(ctx,w,h,t,env){
-  const{df,hour,fx,col}=env,hy=h*0.5,S=Math.max(0.6,h/800),speedK=env.reduced?0.5:1;
+  const{df,hour,fx,col,view}=env,hy=h*0.5,S=Math.max(0.6,h/800),speedK=env.reduced?0.5:1;
   const g=ctx.createLinearGradient(0,0,0,h);g.addColorStop(0,col.zenith);g.addColorStop(0.46,col.horizon);g.addColorStop(0.5,col.haze);g.addColorStop(1,col.below);
   ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
   // Lightning lights up the sky behind the island only, brightest high up, never the office or the whole view.
@@ -3379,28 +3406,43 @@ function drawBack(ctx,w,h,t,env){
     const sg=ctx.createRadialGradient(sx,sy,2,sx,sy,80*S);sg.addColorStop(0,'rgba(255,248,215,'+(0.85*a)+')');sg.addColorStop(1,'rgba(255,248,215,0)');ctx.fillStyle=sg;ctx.fillRect(sx-80*S,sy-80*S,160*S,160*S);
     ctx.globalAlpha=a;ctx.fillStyle='#fffbe0';ctx.beginPath();ctx.arc(sx,sy,9*S,0,7);ctx.fill();ctx.globalAlpha=1;
   }
-  for(let r=0;r<3;r++){const d=r/3;mistRow(ctx,w,hy*(0.18+d*0.62),d*0.5,t,10+r*17,0.3+fx.cloud*0.9,col,S*0.8,speedK,0.55+fx.cloud*0.35);}
-  [[0.07,0.97,0.8],[0.24,1.01,0.55],[0.78,0.98,0.7],[0.93,1.02,0.45]].forEach(([fx_,fy,sc],i)=>farIsland(ctx,w*fx_,hy*fy+Math.sin(t*0.4+i)*1.5*S,sc*S,col));
-  const hb=ctx.createLinearGradient(0,hy-18*S,0,hy+18*S);hb.addColorStop(0,rgba(col.haze,0));hb.addColorStop(0.5,rgba(col.haze,0.9));hb.addColorStop(1,rgba(col.haze,0));ctx.fillStyle=hb;ctx.fillRect(0,hy-18*S,w,36*S);
-  // The first sea bands sit right under the horizon and their wisps reach a little above it.
-  const seaTop=hy-30*S,sea=mistLayer('sea',w,seaTop,h);
-  for(let r=0;r<9;r++){const d=(r+1)/9;mistRow(sea,w,hy+4*S+(h-hy)*d*d,d,t,100+r*29,1.1+fx.cloud*0.6,col,S,speedK,0.65+0.35*d,d>=0.35);}
-  blitMist(ctx,sea,w,seaTop,h);
-  if(df>0.3&&fx.rain<0.3)for(let i=0;i<3;i++){const bx=((t*9*speedK+i*16)%(w+60))-30,by=hy*0.5+i*5*S+Math.sin(t*2+i)*2,f=Math.floor(t*5+i)%2;ctx.fillStyle=rgba('#35507a',df);ctx.fillRect(bx,by,1,1);ctx.fillRect(bx-2,by-f,2,1);ctx.fillRect(bx+1,by-f,2,1);}
+  for(let r=0;r<3;r++){const d=r/3,v=layerView(view,0.1+0.25*d);inView(ctx,v,()=>mistRow(ctx,w,hy*(0.18+d*0.62),d*0.5,t,10+r*17,0.3+fx.cloud*0.9,col,S*0.8,speedK,0.55+fx.cloud*0.35,true,v));}
+  inView(ctx,layerView(view,0.2),()=>{
+    [[0.07,0.97,0.8],[0.24,1.01,0.55],[0.78,0.98,0.7],[0.93,1.02,0.45]].forEach(([fx_,fy,sc],i)=>farIsland(ctx,w*fx_,hy*fy+Math.sin(t*0.4+i)*1.5*S,sc*S,col));
+    // Wider than the stage so a pan never shows where the horizon haze ends.
+    const hb=ctx.createLinearGradient(0,hy-18*S,0,hy+18*S);hb.addColorStop(0,rgba(col.haze,0));hb.addColorStop(0.5,rgba(col.haze,0.9));hb.addColorStop(1,rgba(col.haze,0));ctx.fillStyle=hb;ctx.fillRect(-w,hy-18*S,3*w,36*S);
+  });
+  // Sea bands deepen toward the viewer, from 0.3 at the horizon to 1 (moving with the island) at the bottom.
+  const rows=Array.from({length:9},(_,r)=>{const d=(r+1)/9;return{d,y:hy+4*S+(h-hy)*d*d,v:layerView(view,0.3+0.7*d)};});
+  // Dragging the island up on a tall stage lifts the sea; more near bands fill down to the bottom of the screen.
+  const near=layerView(view,1),bottom=(h-near.ay)/near.z;
+  for(let y=rows[8].y+80*S;y-60*S<bottom&&rows.length<16;y+=80*S)rows.push({d:1,y,v:near});
+  // The low-res layer only needs the strip the bands reach on screen; a wisp reaches about 51·s above its band.
+  const seaTop=Math.max(0,Math.min(h,...rows.map(o=>o.v.ay+o.v.z*(o.y-51*(0.25+o.d*1.3)*S)))),sea=mistLayer('sea',w,h,seaTop);
+  rows.forEach((o,r)=>inView(sea,o.v,()=>mistRow(sea,w,o.y,o.d,t,100+r*29,1.1+fx.cloud*0.6,col,S,speedK,0.65+0.35*o.d,o.d>=0.35,o.v)));
+  blitMist(ctx,sea,w,seaTop);
+  if(df>0.3&&fx.rain<0.3)inView(ctx,layerView(view,0.3),()=>{for(let i=0;i<3;i++){const bx=BAND_X0*w+((t*9*speedK+i*16)%(BAND_W*w)),by=hy*0.5+i*5*S+Math.sin(t*2+i)*2,f=Math.floor(t*5+i)%2;ctx.fillStyle=rgba('#35507a',df);ctx.fillRect(bx,by,1,1);ctx.fillRect(bx-2,by-f,2,1);ctx.fillRect(bx+1,by-f,2,1);}});
 }
 // env adds flash (0..1, already 0 when reduced motion is on)
 function drawFront(ctx,w,h,t,env){
-  const{fx,col}=env,S=Math.max(0.6,h/800),many=env.reduced?0.4:1,speedK=env.reduced?0.5:1;
-  // A near bank of mist sweeps past in front of the island.
-  const span=w+800*S,nx=((t*22*speedK)%span)-400*S;
-  for(let j=0;j<3;j++)mistWisp(ctx,nx+j*140*S,h*0.8+j*10*S+Math.sin(t*0.3*speedK+j)*3*S,(340-70*j)*S,(90-14*j)*S,j,col.cloud,col.cloudShade,0.55-0.1*j);
-  // Thin wisps drift across the island itself; they stay faint (the bubbles sit under this canvas) and come and go.
-  const nOver=Math.round((3+fx.cloud*4)*(env.reduced?0.6:1));
-  for(let i=0;i<nOver;i++){
-    const cw=(380+hash(i,31,1)*300)*S,ch=cw*0.18,ospan=w+cw,x=((hash(i,31,2)*ospan+t*(6+hash(i,31,3)*7)*S*speedK)%ospan)-cw;
-    const y=h*(0.25+0.45*hash(i,31,4))+Math.sin(t*0.2*speedK+i*1.3)*5*S,fade=0.5+0.5*Math.sin(t*0.09*speedK+hash(i,31,5)*6.28);
-    mistWisp(ctx,x,y-ch*0.5,cw,ch,i%MIST_VARIANTS,col.cloud,null,(0.48+0.15*fx.cloud)*fade);
-  }
+  const{fx,col,view}=env,S=Math.max(0.6,h/800),many=env.reduced?0.4:1,speedK=env.reduced?0.5:1;
+  // A near bank of mist sweeps past in front of the island, a little nearer than it, so it zooms a little more.
+  inView(ctx,layerView(view,1.15),()=>{
+    const span=BAND_W*w+800*S,nx=BAND_X0*w-400*S+((t*22*speedK)%span);
+    for(let j=0;j<3;j++)mistWisp(ctx,nx+j*140*S,h*0.8+j*10*S+Math.sin(t*0.3*speedK+j)*3*S,(340-70*j)*S,(90-14*j)*S,j,col.cloud,col.cloudShade,0.55-0.1*j);
+  });
+  // Thin wisps drift across the island itself and move with it; they stay faint (the bubbles sit under this canvas)
+  // and come and go.
+  const vo=layerView(view,1),[ox0,ox1]=visibleX(vo,w);
+  inView(ctx,vo,()=>{
+    const nOver=bandCount((3+fx.cloud*4)*(env.reduced?0.6:1),w,530*S);
+    for(let i=0;i<nOver;i++){
+      const cw=(380+hash(i,31,1)*300)*S,ch=cw*0.18,ospan=BAND_W*w+cw,x=BAND_X0*w-cw+((hash(i,31,2)*ospan+t*(6+hash(i,31,3)*7)*S*speedK)%ospan);
+      if(x+cw<ox0||x>ox1)continue;
+      const y=h*(0.25+0.45*hash(i,31,4))+Math.sin(t*0.2*speedK+i*1.3)*5*S,fade=0.5+0.5*Math.sin(t*0.09*speedK+hash(i,31,5)*6.28);
+      mistWisp(ctx,x,y-ch*0.5,cw,ch,i%MIST_VARIANTS,col.cloud,null,(0.48+0.15*fx.cloud)*fade);
+    }
+  });
   const nRain=Math.round(260*fx.rain*many);
   if(nRain){ctx.fillStyle=rgba('#d7e6ff',0.35+0.25*env.df);for(let i=0;i<nRain;i++){const x=(hash(i,7,1)*w+t*60)%w,y=(hash(i,8,1)*h+t*(700+hash(i,9,1)*200))%h;ctx.fillRect(Math.round(x),Math.round(y),1,Math.round(9*S));}}
   const nSnow=Math.round(180*fx.snow*many);
@@ -3408,12 +3450,15 @@ function drawFront(ctx,w,h,t,env){
   if(fx.fog>0){
     const fg=ctx.createLinearGradient(0,0,0,h);fg.addColorStop(0,rgba(col.haze,0.12*fx.fog));fg.addColorStop(1,rgba(col.haze,0.32*fx.fog));ctx.fillStyle=fg;ctx.fillRect(0,0,w,h);
     // Fog banks roll across the whole view at different heights and speeds.
-    const nBank=Math.round(12*fx.fog*(env.reduced?0.6:1));
-    for(let i=0;i<nBank;i++){
-      const cw=(420+hash(i,21,1)*360)*S,ch=cw*0.22,fspan=w+cw,x=((hash(i,21,2)*fspan+t*(8+hash(i,21,3)*12)*S*speedK)%fspan)-cw;
-      const y=h*(0.1+0.85*hash(i,21,4))+Math.sin(t*0.2*speedK+i)*4*S,breath=0.6+0.4*Math.sin(t*0.12*speedK+i*2.3);
-      mistWisp(ctx,x,y-ch*0.5,cw,ch,i%MIST_VARIANTS,col.haze,null,0.4*fx.fog*breath);
-    }
+    const nBank=bandCount(12*fx.fog*(env.reduced?0.6:1),w,600*S),vf=layerView(view,0.8),[fx0,fx1]=visibleX(vf,w);
+    inView(ctx,vf,()=>{
+      for(let i=0;i<nBank;i++){
+        const cw=(420+hash(i,21,1)*360)*S,ch=cw*0.22,fspan=BAND_W*w+cw,x=BAND_X0*w-cw+((hash(i,21,2)*fspan+t*(8+hash(i,21,3)*12)*S*speedK)%fspan);
+        if(x+cw<fx0||x>fx1)continue;
+        const y=h*(0.1+0.85*hash(i,21,4))+Math.sin(t*0.2*speedK+i)*4*S,breath=0.6+0.4*Math.sin(t*0.12*speedK+i*2.3);
+        mistWisp(ctx,x,y-ch*0.5,cw,ch,i%MIST_VARIANTS,col.haze,null,0.4*fx.fog*breath);
+      }
+    });
   }
 }
 
@@ -4866,10 +4911,12 @@ class ClaudeOffice extends React.Component{
   // The sky fills the whole stage behind the scene canvas; rain, snow, fog and a near cloud go over it.
   drawSky(t){
     const st=this.stageEl,env=this.env;if(!st||!env)return;
-    const w=st.clientWidth,hh=st.clientHeight,dpr=window.devicePixelRatio||1;
+    const w=st.clientWidth,hh=st.clientHeight,dpr=window.devicePixelRatio||1,b=this.camBox();
+    // Clouds follow the island camera (zoom and pan), each layer by its depth.
+    const skyEnv=b?{...env,view:CameraLogic.skyView(this.cam,b)}:env;
     for(const[cv,fn]of[[this.backCanvas,SkyRender.drawBack],[this.frontCanvas,SkyRender.drawFront]]){
       if(!cv)continue;const bw=Math.round(w*dpr),bh=Math.round(hh*dpr);if(cv.width!==bw||cv.height!==bh){cv.width=bw;cv.height=bh;}
-      const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,hh);fn(ctx,w,hh,t,env);
+      const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,hh);fn(ctx,w,hh,t,skyEnv);
     }
     // The island bobs a few pixels; moving the wrapper (not a transform) keeps bubbles, clicks and layering intact.
     if(this.wrapEl){const top=env.reduced?0:Math.round(Math.sin(t*0.7)*3);if(this.wrapTop!==top){this.wrapTop=top;this.wrapEl.style.top=top+'px';}}

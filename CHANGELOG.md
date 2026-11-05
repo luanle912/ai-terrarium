@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Clouds follow the zoom** — Zooming and panning the island now carries the sky with it by depth: the sky colour, sun, moon and stars stay put, far clouds and islands drift a little, the cloud sea grows toward the island's own zoom, the mist over the island moves with it exactly and the near mist bank a little more
 - **"Toàn cảnh" is centred on the viewer** — Your island sits in the middle, a little larger, with the other 7 places in a ring around it in the same order for everyone (2 columns below your island on a phone); free places read "chỗ trống", a viewer without an island sees "chỗ của bạn" or "Hub đã đủ 8 đảo", and islands are drawn in a light simplified style; no dragging or zooming
 - **A revoked or banned island stays offline in its slot** — Revoking someone's last device, or an automatic `google_revoked` ban, no longer removes the island from the sky: it goes offline with no staff and keeps its place (the machine is still cut at once); only "Xoá đảo" and leaving the hub free the slot
 - **One-island panel** — On a phone the island's panel is a bottom sheet that starts as a one-line bar (name and status) and opens on tap; on a wide screen it can be collapsed, and the island is drawn beside it rather than under it. Esc with a modifier key held no longer leaves the island
@@ -306,6 +307,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v1.5.0...HEAD
 [1.5.0]: https://github.com/luanle912/ai-terrarium/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/luanle912/ai-terrarium/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/luanle912/ai-terrarium/compare/v1.4.0...v1.4.1

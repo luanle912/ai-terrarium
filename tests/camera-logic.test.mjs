@@ -193,3 +193,41 @@ test('zoomed in, the resolution follows the zoom in half steps, never above 4', 
 test('the resolution never drops below 1', () => {
   assert.equal(Cam.renderScale(200, 1, 1, 700), 1)
 })
+
+// ---- sky layers follow the camera ----
+
+test('at depth 1 the sky view lands a point exactly where the island wrapper draws it', () => {
+  const cam = Cam.zoomAt({ z: 1, tx: 0, ty: 0 }, 300, 250, 2.5, box)
+  const v = Cam.skyView(cam, box)
+  for (const [qx, qy] of [[0, 0], [400, 200], [800, 400], [123, 321]]) {
+    const [sx, sy] = onStage(cam, qx, qy)
+    close(v.ax + v.z * (box.ox + qx), sx)
+    close(v.ay + v.z * (box.oy + qy), sy)
+  }
+})
+
+test('at rest every depth is the identity, and depth 0 never moves', () => {
+  const rest = Cam.skyView({ z: 1, tx: 0, ty: 0 }, box)
+  const isIdentity = (l) => { close(l.z, 1); close(l.ax, 0); close(l.ay, 0) }
+  for (const k of [0, 0.3, 1, 1.15]) isIdentity(Cam.parallax(rest, k))
+  isIdentity(Cam.parallax(Cam.skyView({ z: 3, tx: -700, ty: -350 }, box), 0))
+})
+
+test('every depth zooms about the same fixed point, nearer layers by more', () => {
+  const v = Cam.skyView(Cam.zoomAt({ z: 1, tx: 0, ty: 0 }, 640, 180, 3, box), box)
+  const fixed = (l) => [l.ax / (1 - l.z), l.ay / (1 - l.z)]
+  const [fx, fy] = fixed(v)
+  let prev = 1
+  for (const k of [0.1, 0.3, 0.7, 1, 1.15]) {
+    const l = Cam.parallax(v, k)
+    const [px, py] = fixed(l)
+    close(px, fx, 1e-6); close(py, fy, 1e-6)
+    assert.ok(l.z > prev, `depth ${k} zooms more than the layer behind it`)
+    prev = l.z
+  }
+})
+
+test('a pure pan at 1× moves a layer by its share of the pan', () => {
+  const v = Cam.skyView({ z: 1, tx: 60, ty: 0 }, box)
+  assert.deepEqual(Cam.parallax(v, 0.5), { z: 1, ax: 30, ay: 0 })
+})
