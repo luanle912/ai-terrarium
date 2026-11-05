@@ -231,3 +231,71 @@ test('canNavigate refuses while clouds are running', () => {
   assert.equal(W.canNavigate(t, 1200, true), true)
   assert.equal(W.canNavigate(null, 0, false), true)
 })
+
+// ---- one island and the cloud transition (Task 6) ----
+test('transStep swaps on exactly one frame and ends with the clouds', () => {
+  const t = { start: 1000, swapped: false }
+  let swaps = 0, doneAt = null
+  for (let now = 1000; now <= 2000; now += 16) {
+    const s = W.transStep(t, now, false)
+    if (s.swapNow) { swaps++; t.swapped = true; assert.ok(now - 1000 >= 350) }
+    if (s.done && doneAt == null) doneAt = now
+  }
+  assert.equal(swaps, 1)
+  assert.ok(doneAt - 1000 >= 850 && doneAt - 1000 < 866)
+  assert.deepEqual(W.transStep(null, 0, false), { phase: null, swapNow: false, done: true })
+})
+
+test('transStep with reduced motion fades, swapping at 100 ms and ending at 200 ms', () => {
+  const t = { start: 0, swapped: false }
+  assert.equal(W.transStep(t, 99, true).swapNow, false)
+  const s = W.transStep(t, 100, true)
+  assert.equal(s.swapNow, true)
+  assert.equal(s.phase.cover, 0)
+  assert.equal(s.phase.fade, 1)
+  t.swapped = true
+  assert.equal(W.transStep(t, 150, true).swapNow, false)
+  assert.equal(W.transStep(t, 200, true).done, true)
+})
+
+test('a second navigation while the clouds run is ignored, not queued', () => {
+  // navigate() starts a transition only when canNavigate allows it; the target of the first one is kept.
+  let trans = null
+  const go = (to, now) => { if (!W.canNavigate(trans, now, false)) return false; trans = { start: now, to, swapped: false }; return true }
+  assert.equal(go({ view: 'one', focus: 'A' }, 0), true)
+  assert.equal(go({ view: 'one', focus: 'B' }, 40), false)
+  assert.equal(go({ view: 'all' }, 500), false)
+  assert.equal(trans.to.focus, 'A')
+  assert.equal(go({ view: 'all' }, 850), true)
+})
+
+test('landingView falls back to "Toàn cảnh" when the island is gone before the swap', () => {
+  const has = (id) => id === 'A'
+  assert.deepEqual(W.landingView({ view: 'one', focus: 'A' }, has), { view: 'one', focus: 'A' })
+  assert.deepEqual(W.landingView({ view: 'one', focus: 'B' }, has), { view: 'all', focus: null })
+  assert.deepEqual(W.landingView({ view: 'one' }, has), { view: 'all', focus: null })
+  assert.deepEqual(W.landingView({ view: 'mine' }, has), { view: 'mine', focus: null })
+  assert.deepEqual(W.landingView({ view: 'all' }, has), { view: 'all', focus: null })
+  assert.deepEqual(W.landingView({ view: 'bogus' }, has), { view: 'all', focus: null })
+})
+
+test('viewGone: the island on screen was removed (one island, or mine)', () => {
+  const has = (id) => id === 'A'
+  assert.equal(W.viewGone('one', 'A', has), false)
+  assert.equal(W.viewGone('one', 'B', has), true)
+  assert.equal(W.viewGone('mine', 'B', has), true)
+  assert.equal(W.viewGone('mine', null, has), false)  // "Của tôi" without an island shows the pairing guide
+  assert.equal(W.viewGone('all', 'B', has), false)
+})
+
+test('Esc closes an open confirm first, then goes back; never while typing', () => {
+  const base = { view: 'one', typing: false, settings: false, confirm: false }
+  assert.equal(W.escAction(base), 'back')
+  assert.equal(W.escAction({ ...base, view: 'mine' }), 'back')
+  assert.equal(W.escAction({ ...base, confirm: true }), 'confirm')
+  assert.equal(W.escAction({ ...base, typing: true }), 'none')
+  assert.equal(W.escAction({ ...base, typing: true, confirm: true }), 'none')
+  assert.equal(W.escAction({ ...base, settings: true }), 'none')
+  assert.equal(W.escAction({ ...base, view: 'all' }), 'none')
+  assert.equal(W.escAction({ ...base, view: 'all', confirm: true }), 'none')
+})
