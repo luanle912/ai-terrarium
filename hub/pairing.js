@@ -15,6 +15,7 @@ const INTERVAL_S = 5;
 const BODY_LIMIT = 4096; // S15
 const MAX_WRONG = 5;
 const WRONG_WINDOW_MS = 10 * 60 * 1000;
+const HUB_FULL_MSG = 'Hub đã đủ 8 đảo, nhờ owner xoá bớt.';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const HTML = { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, ...NO_STORE };
 
@@ -71,7 +72,15 @@ function routes(ctx) {
     const existing = db.getIslandByUser(user.id);
     if (existing) return existing;
     const base = (user.name && String(user.name).trim()) || String(user.email || '').split('@')[0] || 'Ai đó';
-    return db.upsertIsland({ id: crypto.randomBytes(8).toString('hex'), userId: user.id, name: ('Đảo ' + base).slice(0, 60), color: colorFor(user.id), now });
+    const r = db.claimIsland({ id: crypto.randomBytes(8).toString('hex'), userId: user.id, name: ('Đảo ' + base).slice(0, 60), color: colorFor(user.id), now });
+    return r.full ? null : r.island;
+  }
+
+  // The hub is full and this user has no island: the code is refused for good (not a wrong code, so no recordWrong).
+  function refuseFull(res, s, row, req) {
+    db.denyDeviceCode(row.code_hash, 'hub_full');
+    ctx.accounts.audit('pair_refused_full', { actorId: s.user.id, target: 'user:' + s.user.id, ip: helpers.clientIp(req) });
+    return html(res, 400, devicePage({ csrf: s.session.csrf, error: HUB_FULL_MSG }));
   }
 
   const list = [];
@@ -109,7 +118,7 @@ function routes(ctx) {
       if (row.expires_at <= now) { db.deleteDeviceCode(hash); return json(res, 410, { error: 'expired_token' }); }
       if (!limiters.deviceToken.take(hash, now)) return json(res, 429, { error: 'slow_down' });
       db.touchDeviceCodePoll(hash, now);
-      if (row.denied) { db.deleteDeviceCode(hash); return json(res, 403, { error: 'access_denied' }); }
+      if (row.denied) { db.deleteDeviceCode(hash); return json(res, 403, { error: row.deny_reason === 'hub_full' ? 'hub_full' : 'access_denied' }); }
       if (row.approved_user_id == null) return json(res, 428, { error: 'authorization_pending' });
       // Claim the row first: of two concurrent polls only one deletes it and gets the token.
       if (!db.deleteDeviceCode(hash)) return json(res, 410, { error: 'expired_token' });
@@ -167,9 +176,11 @@ function routes(ctx) {
         return html(res, 400, devicePage({ csrf, error: 'Mã không đúng hoặc đã hết hạn.' }));
       }
       const device = { name: row.name, userCode: row.user_code, requestedAt: row.created_at };
+      if (action !== 'deny' && !db.getIslandByUser(s.user.id) && db.islandCount() >= db.MAX_ISLANDS) return refuseFull(res, s, row, req);
       if (action === 'lookup') return html(res, 200, devicePage({ csrf, device }));
       if (action === 'deny') { db.denyDeviceCode(row.code_hash); return html(res, 200, devicePage({ csrf, done: 'denied' })); }
-      ensureIsland(s.user, now); // C2: the island appears with the first approved device
+      // C2: the island appears with the first approved device; losing the race for the last slot is a refusal
+      if (!ensureIsland(s.user, now)) return refuseFull(res, s, row, req);
       if (!db.approveDeviceCode(row.code_hash, s.user.id, now)) {
         recordWrong(key, now);
         return html(res, 400, devicePage({ csrf, error: 'Mã không đúng hoặc đã hết hạn.' }));
@@ -181,4 +192,4 @@ function routes(ctx) {
   return list;
 }
 
-module.exports = { routes, newUserCode, normalizeUserCode };
+module.exports = { routes, HUB_FULL_MSG, newUserCode, normalizeUserCode };
