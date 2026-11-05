@@ -408,6 +408,30 @@ test('a promoted hidden island appears in its new slot', async () => {
   } finally { st && st.close(); await h.close(); }
 });
 
+test('a promoted hidden island that was already publishing sends its sessions on promotion', async () => {
+  const h = await startDevHub();
+  let st;
+  try {
+    const boss = await devLogin(h.url, 'boss@newera.inc', 'Boss');
+    const ids = []; let hiddenTok;
+    for (let i = 0; i < 8; i++) {
+      const u = await devLogin(h.url, `u${i}@newera.inc`, 'U' + i);
+      const d = await pairDevice(h.url, u, 'M' + i);
+      ids.push(d.island_id); if (i === 7) hiddenTok = d.token;
+    }
+    const raw = new DatabaseSync(h.config.dbPath);
+    raw.prepare('UPDATE islands SET slot=NULL WHERE id=?').run(ids[7]);
+    raw.close();
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(9), sess(10)]), bearer(hiddenTok))).status, 204);
+    st = await openStream(h.url, boss.cookie);
+    assert.ok(await st.until((e) => e.event === 'world'));
+    const r = await postJson(h.url, `/api/owner/islands/${ids[4]}/remove`, {}, { cookie: boss.cookie, origin: h.url, 'x-csrf-token': boss.csrf });
+    assert.equal(r.status, 200);
+    const isl = await st.until((e) => e.event === 'island' && e.data.id === ids[7] && e.data.sessions.length === 2);
+    assert.ok(isl, 'the promoted island sends its live sessions');
+  } finally { st && st.close(); await h.close(); }
+});
+
 test('owner removal still sends remove for an island that is offline', async () => {
   const h = await startDevHub();
   let st;
