@@ -619,9 +619,9 @@ const hash=(x,y,s)=>{const v=Math.sin(x*127.1+y*311.7+s*74.7)*43758.5453;return 
 // LAWN is the grass in front of the office (where outdoor spots go); LAWN_BACK the thin strip behind its two walls.
 const LAWN=6,LAWN_BACK=2,WATERFALL_LEN=140,DECOR_TOP=24;
 
-// east-back sits against the pantry's east wall and holds the restroom; east-front, further down the east lawn beside
-// the garden path, holds the smoking corner; south-left is still free.
-const outdoorSpots=(W,H)=>[{id:'east-front',x:W+1,y:H-5,w:4,h:4},{id:'south-left',x:5,y:H+1,w:4,h:3},{id:'east-back',x:W+1,y:2,w:4,h:4}];
+// east-back runs along the pantry's east side and holds the restroom block (raised to the office floor); east-front,
+// further down the east lawn beside the garden path, holds the smoking corner; south-left is still free.
+const outdoorSpots=(W,H)=>[{id:'east-front',x:W+1,y:H-5,w:4,h:4},{id:'south-left',x:5,y:H+1,w:4,h:3},{id:'east-back',x:W,y:2,w:8,h:5}];
 
 function buildIsland({W,H,lawn=LAWN,back=LAWN_BACK}){
   const cx=W/2,cy=H/2,x0=-back-3,x1=W+lawn+3,y0=-back-3,y1=H+lawn+3;
@@ -665,8 +665,8 @@ function buildIsland({W,H,lawn=LAWN,back=LAWN_BACK}){
 }
 
 // ---- garden paths ----
-// Stepping-stone paths laid where agents really walk (desire lines): from the foot of each stair flight to the pond,
-// plus a short spur from the east stairs to the edge of the east-back spot (the restroom). They run one tile
+// Stepping-stone paths laid where agents really walk (desire lines): from the foot of each stair flight to the pond
+// (the restroom block is reached across the pantry floor, not from the lawn). They run one tile
 // clear of the plinth front, so the big front lawn stays whole. Each leg is a list of waypoints that share a row or a
 // column; `cells` are the tiles they cover (agents prefer them), `lines` the same legs in world coordinates for drawing,
 // starting just past the bottom step instead of at the tile centre under it.
@@ -676,7 +676,6 @@ function lawnPaths(W,H,st,pondSpots){
   const legs=[
     {at:'south',pts:[[sx,H],[sx,row],[bath.x,row],[bath.x,bath.y-1]]},
     {at:'east',pts:[[e.x,e.y+e.len-1],[e.x,row]]},
-    {at:'east',pts:[[e.x,e.y],[e.x+1,e.y],[e.x+1,e.y-1]]},
   ];
   const cells=new Set();
   for(const{pts}of legs)for(let i=1;i<pts.length;i++){
@@ -1956,30 +1955,70 @@ globalThis.SmokeLogic={layout,cycle,PERIOD};
 })();
 </script>
 <script id="restroom-logic">
-// The restroom against the pantry's east wall: where it stands, its two doors and how long a visit takes. No DOM, no
-// canvas; tests/restroom-logic.test.mjs runs this block.
+// The restroom block against the pantry's east side: an open-top (cutaway) annex on the office floor with the men's
+// room, the women's room and a shared lobby, plus the rhythm of one visit. No DOM, no canvas;
+// tests/restroom-logic.test.mjs runs this block.
 (function(){
 'use strict';
 const k=(x,y)=>x+','+y;
-// Laid out from the corner of the 4×4 outdoor spot (SkyLogic.outdoorSpots 'east-back'). The building takes the 3×3
-// tiles at the back of the spot (nobody walks through its walls); the front row is a paved step where the garden-path
-// spur from the east stairs ends, and each of the two doors has one place to stand in front of it. The far column
-// stays lawn, so people and dogs can still go round the back.
-function layout(zone){
-  const X=zone.x,Y=zone.y,blocked=[],paved=[];
-  for(let y=Y;y<Y+3;y++)for(let x=X;x<X+3;x++)blocked.push(k(x,y));
-  for(let x=X;x<X+zone.w;x++)paved.push(k(x,Y+3));
-  // the front wall runs along y = body.y1; doors are cut into it, the wash basin and mirror sit to their right
-  const body={x0:X+0.15,x1:X+3.0,y0:Y+0.5,y1:Y+2.95};
-  const doors=[{x0:X+0.3,x1:X+0.95,sign:'m'},{x0:X+1.2,x1:X+1.85,sign:'f'}];
-  const spots=doors.map((d,i)=>({act:'wc',door:i,tile:[X+i,Y+3],pt:[(d.x0+d.x1)/2,Y+3.2],front:false}));
-  return{x:X,y:Y,body,doors,blocked,paved,spots,basin:{x0:X+2.1,x1:X+2.85}};
+// Laid out from the corner of the outdoor spot 'east-back' (SkyLogic.outdoorSpots, 8×5 tiles from x = W, y = 2).
+// One tile is about 0.7 m (a desk is 2×1 tiles) and `wall` is the office's full wall height (3 tiles). Left to right
+// along the back wall: the men's room (x 0..4 of the spot) and the women's room (x 4..7.6); the front two rows are the
+// lobby, open to the pantry on the west. The floor stops 0.4 tile short of the spot's east edge, so a strip of grass is
+// left before the cliff.
+function layout(zone,wall){
+  const X=zone.x,Y=zone.y,x1=X+7.6,y1=Y+5,front=Y+3;
+  const heights={full:wall,half:Math.round(wall/2),glass:Math.round(wall*0.82),knee:10};
+  const rooms={m:{x0:X,x1:X+4,door:[X+1,X+2],accent:'#173DC9'},f:{x0:X+4,x1,door:[X+6,X+7],accent:'#D9467A'}};
+  // The back wall is BACK thick and stands on the floor's back edge, so it never hangs past the island's edge.
+  const BACK=0.25,wy=Y+BACK;
+  const stall=(room,x0,x1)=>({room,x0,x1,y0:wy,y1:wy+1.35});
+  const stalls=[stall('m',X+2,X+3),stall('m',X+3,X+4),stall('f',X+5,X+5.87),stall('f',X+5.87,X+6.73),stall('f',X+6.73,x1)];
+  // The women's vanity sits further forward than the men's: its first basin must be washed at in front of the first
+  // stall (whose side panel stands right beside it), and the hand dryer fits between it and the makeup counter.
+  const vanity=(room,x0,y0,y1,basins,dryer)=>({room,x0,x1:x0+0.56,y0,y1,basins,dryer});
+  const vanities={m:vanity('m',X+0.14,Y+1.1,Y+2.7,[Y+1.5,Y+2.3],Y+2.85),f:vanity('f',X+4.07,Y+1.3,Y+2.85,[Y+1.72,Y+2.45],Y+1.15)};
+  const urinals=[X+0.85,X+1.6],urinalGlass=[X+0.55,X+1.22];
+  const makeup={x0:X+4.07,x1:X+4.55,y0:wy+0.05,y1:wy+0.75,stool:[X+4.8,wy+0.4]};
+  const plants={m:[X+0.38,wy+0.22],f:[x1-0.4,Y+2.55],lobby:[x1-0.4,Y+4.55]};
+  const lobby={rug:{x0:X+0.3,x1:x1-0.4,y0:Y+3.35,y1:Y+3.95},totem:[X+0.3,Y+4.65],sanitizer:[X+3.5,Y+3.3],
+    bench:{x0:X+2.2,x1:X+4.8,y0:Y+4.3,y1:Y+4.7}};
+  // Tiles: the 8×5 floor, minus what furniture stands on. The doorways are tiles (X+1, front-1) and (X+6, front-1).
+  const floor=[];for(let y=Y;y<Y+5;y++)for(let x=X;x<X+8;x++)floor.push(k(x,y));
+  const taken=new Set([[0,0],[1,0],[2,0],[3,0],[0,1],[0,2],[4,0],[5,0],[6,0],[7,0],[4,1],[4,2],[7,2],[0,4],[2,4],[3,4],[4,4],[7,4]].map(([dx,dy])=>k(X+dx,Y+dy)));
+  const walk=floor.filter(c=>!taken.has(c));
+  // Walls as blocked steps (both ways): the half-height dividers at x = X and x = X+4 along the rooms, and the knee-high
+  // front wall along y = front except at the two doorways. The back and east sides need none: nobody steps from the
+  // floor onto the lawn at all (see step()).
+  const shut=[],cut=(a,b)=>shut.push(a+'|'+b,b+'|'+a);
+  for(let y=Y;y<front;y++){cut(k(X-1,y),k(X,y));cut(k(X+3,y),k(X+4,y));}
+  for(let x=X;x<X+8;x++)if(x!==rooms.m.door[0]&&x!==rooms.f.door[0])cut(k(x,front-1),k(x,front));
+  // One idle spot per stall: standing in front of its door; afterwards the hands are washed at the room's vanity.
+  const wash=(room,i)=>{const v=vanities[room],y=v.basins[i%2],x=v.x1+0.45;return{tile:[Math.floor(x),Math.floor(y)],pt:[x,y]};};
+  const spots=stalls.map((s,i)=>{const n=stalls.filter((o,j)=>j<i&&o.room===s.room).length,cx=(s.x0+s.x1)/2;
+    return{act:'wc',room:s.room,stall:i,tile:[Math.floor(cx),Y+1],pt:[cx,Y+1.88],front:false,wash:wash(s.room,n)};});
+  return{x0:X,y0:Y,x1,y1,front,back:BACK,wy,heights,rooms,stalls,vanities,urinals,urinalGlass,makeup,plants,lobby,
+    floor,floorSet:new Set(floor),walk,shut,spots};
 }
-// One visit, in simulated seconds spent at the door: a moment at the door while it opens, a short while inside with
-// the door shut, a moment coming back out, and then the visit is over and the person goes somewhere else.
-const DOOR=0.8,INSIDE=7,VISIT=DOOR+INSIDE+DOOR;
-const visit=t=>t<DOOR?'door':t<DOOR+INSIDE?'inside':t<VISIT?'out':'done';
-globalThis.RestroomLogic={layout,visit,VISIT,DOOR,INSIDE};
+// Is a point (world tiles) on the block's raised floor?
+const onFloor=(L,x,y)=>x>=L.x0&&x<L.x1&&y>=L.y0&&y<L.y1;
+// One step between neighbouring tiles a and b, when either is on the block's floor: false across a wall or between the
+// floor and the lawn, true otherwise (floor to floor, or floor to the pantry beside it). null when neither tile is on
+// the block, so the caller's own rules apply. `inOffice(x,y)` says whether a tile is office floor.
+function step(L,a,b,inOffice){
+  const ka=k(a[0],a[1]),kb=k(b[0],b[1]),fa=L.floorSet.has(ka),fb=L.floorSet.has(kb);
+  if(!fa&&!fb)return null;
+  if(L.shut.includes(ka+'|'+kb))return false;
+  if(fa&&fb)return true;
+  const o=fa?b:a;return inOffice(o[0],o[1]);
+}
+// Which room an agent uses, fixed per agent so it always walks to the same door.
+const roomOf=id=>id%2?'m':'f';
+// One visit, in simulated seconds spent standing (walking does not count): a moment at the stall door while it opens,
+// a while inside with the door shut, a moment coming back out, washing hands at the vanity, then on to somewhere else.
+const DOOR=0.8,INSIDE=6,OUT=0.6,WASH=2.5,VISIT=DOOR+INSIDE+OUT+WASH;
+const visit=t=>t<DOOR?'door':t<DOOR+INSIDE?'inside':t<DOOR+INSIDE+OUT?'out':t<VISIT?'wash':'done';
+globalThis.RestroomLogic={layout,onFloor,step,roomOf,visit,VISIT,DOOR,INSIDE,OUT,WASH};
 })();
 </script>
 <script>
@@ -1997,18 +2036,20 @@ const PG=(x,y,z=0)=>[OX+(x-y)*TW, OY+(x+y)*TH-z];
 const P=(x,y,z=0)=>PG(x,y,z+FLOOR_Z);
 // Agents can step down the stairs onto the lawn, so a person stands at the ground height of wherever they are.
 const STAIRS=SkyLogic.stairs(W,H),LAWN_WALK=SkyLogic.lawnWalk(ISLAND,W,H);
-const PA=(x,y,z=0)=>PG(x,y,z+SkyLogic.groundZ(x,y,W,H,STAIRS,FLOOR_Z));
+// The restroom block beside the pantry is raised to the office floor too.
+const PA=(x,y,z=0)=>PG(x,y,z+(RestroomLogic.onFloor(WC,x,y)?FLOOR_Z:SkyLogic.groundZ(x,y,W,H,STAIRS,FLOOR_Z)));
 // The smoking corner fills the east-front outdoor spot, down the east lawn beside the garden path. Only its planted
 // trough is taken off the walkable lawn: seats, the ash bin and the posts are thin enough to step past, and an agent's
 // own spot must stay walkable to path from it. Its pad is entered only through the entrance (SMOKE.shut, added to EDGE
 // below), so nobody climbs over the bench back on the way in from the stairs.
 const SMOKE=SmokeLogic.layout(ISLAND.spots.find(s=>s.id==='east-front'));
 SMOKE.blocked.forEach(k=>LAWN_WALK.delete(k));
-// The restroom stands in the east-back spot against the pantry wall; its walls are off the walkable lawn.
-const WC=RestroomLogic.layout(ISLAND.spots.find(s=>s.id==='east-back'));
-WC.blocked.forEach(k=>LAWN_WALK.delete(k));
-// Paving walks like the garden path: smokers stay on their pad and the restroom step is the way to its doors.
-const PAVED=new Set([...SMOKE.paved,...WC.paved]);
+// The restroom block fills the east-back spot along the pantry's east side, on the office floor level: its tiles are
+// floor, not lawn, and bfs reaches them only across the pantry (RestroomLogic.step), never from the grass.
+const WC=RestroomLogic.layout(ISLAND.spots.find(s=>s.id==='east-back'),WALL),WC_WALK=new Set(WC.walk);
+WC.floor.forEach(k=>LAWN_WALK.delete(k));
+// Paving walks like the garden path: smokers stay on their pad.
+const PAVED=new Set(SMOKE.paved);
 // The office dogs live on the lawn in front of and beside the office, never in the pond, the smoking corner or the restroom.
 const DOG_ROAM=DogLogic.roamCells(LAWN_WALK,{W,H,pond:ISLAND.pond.cells,avoid:ISLAND.spots.filter(s=>s.id==='east-back'||s.id==='east-front')});
 // They run across the stone paths and past the stairs but never lie, sit, sniff or sleep on them (the stairs' foot and
@@ -2106,9 +2147,12 @@ const cwdKey=s=>{if(!s||s==='—')return null;const p=s.replace(/\/+$/,'').split
 function bfs(from,to){
   // Office floor cells avoid furniture; lawn cells come from the island's walkable set; the two only meet at the stairs.
   // Out on the lawn grass costs more than the garden path, so agents keep to the path unless it is a long way round.
-  const key=p=>p[0]+','+p[1], inside=(x,y)=>x>=0&&y>=0&&x<W&&y<H, ok=(x,y)=>inside(x,y)?!BLOCK.has(x+','+y):LAWN_WALK.has(x+','+y);
-  const canStep=(c,n)=>!EDGE.has(key(c)+'|'+key(n))&&SkyLogic.canCross(c,n,W,H,STAIRS)&&(ok(n[0],n[1])||(n[0]===to[0]&&n[1]===to[1]));
-  return SkyLogic.cheapestPath(from,to,canStep,n=>inside(n[0],n[1])||ISLAND.paths.cells.has(key(n))||PAVED.has(key(n))?1:SkyLogic.GRASS_COST);
+  // The restroom block is floor like the office: walked from the pantry beside it, never stepped onto from the lawn.
+  const key=p=>p[0]+','+p[1], inside=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
+  const ok=(x,y)=>{const k=x+','+y;return inside(x,y)?!BLOCK.has(k):WC.floorSet.has(k)?WC_WALK.has(k):LAWN_WALK.has(k);};
+  const canStep=(c,n)=>{if(EDGE.has(key(c)+'|'+key(n)))return false;const s=RestroomLogic.step(WC,c,n,inside);
+    if(s===false||(s===null&&!SkyLogic.canCross(c,n,W,H,STAIRS)))return false;return ok(n[0],n[1])||(n[0]===to[0]&&n[1]===to[1]);};
+  return SkyLogic.cheapestPath(from,to,canStep,n=>inside(n[0],n[1])||WC.floorSet.has(key(n))||ISLAND.paths.cells.has(key(n))||PAVED.has(key(n))?1:SkyLogic.GRASS_COST);
 }
 
 class ClaudeOffice extends React.Component{
@@ -2401,8 +2445,13 @@ class ClaudeOffice extends React.Component{
       const taken=new Set(this.agents.filter(o=>o!==a&&!o.leaving&&o.status==='idle'&&o.idleSpot!=null).map(o=>o.idleSpot));
       // A restroom visit is short: once it is over the person moves on, and does not go back while still idle.
       if(a.idleSpot!=null&&IDLE_SPOTS[a.idleSpot].act==='wc'&&RestroomLogic.visit(a.wcT||0)==='done'){a.idleSpot=null;a.wcDone=true;}
-      if(a.idleSpot==null||taken.has(a.idleSpot)){const free=IDLE_SPOTS.map((_,i)=>i).filter(i=>!taken.has(i)&&!(a.wcDone&&IDLE_SPOTS[i].act==='wc'));a.idleSpot=free.length?pick(free):null;}
-      if(a.idleSpot!=null){const sp=IDLE_SPOTS[a.idleSpot];return{key:'idle'+a.idleSpot,tile:sp.tile,pt:sp.pt,stool:sp.stool||0,spot:sp};}
+      // Each agent always uses the same room (RestroomLogic.roomOf), so only that room's stalls are open to it.
+      const wcOk=i=>IDLE_SPOTS[i].act!=='wc'||(!a.wcDone&&IDLE_SPOTS[i].room===RestroomLogic.roomOf(a.id));
+      if(a.idleSpot==null||taken.has(a.idleSpot)){const free=IDLE_SPOTS.map((_,i)=>i).filter(i=>!taken.has(i)&&wcOk(i));a.idleSpot=free.length?pick(free):null;}
+      if(a.idleSpot!=null){const sp=IDLE_SPOTS[a.idleSpot];
+        // After the stall comes the vanity: same visit, so the visit clock keeps running (keepWc).
+        if(sp.act==='wc'&&RestroomLogic.visit(a.wcT||0)==='wash')return{key:'wash'+a.idleSpot,tile:sp.wash.tile,pt:sp.wash.pt,spot:sp,keepWc:true};
+        return{key:'idle'+a.idleSpot,tile:sp.tile,pt:sp.pt,stool:sp.stool||0,spot:sp};}
     }
     if(a.status==='idle')return{key:'sleep',tile:[d.gx,d.gy+1],pt:[d.gx+0.75,d.gy+0.62]};
     return{key:'seat',tile:[d.gx,d.gy+1],pt:[d.gx+1,d.gy+1.45]};
@@ -2414,10 +2463,11 @@ class ClaudeOffice extends React.Component{
     if(a.sleeping)return;
     const g=this.goalFor(a);
     if(g.key!==a.goalKey){
-      a.goalKey=g.key;a.seated=false;a.sleeping=false;a.stool=false;a.actNow=null;a.wcT=0;a.wcIn=false;
-      // Out on the lawn an agent paths from where it stands; anywhere else (e.g. just in through the door) it starts inside.
-      const fx=Math.floor(a.x),fy=Math.floor(a.y);
-      const cur=LAWN_WALK.has(fx+','+fy)&&fx>=0&&fy>=0?[fx,fy]:[Math.min(W-1,Math.max(0,fx)),Math.min(H-1,Math.max(0,fy))];
+      a.goalKey=g.key;a.seated=false;a.sleeping=false;a.stool=false;a.actNow=null;a.wcIn=false;if(!g.keepWc)a.wcT=0;
+      // Out on the lawn or in the restroom block an agent paths from where it stands; anywhere else (e.g. just in
+      // through the door) it starts inside.
+      const fx=Math.floor(a.x),fy=Math.floor(a.y),fk=fx+','+fy;
+      const cur=(LAWN_WALK.has(fk)||WC.floorSet.has(fk))&&fx>=0&&fy>=0?[fx,fy]:[Math.min(W-1,Math.max(0,fx)),Math.min(H-1,Math.max(0,fy))];
       a.path=bfs(cur,g.tile).map(p=>[p[0]+0.5,p[1]+0.5]).concat([g.pt]);
       if(g.key==='seat'&&a.path.length>1)a.path.splice(a.path.length-2,1);
     }
@@ -2430,7 +2480,7 @@ class ClaudeOffice extends React.Component{
       }
       if(!a.path.length){a.moving=false;if(g.key==='seat')a.seated=true;if(g.key==='sleep')a.sleeping=true;if(g.stool)a.stool=g.stool;if(g.key==='exit')a.gone=true;a.dirFront=g.spot?g.spot.front:false;if(g.spot)a.actNow=g.spot.act;}
     }
-    // At the restroom door: count the visit along (RestroomLogic.visit); while inside, the person is not drawn.
+    // At a stall or the vanity: count the visit along (RestroomLogic.visit); while inside the stall, the person is not drawn.
     else if(a.actNow==='wc'){a.wcT=(a.wcT||0)+dt*this.speed;a.wcIn=RestroomLogic.visit(a.wcT)==='inside';}
   }
 
@@ -2720,74 +2770,192 @@ class ClaudeOffice extends React.Component{
       const[sx,sy]=PG(X+1.75,Y+3.7,19.5);ctx.save();ctx.translate(Math.round(sx),Math.round(sy));ctx.transform(1,0.5,0,1,0,0);
       ctx.fillStyle=N('#ffffff');ctx.fillRect(2,4,6,1);ctx.fillRect(3,2,1,1);ctx.fillRect(4,1,1,1);ctx.fillRect(5,2,1,1);ctx.fillStyle='#ff9a3d';ctx.fillRect(8,4,1,1);ctx.restore();}});
   }
-  // The restroom against the pantry's east wall (RestroomLogic.layout): a small plastered annex with a flat slate roof,
-  // two wooden doors under a teal awning (a pictogram and a vacant/occupied light on each), a wash basin with a mirror,
-  // a lamp and a WC plate to their right, a frosted window on the side and a potted plant on the paved step. Like
-  // the smoking corner it stands on the grass (PG), and its colours go through night() and the snow cover.
+  // The restroom block beside the pantry (RestroomLogic.layout, spec "Bản 2"): an open-top cutaway on the office floor
+  // level. Left to right along a full-height tiled back wall: a half-height divider with frosted glass, the men's room
+  // (blue), another divider, the women's room (pink); knee-high front walls with two doorways under glowing signs, and a
+  // wood-floored lobby open to the pantry. Flat three-face shading (top lightest, left mid, right darkest) with dark 1px
+  // outlines. Slab, floor and rug are drawn at once (nothing on the block stands under them); walls and fixtures go into
+  // `items` by depth, walls in one-tile pieces so people sort correctly in front of and behind them.
   restroomItems(G,items,snow){
-    const{ctx,poly,df}=G,X=WC.x,Y=WC.y,{x0,x1,y0,y1}=WC.body,WH=30,N=c=>SkyRender.night(c,df),SN=(c,k)=>N(mix(c,'#eef3f7',snow*k));
-    const gbox=(x,y,w,hh,z0,z1,top,l,r)=>{poly([PG(x,y+hh,z0),PG(x+w,y+hh,z0),PG(x+w,y+hh,z1),PG(x,y+hh,z1)],l||shade(top,-22),null);poly([PG(x+w,y,z0),PG(x+w,y+hh,z0),PG(x+w,y+hh,z1),PG(x+w,y,z1)],r||shade(top,-38),null);poly([PG(x,y,z1),PG(x+w,y,z1),PG(x+w,y+hh,z1),PG(x,y+hh,z1)],top,null);};
-    const R=(x,y,w,hh,c)=>{ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,hh);};
-    // F paints a patch on the front wall (the plane y = y1), S one on the east wall (x = x1); px draws pixel art on the
-    // front wall from its top-left corner, sheared to lie in that plane.
-    const yF=y1+0.01,xS=x1+0.01;
-    const F=(xa,xb,za,zb,c)=>poly([PG(xa,yF,za),PG(xb,yF,za),PG(xb,yF,zb),PG(xa,yF,zb)],c,null);
-    const S=(ya,yb,za,zb,c)=>poly([PG(xS,ya,za),PG(xS,yb,za),PG(xS,yb,zb),PG(xS,ya,zb)],c,null);
-    const px=(x,z,rows,col)=>{const[sx,sy]=PG(x,yF,z);ctx.save();ctx.translate(Math.round(sx),Math.round(sy));ctx.transform(1,0.5,0,1,0,0);ctx.fillStyle=col;
+    const{ctx,df}=G,L=WC,X=L.x0,Y=L.y0,X1=L.x1,Y1=L.y1,F=L.front,wy=L.wy,HT=L.heights;
+    // Indoors the light falls off like the office's own at night; LEDs and signs keep their colour and glow instead.
+    const NB=c=>mix(c,'#161c2c',(1-df)*0.74),CAP=c=>mix(NB(c),'#f2f6fb',snow*0.9),lit=df<0.6,glow=lit?1-df/0.6:0;
+    const OL=NB('#2B2D42'),WHITE=NB('#F7F9FC'),CREAM=NB('#F4ECDA'),SLATE='#3F4452',WOOD='#D2A877',CHROME=NB('#c3cad4'),LED='#FFD54A';
+    const ACC={m:'#173DC9',f:'#D9467A'};
+    const rp=p=>[Math.round(p[0]),Math.round(p[1])];
+    const path=pts=>{ctx.beginPath();pts.forEach((p,i)=>{const q=rp(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});ctx.closePath();};
+    const fill=(pts,c)=>{path(pts);ctx.fillStyle=c;ctx.fill();};
+    const edge=(pts,c=OL)=>{path(pts);ctx.strokeStyle=c;ctx.lineWidth=1;ctx.stroke();};
+    const al=(a,f)=>{const o=ctx.globalAlpha;ctx.globalAlpha=o*a;f();ctx.globalAlpha=o;};
+    // a face on the plane y = const (seen from the front-left) and one on x = const (seen from the front-right)
+    const fy=(y,xa,xb,za,zb,c)=>fill([P(xa,y,za),P(xb,y,za),P(xb,y,zb),P(xa,y,zb)],c);
+    const fx=(x,ya,yb,za,zb,c)=>fill([P(x,ya,za),P(x,yb,za),P(x,yb,zb),P(x,ya,zb)],c);
+    const ftop=(xa,ya,xb,yb,z,c)=>fill([P(xa,ya,z),P(xb,ya,z),P(xb,yb,z),P(xa,yb,z)],c);
+    // a box with the outline of its silhouette (o = false leaves the outline off for tiny parts)
+    const box=(x,y,w,h,z0,z1,top,o=true,l,r)=>{
+      fy(y+h,x,x+w,z0,z1,l||shade(top,-22));fx(x+w,y,y+h,z0,z1,r||shade(top,-38));ftop(x,y,x+w,y+h,z1,top);
+      if(o)edge([P(x,y,z1),P(x+w,y,z1),P(x+w,y,z0),P(x+w,y+h,z0),P(x,y+h,z0),P(x,y+h,z1)]);};
+    // pixel art lying in a y-plane or an x-plane, from its top-left corner
+    const pix=(x,y,z,rows,col,onX)=>{const[sx,sy]=P(x,y,z);ctx.save();ctx.translate(Math.round(sx),Math.round(sy));ctx.transform(1,onX?-0.5:0.5,0,1,0,0);ctx.fillStyle=col;
       rows.forEach((r,j)=>{for(let i=0;i<r.length;i++)if(r[i]==='#')ctx.fillRect(i,j,1,1);});ctx.restore();};
-    const leaf=SN('#3e9a45',0.45),leafL=SN('#57b85a',0.6),leafD=N('#2f7a36'),metal=N('#3d4350'),lit=df<0.6;
-    const bush=(x,y,z,r)=>{const[cx,cy]=PG(x,y,z);for(let dy=-r;dy<=r;dy++){const w=Math.round(Math.sqrt(r*r-dy*dy)*1.2),c=dy<-r*0.45?leafL:leaf;R(cx-w,cy+dy,w*2,1,c);R(cx+Math.round(w*0.3),cy+dy,Math.round(w*0.7),1,leafD);}};
-    // Who is at which door, and whether that door is open (stepping in or out) or shut with someone inside.
-    const doorState=WC.doors.map(()=>null);
-    for(const a of this.agents){if(a.actNow!=='wc'||a.moving||a.idleSpot==null||!IDLE_SPOTS[a.idleSpot])continue;
-      const ph=RestroomLogic.visit(a.wcT||0);if(ph!=='done')doorState[IDLE_SPOTS[a.idleSpot].door]=ph;}
-    const busy=doorState.some(p=>p==='inside');
-    // The paved step in front and the base under the walls; after dark the lamp leaves a warm pool on the step.
-    items.push({z:-1,f:()=>{const top=SN('#b9b3a8',0.8);gbox(X,Y+0.35,3.2,3.65,0,0.6,top);gbox(X,Y+3,4,1,0,0.6,top);
-      for(let x=0;x<4;x+=0.5)for(let y=3;y<4;y+=0.5)poly([PG(X+x+0.04,Y+y+0.04,0.6),PG(X+x+0.46,Y+y+0.04,0.6),PG(X+x+0.46,Y+y+0.46,0.6),PG(X+x+0.04,Y+y+0.46,0.6)],SN((x+y)*2%2?'#d6d0c4':'#cbc5b9',0.8),null);
-      if(lit){const[lx,ly]=PG(X+2.5,Y+3.4,0.6);ctx.globalAlpha=0.24*(1-df/0.6);ctx.fillStyle='#ffd98a';ctx.beginPath();ctx.ellipse(lx,ly,24,11,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}}});
-    // The building, drawn as one item: everything behind it on the lawn sorts before it, people at the doors after it.
-    items.push({z:X+Y+3.1,f:()=>{
-      const wall=N('#efe6d6'),tile=N('#4f9d8f'),trim=N('#fbf8f1'),wood=N('#a8763e');
-      gbox(x0,y0,x1-x0,y1-y0,0,WH,wall,wall,shade(wall,-26));
-      // teal tiled skirting with grout lines
-      F(x0,x1,0,5,tile);S(y0,y1,0,5,shade(tile,-24));
-      for(let x=x0+0.25;x<x1;x+=0.25)F(x,x+0.02,0,5,shade(tile,-18));
-      for(let y=y0+0.25;y<y1;y+=0.25)S(y,y+0.02,0,5,shade(tile,-40));
-      // doors: frame, wooden leaf (or the dark doorway with the leaf swung out), a pictogram plate and a little light
-      const MAN=['..#..','.....','.###.','.###.','.###.','.#.#.','.#.#.'],WOMAN=['..#..','.....','.###.','.###.','#####','.#.#.','.#.#.'];
-      WC.doors.forEach((d,i)=>{const st=doorState[i],open=st==='door'||st==='out';
-        F(d.x0-0.05,d.x1+0.05,0.6,20,trim);
-        if(open){F(d.x0,d.x1,0.6,19,N('#2b2522'));poly([PG(d.x0,yF,0.6),PG(d.x0,yF+0.42,0.6),PG(d.x0,yF+0.42,19),PG(d.x0,yF,19)],shade(wood,-18),null);}
-        else{F(d.x0,d.x1,0.6,19,wood);F(d.x0+0.08,d.x1-0.08,3,9,shade(wood,-14));F(d.x0+0.08,d.x1-0.08,11,16.5,shade(wood,-14));F(d.x1-0.12,d.x1-0.06,9.5,10.5,N('#d9dbe2'));}
-        const pc=d.sign==='m'?N('#3e8ed0'):N('#e5484d'),pxx=(d.x0+d.x1)/2-0.22;
-        if(!open){F(pxx,pxx+0.44,11.5,17.5,N('#ffffff'));px(pxx+0.06,17,d.sign==='m'?MAN:WOMAN,pc);}
-        F((d.x0+d.x1)/2-0.06,(d.x0+d.x1)/2+0.06,20.6,21.6,st==='inside'?'#ff5a5f':'#5fd17a');});
-      // awning over both doors
-      {const xa=X+0.2,xb=X+1.98,aw=SN('#3f8f82',0.85);
-        poly([PG(xa,yF,23),PG(xb,yF,23),PG(xb,yF+0.42,20.5),PG(xa,yF+0.42,20.5)],aw,null);
-        poly([PG(xa,yF+0.42,19.6),PG(xb,yF+0.42,19.6),PG(xb,yF+0.42,20.5),PG(xa,yF+0.42,20.5)],shade(N('#3f8f82'),-28),null);
-        poly([PG(xb,yF,23),PG(xb,yF+0.42,20.5),PG(xb,yF+0.42,19.6),PG(xb,yF,22.1)],shade(N('#3f8f82'),-40),null);}
-      // wash basin under a mirror, a wall lamp over the mirror that glows after dark, and the WC plate at the top, where
-      // nobody standing at the doors hides it
-      {const b=WC.basin,bc=(b.x0+b.x1)/2;
-        F(b.x0,b.x1,22.4,29.4,N('#2d3142'));F(b.x0+0.03,b.x1-0.03,22.7,29.1,N('#3a8fd0'));
-        px(b.x0+0.06,28.2,['#...#.###','#...#.#..','#.#.#.#..','#.#.#.#..','.#.#..###'],N('#ffffff'));
-        F(b.x0+0.06,b.x1-0.06,11.5,19.5,N('#cfd5df'));F(b.x0+0.1,b.x1-0.1,12,19,N('#bfe3ff'));
-        px(b.x0+0.22,18,['....#','...#.','..#..','.#...'],N('#ffffff'));
-        gbox(bc-0.04,y1,0.08,0.1,0,8,N('#c9cfdc'));
-        gbox(b.x0+0.08,y1,b.x1-b.x0-0.16,0.26,8,10.5,N('#f6f4ee'),N('#dcdcd4'),N('#c9c9c0'));
-        gbox(bc-0.03,y1+0.02,0.06,0.08,10.5,12,N('#c9d3e3'));
-        gbox(bc-0.12,y1,0.24,0.12,21,22.2,metal);
-        const bulb=lit?'#ffd98a':N('#e8e2d6');gbox(bc-0.08,y1+0.02,0.16,0.12,20.1,21,bulb,lit?'#f5c46a':undefined,lit?'#e8b25a':undefined);
-        if(lit){const[gx,gy]=PG(bc,y1+0.1,20.8);ctx.globalAlpha=0.28*(1-df/0.6);ctx.fillStyle='#ffd98a';ctx.beginPath();ctx.ellipse(gx,gy,7,5,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}}
-      // frosted window high on the side wall: warm when someone is inside after dark
-      S(Y+1.15,Y+1.95,17.5,24.5,trim);S(Y+1.2,Y+1.9,18,24,busy&&lit?'#ffe2a0':N('#dfe8f2'));S(Y+1.53,Y+1.57,18,24,trim);
-      // flat roof: a slate slab with a pale fascia, a little overhang and a vent pipe; snow settles on top
-      gbox(x0-0.12,y0-0.12,x1-x0+0.24,y1-y0+0.24,WH,WH+2.5,SN('#4a5266',0.9),N('#e9e3d6'),N('#cfc8b9'));
-      gbox(X+2.4,Y+1.0,0.14,0.14,WH+2.5,WH+6.5,metal);gbox(X+2.36,Y+0.96,0.22,0.22,WH+6.5,WH+7.2,SN('#3d4350',0.6));}});
-    // a potted plant on the step's far corner
-    items.push({z:X+Y+6.7,f:()=>{gbox(X+3.3,Y+3.25,0.36,0.36,0.6,6,N('#d0743c'),N('#b45f2f'),N('#9a4f26'));bush(X+3.48,Y+3.43,11,5);bush(X+3.4,Y+3.38,15,3);}});
+    const halo=(x,y,z,rx,ry,c,a)=>{if(!glow)return;const[gx,gy]=P(x,y,z);al(a*glow,()=>{ctx.fillStyle=c;ctx.beginPath();ctx.ellipse(gx,gy,rx,ry,0,0,Math.PI*2);ctx.fill();});};
+    const glass=(draw)=>al(0.3,draw);
+    const plant=(x,y,potH,big)=>{const pot=NB('#ECE7DE'),g=NB('#55A043'),gl=NB('#6fbd57'),gd=NB('#3f7f31'),s=big?1.5:1;
+      box(x-0.13*s,y-0.13*s,0.26*s,0.26*s,0,potH,pot);ftop(x-0.1*s,y-0.1*s,x+0.1*s,y+0.1*s,potH,NB('#6b4a33'));
+      const cubes=big?[[0,0,potH+2,7],[-0.12,0.1,potH+8,6],[0.1,-0.1,potH+11,6],[0,0,potH+16,5],[-0.08,-0.06,potH+21,4],[0.08,0.08,potH+24,3]]
+        :[[0,0,potH+1,5],[-0.08,0.06,potH+5,4],[0.07,-0.05,potH+8,4],[0,0,potH+11,3]];
+      cubes.forEach(([dx,dy,z,c],i)=>{const r=c/32;box(x+dx-r,y+dy-r,r*2,r*2,z,z+c,i%2?gl:g,true,gd,shade(gd,-12));});};
+    const PERSON={m:['..#..','.....','.###.','.###.','.###.','.#.#.','.#.#.'],f:['..#..','.....','.###.','.###.','#####','.#.#.','.#.#.']};
+    // 3×5 letters from the page font, plus Ữ and Ả with their marks drawn above (rows -3 and -2)
+    const glyph=ch=>{if(ch==='Ữ')return{rows:['.##.','##..','#.##','#.#.','#.#.','#.#.','###.'],up:2};if(ch==='Ả')return{rows:['##.','.#.','.#.','#.#','###','#.#','#.#'],up:2};
+      const f=FONT[ch];if(!f)return{rows:['...','...','...','...','...'],up:0};const rows=[];for(let r=0;r<5;r++)rows.push(f.slice(r*3,r*3+3).replace(/1/g,'#').replace(/0/g,'.'));return{rows,up:0};};
+    const word=s=>{const gs=[...s].map(ch=>ch===' '?{rows:['..'],up:0,sp:1}:glyph(ch));let x=0;const out=[];gs.forEach(g=>{out.push({g,x});x+=(g.sp?2:g.rows[g.rows.length-1].length)+1;});return{out,w:x-1};};
+    // stall doors: shut, with a red light, while someone is inside (RestroomLogic.visit 'inside')
+    const occupied=new Set();for(const a of this.agents)if(a.wcIn&&a.idleSpot!=null&&IDLE_SPOTS[a.idleSpot])occupied.add(IDLE_SPOTS[a.idleSpot].stall);
+
+    // ---- drawn at once: shadow on the lawn, the slab, the east stairs again (they stand in front of it), the floor ----
+    {const stone=SkyRender.night('#b9b2a3',df);
+      [[0.5,0.07],[0.25,0.1]].forEach(([b,a])=>{const sh='rgba(0,0,0,'+a+')';fill([PG(X+b,Y1),PG(X1,Y1),PG(X1+b,Y1+b),PG(X+b,Y1+b)],sh);fill([PG(X1,Y),PG(X1+b,Y+b),PG(X1+b,Y1+b),PG(X1,Y1)],sh);});
+      fill([PG(X,Y1,0),PG(X1,Y1,0),PG(X1,Y1,FLOOR_Z),PG(X,Y1,FLOOR_Z)],shade(stone,-18));
+      fill([PG(X1,Y,0),PG(X1,Y1,0),PG(X1,Y1,FLOOR_Z),PG(X1,Y,FLOOR_Z)],shade(stone,-40));
+      fill([PG(X,Y1,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z),PG(X,Y1,FLOOR_Z)],shade(stone,12));
+      fill([PG(X1,Y,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z),PG(X1,Y,FLOOR_Z)],shade(stone,-10));
+      for(let x=30;x<X1;x+=4)fill([PG(x,Y1,1),PG(x+0.06,Y1,1),PG(x+0.06,Y1,FLOOR_Z-1),PG(x,Y1,FLOOR_Z-1)],shade(stone,-32));
+      fill([PG(X1,6,1),PG(X1,6.06,1),PG(X1,6.06,FLOOR_Z-1),PG(X1,6,FLOOR_Z-1)],shade(stone,-52));
+      // the east flight of stairs, exactly as the plinth draws it, so its steps stay in front of the slab's face
+      const run=SkyLogic.STAIR_RUN/3;
+      for(const s of STAIRS)if(s.side==='east')for(let i=0;i<2;i++){const zt=FLOOR_Z*(1-(i+1)/3),top=shade(stone,8-i*4),x0=W+i*run,x1=x0+run,y0=s.y,y1=s.y+s.len;
+        fill([PG(x0,y1,0),PG(x1,y1,0),PG(x1,y1,zt),PG(x0,y1,zt)],shade(top,-20));fill([PG(x1,y0,0),PG(x1,y1,0),PG(x1,y1,zt),PG(x1,y0,zt)],shade(top,-38));fill([PG(x0,y0,zt),PG(x1,y0,zt),PG(x1,y1,zt),PG(x0,y1,zt)],top);}}
+    {// rooms: light grey anti-slip tiles with a fine grid; lobby: warm wooden planks running along the block
+      const grey=NB('#DCE2EA'),grid=shade(grey,-14);
+      for(let y=Y;y<F;y++)for(let x=X;x<X1;x++){const xb=Math.min(x+1,X1);ftop(x,y,xb,y+1,0,(x+y)%2?grey:shade(grey,4));}
+      for(let t=X+0.5;t<X1;t+=0.5)ftop(t,Y,t+0.02,F,0,grid);for(let t=Y+0.5;t<F;t+=0.5)ftop(X,t,X1,t+0.02,0,grid);
+      const wood=NB(WOOD),seam=shade(wood,-24);
+      ftop(X,F,X1,Y1,0,wood);
+      for(let r=0;r<6;r++){const y=F+r/3;if(r)ftop(X,y,X1,y+0.025,0,seam);for(let x=X+(r%2?0.6:1.3);x<X1;x+=1.4)ftop(x,y,x+0.03,y+1/3,0,seam);}
+      // pale blue runner rug along the lobby, from the pantry to the far end
+      const rug=L.lobby.rug,rc=NB('#BFD8EF');
+      ftop(rug.x0,rug.y0,rug.x1,rug.y1,0.3,shade(rc,-18));ftop(rug.x0+0.06,rug.y0+0.06,rug.x1-0.06,rug.y1-0.06,0.3,rc);
+      for(let x=rug.x0+0.3;x<rug.x1-0.2;x+=0.6)ftop(x,rug.y0+0.25,x+0.12,rug.y0+0.35,0.3,shade(rc,-10));
+      // soft contact shadow along the foot of the back wall and the dividers
+      [[0.4,0.05],[0.2,0.08]].forEach(([b,a])=>{const sh='rgba(0,0,0,'+a+')';fill([P(X,wy),P(X1,wy),P(X1,wy+b),P(X,wy+b)],sh);fill([P(X+0.14,wy),P(X+0.14+b,wy),P(X+0.14+b,F),P(X+0.14,F)],sh);fill([P(X+4.07,wy),P(X+4.07+b,wy),P(X+4.07+b,F),P(X+4.07,F)],sh);});}
+
+    // ---- the back wall: white tiles up to 36, cream above, frosted clerestory windows high up, one item behind all ----
+    items.push({z:X+Y-0.1,f:()=>{const full=HT.full,top=full+3,tileTop=36;
+      fy(wy,X,X1,0,tileTop,WHITE);fy(wy,X,X1,tileTop,full,CREAM);fy(wy,X,X1,full,top,shade(CREAM,-14));
+      const grout=shade(WHITE,-12);for(let z=6;z<tileTop;z+=6)fy(wy,X,X1,z,z+0.5,grout);for(let x=X+0.25;x<X1;x+=0.25)fy(wy,x,x+0.02,0,tileTop,grout);
+      fy(wy,X,X1,tileTop,tileTop+1,shade(WHITE,-22));
+      [[X+0.5,X+3.5],[X+4.6,X1-0.4]].forEach(([a,b])=>{fy(wy,a-0.04,b+0.04,39,51,NB('#e9e3d6'));fy(wy,a,b,40,50,NB(lit?'#3b4a6a':'#E3ECF4'));
+        for(let x=a+0.5;x<b;x+=0.5)fy(wy,x-0.02,x+0.02,40,50,NB('#e9e3d6'));al(0.5,()=>fy(wy,a,b,47,50,NB('#ffffff')));edge([P(a-0.04,wy,39),P(b+0.04,wy,39),P(b+0.04,wy,51),P(a-0.04,wy,51)]);});
+      ftop(X,Y,X1,wy,top,CAP(SLATE));fx(X1,Y,wy,0,top,shade(WHITE,-38));
+      edge([P(X,wy,0),P(X,wy,top),P(X,Y,top),P(X1,Y,top),P(X1,Y,0),P(X1,wy,0),P(X1,wy,top),P(X,wy,top)]);}});
+
+    // ---- half-height dividers (white, slate cap, frosted glass on top) with what hangs on them, one tile at a time ----
+    const deco={};// tile key -> drawings on that divider tile, after its wall and glass
+    const put=(x,y,f)=>{const k=x+','+Math.min(F-1,Math.floor(y));(deco[k]=deco[k]||[]).push(f);};
+    const divider=(x0,ya,yb)=>{const x1=x0+0.14,h=HT.half,g=HT.glass;
+      box(x0,ya,0.14,yb-ya,0,h-2,WHITE,false,shade(WHITE,-10),shade(WHITE,-24));box(x0-0.01,ya,0.16,yb-ya,h-2,h,CAP(SLATE),false);
+      glass(()=>{fy(yb,x0+0.04,x0+0.1,h,g,NB('#ffffff'));fx(x0+0.1,ya,yb,h,g,NB('#eef3f8'));ftop(x0+0.04,ya,x0+0.1,yb,g,NB('#ffffff'));});
+      fx(x0+0.1,ya,yb,g-1,g,NB('#cfd6df'));fx(x1,ya,yb,0,1.5,shade(WHITE,-34));
+      edge([P(x0,yb,0),P(x0,yb,h),P(x0,ya,h)]);edge([P(x1,ya,h),P(x1,yb,h),P(x1,yb,0)]);edge([P(x0+0.04,ya,g),P(x0+0.1,ya,g),P(x0+0.1,yb,g)],NB('#9aa6b5'));};
+    // a mirror with a warm LED frame on a divider's east face
+    const mirror=(x,ya,yb,za,zb)=>{fx(x,ya,yb,za,zb,LED);fx(x,ya+0.06,yb-0.06,za+1.5,zb-1.5,NB('#CFE0EE'));
+      const n=Math.max(1,Math.round((yb-ya)/0.6));for(let i=0;i<n;i++){const s=ya+0.15+i*(yb-ya)/n;al(0.6,()=>fill([P(x,s,zb-3),P(x,s+0.12,zb-3),P(x,s+0.3,za+3),P(x,s+0.18,za+3)],NB('#ffffff')));}
+      edge([P(x,ya,za),P(x,yb,za),P(x,yb,zb),P(x,ya,zb)]);halo(x+0.3,(ya+yb)/2,(za+zb)/2,8+(yb-ya)*10,9,'#ffe08a',0.28);};
+    const dryer=(x,y)=>{box(x,y-0.12,0.13,0.24,17,24,NB('#fbfbfd'));fx(x+0.13,y-0.06,y+0.06,17.5,18.5,NB('#5b6270'));};
+    ['m','f'].forEach(r=>{const v=L.vanities[r],x=v.x0;
+      put(X+(r==='m'?0:4),v.y1,()=>mirror(x,v.y0+0.05,v.y1-0.05,20,36));put(X+(r==='m'?0:4),v.dryer,()=>dryer(x,v.dryer));});
+    {const m=L.makeup;put(X+4,m.y1,()=>{mirror(m.x0,m.y0+0.08,m.y1-0.08,18,32);});}
+    for(const dx of[0,4])for(let y=Y;y<F;y++){const x0=dx?X+4-0.07:X;
+      items.push({z:x0+y+0.3,f:()=>{divider(x0,y===Y?wy:y,y+1);(deco[(X+dx)+','+y]||[]).forEach(f=>f());}});}
+
+    // ---- knee-high front wall with the two doorways, and the women's room's knee-high east wall ----
+    const knee=(x,y,w,h)=>{box(x,y,w,h,0,HT.knee-1.5,WHITE,false,shade(WHITE,-12),shade(WHITE,-26));box(x,y,w,h,HT.knee-1.5,HT.knee,CAP(SLATE),false);
+      edge([P(x,y,HT.knee),P(x+w,y,HT.knee),P(x+w,y,0),P(x+w,y+h,0),P(x,y+h,0),P(x,y+h,HT.knee)]);};
+    const doorX=[L.rooms.m.door,L.rooms.f.door];
+    for(let x=X;x<X1;x++){if(doorX.some(d=>d[0]===x))continue;const w=Math.min(1,X1-x);items.push({z:x+0.5+F,f:()=>knee(x,F-0.07,w,0.14)});}
+    for(let y=Y;y<F;y++)items.push({z:X1+y+0.4,f:()=>knee(X1-0.12,y===Y?wy:y,0.12,y===F-1?1-0.07:1)});
+    // door frames: two slim posts and a glowing sign box over each doorway (pictogram + NAM / NỮ). The box hangs at
+    // SIGN so it clears the heads of people at the stalls and vanities behind it: on screen a sign at height z on the
+    // front wall covers a person standing at depth y (about 25 px tall) unless z >= 25 + 16 * (front - y).
+    const SIGN=49;
+    ['m','f'].forEach(r=>{const[d0,d1]=L.rooms[r].door,acc=ACC[r];
+      items.push({z:(d0+d1)/2+F,f:()=>{const post=NB('#e9edf2'),yb=F-0.06,h=0.12;
+        box(d0,yb,0.07,h,0,SIGN,post);box(d1-0.07,yb,0.07,h,0,SIGN,post);
+        const sx0=d0-0.1,sx1=d1+0.1,sc=lit?acc:NB(acc);
+        halo((sx0+sx1)/2,F+0.2,SIGN+4,22,10,lit?mix(acc,'#ffffff',0.35):acc,0.35);
+        box(sx0,yb-0.02,sx1-sx0,h+0.04,SIGN,SIGN+9,shade(sc,10),true,sc,shade(sc,-30));
+        const ink=lit?'#ffffff':NB('#ffffff');
+        pix(sx0+0.12,yb+h+0.021,SIGN+8,PERSON[r],ink);
+        const txt=r==='m'?'NAM':'NỮ',{out}=word(txt);
+        out.forEach(({g,x})=>{const[px0,py0]=P(sx0+0.12,yb+h+0.021,SIGN+6+g.up);ctx.save();ctx.translate(Math.round(px0)+6+x,Math.round(py0)+3+x*0.5);ctx.transform(1,0.5,0,1,0,0);ctx.fillStyle=ink;
+          g.rows.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(i,j,1,1);});ctx.restore();});}});});
+
+    // ---- men's room: corner plant, two urinals with frosted privacy screens ----
+    {const[px,py]=L.plants.m;items.push({z:px+py,f:()=>plant(px,py,6,false)});}
+    L.urinals.forEach(ux=>items.push({z:ux+wy+0.3,f:()=>{const w=NB('#fcfdff');
+      box(ux-0.18,wy,0.36,0.28,7,18,w);fy(wy+0.28,ux-0.11,ux+0.11,9,15.5,NB('#dfe5ec'));box(ux-0.03,wy,0.06,0.06,18,24,CHROME,false);}}));
+    L.urinalGlass.forEach(gx=>items.push({z:gx+wy+0.32,f:()=>{glass(()=>{fx(gx+0.03,wy,wy+0.6,6,30,NB('#f4f8fc'));fy(wy+0.6,gx,gx+0.03,6,30,NB('#ffffff'));});
+      edge([P(gx+0.03,wy+0.6,6),P(gx+0.03,wy+0.6,30),P(gx+0.03,wy,30)],NB('#9aa6b5'));}}));
+
+    // ---- stalls: HPL panels raised off the floor, wall-hung toilets with flush plates, doors swung open inward ----
+    L.stalls.forEach((s,i)=>{const acc=NB(ACC[s.room]),room=L.rooms[s.room],first=!i||L.stalls[i-1].room!==s.room;
+      // sorted by the stall's front-left corner, so someone washing in front of the first women's stall stays in front of it
+      items.push({z:s.x0+s.y1+0.1,f:()=>{
+        const cx=(s.x0+s.x1)/2,y1=s.y1,zb=3,zt=32,shut=occupied.has(i),xr=Math.min(s.x1,room.x1-0.08)-0.05;
+        fy(wy+0.005,cx-0.09,cx+0.09,19,23,NB('#e9edf2'));fy(wy+0.01,cx-0.02,cx+0.02,20,22,CHROME);
+        box(cx-0.17,wy,0.34,0.44,6,11,NB('#fbfcfe'));ftop(cx-0.13,wy+0.06,cx+0.13,wy+0.4,11.01,NB('#e6ebf1'));
+        if(s.room==='f'){box(s.x0+0.08,wy+0.8,0.15,0.15,0,5,NB('#f0eff2'),true);box(s.x0+0.07,wy+0.79,0.17,0.17,5,6,NB('#e8a7bf'),false);}
+        const panel=x=>{box(x,wy,0.05,y1-wy,zb,zt,shade(acc,18),true,acc,shade(acc,-26));box(x,y1-0.06,0.05,0.05,0,zb,CHROME,false);};
+        if(first)panel(s.x0);
+        const hx=s.x0+0.12,dw=(s.x1-s.x0)-0.24;
+        if(!shut){const ex=hx+dw*Math.cos(1.42),ey=y1-dw*Math.sin(1.42),dc=shade(acc,4);
+          fill([P(hx,y1,zb),P(ex,ey,zb),P(ex,ey,zt),P(hx,y1,zt)],dc);fill([P(hx,y1,zt),P(ex,ey,zt),P(ex+0.04,ey+0.02,zt),P(hx+0.04,y1,zt)],shade(acc,24));
+          edge([P(hx,y1,zb),P(ex,ey,zb),P(ex,ey,zt),P(hx,y1,zt)]);}
+        panel(xr);
+        box(s.x0,y1-0.04,0.12,0.04,zb,zt,shade(acc,18),true,acc);box(s.x1-0.12,y1-0.04,0.12,0.04,zb,zt,shade(acc,18),true,acc);
+        box(s.x0,y1-0.04,s.x1-s.x0,0.04,zt,zt+1.2,CHROME,false);
+        if(shut){box(hx,y1-0.035,dw,0.03,zb,zt,shade(acc,18),true,shade(acc,6));fy(y1+0.001,s.x1-0.22,s.x1-0.17,17,18,CHROME);}
+        fy(y1+0.002,s.x1-0.1,s.x1-0.04,21,23,shut?'#ff4d5a':NB('#4fd17a'));}});});
+
+    // ---- vanities: wooden cabinet, dark stone top, two white basins with chrome taps; a pedal bin under the dryer ----
+    ['m','f'].forEach(r=>{const v=L.vanities[r];
+      items.push({z:(r==='m'?X:X+4)+F-1+0.45,f:()=>{const w=NB(WOOD),len=v.y1-v.y0;
+        box(v.x0,v.y0,v.x1-v.x0,len,0,13,w,true,shade(w,-16),shade(w,-30));
+        for(let k=1;k<4;k++)fx(v.x1+0.002,v.y0+len*k/4,v.y0+len*k/4+0.02,1,12,shade(w,-48));
+        for(let k=0;k<4;k++)fx(v.x1+0.003,v.y0+len*(k+0.5)/4-0.05,v.y0+len*(k+0.5)/4+0.05,10,10.8,CHROME);
+        box(v.x0-0.02,v.y0-0.03,v.x1-v.x0+0.06,len+0.06,13,15,NB(SLATE),true);
+        v.basins.forEach(b=>{ftop(v.x0+0.14,b-0.22,v.x1-0.06,b+0.22,15.01,NB('#fbfcfe'));ftop(v.x0+0.2,b-0.15,v.x1-0.12,b+0.15,15.02,NB('#d8dee6'));
+          box(v.x0+0.05,b-0.03,0.06,0.06,15,20,CHROME,false);box(v.x0+0.05,b-0.03,0.16,0.05,19,20,CHROME,false);});}});
+      items.push({z:v.x0+0.2+v.dryer,f:()=>{box(v.x0+0.07,v.dryer-0.09,0.18,0.18,0,6,NB('#b9c1cb'));box(v.x0+0.07,v.dryer-0.09,0.18,0.18,6,6.8,NB('#9aa3ae'),false);}});});
+
+    // ---- women's room: makeup corner (counter, LED mirror, pink stool), plant ----
+    {const m=L.makeup;items.push({z:X+4+Y+0.4,f:()=>{const w=NB(WOOD);box(m.x0,m.y0,m.x1-m.x0,m.y1-m.y0,0,12,w,true,shade(w,-16),shade(w,-30));
+      box(m.x0-0.02,m.y0-0.02,m.x1-m.x0+0.04,m.y1-m.y0+0.04,12,13.5,NB('#fbfcfe'));}});
+      const[sx,sy]=m.stool;items.push({z:sx+sy,f:()=>{box(sx-0.02,sy-0.02,0.04,0.04,0,6,CHROME,false);const[px,py]=P(sx,sy,8),pk=NB('#F08DB0');
+        ctx.fillStyle=shade(pk,-30);ctx.beginPath();ctx.ellipse(px,py+1,5,2.5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=pk;ctx.beginPath();ctx.ellipse(px,py,5,2.5,0,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle=OL;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(px,py+0.5,5.5,3,0,0,Math.PI*2);ctx.stroke();}});}
+    {const[px,py]=L.plants.f;items.push({z:px+py,f:()=>plant(px,py,6,false)});}
+
+    // ---- lobby: wayfinding totem, hand-sanitiser stand between the doors, long bench, big plant ----
+    {const[tx,ty]=L.lobby.totem;items.push({z:tx+ty,f:()=>{const d=NB('#2B2D42');box(tx-0.12,ty-0.1,0.24,0.2,0,36,d,true,shade(d,8),shade(d,-6));
+      [[ACC.m,27],[ACC.f,21]].forEach(([c,z])=>{const cc=lit?c:NB(c);fy(ty+0.1,tx-0.12,tx+0.12,z,z+3,cc);fx(tx+0.12,ty-0.1,ty+0.1,z,z+3,shade(cc,-20));});
+      pix(tx-0.08,ty+0.1,33,['..#..','.###.','#####'],NB('#ffffff'));}});}
+    {const[sx,sy]=L.lobby.sanitizer;items.push({z:sx+sy,f:()=>{box(sx-0.09,sy-0.09,0.18,0.18,0,1,CHROME);box(sx-0.02,sy-0.02,0.04,0.04,1,20,CHROME,false);
+      box(sx-0.08,sy-0.07,0.16,0.14,20,28,NB('#fbfcfe'));fy(sy+0.07,sx-0.05,sx+0.05,23,26,NB('#2fb7a0'));box(sx-0.06,sy-0.02,0.12,0.12,13,14,NB('#9aa3ae'),false);}});}
+    {const b=L.lobby.bench;items.push({z:(b.x0+b.x1)/2+(b.y0+b.y1)/2,f:()=>{const w=NB(WOOD),leg=NB('#3d3a40');
+      for(const lx of[b.x0+0.1,b.x1-0.2])box(lx,b.y0+0.05,0.1,b.y1-b.y0-0.1,0,8,leg,false);
+      box(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0,8,10.5,w,true,shade(w,-16),shade(w,-30));
+      for(let y=b.y0+0.1;y<b.y1-0.05;y+=0.1)ftop(b.x0,y,b.x1,y+0.015,10.51,shade(w,-20));}});}
+    {const[px,py]=L.plants.lobby;items.push({z:px+py,f:()=>plant(px,py,9,true)});}
+
+    // ---- floating tags, in the page's pixel font: WC NAM (blue), WC NỮ (pink), SẢNH CHUNG (dark); labels, so they
+    // stay readable after dark ----
+    const tag=(x,y,z,s,col)=>{const{out,w}=word(s),[cx,cy]=P(x,y,z),x0=Math.round(cx-w/2)-3,y0=Math.round(cy)-12,bw=w+6,bh=12;
+      ctx.fillStyle='#ffffff';ctx.fillRect(x0,y0,bw,bh);ctx.strokeStyle='#2B2D42';ctx.lineWidth=1;ctx.strokeRect(x0+0.5,y0+0.5,bw-1,bh-1);
+      ctx.fillStyle='#2B2D42';ctx.fillRect(Math.round(cx)-1,y0+bh,3,1);ctx.fillRect(Math.round(cx),y0+bh+1,1,1);
+      ctx.fillStyle=col;out.forEach(({g,x:dx})=>g.rows.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(x0+3+dx+i,y0+5+j-g.up,1,1);}));};
+    items.push({z:1e6,f:()=>{tag(X+2,Y+1.5,64,'WC NAM',ACC.m);tag(X+5.8,Y+1.5,64,'WC NỮ',ACC.f);tag(X+3.8,Y1-0.2,30,'SẢNH CHUNG','#2B2D42');}});
   }
   drawDesk(G,d,i){
     const{ctx,poly,box,rect,t,df}=G,{gx,gy}=d,owner=this.agents.find(a=>a.desk===i&&!a.leaving&&!a.parent);
