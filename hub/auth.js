@@ -79,10 +79,10 @@ function routes(ctx) {
     notify({ userId, tokenHash, reason });
   }
   function endSessionsForUser(userId, reason = 'ended') {
-    const rows = db.raw.prepare('SELECT token_hash FROM sessions WHERE user_id=?').all(userId);
+    const tokens = db.sessionTokensForUser(userId);
     db.deleteSessionsForUser(userId);
-    for (const r of rows) notify({ userId, tokenHash: r.token_hash, reason });
-    return rows.length;
+    for (const tokenHash of tokens) notify({ userId, tokenHash, reason });
+    return tokens.length;
   }
 
   function requireSession(req) {
@@ -112,12 +112,10 @@ function routes(ctx) {
   // Creates/updates the user, refuses banned ones, starts a session and redirects home.
   function finishLogin(res, who) {
     const now = deps.now();
-    const isOwner = config.ownerEmails.includes(who.email);
-    let user = db.upsertUser({ googleSub: who.sub, email: who.email, name: who.name, role: isOwner ? 'owner' : 'member', now });
+    const user = db.upsertUser({ googleSub: who.sub, email: who.email, name: who.name, now });
     if (user.banned_at != null) {
       return send(res, 403, 'This account has been blocked.', { 'Content-Type': 'text/plain; charset=utf-8', ...noStore });
     }
-    if (isOwner && user.role !== 'owner') { db.setUserRole(user.id, 'owner'); user = db.getUserById(user.id); }
     const token = rand();
     db.createSession({ tokenHash: sha256hex(token), userId: user.id, csrf: rand(), now, expiresAt: now + SESSION_TTL_MS });
     send(res, 302, '', {

@@ -155,7 +155,10 @@ function routes(ctx) {
       if (action === 'lookup') return html(res, 200, devicePage({ csrf, device }));
       if (action === 'deny') { db.denyDeviceCode(row.code_hash); return html(res, 200, devicePage({ csrf, done: 'denied' })); }
       ensureIsland(s.user, now); // C2: the island appears with the first approved device
-      db.approveDeviceCode(row.code_hash, s.user.id);
+      if (!db.approveDeviceCode(row.code_hash, s.user.id, now)) {
+        recordWrong(key, now);
+        return html(res, 400, devicePage({ csrf, error: 'Mã không đúng hoặc đã hết hạn.' }));
+      }
       html(res, 200, devicePage({ csrf, done: 'approved' }));
     },
   });

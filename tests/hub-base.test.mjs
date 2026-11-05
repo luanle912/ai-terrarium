@@ -64,19 +64,16 @@ test('db file is 0600 and parent dir is created', () => {
   const fk = db.raw.prepare('PRAGMA foreign_keys').get();
   assert.equal(Object.values(fk)[0], 1);
   const tables = db.raw.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
-  assert.ok(!tables.includes('audit'));
-  for (const t of ['users', 'islands', 'devices', 'device_codes', 'sessions', 'login_states']) assert.ok(tables.includes(t), t);
+  for (const t of ['users', 'islands', 'devices', 'device_codes', 'sessions', 'login_states', 'audit']) assert.ok(tables.includes(t), t);
   db.close();
 });
 
 test('db helpers round-trip', () => {
   const db = openDb(path.join(tmp(), 'h.sqlite'));
-  const u = db.upsertUser({ googleSub: 's1', email: 'a@newera.inc', name: 'A', role: 'owner', now: 1000 });
-  assert.equal(u.role, 'owner');
-  const u2 = db.upsertUser({ googleSub: 's1', email: 'a2@newera.inc', name: 'A2', role: 'member', now: 2000 });
+  const u = db.upsertUser({ googleSub: 's1', email: 'a@newera.inc', name: 'A', now: 1000 });
+  const u2 = db.upsertUser({ googleSub: 's1', email: 'a2@newera.inc', name: 'A2', now: 2000 });
   assert.equal(u2.id, u.id);
   assert.equal(u2.email, 'a2@newera.inc');
-  assert.equal(u2.role, 'owner'); // role is only set on insert
   assert.equal(u2.last_login_at, 2000);
   assert.equal(db.getUserBySub('s1').id, u.id);
 
@@ -91,7 +88,7 @@ test('db helpers round-trip', () => {
 
   db.createDeviceCode({ codeHash: 'ch', userCode: 'ABCD-EFGH', name: 'mac', now: 1, expiresAt: 50, ip: '1.1.1.1' });
   assert.equal(db.getDeviceCodeByUserCode('ABCD-EFGH').code_hash, 'ch');
-  assert.equal(db.approveDeviceCode('ch', u.id), true);
+  assert.equal(db.approveDeviceCode('ch', u.id, 10), true);
   assert.equal(db.getDeviceCodeByHash('ch').approved_user_id, u.id);
 
   db.createDevice({ id: 'd1', userId: u.id, name: 'mac', tokenHash: 'dth', now: 3 });
