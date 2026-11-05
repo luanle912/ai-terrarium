@@ -2669,9 +2669,15 @@ const hash=(x,y,s)=>{const v=Math.sin(x*127.1+y*311.7+s*74.7)*43758.5453;return 
 // LAWN is the grass in front of the office (where outdoor spots go); LAWN_BACK the thin strip behind its two walls.
 const LAWN=6,LAWN_BACK=2,WATERFALL_LEN=140,DECOR_TOP=24;
 
-// east-back runs along the pantry's east side and holds the restroom block (raised to the office floor); east-front,
-// further down the east lawn beside the garden path, holds the smoking corner; south-left is still free.
-const outdoorSpots=(W,H)=>[{id:'east-front',x:W+1,y:H-5,w:4,h:4},{id:'south-left',x:5,y:H+1,w:4,h:3},{id:'east-back',x:W,y:2,w:8,h:5}];
+// east-back runs along the pantry's east side, flush with the office's back wall, and holds the restroom block (raised
+// to the office floor); east-front, right beside the block's east side, holds the smoking corner; south-left is free.
+const outdoorSpots=(W,H)=>[{id:'east-front',x:W+6,y:4,w:4,h:4},{id:'south-left',x:5,y:H+1,w:4,h:3},{id:'east-back',x:W,y:0,w:6,h:7}];
+// Land added to the squircle on the north-east, so the restroom block can sit flush with the office's back wall
+// (rows -1..0) and the smoking corner can stand beside it (rows 3..10). Every added tile keeps (x+1) - y <= W+6: the
+// island's right-most screen corner stays where it was, so the scene frame (sceneFrame) and every pixel west of the
+// annex are unchanged. Rows are [y, first x, last x], relative to the office (x from W, y from 0).
+const ANNEX_LAND=[[-1,2,4],[0,5,5],[3,8,8],[4,8,9],[5,8,10],[6,8,10],[7,8,10],[8,8,10],[9,8,9],[10,8,8]];
+const annexLand=W=>ANNEX_LAND.flatMap(([y,a,b])=>Array.from({length:b-a+1},(_,i)=>[W+a+i,y]));
 
 function buildIsland({W,H,lawn=LAWN,back=LAWN_BACK}){
   const cx=W/2,cy=H/2,x0=-back-3,x1=W+lawn+3,y0=-back-3,y1=H+lawn+3;
@@ -2685,11 +2691,17 @@ function buildIsland({W,H,lawn=LAWN,back=LAWN_BACK}){
     const wave=0.05+0.07*Math.sin(a*2+0.6)+0.05*Math.sin(a*3+2.1)+0.03*Math.sin(a*5+4.0);
     if(n<=1+wave||(x>=-1&&x<=W&&y>=-1&&y<=H))cells.add(key(x,y));
   }
-  const count=(x,y)=>N4.filter(([a,b])=>cells.has(key(x+a,y+b))).length;
   const pos=k=>k.split(',').map(Number);
-  const shore=new Map(),queue=[];
-  for(const k of cells){const[x,y]=pos(k);if(count(x,y)<4){shore.set(k,0);queue.push([x,y]);}}
-  for(let i=0;i<queue.length;i++){const[x,y]=queue[i],d=shore.get(key(x,y));for(const[a,b]of N4){const k=key(x+a,y+b);if(cells.has(k)&&!shore.has(k)){shore.set(k,d+1);queue.push([x+a,y+b]);}}}
+  // Distance of every cell to the shore, which sets how deep its underside hangs.
+  const shoreOf=set=>{const count=(x,y)=>N4.filter(([a,b])=>set.has(key(x+a,y+b))).length,out=new Map(),queue=[];
+    for(const k of set){const[x,y]=pos(k);if(count(x,y)<4){out.set(k,0);queue.push([x,y]);}}
+    for(let i=0;i<queue.length;i++){const[x,y]=queue[i],d=out.get(key(x,y));for(const[a,b]of N4){const k=key(x+a,y+b);if(set.has(k)&&!out.has(k)){out.set(k,d+1);queue.push([x+a,y+b]);}}}
+    return out;};
+  // The annex land keeps the underside of the island it was added to: cells that were there before keep their depth,
+  // the added cells hang like any other shore cell. Otherwise the whole south-east underside would grow deeper.
+  const before=shoreOf(cells);
+  for(const[x,y]of annexLand(W))cells.add(key(x,y));
+  const after=shoreOf(cells),shore=new Map([...cells].map(k=>[k,before.has(k)?before.get(k):after.get(k)]));
   const list=[...cells].map(k=>{const[x,y]=pos(k),s=shore.get(k);return{x,y,shore:s,d:8+Math.pow(Math.min(s,11),1.55)*6+Math.floor(hash(x,y,1)*5)};})
     .sort((a,b)=>(a.x+a.y)-(b.x+b.y)||a.x-b.x);
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
@@ -2726,6 +2738,8 @@ function lawnPaths(W,H,st,pondSpots){
   const legs=[
     {at:'south',pts:[[sx,H],[sx,row],[bath.x,row],[bath.x,bath.y-1]]},
     {at:'east',pts:[[e.x,e.y+e.len-1],[e.x,row]]},
+    // along the front of the restroom block to the smoking corner's entrance beside it
+    {at:'east',pts:[[e.x,e.y],[W+5,e.y]]},
   ];
   const cells=new Set();
   for(const{pts}of legs)for(let i=1;i<pts.length;i++){
@@ -2970,7 +2984,7 @@ function skyColors(df,hour,fx){
   return out;
 }
 
-globalThis.SkyLogic={stepSnow,stairs,canCross,lawnWalk,lawnPaths,cheapestPath,GRASS_COST,groundZ,STAIR_RUN,flashLevel,PREVIEW_MS,startPreview,stepPreview,LAWN_BACK,mixHex,skyColors,WEATHER_KEY,loadWeatherSettings,saveWeatherSettings,geocodeUrl,forecastUrl,fetchRealWeather,LAWN,WATERFALL_LEN,DECOR_TOP,outdoorSpots,buildIsland,sceneFrame,
+globalThis.SkyLogic={annexLand,stepSnow,stairs,canCross,lawnWalk,lawnPaths,cheapestPath,GRASS_COST,groundZ,STAIR_RUN,flashLevel,PREVIEW_MS,startPreview,stepPreview,LAWN_BACK,mixHex,skyColors,WEATHER_KEY,loadWeatherSettings,saveWeatherSettings,geocodeUrl,forecastUrl,fetchRealWeather,LAWN,WATERFALL_LEN,DECOR_TOP,outdoorSpots,buildIsland,sceneFrame,
   WEATHERS,WEIGHTS,FX,pickNextWeather,changeDelayMs,transitionMs,wmoToWeather,initialWeather,weatherFx,startTransition,stepRandom,snowCover,lightningDelayMs,lightningFlashMs};
 })();
 </script>
@@ -4122,43 +4136,46 @@ globalThis.SmokeLogic={layout,cycle,PERIOD};
 (function(){
 'use strict';
 const k=(x,y)=>x+','+y;
-// Laid out from the corner of the outdoor spot 'east-back' (SkyLogic.outdoorSpots, 8×5 tiles from x = W, y = 2).
-// One tile is about 0.7 m (a desk is 2×1 tiles) and `wall` is the office's full wall height (3 tiles). Left to right
-// along the back wall: the men's room (x 0..4 of the spot) and the women's room (x 4..7.6); the front two rows are the
-// lobby, open to the pantry on the west. The floor stops 0.4 tile short of the spot's east edge, so a strip of grass is
-// left before the cliff.
+// Laid out from the corner of the outdoor spot 'east-back' (SkyLogic.outdoorSpots, 6×7 tiles from x = W, y = 0). One
+// tile is about 0.7 m (a desk is 2×1 tiles) and `wall` is the office's full wall height (3 tiles). The back wall runs on
+// the office's own back-wall line (inner face y = 0, BACK thick behind it), so the block continues the pantry without a
+// step. Left to right: the men's room (3 tiles) and the women's room (3 tiles), five rows deep; the front two rows are the
+// lobby, open to the pantry on the west.
 function layout(zone,wall){
-  const X=zone.x,Y=zone.y,x1=X+7.6,y1=Y+5,front=Y+3;
-  const heights={full:wall,half:Math.round(wall/2),glass:Math.round(wall*0.82),knee:10};
-  const rooms={m:{x0:X,x1:X+4,door:[X+1,X+2],accent:'#173DC9'},f:{x0:X+4,x1,door:[X+6,X+7],accent:'#D9467A'}};
-  // The back wall is BACK thick and stands on the floor's back edge, so it never hangs past the island's edge.
-  const BACK=0.25,wy=Y+BACK;
-  const stall=(room,x0,x1)=>({room,x0,x1,y0:wy,y1:wy+1.35});
-  const stalls=[stall('m',X+2,X+3),stall('m',X+3,X+4),stall('f',X+5,X+5.87),stall('f',X+5.87,X+6.73),stall('f',X+6.73,x1)];
-  // The women's vanity sits further forward than the men's: its first basin must be washed at in front of the first
-  // stall (whose side panel stands right beside it), and the hand dryer fits between it and the makeup counter.
+  const X=zone.x,Y=zone.y,x1=X+zone.w,y1=Y+zone.h,front=Y+5,BACK=0.35,T=0.07;
+  // Solid room walls stand above a person (about 25 px) but well under the full wall, so the rooms read from the 3/4
+  // view like the office's own rooms; stall panels hide whoever is inside once the door shuts.
+  const heights={full:wall,room:32,stall:28,stallFoot:3,knee:10};
+  const rooms={m:{x0:X,x1:X+3,door:[X+1,X+2],accent:'#173DC9'},f:{x0:X+3,x1,door:[X+4,X+5],accent:'#D9467A'}};
+  const walls={pantry:{x:X,t:0.14},split:{x:X+3-T,t:2*T},east:{x:x1-0.12,t:0.12},front:{y:front-T,t:2*T}};
+  const stall=(room,x0,x1)=>({room,x0,x1,y0:Y,y1:Y+1.35});
+  const fw=(X+5.88-(X+3+T))/3,f0=X+3+T;
+  const stalls=[stall('m',X+1.08,X+2),stall('m',X+2,X+3-T),stall('f',f0,f0+fw),stall('f',f0+fw,f0+2*fw),stall('f',f0+2*fw,X+5.88)];
   const vanity=(room,x0,y0,y1,basins,dryer)=>({room,x0,x1:x0+0.56,y0,y1,basins,dryer});
-  const vanities={m:vanity('m',X+0.14,Y+1.1,Y+2.7,[Y+1.5,Y+2.3],Y+2.85),f:vanity('f',X+4.07,Y+1.3,Y+2.85,[Y+1.72,Y+2.45],Y+1.15)};
-  const urinals=[X+0.85,X+1.6],urinalGlass=[X+0.55,X+1.22];
-  const makeup={x0:X+4.07,x1:X+4.55,y0:wy+0.05,y1:wy+0.75,stool:[X+4.8,wy+0.4]};
-  const plants={m:[X+0.38,wy+0.22],f:[x1-0.4,Y+2.55],lobby:[x1-0.4,Y+4.55]};
-  const lobby={rug:{x0:X+0.3,x1:x1-0.4,y0:Y+3.35,y1:Y+3.95},totem:[X+0.3,Y+4.65],sanitizer:[X+3.5,Y+3.3],
-    bench:{x0:X+2.2,x1:X+4.8,y0:Y+4.3,y1:Y+4.7}};
-  // Tiles: the 8×5 floor, minus what furniture stands on. The doorways are tiles (X+1, front-1) and (X+6, front-1).
-  const floor=[];for(let y=Y;y<Y+5;y++)for(let x=X;x<X+8;x++)floor.push(k(x,y));
-  const taken=new Set([[0,0],[1,0],[2,0],[3,0],[0,1],[0,2],[4,0],[5,0],[6,0],[7,0],[4,1],[4,2],[7,2],[0,4],[2,4],[3,4],[4,4],[7,4]].map(([dx,dy])=>k(X+dx,Y+dy)));
+  const vanities={m:vanity('m',X+0.14,Y+3.15,Y+4.75,[Y+3.55,Y+4.35],null),f:vanity('f',X+3+T,Y+2.95,Y+4.55,[Y+3.35,Y+4.15],Y+4.75)};
+  // urinals hang on the pantry wall (it is the one wall of the men's room that faces the camera), with solid screens
+  const urinals=[Y+1.75,Y+2.5],screens=[Y+2.12,Y+2.88];
+  const makeup={x0:X+3+T,x1:X+3.55,y0:Y+1.95,y1:Y+2.6,stool:[X+3.82,Y+2.28]};
+  const plants={m:[X+0.4,Y+0.4],f:[X+5.55,Y+4.55],lobby:[X+5.55,Y+5.55]};
+  const dryerM=[X+0.85,Y],bin=[X+2.75,Y+4.7];
+  const lobby={totem:[X+0.25,Y+6.75],sanitizer:[X+2.2,Y+5.25],
+    bench:{x0:X+2.45,x1:X+3.85,y0:Y+5.1,y1:Y+5.45},label:[X+0.75,Y+6.25]};
+  // Tiles: the 6×7 floor, minus what furniture stands on. The doorways are tiles (X+1, front-1) and (X+4, front-1).
+  const floor=[];for(let y=Y;y<y1;y++)for(let x=X;x<x1;x++)floor.push(k(x,y));
+  const taken=new Set([[0,0],[1,0],[2,0],[0,1],[0,2],[0,3],[0,4],[2,4],[3,0],[4,0],[5,0],[3,2],[3,3],[3,4],[5,4],
+    [2,5],[3,5],[5,5],[0,6]].map(([dx,dy])=>k(X+dx,Y+dy)));
   const walk=floor.filter(c=>!taken.has(c));
-  // Walls as blocked steps (both ways): the half-height dividers at x = X and x = X+4 along the rooms, and the knee-high
-  // front wall along y = front except at the two doorways. The back and east sides need none: nobody steps from the
-  // floor onto the lawn at all (see step()).
+  // Walls as blocked steps (both ways): the room walls at x = X (the pantry side) and x = X+3 along the rooms, and the
+  // knee-high front wall along y = front except at the two doorways. The back and east sides need none: nobody steps
+  // from the floor onto the lawn at all (see step()).
   const shut=[],cut=(a,b)=>shut.push(a+'|'+b,b+'|'+a);
-  for(let y=Y;y<front;y++){cut(k(X-1,y),k(X,y));cut(k(X+3,y),k(X+4,y));}
-  for(let x=X;x<X+8;x++)if(x!==rooms.m.door[0]&&x!==rooms.f.door[0])cut(k(x,front-1),k(x,front));
+  for(let y=Y;y<front;y++){cut(k(X-1,y),k(X,y));cut(k(X+2,y),k(X+3,y));}
+  for(let x=X;x<x1;x++)if(x!==rooms.m.door[0]&&x!==rooms.f.door[0])cut(k(x,front-1),k(x,front));
   // One idle spot per stall: standing in front of its door; afterwards the hands are washed at the room's vanity.
   const wash=(room,i)=>{const v=vanities[room],y=v.basins[i%2],x=v.x1+0.45;return{tile:[Math.floor(x),Math.floor(y)],pt:[x,y]};};
   const spots=stalls.map((s,i)=>{const n=stalls.filter((o,j)=>j<i&&o.room===s.room).length,cx=(s.x0+s.x1)/2;
-    return{act:'wc',room:s.room,stall:i,tile:[Math.floor(cx),Y+1],pt:[cx,Y+1.88],front:false,wash:wash(s.room,n)};});
-  return{x0:X,y0:Y,x1,y1,front,back:BACK,wy,heights,rooms,stalls,vanities,urinals,urinalGlass,makeup,plants,lobby,
+    return{act:'wc',room:s.room,stall:i,tile:[Math.floor(cx),Y+1],pt:[cx,Y+1.63],front:false,wash:wash(s.room,n)};});
+  return{x0:X,y0:Y,x1,y1,front,back:BACK,wy:Y,heights,rooms,walls,stalls,vanities,urinals,screens,makeup,plants,dryerM,bin,lobby,
     floor,floorSet:new Set(floor),walk,shut,spots};
 }
 // Is a point (world tiles) on the block's raised floor?
@@ -4211,9 +4228,10 @@ const P=(x,y,z=0)=>PG(x,y,z+FLOOR_Z);
 const STAIRS=SkyLogic.stairs(W,H),LAWN_WALK=SkyLogic.lawnWalk(ISLAND,W,H);
 // The restroom block beside the pantry is raised to the office floor too.
 const PA=(x,y,z=0)=>PG(x,y,z+(RestroomLogic.onFloor(WC,x,y)?FLOOR_Z:SkyLogic.groundZ(x,y,W,H,STAIRS,FLOOR_Z)));
-// The smoking corner fills the east-front outdoor spot, down the east lawn beside the garden path. Only its planted
-// trough is taken off the walkable lawn: seats, the ash bin and the posts are thin enough to step past, and an agent's
-// own spot must stay walkable to path from it. Its pad is entered only through the entrance (SMOKE.shut, added to EDGE
+// The smoking corner fills the east-front outdoor spot, right beside the restroom block's east side, at the end of the
+// garden path that runs along the block's front. Only its planted trough (which faces the block) is taken off the
+// walkable lawn: seats, the ash bin and the posts are thin enough to step past, and an agent's own spot must stay
+// walkable to path from it. Its pad is entered only through the entrance (SMOKE.shut, added to EDGE
 // below), so nobody climbs over the bench back on the way in from the stairs.
 const SMOKE=SmokeLogic.layout(ISLAND.spots.find(s=>s.id==='east-front'));
 SMOKE.blocked.forEach(k=>LAWN_WALK.delete(k));
@@ -4308,6 +4326,9 @@ const greyHex=(hh,sat,bri)=>{if(!hh||hh[0]!=='#'||hh.length!==7)return hh;const 
 const VACANT_CACHE=new Map();
 const vacantTheme=th=>{const key=JSON.stringify(th);let v=VACANT_CACHE.get(key);if(v)return v;const sat=th.stroke?0.9:0.85,bri=th.stroke?1.08:0.7;v={};for(const k in th)v[k]=typeof th[k]==='string'?greyHex(th[k],sat,bri):th[k];v._metal=greyHex(th.stroke?'#ffffff':'#2d3142',sat,bri);v._mouse=greyHex(th.stroke?'#ffffff':'#d9dbe2',sat,bri);if(VACANT_CACHE.size>64)VACANT_CACHE.clear();VACANT_CACHE.set(key,v);return v;};
 const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','·':'000000010000000','/':'001001010100100','%':'101001010100101','-':'000000111000000','_':'000000000000111','.':'000000000000010'};
+// Rows of a 3×5 FONT letter for the restroom's sign and floor paint, plus Ữ and Ả with their marks above (7 rows).
+const RESTROOM_GLYPH=ch=>{if(ch==='Ữ')return['.##.','##..','#.##','#.#.','#.#.','#.#.','###.'];if(ch==='Ả')return['##.','.#.','.#.','#.#','###','#.#','#.#'];
+  const f=FONT[ch];if(!f)return[];const r=[];for(let i=0;i<5;i++)r.push(f.slice(i*3,i*3+3).replace(/1/g,'#').replace(/0/g,'.'));return r;};
 function text3(ctx,str,x,y,col){ctx.fillStyle=col;x=Math.round(x);y=Math.round(y);[...String(str).toUpperCase()].forEach((ch,i)=>{const f=FONT[ch];if(!f)return;for(let b=0;b<15;b++)if(f[b]==='1')ctx.fillRect(x+i*4+(b%3),y+Math.floor(b/3),1,1);});}
 const PANTS=['#2d3142','#3b4a6b','#4a3b2f','#22303a','#5a5f73'];
 const pick=a=>a[Math.floor(Math.random()*a.length)];
@@ -4882,8 +4903,8 @@ class ClaudeOffice extends React.Component{
       }});
     });
   }
-  // Smoking corner down the east lawn (SmokeLogic.layout): a stone pad, a planted trough screening it from the
-  // pantry, a bench under a vine-covered cantilever pergola, an ash bin, and a light, an extinguisher and a sign by the
+  // Smoking corner beside the restroom block (SmokeLogic.layout): a stone pad, a planted trough screening it from the
+  // block, a bench under a vine-covered cantilever pergola, an ash bin, and a light, an extinguisher and a sign by the
   // entrance. It all stands on the grass, so it is drawn with PG (P is lifted by the plinth) and its colours go through
   // night() and the snow cover like the rest of the island.
   smokingItems(G,items,snow){
@@ -4899,7 +4920,7 @@ class ClaudeOffice extends React.Component{
       for(let y=0;y<4;y+=0.5)for(let x=0;x<4;x+=0.5)poly([PG(X+x+0.04,Y+y+0.04,0.6),PG(X+x+0.46,Y+y+0.04,0.6),PG(X+x+0.46,Y+y+0.46,0.6),PG(X+x+0.04,Y+y+0.46,0.6)],SN((x+y)*2%2?'#c9c3b8':'#bdb6aa',0.8),null);
       // after dark the entrance light leaves a warm pool on the stones, under everyone standing there
       if(df<0.6){const[lx,ly]=PG(X+0.4,Y+3.8,0.6);ctx.globalAlpha=0.22*(1-df/0.6);ctx.fillStyle='#ffd98a';ctx.beginPath();ctx.ellipse(lx,ly,18,9,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}}});
-    // The planted trough on the side facing the pantry, about 1.2 m tall: it screens the view and breaks the drift of
+    // The planted trough on the side facing the restroom block, about 1.2 m tall: it screens the view and breaks the drift of
     // smoke. One item per tile so it sorts between people on the lawn behind it and people in the corner.
     [0,1,2].forEach(r=>items.push({z:Z+1.8+r,f:()=>{const y0=Y+(r===0?0.1:r),y1=Y+(r===2?2.9:r+1);
       gbox(X+0.1,y0,0.45,y1-y0,0,5,SN('#b9b2a3',0.6));
@@ -4945,198 +4966,151 @@ class ClaudeOffice extends React.Component{
       const[sx,sy]=PG(X+1.75,Y+3.7,19.5);ctx.save();ctx.translate(Math.round(sx),Math.round(sy));ctx.transform(1,0.5,0,1,0,0);
       ctx.fillStyle=N('#ffffff');ctx.fillRect(2,4,6,1);ctx.fillRect(3,2,1,1);ctx.fillRect(4,1,1,1);ctx.fillRect(5,2,1,1);ctx.fillStyle='#ff9a3d';ctx.fillRect(8,4,1,1);ctx.restore();}});
   }
-  // The restroom block beside the pantry (RestroomLogic.layout, spec "Bản 2"): an open-top cutaway on the office floor
-  // level. Left to right along a full-height tiled back wall: a half-height divider with frosted glass, the men's room
-  // (blue), another divider, the women's room (pink); knee-high front walls with two doorways under glowing signs, and a
-  // wood-floored lobby open to the pantry. Flat three-face shading (top lightest, left mid, right darkest) with dark 1px
-  // outlines. Slab, floor and rug are drawn at once (nothing on the block stands under them); walls and fixtures go into
-  // `items` by depth, walls in one-tile pieces so people sort correctly in front of and behind them.
+  // The restroom block beside the pantry (RestroomLogic.layout, spec "Bản 3"): an open-top cutaway on the office floor
+  // level that continues the office. Nothing here has a look of its own: the back wall is the office back wall, the
+  // room walls are office walls (solid, 32 px: above a person, under the full wall), the floors are the pantry's tiles
+  // and planks, the fixtures are drawn with the pantry's kit and colours (cabinets, worktop, steel sinks, white pots,
+  // the bar stool), the bench is the smoking corner's, the room signs are neon boards like CAFE and the lobby name is
+  // painted on the floor like PANTRY. The two accents (#173DC9 men, #D9467A women) are only on the stall panels and the
+  // signs. Slab, floor, rug and back wall are drawn at once (nothing on the block stands behind them); everything else
+  // goes into `items` by depth, walls one tile at a time so people sort in front of and behind them.
   restroomItems(G,items,snow){
-    const{ctx,df}=G,L=WC,X=L.x0,Y=L.y0,X1=L.x1,Y1=L.y1,F=L.front,wy=L.wy,HT=L.heights;
-    // Indoors the light falls off like the office's own at night; LEDs and signs keep their colour and glow instead.
-    const NB=c=>mix(c,'#161c2c',(1-df)*0.74),CAP=c=>mix(NB(c),'#f2f6fb',snow*0.9),lit=df<0.6,glow=lit?1-df/0.6:0;
-    const OL=NB('#2B2D42'),WHITE=NB('#F7F9FC'),CREAM=NB('#F4ECDA'),SLATE='#3F4452',WOOD='#D2A877',CHROME=NB('#c3cad4'),LED='#FFD54A';
-    const ACC={m:'#173DC9',f:'#D9467A'};
-    const rp=p=>[Math.round(p[0]),Math.round(p[1])];
-    const path=pts=>{ctx.beginPath();pts.forEach((p,i)=>{const q=rp(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});ctx.closePath();};
-    const fill=(pts,c)=>{path(pts);ctx.fillStyle=c;ctx.fill();};
-    const edge=(pts,c=OL)=>{path(pts);ctx.strokeStyle=c;ctx.lineWidth=1;ctx.stroke();};
-    const al=(a,f)=>{const o=ctx.globalAlpha;ctx.globalAlpha=o*a;f();ctx.globalAlpha=o;};
-    // a face on the plane y = const (seen from the front-left) and one on x = const (seen from the front-right)
-    const fy=(y,xa,xb,za,zb,c)=>fill([P(xa,y,za),P(xb,y,za),P(xb,y,zb),P(xa,y,zb)],c);
-    const fx=(x,ya,yb,za,zb,c)=>fill([P(x,ya,za),P(x,yb,za),P(x,yb,zb),P(x,ya,zb)],c);
-    const ftop=(xa,ya,xb,yb,z,c)=>fill([P(xa,ya,z),P(xb,ya,z),P(xb,yb,z),P(xa,yb,z)],c);
-    // a box with the outline of its silhouette (o = false leaves the outline off for tiny parts)
-    const box=(x,y,w,h,z0,z1,top,o=true,l,r)=>{
-      fy(y+h,x,x+w,z0,z1,l||shade(top,-22));fx(x+w,y,y+h,z0,z1,r||shade(top,-38));ftop(x,y,x+w,y+h,z1,top);
-      if(o)edge([P(x,y,z1),P(x+w,y,z1),P(x+w,y,z0),P(x+w,y+h,z0),P(x,y+h,z0),P(x,y+h,z1)]);};
-    // pixel art lying in a y-plane or an x-plane, from its top-left corner
-    const pix=(x,y,z,rows,col,onX)=>{const[sx,sy]=P(x,y,z);ctx.save();ctx.translate(Math.round(sx),Math.round(sy));ctx.transform(1,onX?-0.5:0.5,0,1,0,0);ctx.fillStyle=col;
-      rows.forEach((r,j)=>{for(let i=0;i<r.length;i++)if(r[i]==='#')ctx.fillRect(i,j,1,1);});ctx.restore();};
-    const halo=(x,y,z,rx,ry,c,a)=>{if(!glow)return;const[gx,gy]=P(x,y,z);al(a*glow,()=>{ctx.fillStyle=c;ctx.beginPath();ctx.ellipse(gx,gy,rx,ry,0,0,Math.PI*2);ctx.fill();});};
-    const glass=(draw)=>al(0.3,draw);
-    const plant=(x,y,potH,big)=>{const pot=NB('#ECE7DE'),g=NB('#55A043'),gl=NB('#6fbd57'),gd=NB('#3f7f31'),s=big?1.5:1;
-      box(x-0.13*s,y-0.13*s,0.26*s,0.26*s,0,potH,pot);ftop(x-0.1*s,y-0.1*s,x+0.1*s,y+0.1*s,potH,NB('#6b4a33'));
-      const cubes=big?[[0,0,potH+2,7],[-0.12,0.1,potH+8,6],[0.1,-0.1,potH+11,6],[0,0,potH+16,5],[-0.08,-0.06,potH+21,4],[0.08,0.08,potH+24,3]]
-        :[[0,0,potH+1,5],[-0.08,0.06,potH+5,4],[0.07,-0.05,potH+8,4],[0,0,potH+11,3]];
-      cubes.forEach(([dx,dy,z,c],i)=>{const r=c/32;box(x+dx-r,y+dy-r,r*2,r*2,z,z+c,i%2?gl:g,true,gd,shade(gd,-12));});};
-    const PERSON={m:['..#..','.....','.###.','.###.','.###.','.#.#.','.#.#.'],f:['..#..','.....','.###.','.###.','#####','.#.#.','.#.#.']};
-    // 3×5 letters from the page font, plus \u1EEE (U with horn and tilde) and \u1EA2 (A with hook) with their marks drawn above (rows -3 and -2)
-    const glyph=ch=>{if(ch==='\u1EEE')return{rows:['.##.','##..','#.##','#.#.','#.#.','#.#.','###.'],up:2};if(ch==='\u1EA2')return{rows:['##.','.#.','.#.','#.#','###','#.#','#.#'],up:2};
-      const f=FONT[ch];if(!f)return null;const rows=[];for(let r=0;r<5;r++)rows.push(f.slice(r*3,r*3+3).replace(/1/g,'#').replace(/0/g,'.'));return{rows,up:0};};
-    // A label in another language may have letters the pixel font lacks (CJK, Ñ, Í…): word() is then null and the
-    // label is drawn with fillText in TXT_FONT instead.
-    const TXT_FONT="bold 8px 'JetBrains Mono',sans-serif";
-    const word=s=>{const gs=[...s].map(ch=>ch===' '?{rows:['..'],up:0,sp:1}:glyph(ch));if(gs.some(g=>!g))return null;let x=0;const out=[];gs.forEach(g=>{out.push({g,x});x+=(g.sp?2:g.rows[g.rows.length-1].length)+1;});return{out,w:x-1};};
-    // stall doors: shut, with a red light, while someone is inside (RestroomLogic.visit 'inside')
+    const{ctx,poly,th,t,df}=G,L=WC,X=L.x0,Y=L.y0,X1=L.x1,Y1=L.y1,F=L.front,HT=L.heights,PI=window.PantryItems;
+    if(!PI)return;
+    const K=PI.kit(ctx,...P(0,0)),{box,fL,fR,top,R}=K,night=df<0.5;
+    const ACC={m:'#173DC9',f:'#D9467A'},WHITE='#f6f4ee',STEEL='#c9d3e3',WOOD='#a8763e',WORK='#efe9dc';
+    const cap=shade(th.trim,18),glow=df<0.6?1-df/0.6:0;
+    // stall doors are shut, with a red light, while someone is inside (RestroomLogic.visit 'inside')
     const occupied=new Set();for(const a of this.agents)if(a.wcIn&&a.idleSpot!=null&&IDLE_SPOTS[a.idleSpot])occupied.add(IDLE_SPOTS[a.idleSpot].stall);
+    // a pantry item drawn at a floor position, with the soft contact shadow pantryItems gives it
+    const item=(name,x,y)=>{const it=PI.I[name],k=PI.kit(ctx,...P(x,y));k.shadow(0,0,it.size[0],it.size[1],0.22);it.draw(k,t,{night});};
 
-    // ---- drawn at once: shadow on the lawn, the slab, the east stairs again (they stand in front of it), the floor ----
-    {const stone=SkyRender.night('#b9b2a3',df);
-      [[0.5,0.07],[0.25,0.1]].forEach(([b,a])=>{const sh='rgba(0,0,0,'+a+')';fill([PG(X+b,Y1),PG(X1,Y1),PG(X1+b,Y1+b),PG(X+b,Y1+b)],sh);fill([PG(X1,Y),PG(X1+b,Y+b),PG(X1+b,Y1+b),PG(X1,Y1)],sh);});
-      fill([PG(X,Y1,0),PG(X1,Y1,0),PG(X1,Y1,FLOOR_Z),PG(X,Y1,FLOOR_Z)],shade(stone,-18));
-      fill([PG(X1,Y,0),PG(X1,Y1,0),PG(X1,Y1,FLOOR_Z),PG(X1,Y,FLOOR_Z)],shade(stone,-40));
-      fill([PG(X,Y1,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z),PG(X,Y1,FLOOR_Z)],shade(stone,12));
-      fill([PG(X1,Y,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z),PG(X1,Y,FLOOR_Z)],shade(stone,-10));
-      for(let x=30;x<X1;x+=4)fill([PG(x,Y1,1),PG(x+0.06,Y1,1),PG(x+0.06,Y1,FLOOR_Z-1),PG(x,Y1,FLOOR_Z-1)],shade(stone,-32));
-      fill([PG(X1,6,1),PG(X1,6.06,1),PG(X1,6.06,FLOOR_Z-1),PG(X1,6,FLOOR_Z-1)],shade(stone,-52));
+    // ---- at once: the plinth (office stone), the east stairs again (they stand in front of it), floors, rug ----
+    {const WT_=0.35,stone=SkyRender.night('#b9b2a3',df);
+      [[0.5,0.07],[0.25,0.1]].forEach(([b,a])=>{const sh='rgba(0,0,0,'+a+')';poly([PG(X+b,Y1),PG(X1,Y1),PG(X1+b,Y1+b),PG(X+b,Y1+b)],sh,null);poly([PG(X1,Y-WT_),PG(X1+b,Y-WT_),PG(X1+b,Y1+b),PG(X1,Y1)],sh,null);});
+      poly([PG(X,Y1,0),PG(X1,Y1,0),PG(X1,Y1,FLOOR_Z),PG(X,Y1,FLOOR_Z)],shade(stone,-18),null);
+      poly([PG(X1,Y-WT_,0),PG(X1,Y1,0),PG(X1,Y1,FLOOR_Z),PG(X1,Y-WT_,FLOOR_Z)],shade(stone,-40),null);
+      poly([PG(X,Y1,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z),PG(X,Y1,FLOOR_Z)],shade(stone,12),null);
+      poly([PG(X1,Y-WT_,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z-1),PG(X1,Y1,FLOOR_Z),PG(X1,Y-WT_,FLOOR_Z)],shade(stone,-10),null);
+      for(let x=30;x<X1;x+=4)poly([PG(x,Y1,1),PG(x+0.06,Y1,1),PG(x+0.06,Y1,FLOOR_Z-1),PG(x,Y1,FLOOR_Z-1)],shade(stone,-32),null);
+      for(let y=2;y<Y1;y+=4)poly([PG(X1,y,1),PG(X1,y+0.06,1),PG(X1,y+0.06,FLOOR_Z-1),PG(X1,y,FLOOR_Z-1)],shade(stone,-52),null);
       // the east flight of stairs, exactly as the plinth draws it, so its steps stay in front of the slab's face
       const run=SkyLogic.STAIR_RUN/3;
-      for(const s of STAIRS)if(s.side==='east')for(let i=0;i<2;i++){const zt=FLOOR_Z*(1-(i+1)/3),top=shade(stone,8-i*4),x0=W+i*run,x1=x0+run,y0=s.y,y1=s.y+s.len;
-        fill([PG(x0,y1,0),PG(x1,y1,0),PG(x1,y1,zt),PG(x0,y1,zt)],shade(top,-20));fill([PG(x1,y0,0),PG(x1,y1,0),PG(x1,y1,zt),PG(x1,y0,zt)],shade(top,-38));fill([PG(x0,y0,zt),PG(x1,y0,zt),PG(x1,y1,zt),PG(x0,y1,zt)],top);}}
-    {// rooms: light grey anti-slip tiles with a fine grid; lobby: warm wooden planks running along the block
-      const grey=NB('#DCE2EA'),grid=shade(grey,-14);
-      for(let y=Y;y<F;y++)for(let x=X;x<X1;x++){const xb=Math.min(x+1,X1);ftop(x,y,xb,y+1,0,(x+y)%2?grey:shade(grey,4));}
-      for(let t=X+0.5;t<X1;t+=0.5)ftop(t,Y,t+0.02,F,0,grid);for(let t=Y+0.5;t<F;t+=0.5)ftop(X,t,X1,t+0.02,0,grid);
-      const wood=NB(WOOD),seam=shade(wood,-24);
-      ftop(X,F,X1,Y1,0,wood);
-      for(let r=0;r<6;r++){const y=F+r/3;if(r)ftop(X,y,X1,y+0.025,0,seam);for(let x=X+(r%2?0.6:1.3);x<X1;x+=1.4)ftop(x,y,x+0.03,y+1/3,0,seam);}
-      // pale blue runner rug along the lobby, from the pantry to the far end
-      const rug=L.lobby.rug,rc=NB('#BFD8EF');
-      ftop(rug.x0,rug.y0,rug.x1,rug.y1,0.3,shade(rc,-18));ftop(rug.x0+0.06,rug.y0+0.06,rug.x1-0.06,rug.y1-0.06,0.3,rc);
-      for(let x=rug.x0+0.3;x<rug.x1-0.2;x+=0.6)ftop(x,rug.y0+0.25,x+0.12,rug.y0+0.35,0.3,shade(rc,-10));
-      // soft contact shadow along the foot of the back wall and the dividers
-      [[0.4,0.05],[0.2,0.08]].forEach(([b,a])=>{const sh='rgba(0,0,0,'+a+')';fill([P(X,wy),P(X1,wy),P(X1,wy+b),P(X,wy+b)],sh);fill([P(X+0.14,wy),P(X+0.14+b,wy),P(X+0.14+b,F),P(X+0.14,F)],sh);fill([P(X+4.07,wy),P(X+4.07+b,wy),P(X+4.07+b,F),P(X+4.07,F)],sh);});}
+      for(const s of STAIRS)if(s.side==='east')for(let i=0;i<2;i++){const zt=FLOOR_Z*(1-(i+1)/3),tp=shade(stone,8-i*4),x0=W+i*run,x1=x0+run,y0=s.y,y1=s.y+s.len;
+        poly([PG(x0,y1,0),PG(x1,y1,0),PG(x1,y1,zt),PG(x0,y1,zt)],shade(tp,-20),null);poly([PG(x1,y0,0),PG(x1,y1,0),PG(x1,y1,zt),PG(x1,y0,zt)],shade(tp,-38),null);poly([PG(x0,y0,zt),PG(x1,y0,zt),PG(x1,y1,zt),PG(x0,y1,zt)],tp,null);}
+}
+    for(let y=Y;y<Y1;y++)for(let x=X;x<X1;x++){
+      if(y>=F){// lobby: the pantry's warm planks with their seams and staggered joints
+        const col=y%2?lerpHex('#3a2d2b','#c99862',df):lerpHex('#332725','#c18f59',df);poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],col,null);
+        const sm=shade(col,-16),jx=x+(y%2?0.3:0.7);poly([P(x,y+0.5),P(x+1,y+0.5),P(x+1,y+0.53),P(x,y+0.53)],sm,null);poly([P(jx,y),P(jx+0.03,y),P(jx+0.03,y+0.5),P(jx,y+0.5)],sm,null);continue;}
+      // rooms: the pantry kitchen's light washable tiles
+      poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],(x+y)%2?lerpHex('#2e2d3a','#ebe7dd',df):lerpHex('#282734','#dfdace',df),null);}
+    // soft contact shadow where the walls meet the floor, as in the office
+    [[0.45,0.06],[0.22,0.1]].forEach(([b,a])=>{const sh='rgba(0,0,0,'+a+')';poly([P(X,Y),P(X1,Y),P(X1,Y+b),P(X,Y+b)],sh,null);
+      for(const wx of[L.walls.pantry.x+L.walls.pantry.t,L.walls.split.x+L.walls.split.t])poly([P(wx,Y),P(wx+b,Y),P(wx+b,F),P(wx,F)],sh,null);});
+    // the lobby's name painted on its planks along the walkway, in the same paint as PANTRY
+    {const[lx,ly]=L.lobby.label;this.restroomPaint(ctx,P(lx,ly),'SẢNH CHUNG',df>0.5?'#8a5a2a':'#a8763e',2);}
 
-    // ---- the back wall: white tiles up to 36, cream above, frosted clerestory windows high up, one item behind all ----
-    items.push({z:X+Y-0.1,f:()=>{const full=HT.full,top=full+3,tileTop=36;
-      fy(wy,X,X1,0,tileTop,WHITE);fy(wy,X,X1,tileTop,full,CREAM);fy(wy,X,X1,full,top,shade(CREAM,-14));
-      const grout=shade(WHITE,-12);for(let z=6;z<tileTop;z+=6)fy(wy,X,X1,z,z+0.5,grout);for(let x=X+0.25;x<X1;x+=0.25)fy(wy,x,x+0.02,0,tileTop,grout);
-      fy(wy,X,X1,tileTop,tileTop+1,shade(WHITE,-22));
-      [[X+0.5,X+3.5],[X+4.6,X1-0.4]].forEach(([a,b])=>{fy(wy,a-0.04,b+0.04,39,51,NB('#e9e3d6'));fy(wy,a,b,40,50,NB(lit?'#3b4a6a':'#E3ECF4'));
-        for(let x=a+0.5;x<b;x+=0.5)fy(wy,x-0.02,x+0.02,40,50,NB('#e9e3d6'));al(0.5,()=>fy(wy,a,b,47,50,NB('#ffffff')));edge([P(a-0.04,wy,39),P(b+0.04,wy,39),P(b+0.04,wy,51),P(a-0.04,wy,51)]);});
-      ftop(X,Y,X1,wy,top,CAP(SLATE));fx(X1,Y,wy,0,top,shade(WHITE,-38));
-      edge([P(X,wy,0),P(X,wy,top),P(X,Y,top),P(X1,Y,top),P(X1,Y,0),P(X1,wy,0),P(X1,wy,top),P(X,wy,top)]);}});
+    // ---- the back wall, exactly the office's: wall, skirting, top band and cap, cut end ----
+    {const WT=0.35,ZT=WALL+3;
+      poly([P(X,Y,0),P(X1,Y,0),P(X1,Y,WALL),P(X,Y,WALL)],th.wr,null);
+      poly([P(X,Y,WALL),P(X1,Y,WALL),P(X1,Y,ZT),P(X,Y,ZT)],th.trim,null);
+      poly([P(X,Y,0),P(X1,Y,0),P(X1,Y,4),P(X,Y,4)],th.trim,null);
+      poly([P(X,Y-WT,ZT),P(X1,Y-WT,ZT),P(X1,Y,ZT),P(X,Y,ZT)],cap,null);
+      poly([P(X1,Y-WT,0),P(X1,Y,0),P(X1,Y,ZT),P(X1,Y-WT,ZT)],shade(th.wr,-34),null);
+      // neon room signs on the back wall, above the stalls, made like the CAFE board
+      for(const r of['m','f']){const ss=L.stalls.filter(s=>s.room===r),x0=ss[0].x0+0.05,x1=ss[ss.length-1].x1-0.05;this.restroomSign(K,x0,x1,r,ACC[r],night,t);}
+      // hand dryer in the men's room corner, above the plant
+      const[dx]=L.dryerM;box(dx-0.12,Y,0.24,0.14,17,24,WHITE,'#e3ddd0','#d6cfbf');fL(dx-0.04,dx+0.04,Y+0.14,17,17.6,'#8b93a7');}
 
-    // ---- half-height dividers (white, slate cap, frosted glass on top) with what hangs on them, one tile at a time ----
-    const deco={};// tile key -> drawings on that divider tile, after its wall and glass
-    const put=(x,y,f)=>{const k=x+','+Math.min(F-1,Math.floor(y));(deco[k]=deco[k]||[]).push(f);};
-    const divider=(x0,ya,yb)=>{const x1=x0+0.14,h=HT.half,g=HT.glass;
-      box(x0,ya,0.14,yb-ya,0,h-2,WHITE,false,shade(WHITE,-10),shade(WHITE,-24));box(x0-0.01,ya,0.16,yb-ya,h-2,h,CAP(SLATE),false);
-      glass(()=>{fy(yb,x0+0.04,x0+0.1,h,g,NB('#ffffff'));fx(x0+0.1,ya,yb,h,g,NB('#eef3f8'));ftop(x0+0.04,ya,x0+0.1,yb,g,NB('#ffffff'));});
-      fx(x0+0.1,ya,yb,g-1,g,NB('#cfd6df'));fx(x1,ya,yb,0,1.5,shade(WHITE,-34));
-      edge([P(x0,yb,0),P(x0,yb,h),P(x0,ya,h)]);edge([P(x1,ya,h),P(x1,yb,h),P(x1,yb,0)]);edge([P(x0+0.04,ya,g),P(x0+0.1,ya,g),P(x0+0.1,yb,g)],NB('#9aa6b5'));};
-    // a mirror with a warm LED frame on a divider's east face
-    const mirror=(x,ya,yb,za,zb)=>{fx(x,ya,yb,za,zb,LED);fx(x,ya+0.06,yb-0.06,za+1.5,zb-1.5,NB('#CFE0EE'));
-      const n=Math.max(1,Math.round((yb-ya)/0.6));for(let i=0;i<n;i++){const s=ya+0.15+i*(yb-ya)/n;al(0.6,()=>fill([P(x,s,zb-3),P(x,s+0.12,zb-3),P(x,s+0.3,za+3),P(x,s+0.18,za+3)],NB('#ffffff')));}
-      edge([P(x,ya,za),P(x,yb,za),P(x,yb,zb),P(x,ya,zb)]);halo(x+0.3,(ya+yb)/2,(za+zb)/2,8+(yb-ya)*10,9,'#ffe08a',0.28);};
-    const dryer=(x,y)=>{box(x,y-0.12,0.13,0.24,17,24,NB('#fbfbfd'));fx(x+0.13,y-0.06,y+0.06,17.5,18.5,NB('#5b6270'));};
-    ['m','f'].forEach(r=>{const v=L.vanities[r],x=v.x0;
-      put(X+(r==='m'?0:4),v.y1,()=>mirror(x,v.y0+0.05,v.y1-0.05,20,36));put(X+(r==='m'?0:4),v.dryer,()=>dryer(x,v.dryer));});
-    {const m=L.makeup;put(X+4,m.y1,()=>{mirror(m.x0,m.y0+0.08,m.y1-0.08,18,32);});}
-    for(const dx of[0,4])for(let y=Y;y<F;y++){const x0=dx?X+4-0.07:X;
-      items.push({z:x0+y+0.3,f:()=>{divider(x0,y===Y?wy:y,y+1);(deco[(X+dx)+','+y]||[]).forEach(f=>f());}});}
+    // ---- solid room walls (office walls: wall colour, skirting, top band, cap), one tile at a time ----
+    const wallX=(x0,w,ya,yb,h)=>{box(x0,ya,w,yb-ya,0,h-2,th.trim,shade(th.wl,-20),th.wl);box(x0,ya,w,yb-ya,h-2,h,cap,th.trim,th.trim);fR(x0+w,ya,yb,0,4,th.trim);};
+    const wallY=(xa,xb,y0,d,h)=>{box(xa,y0,xb-xa,d,0,h-1.5,th.trim,th.wr,shade(th.wr,-34));box(xa,y0,xb-xa,d,h-1.5,h,cap,th.trim,th.trim);fL(xa,xb,y0+d,0,3,th.trim);};
+    const deco={};const put=(x,y,f)=>{const k=x+','+Math.min(F-1,Math.floor(y));(deco[k]=deco[k]||[]).push(f);};
+    // a mirror on a room wall's east face: a thin trim frame round glass that catches the light like the office windows
+    const mirror=(x,ya,yb,za,zb)=>{fR(x,ya,yb,za,zb,th.trim);fR(x,ya+0.05,yb-0.05,za+1.2,zb-1.2,th.glass);
+      for(let s=ya+0.2;s<yb-0.25;s+=0.55)poly([P(x,s,zb-2.5),P(x,s+0.1,zb-2.5),P(x,s+0.28,za+2.5),P(x,s+0.18,za+2.5)],th.glassHi,null);};
+    const dryer=(x,y)=>{box(x,y-0.12,0.13,0.24,17,24,WHITE,'#e3ddd0','#d6cfbf');fR(x+0.13,y-0.05,y+0.05,17.3,18,'#8b93a7');};
+    {const v=L.vanities.m;put(X,v.y1,()=>mirror(v.x0,v.y0+0.05,v.y1-0.05,18,32));}
+    {const v=L.vanities.f;put(X+3,v.y1,()=>mirror(v.x0,v.y0+0.05,v.y1-0.05,18,32));put(X+3,v.dryer,()=>dryer(v.x0,v.dryer));}
+    {const m=L.makeup;put(X+3,m.y1,()=>mirror(m.x0,m.y0+0.08,m.y1-0.08,18,30));}
+    // urinals on the pantry wall, with solid modesty screens in the wall colour
+    L.urinals.forEach(u=>put(X,u,()=>{const x=L.walls.pantry.x+L.walls.pantry.t;box(x,u-0.18,0.28,0.36,7,18,WHITE,'#e3ddd0','#d6cfbf');fR(x+0.28,u-0.11,u+0.11,9,15.5,'#d9dbe2');box(x,u-0.03,0.06,0.06,18,24,STEEL);}));
+    for(const[wx,wt]of[[L.walls.pantry.x,L.walls.pantry.t],[L.walls.split.x,L.walls.split.t]])for(let y=Y;y<F;y++){const k=Math.round(wx===X?X:X+3)+','+y;
+      items.push({z:wx+y+0.3,f:()=>{wallX(wx,wt,y,y+1,HT.room);(deco[k]||[]).forEach(f=>f());}});}
+    L.screens.forEach(s=>items.push({z:X+s+0.5,f:()=>{const x=L.walls.pantry.x+L.walls.pantry.t;box(x,s-0.02,0.38,0.04,6,22,cap,th.wr,shade(th.wr,-34));}}));
+    // knee-high front wall with its two doorways, and the knee-high east wall of the women's room
+    const doorX=[L.rooms.m.door[0],L.rooms.f.door[0]],fw=L.walls.front;
+    for(let x=X;x<X1;x++){if(doorX.includes(x))continue;items.push({z:x+0.5+F,f:()=>wallY(x,Math.min(x+1,X1),fw.y,fw.t,HT.knee)});}
+    for(let y=Y;y<F;y++)items.push({z:X1+y+0.4,f:()=>{const ew=L.walls.east;box(ew.x,y,ew.t,y===F-1?1-fw.t:1,0,HT.knee-1.5,th.trim,shade(th.wl,-20),th.wl);box(ew.x,y,ew.t,y===F-1?1-fw.t:1,HT.knee-1.5,HT.knee,cap,th.trim,th.trim);}});
 
-    // ---- knee-high front wall with the two doorways, and the women's room's knee-high east wall ----
-    const knee=(x,y,w,h)=>{box(x,y,w,h,0,HT.knee-1.5,WHITE,false,shade(WHITE,-12),shade(WHITE,-26));box(x,y,w,h,HT.knee-1.5,HT.knee,CAP(SLATE),false);
-      edge([P(x,y,HT.knee),P(x+w,y,HT.knee),P(x+w,y,0),P(x+w,y+h,0),P(x,y+h,0),P(x,y+h,HT.knee)]);};
-    const doorX=[L.rooms.m.door,L.rooms.f.door];
-    for(let x=X;x<X1;x++){if(doorX.some(d=>d[0]===x))continue;const w=Math.min(1,X1-x);items.push({z:x+0.5+F,f:()=>knee(x,F-0.07,w,0.14)});}
-    for(let y=Y;y<F;y++)items.push({z:X1+y+0.4,f:()=>knee(X1-0.12,y===Y?wy:y,0.12,y===F-1?1-0.07:1)});
-    // door frames: two slim posts and a glowing sign box over each doorway (pictogram + office.wc.signMen / signWomen). The box hangs at
-    // SIGN so it clears the heads of people at the stalls and vanities behind it: on screen a sign at height z on the
-    // front wall covers a person standing at depth y (about 25 px tall) unless z >= 25 + 16 * (front - y).
-    const SIGN=49;
-    ['m','f'].forEach(r=>{const[d0,d1]=L.rooms[r].door,acc=ACC[r];
-      items.push({z:(d0+d1)/2+F,f:()=>{const post=NB('#e9edf2'),yb=F-0.06,h=0.12;
-        box(d0,yb,0.07,h,0,SIGN,post);box(d1-0.07,yb,0.07,h,0,SIGN,post);
-        const sx0=d0-0.1,sx1=d1+0.1,sc=lit?acc:NB(acc);
-        halo((sx0+sx1)/2,F+0.2,SIGN+4,22,10,lit?mix(acc,'#ffffff',0.35):acc,0.35);
-        box(sx0,yb-0.02,sx1-sx0,h+0.04,SIGN,SIGN+9,shade(sc,10),true,sc,shade(sc,-30));
-        const ink=lit?'#ffffff':NB('#ffffff');
-        pix(sx0+0.12,yb+h+0.021,SIGN+8,PERSON[r],ink);
-        const txt=r==='m'?tr('office.wc.signMen'):tr('office.wc.signWomen'),wd=word(txt);
-        if(!wd){const[px0,py0]=P(sx0+0.12,yb+h+0.021,SIGN+6);ctx.save();ctx.translate(Math.round(px0)+6,Math.round(py0)+3);ctx.transform(1,0.5,0,1,0,0);
-          ctx.fillStyle=ink;ctx.font=TXT_FONT;ctx.textBaseline='top';ctx.fillText(txt,0,-2);ctx.restore();return;}
-        wd.out.forEach(({g,x})=>{const[px0,py0]=P(sx0+0.12,yb+h+0.021,SIGN+6+g.up);ctx.save();ctx.translate(Math.round(px0)+6+x,Math.round(py0)+3+x*0.5);ctx.transform(1,0.5,0,1,0,0);ctx.fillStyle=ink;
-          g.rows.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(i,j,1,1);});ctx.restore();});}});});
-
-    // ---- men's room: corner plant, two urinals with frosted privacy screens ----
-    {const[px,py]=L.plants.m;items.push({z:px+py,f:()=>plant(px,py,6,false)});}
-    L.urinals.forEach(ux=>items.push({z:ux+wy+0.3,f:()=>{const w=NB('#fcfdff');
-      box(ux-0.18,wy,0.36,0.28,7,18,w);fy(wy+0.28,ux-0.11,ux+0.11,9,15.5,NB('#dfe5ec'));box(ux-0.03,wy,0.06,0.06,18,24,CHROME,false);}}));
-    L.urinalGlass.forEach(gx=>items.push({z:gx+wy+0.32,f:()=>{glass(()=>{fx(gx+0.03,wy,wy+0.6,6,30,NB('#f4f8fc'));fy(wy+0.6,gx,gx+0.03,6,30,NB('#ffffff'));});
-      edge([P(gx+0.03,wy+0.6,6),P(gx+0.03,wy+0.6,30),P(gx+0.03,wy,30)],NB('#9aa6b5'));}}));
-
-    // ---- stalls: HPL panels raised off the floor, wall-hung toilets with flush plates, doors swung open inward ----
-    L.stalls.forEach((s,i)=>{const acc=NB(ACC[s.room]),room=L.rooms[s.room],first=!i||L.stalls[i-1].room!==s.room;
-      // sorted by the stall's front-left corner, so someone washing in front of the first women's stall stays in front of it
+    // ---- stalls: solid accent panels raised off the floor, wall-hung toilets, doors swung inward or shut ----
+    L.stalls.forEach((s,i)=>{const acc=ACC[s.room],room=L.rooms[s.room],first=!i||L.stalls[i-1].room!==s.room;
       items.push({z:s.x0+s.y1+0.1,f:()=>{
-        const cx=(s.x0+s.x1)/2,y1=s.y1,zb=3,zt=32,shut=occupied.has(i),xr=Math.min(s.x1,room.x1-0.08)-0.05;
-        fy(wy+0.005,cx-0.09,cx+0.09,19,23,NB('#e9edf2'));fy(wy+0.01,cx-0.02,cx+0.02,20,22,CHROME);
-        box(cx-0.17,wy,0.34,0.44,6,11,NB('#fbfcfe'));ftop(cx-0.13,wy+0.06,cx+0.13,wy+0.4,11.01,NB('#e6ebf1'));
-        if(s.room==='f'){box(s.x0+0.08,wy+0.8,0.15,0.15,0,5,NB('#f0eff2'),true);box(s.x0+0.07,wy+0.79,0.17,0.17,5,6,NB('#e8a7bf'),false);}
-        const panel=x=>{box(x,wy,0.05,y1-wy,zb,zt,shade(acc,18),true,acc,shade(acc,-26));box(x,y1-0.06,0.05,0.05,0,zb,CHROME,false);};
+        const cx=(s.x0+s.x1)/2,y0=s.y0,y1=s.y1,zb=HT.stallFoot,zt=HT.stall,shut=occupied.has(i),pc=shade(acc,30);
+        fL(cx-0.09,cx+0.09,y0+0.005,19,23,'#e6e9ef');fL(cx-0.02,cx+0.02,y0+0.01,20,22,STEEL);
+        box(cx-0.17,y0,0.34,0.44,6,11,WHITE,'#e3ddd0','#d6cfbf');top(cx-0.13,y0+0.06,0.26,0.34,11.01,'#e8e2d6');
+        if(s.room==='f'){box(s.x0+0.08,y0+0.8,0.15,0.15,0,5,STEEL);box(s.x0+0.07,y0+0.79,0.17,0.17,5,6,'#aab4c6');}
+        const panel=x=>{box(x,y0,0.05,y1-y0,zb,zt,pc);box(x,y1-0.06,0.05,0.05,0,zb,STEEL);};
         if(first)panel(s.x0);
-        const hx=s.x0+0.12,dw=(s.x1-s.x0)-0.24;
-        if(!shut){const ex=hx+dw*Math.cos(1.42),ey=y1-dw*Math.sin(1.42),dc=shade(acc,4);
-          fill([P(hx,y1,zb),P(ex,ey,zb),P(ex,ey,zt),P(hx,y1,zt)],dc);fill([P(hx,y1,zt),P(ex,ey,zt),P(ex+0.04,ey+0.02,zt),P(hx+0.04,y1,zt)],shade(acc,24));
-          edge([P(hx,y1,zb),P(ex,ey,zb),P(ex,ey,zt),P(hx,y1,zt)]);}
-        panel(xr);
-        box(s.x0,y1-0.04,0.12,0.04,zb,zt,shade(acc,18),true,acc);box(s.x1-0.12,y1-0.04,0.12,0.04,zb,zt,shade(acc,18),true,acc);
-        box(s.x0,y1-0.04,s.x1-s.x0,0.04,zt,zt+1.2,CHROME,false);
-        if(shut){box(hx,y1-0.035,dw,0.03,zb,zt,shade(acc,18),true,shade(acc,6));fy(y1+0.001,s.x1-0.22,s.x1-0.17,17,18,CHROME);}
-        fy(y1+0.002,s.x1-0.1,s.x1-0.04,21,23,shut?'#ff4d5a':NB('#4fd17a'));}});});
+        const hx=s.x0+0.1,dw=(s.x1-s.x0)-0.2;
+        if(!shut){const ex=hx+dw*Math.cos(1.42),ey=y1-dw*Math.sin(1.42);
+          K.poly([K.P(hx,y1,zb),K.P(ex,ey,zb),K.P(ex,ey,zt),K.P(hx,y1,zt)],shade(acc,-6));K.poly([K.P(hx,y1,zt),K.P(ex,ey,zt),K.P(ex+0.04,ey+0.02,zt),K.P(hx+0.04,y1,zt)],pc);}
+        panel(Math.min(s.x1,room.x1-0.08)-0.05);
+        box(s.x0,y1-0.04,0.1,0.04,zb,zt,pc);box(s.x1-0.1,y1-0.04,0.1,0.04,zb,zt,pc);
+        if(shut){box(hx,y1-0.035,dw,0.03,zb,zt,pc,shade(acc,12));fL(s.x1-0.22,s.x1-0.17,y1+0.001,15,16,STEEL);}
+        fL(s.x1-0.09,s.x1-0.04,y1+0.002,20,22,shut?'#e5484d':'#46a758');}});});
 
-    // ---- vanities: wooden cabinet, dark stone top, two white basins with chrome taps; a pedal bin under the dryer ----
+    // ---- vanities: the pantry's base cabinet and worktop turned to face the room, steel sinks, chrome taps ----
     ['m','f'].forEach(r=>{const v=L.vanities[r];
-      items.push({z:(r==='m'?X:X+4)+F-1+0.45,f:()=>{const w=NB(WOOD),len=v.y1-v.y0;
-        box(v.x0,v.y0,v.x1-v.x0,len,0,13,w,true,shade(w,-16),shade(w,-30));
-        for(let k=1;k<4;k++)fx(v.x1+0.002,v.y0+len*k/4,v.y0+len*k/4+0.02,1,12,shade(w,-48));
-        for(let k=0;k<4;k++)fx(v.x1+0.003,v.y0+len*(k+0.5)/4-0.05,v.y0+len*(k+0.5)/4+0.05,10,10.8,CHROME);
-        box(v.x0-0.02,v.y0-0.03,v.x1-v.x0+0.06,len+0.06,13,15,NB(SLATE),true);
-        v.basins.forEach(b=>{ftop(v.x0+0.14,b-0.22,v.x1-0.06,b+0.22,15.01,NB('#fbfcfe'));ftop(v.x0+0.2,b-0.15,v.x1-0.12,b+0.15,15.02,NB('#d8dee6'));
-          box(v.x0+0.05,b-0.03,0.06,0.06,15,20,CHROME,false);box(v.x0+0.05,b-0.03,0.16,0.05,19,20,CHROME,false);});}});
-      items.push({z:v.x0+0.2+v.dryer,f:()=>{box(v.x0+0.07,v.dryer-0.09,0.18,0.18,0,6,NB('#b9c1cb'));box(v.x0+0.07,v.dryer-0.09,0.18,0.18,6,6.8,NB('#9aa3ae'),false);}});});
+      // sorted just after the room-wall tiles it stands against, and before anyone washing at it
+      items.push({z:(r==='m'?L.walls.pantry.x:L.walls.split.x)+F-1+0.4,f:()=>{const len=v.y1-v.y0,w=v.x1-v.x0;
+        box(v.x0+0.04,v.y0+0.04,w-0.06,len-0.08,0,2,'#2d1c10');box(v.x0,v.y0,w-0.02,len,2,12.5,WOOD,'#8a5f30','#74501f');
+        const n=Math.round(len/0.6),dh=len/n;
+        for(let i=0;i<n;i++){const y=v.y0+i*dh;fR(v.x1-0.02,y+0.04,y+dh-0.04,3,11.6,shade(WOOD,10));fR(v.x1-0.02,y+0.08,y+dh-0.08,4,10.6,shade(WOOD,-10));fR(v.x1-0.02,y+0.1,y+dh-0.1,4.4,10.2,shade(WOOD,4));fR(v.x1-0.02,y+0.12,y+0.16,8.6,9.6,'#e0b23a');}
+        box(v.x0-0.02,v.y0-0.03,w+0.04,len+0.06,12.5,14,WORK,'#d6cfbf','#bfb7a6');
+        v.basins.forEach(b=>{top(v.x0+0.12,b-0.24,w-0.2,0.48,14.02,'#aab4c6');top(v.x0+0.16,b-0.19,w-0.28,0.38,14.03,'#6b768c');box(v.x0+0.03,b-0.03,0.06,0.06,14,19,STEEL);box(v.x0+0.03,b-0.03,0.18,0.05,18,19,STEEL);});}});});
+    {const[bx,by]=L.bin;items.push({z:bx+by,f:()=>{box(bx-0.1,by-0.1,0.2,0.2,0,6,STEEL,'#aab4c6','#8f9ab0');box(bx-0.1,by-0.1,0.2,0.2,6,6.8,'#aab4c6');}});}
+    {const v=L.vanities.f;items.push({z:v.x0+0.2+v.dryer,f:()=>{box(v.x0+0.07,v.dryer-0.09,0.18,0.18,0,6,STEEL,'#aab4c6','#8f9ab0');box(v.x0+0.07,v.dryer-0.09,0.18,0.18,6,6.8,'#aab4c6');}});}
 
-    // ---- women's room: makeup corner (counter, LED mirror, pink stool), plant ----
-    {const m=L.makeup;items.push({z:X+4+Y+0.4,f:()=>{const w=NB(WOOD);box(m.x0,m.y0,m.x1-m.x0,m.y1-m.y0,0,12,w,true,shade(w,-16),shade(w,-30));
-      box(m.x0-0.02,m.y0-0.02,m.x1-m.x0+0.04,m.y1-m.y0+0.04,12,13.5,NB('#fbfcfe'));}});
-      const[sx,sy]=m.stool;items.push({z:sx+sy,f:()=>{box(sx-0.02,sy-0.02,0.04,0.04,0,6,CHROME,false);const[px,py]=P(sx,sy,8),pk=NB('#F08DB0');
-        ctx.fillStyle=shade(pk,-30);ctx.beginPath();ctx.ellipse(px,py+1,5,2.5,0,0,Math.PI*2);ctx.fill();ctx.fillStyle=pk;ctx.beginPath();ctx.ellipse(px,py,5,2.5,0,0,Math.PI*2);ctx.fill();
-        ctx.strokeStyle=OL;ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(px,py+0.5,5.5,3,0,0,Math.PI*2);ctx.stroke();}});}
-    {const[px,py]=L.plants.f;items.push({z:px+py,f:()=>plant(px,py,6,false)});}
+    // ---- the makeup counter (the pantry's worktop on a small cabinet) and the pantry's bar stool ----
+    {const m=L.makeup;items.push({z:X+3+m.y1-0.2,f:()=>{box(m.x0,m.y0,m.x1-m.x0,m.y1-m.y0,0,12,WOOD,'#8a5f30','#74501f');box(m.x0-0.02,m.y0-0.02,m.x1-m.x0+0.04,m.y1-m.y0+0.04,12,13.5,WORK,'#d6cfbf','#bfb7a6');}});
+      const[sx,sy]=m.stool;items.push({z:sx+sy,f:()=>item('stool',sx-0.2,sy-0.2)});}
 
-    // ---- lobby: wayfinding totem, hand-sanitiser stand between the doors, long bench, big plant ----
-    {const[tx,ty]=L.lobby.totem;items.push({z:tx+ty,f:()=>{const d=NB('#2B2D42');box(tx-0.12,ty-0.1,0.24,0.2,0,36,d,true,shade(d,8),shade(d,-6));
-      [[ACC.m,27],[ACC.f,21]].forEach(([c,z])=>{const cc=lit?c:NB(c);fy(ty+0.1,tx-0.12,tx+0.12,z,z+3,cc);fx(tx+0.12,ty-0.1,ty+0.1,z,z+3,shade(cc,-20));});
-      pix(tx-0.08,ty+0.1,33,['..#..','.###.','#####'],NB('#ffffff'));}});}
-    {const[sx,sy]=L.lobby.sanitizer;items.push({z:sx+sy,f:()=>{box(sx-0.09,sy-0.09,0.18,0.18,0,1,CHROME);box(sx-0.02,sy-0.02,0.04,0.04,1,20,CHROME,false);
-      box(sx-0.08,sy-0.07,0.16,0.14,20,28,NB('#fbfcfe'));fy(sy+0.07,sx-0.05,sx+0.05,23,26,NB('#2fb7a0'));box(sx-0.06,sy-0.02,0.12,0.12,13,14,NB('#9aa3ae'),false);}});}
-    {const b=L.lobby.bench;items.push({z:(b.x0+b.x1)/2+(b.y0+b.y1)/2,f:()=>{const w=NB(WOOD),leg=NB('#3d3a40');
-      for(const lx of[b.x0+0.1,b.x1-0.2])box(lx,b.y0+0.05,0.1,b.y1-b.y0-0.1,0,8,leg,false);
-      box(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0,8,10.5,w,true,shade(w,-16),shade(w,-30));
-      for(let y=b.y0+0.1;y<b.y1-0.05;y+=0.1)ftop(b.x0,y,b.x1,y+0.015,10.51,shade(w,-20));}});}
-    {const[px,py]=L.plants.lobby;items.push({z:px+py,f:()=>plant(px,py,9,true)});}
+    // ---- plants: the pantry's white pot plant ----
+    for(const[px,py]of[L.plants.m,L.plants.f,L.plants.lobby])items.push({z:px+py,f:()=>item('potplant',px-0.25,py-0.25)});
 
-    // ---- floating tags, in the page's pixel font: men's room (blue), women's room (pink), shared lobby (dark); labels, so they
-    // stay readable after dark ----
-    const tag=(x,y,z,s,col)=>{const wd=word(s);if(!wd)ctx.font=TXT_FONT;const w=wd?wd.w:Math.ceil(ctx.measureText(s).width),[cx,cy]=P(x,y,z),x0=Math.round(cx-w/2)-3,y0=Math.round(cy)-12,bw=w+6,bh=12;
-      ctx.fillStyle='#ffffff';ctx.fillRect(x0,y0,bw,bh);ctx.strokeStyle='#2B2D42';ctx.lineWidth=1;ctx.strokeRect(x0+0.5,y0+0.5,bw-1,bh-1);
-      ctx.fillStyle='#2B2D42';ctx.fillRect(Math.round(cx)-1,y0+bh,3,1);ctx.fillRect(Math.round(cx),y0+bh+1,1,1);
-      ctx.fillStyle=col;if(!wd){ctx.textBaseline='middle';ctx.fillText(s,x0+3,y0+bh/2+0.5);return;}
-      wd.out.forEach(({g,x:dx})=>g.rows.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(x0+3+dx+i,y0+5+j-g.up,1,1);}));};
-    items.push({z:1e6,f:()=>{tag(X+2,Y+1.5,64,tr('office.wc.men'),ACC.m);tag(X+5.8,Y+1.5,64,tr('office.wc.women'),ACC.f);tag(X+3.8,Y1-0.2,30,tr('office.wc.lobby'),'#2B2D42');}});
+    // ---- lobby: the smoking corner's slatted bench, a hand-sanitiser stand, a small dark sign post ----
+    {const b=L.lobby.bench;items.push({z:(b.x0+b.x1)/2+b.y1,f:()=>{const bw='#c79a5e',metal='#3d4350';
+      for(const lx of[b.x0+0.15,b.x1-0.23])box(lx,b.y0+0.05,0.08,b.y1-b.y0-0.1,0,5.8,metal);
+      box(b.x0,b.y0,b.x1-b.x0,b.y1-b.y0,5.8,7,bw,shade(bw,-25),shade(bw,-40));
+      for(let k=1;k<3;k++)top(b.x0,b.y0+k*(b.y1-b.y0)/3,b.x1-b.x0,0.01,7.01,shade(bw,-30));}});}
+    {const[sx,sy]=L.lobby.sanitizer;items.push({z:sx+sy+0.2,f:()=>{box(sx-0.09,sy-0.09,0.18,0.18,0,1,STEEL);box(sx-0.02,sy-0.02,0.04,0.04,1,20,STEEL);
+      box(sx-0.08,sy-0.07,0.16,0.14,20,27,WHITE,'#e3ddd0','#d6cfbf');fL(sx-0.05,sx+0.05,sy+0.07,22,25,'#46a758');box(sx-0.06,sy-0.02,0.12,0.12,13,14,'#aab4c6');}});}
+    {const[tx,ty]=L.lobby.totem;items.push({z:tx+ty,f:()=>{box(tx-0.03,ty-0.03,0.06,0.06,0,20,'#3d4350');box(tx-0.18,ty-0.04,0.36,0.08,20,30,'#1f2230','#171922','#14161c');
+      const[ax,ay]=K.P(tx-0.12,ty+0.04,28);R(ax+1,ay+1,1,1,ACC.m);R(ax+1,ay+2,1,3,ACC.m);R(ax+5,ay+1,1,1,ACC.f);R(ax+4,ay+2,3,2,ACC.f);R(ax+5,ay+4,1,1,ACC.f);}});}
+  }
+  // A neon room sign on the restroom's back wall, built like the pantry's CAFE board: a dark plate with four screws and
+  // glowing letters (a pictogram, then WC NAM / WC NỮ in the page's 3×5 font, Ữ with its marks drawn in).
+  restroomSign(K,x0,x1,r,neon,night,t){
+    const{box,R,P,al,fL}=K,z0=40,z1=50;
+    if(night)al(0.2,()=>fL(x0-0.15,x1+0.15,0.0,z0-4,z1+4,neon));
+    box(x0,0,x1-x0,0.05,z0,z1,'#1f2230','#171922','#14161c');
+    [[x0+0.05,z1-1],[x1-0.07,z1-1],[x0+0.05,z0+1],[x1-0.07,z0+1]].forEach(([x,z])=>{const[px,py]=P(x,0.05,z);R(px,py,1,1,'#8b93a7');});
+    const man=['.#.','...','###','###','#.#'],woman=['.#.','...','###','###','###'];
+    const rows=[{g:r==='m'?man:woman,w:3}];for(const ch of(r==='m'?'WC NAM':'WC NỮ'))rows.push(ch===' '?{g:[],w:1}:{g:RESTROOM_GLYPH(ch),w:ch==='Ữ'?4:3});
+    // letters lie in the wall plane like wallText: one font pixel per screen pixel, sheared along the wall
+    const total=rows.reduce((s,q)=>s+q.w+1,-1),[bx,by]=P(x0+(x1-x0)/2-total/32,0.05,z1-3),c=K.ctx;let cx=0;
+    c.save();c.translate(Math.round(bx),Math.round(by));c.transform(1,0.5,0,1,0,0);c.fillStyle=neon;
+    for(const q of rows){const up=q.g.length>5?q.g.length-5:0;q.g.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')c.fillRect(cx+i,j-up,1,1);});cx+=q.w+1;}
+    c.restore();
+  }
+  // Words painted on the floor like PANTRY (in the office's floor paint): reading along +x, `s` px per font pixel.
+  restroomPaint(ctx,[px,py],txt,col,s){
+    ctx.save();ctx.translate(Math.round(px),Math.round(py));ctx.transform(1,0.5,-1,0.5,0,0);ctx.scale(s,s);ctx.globalAlpha=0.6;ctx.fillStyle=col;
+    let x=0;for(const ch of txt){if(ch===' '){x+=3;continue;}const g=RESTROOM_GLYPH(ch),up=g.length>5?g.length-5:0;
+      g.forEach((row,j)=>{for(let i=0;i<row.length;i++)if(row[i]==='#')ctx.fillRect(x+i,j-up,1,1);});x+=(ch==='Ữ'?4:3)+1;}
+    ctx.restore();ctx.globalAlpha=1;
   }
   drawDesk(G,d,i){
     const{ctx,poly,box,rect,t,df}=G,{gx,gy}=d,owner=this.agents.find(a=>a.desk===i&&!a.leaving&&!a.parent);
@@ -5629,7 +5603,7 @@ class ClaudeOffice extends React.Component{
 // What belongs to one island lives here; the sky, light, speed and selection come from the host component.
 const SCENE_METHODS=['syncLive','addAgent','dept','colOwners','freeDeskFor','freeDesk','log','byId','leave','goalFor','updateAgent',
   'draw','drawSeg','drawPlanter','pantryItems','drawDesk','actArms','drawPerson','drawSleeper','headPos','hit',
-  'smokingItems','restroomItems','stepDogs','dogSprite','drawDog'];
+  'smokingItems','restroomItems','restroomSign','restroomPaint','stepDogs','dogSprite','drawDog'];
 // Every island bakes the same ground for a given resolution, light and snow, so one bake per k serves them all.
 const SCENE_ISLAND_CACHE=new Map();
 // Dog sprites depend only on breed, frame and light, so all islands share one cache.

@@ -319,21 +319,21 @@ Nguyên tắc: không có ngôn ngữ hình mới. Mỗi món mượn đúng cá
 | Vách chắn bồn tiểu | Tấm đặc màu tường (`th.wl`), không kính |
 | Sàn hai phòng | Gạch sáng dễ lau của bếp pantry (`#ebe7dd`/`#dfdace` ban ngày, `#2e2d3a`/`#282734` ban đêm), ô bàn cờ |
 | Sàn sảnh | Ván gỗ khu ngồi pantry (`#c99862`/`#c18f59`, đêm `#3a2d2b`/`#332725`), cùng đường ron và mạch so le |
-| Thảm chạy ở sảnh | Màu thảm phòng khách pantry (nền xanh đậm, viền đỏ rượu) |
+| Thảm chạy ở sảnh | Bỏ: thảm màu thảm pantry làm chữ sơn khó đọc và rối mắt; sàn gỗ để trống như sàn pantry |
 | Lavabo | Thân tủ gỗ `#a8763e` có cánh tủ và tay nắm vàng, mặt đá sáng `#efe9dc` như tủ bếp dưới; chậu inox lõm như bồn rửa bếp |
 | Gương | Khung mảnh màu nẹp, mặt gương xanh nhạt như kính cửa sổ văn phòng; không viền LED |
 | Chậu cây | `PantryItems.I.potplant` (chậu sứ trắng, lá `PLANT`), vẽ đúng như ở pantry |
 | Ghế bàn trang điểm | `PantryItems.I.stool` (ghế bar của pantry) |
 | Ghế băng sảnh | Kiểu ghế băng khu hút thuốc: chân kim loại tối, mặt ván gỗ `#c79a5e` có rãnh, không tựa |
 | Biển phòng | Bảng nền tối gắn tường sau, chữ phát sáng như biển neon CAFE: `WC NAM` (xanh) phía trên buồng nam, `WC NỮ` (hồng) phía trên buồng nữ, kèm hình người nhỏ |
-| Nhãn sảnh | Chữ sơn trên sàn như chữ `PANTRY`: `SẢNH CHUNG`, cỡ 2, màu nâu gỗ như `PANTRY`, đậm 60% |
+| Nhãn sảnh | Chữ sơn trên sàn như chữ `PANTRY`: `SẢNH CHUNG`, cỡ 2, cùng màu sơn với `PANTRY` (`#8a5a2a` ngày, `#a8763e` đêm), đậm 60% |
 | Bệ | Đá bệ văn phòng `#b9b2a3` qua `night()`, cùng đường ron |
 | Viền | Bỏ viền tối 1px. Chỉ tô phẳng 3 mặt như phần còn lại |
 
 - **Không có mái.** Không mái hiên, không tấm che, không dải nẹp nào chạy ngang trên đầu. Thứ duy nhất ở trên cao là
   dải nẹp đỉnh của tường sau, giống hệt tường văn phòng.
-- Bỏ: kính mờ, khung LED vàng, nhãn nổi trên trời, hộp biển trên cửa (hộp này che người trong phòng), cột chỉ dẫn sọc
-  xanh hồng.
+- Bỏ: kính mờ, khung LED vàng, nhãn nổi trên trời, hộp biển trên cửa (hộp này che người trong phòng), thảm chạy.
+  Cột chỉ dẫn còn lại là một biển nhỏ nền tối trên cột kim loại, hai hình người xanh và hồng.
 - Đêm: tường theo theme văn phòng (`th`), gạch và gỗ pantry nội suy theo `df` như pantry. Biển neon giữ sáng và có
   quầng như biển CAFE. Tuyết: trong khối không có gì bị phủ (văn phòng cũng vậy); chỉ cỏ quanh khối phủ tuyết.
 
@@ -363,6 +363,8 @@ Tường sau khối phải đứng trên đất. Ở bản 2, hàng `y = −1` c
   cỏ nên mọc thêm cây ở `(28,11)`, `(31,11)` và hoa ở `(30,9)`. Cục đá `(30,0)` nay nằm dưới khối. Các hoa ở `(33,3)`,
   `(34,2)`, `(34,4)`, `(34,5)` (ngoài khối) có lại. Hoa `(30,7)` mất vì đường đá mới.
 - Thác, hồ và đường đá xuống hồ không đổi (hồ chọn theo bờ đông ở các hàng dưới cùng, không bị ảnh hưởng).
+- **Đáy đảo:** các ô đã có giữ nguyên độ sâu đáy như trước khi thêm đất (khoảng cách tới bờ tính trên đảo cũ); chỉ ô
+  thêm tính theo đảo mới. Nếu tính lại cho cả đảo, đáy cả góc đông nam sẽ sâu thêm và đổi hình dưới vách.
 
 ## C5. Bố cục khối (6 × 7)
 
@@ -381,7 +383,7 @@ Tường sau khối phải đứng trên đất. Ở bản 2, hàng `y = −1` c
 
 **SẢNH** `y 5 → 7`
 - Ghế băng dựa tường trước, giữa hai cửa: `x 29.45 → 30.85`, `y 5.1 → 5.45`; trạm sát khuẩn `(29.2, 5.25)`.
-- Lối đi là hàng `y = 6` (thảm chạy `x 27.2 → 32.8`, `y 6.15 → 6.85`, chữ `SẢNH CHUNG` sơn trên đó).
+- Lối đi là hàng `y = 6`; chữ `SẢNH CHUNG` sơn trên sàn gỗ dọc lối đi, từ `(27.75, 6.25)`.
 - Chậu cây lớn góc phải `(32.55, 5.55)`, cột chỉ dẫn nhỏ màu tối ở `(27.25, 6.75)`.
 - Từ pantry vào qua `(27,5)`.
 

@@ -381,14 +381,16 @@ test('garden paths lie on walkable lawn, off the water and the reserved spots', 
   for (const d of island.decor) assert.ok(!island.paths.cells.has(d.x + ',' + d.y), `${d.kind} at ${d.x},${d.y} sits on the path`)
 })
 
-test('garden paths join both stairs to the pond, and none leads to the restroom block', () => {
+test('garden paths join both stairs to the pond and the east stairs to the smoking corner, never into the restroom block', () => {
   const cells = island.paths.cells
   const bath = island.pond.spots.reduce((a, b) => (b.y < a.y ? b : a))
   const entry = [bath.x, bath.y - 1]
   assert.ok(cells.has(entry + ''), 'the path ends right next to a bathing spot')
   assert.ok(reachWithin(cells, [W, 8], entry), 'east stairs → pond')
   assert.ok(reachWithin(cells, [23, H], entry), 'south stairs → pond')
-  assert.equal(island.paths.lines.length, 2, 'one leg from each flight of stairs')
+  assert.equal(island.paths.lines.length, 3, 'one leg from each flight of stairs, and one to the smoking corner')
+  const smoke = island.spots.find((s) => s.id === 'east-front')
+  assert.ok(reachWithin(cells, [W, 7], [smoke.x - 1, smoke.y + smoke.h - 1]), 'east stairs → smoking corner entrance')
   for (const k of cells) assert.ok(!inSpotId('east-back', ...k.split(',').map(Number)), `path cell ${k} runs into the restroom block`)
 })
 
@@ -430,13 +432,32 @@ test('stepping stones are laid about one stride apart', () => {
   }
 })
 
-test('the restroom block spot runs along the pantry east side, from the second row to just above the east stairs', () => {
+test('the restroom block spot runs along the pantry east side, from the back-wall line to just above the east stairs', () => {
   const spot = island.spots.find((s) => s.id === 'east-back')
   assert.equal(spot.x, W, 'it starts right at the pantry edge')
+  assert.equal(spot.y, 0, 'its back row is the office back row')
   const east = stairs.find((s) => s.side === 'east')
   assert.equal(spot.y + spot.h, east.y, 'its front row ends where the east stairs begin')
   const stones = island.paths.stones.filter((st) => st.y < east.y)
   assert.deepEqual(stones, [], 'no stepping stone above the east stairs')
+  // the block's back wall (0.35 thick behind y = 0, like the office's) stands on land for all but its last tile
+  for (let x = spot.x; x < spot.x + spot.w - 1; x++) assert.ok(has(x, -1), `no land under the back wall at x ${x}`)
+})
+
+test('the added land joins the island and never widens the scene frame', () => {
+  const land = SkyLogic.annexLand(W)
+  assert.ok(land.length > 0)
+  for (const [x, y] of land) {
+    assert.ok(has(x, y), `added tile ${x},${y} is land`)
+    assert.ok(x + 1 - y <= W + 6, `added tile ${x},${y} reaches past the island's right-most screen corner`)
+    assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => has(x + a, y + b) && !land.some(([p, q]) => p === x + a && q === y + b)) ||
+      land.some(([p, q]) => Math.abs(p - x) + Math.abs(q - y) === 1), `added tile ${x},${y} floats`)
+  }
+  const opts = { W, H, TW: 16, TH: 8, WALL: 64, pad: 16 }
+  const frame = SkyLogic.sceneFrame(island, opts)
+  const bare = { ...island, list: island.list.filter((c) => !land.some(([x, y]) => x === c.x && y === c.y)) }
+  assert.deepEqual([frame.LW, frame.LH, frame.OX, frame.OY], [SkyLogic.sceneFrame(bare, opts).LW, SkyLogic.sceneFrame(bare, opts).LH, SkyLogic.sceneFrame(bare, opts).OX, SkyLogic.sceneFrame(bare, opts).OY])
+  assert.deepEqual([frame.LW, frame.LH, frame.OX, frame.OY], [848, 644, 304, 83], 'the frame the page was laid out for')
 })
 
 // ---- cheapest route on the grid ----
