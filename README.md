@@ -150,13 +150,17 @@ https://claude.ai/artifact/7rKQWsQxG8WttUXiWqEUt6?server=localhost:4317
 | `CLAUDE_DIR` | `~/.claude/projects` | Transcript directory |
 | `ACTIVE_MIN` | `120` | Minutes before a session is considered inactive |
 
+### Language
+
+The page is available in Tiếng Việt, English, 日本語, 한국어, 简体中文 and Español. It starts in your browser's language (English if it is not one of these); pick another under **Language** at the top of the ⚙ panel and the page reloads in it and remembers the choice. The hub sign-in pages and the `server.js` command-line messages are still Vietnamese.
+
 ### Weather
 
 Open the ⚙ panel in the bottom-right corner of the office:
 
-- **Thời tiết** picks the mode: *Ngẫu nhiên* (random, the default), *Thời tiết thật* (real weather) or *Tắt* (always clear).
-- *Thời tiết thật* asks for a city. The page looks it up with [Open-Meteo](https://open-meteo.com/) (free for non-commercial use, no key) and refreshes every 15 minutes. If the lookup fails, the panel says why and the page falls back to random weather.
-- The preview buttons (*Quang, Mây, Mưa, Giông, Tuyết, Sương*) show a weather right away.
+- **Weather** picks the mode: *Random* (the default), *Real weather* or *Off (always clear)*.
+- *Real weather* asks for a city. The page looks it up with [Open-Meteo](https://open-meteo.com/) (free for non-commercial use, no key) and refreshes every 15 minutes. If the lookup fails, the panel says why and the page falls back to random weather.
+- The preview buttons (*Clear, Cloudy, Rain, Storm, Snow, Fog*) show a weather right away.
 - The mode and city are remembered in this browser. With "reduce motion" turned on in your OS, lightning does not flash and rain and snow are lighter.
 
 ---
