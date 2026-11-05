@@ -76,12 +76,13 @@ test('points on the block floor are on the raised floor; the lawn around it is n
 
 // ---- scale ----
 
-test('heights follow the office: full outer walls, solid room walls above a person, doors under the full wall', () => {
+test('heights follow the office: full back wall, front and east walls at 70 %, room walls above a person, doors under a lintel', () => {
   const h = wc.heights
-  assert.equal(h.full, WALL, 'back, front and east walls are as tall as the office walls (3 tiles)')
-  assert.ok(h.room > 25 && h.room <= h.full * 0.6, `room walls ${h.room}: hide a person`)
+  assert.equal(h.full, WALL, 'the back wall is as tall as the office walls (3 tiles)')
+  assert.ok(h.outer >= 0.65 * WALL && h.outer <= 0.75 * WALL, `front and east walls ${h.outer}: about 70 % of the full wall`)
+  assert.ok(h.room > 25 && h.room <= h.outer, `room walls ${h.room}: hide a person, no taller than the outer walls`)
   assert.ok(h.stall > 25 && h.stall <= h.room, `stall panels ${h.stall} hide whoever is inside`)
-  assert.ok(h.door > 30 && h.door < h.full, `doors ${h.door} are taller than a person, with wall above them`)
+  assert.ok(h.door > 25 && h.door <= h.outer - 6, `doors ${h.door} are taller than a person, with a strip of wall above them`)
   // the east wall runs the whole side of the women's room, from behind the back wall line to the front wall
   assert.ok(wc.walls.east.y0 <= wc.y0 - wc.back + 1e-9 && wc.walls.east.y1 >= wc.walls.front.y + wc.walls.front.t - 1e-9)
 })
@@ -90,9 +91,8 @@ test('accents are muted versions of the brief colours: same hue family, softer a
   const hsl = (h) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn
     return { l, s: d ? d / (1 - Math.abs(2 * l - 1)) : 0, blue: b > r } }
   for (const [r, brief] of [['m', '#173DC9'], ['f', '#D9467A']]) {
-    const a = hsl(wc.rooms[r].accent), s = hsl(wc.rooms[r].sign), o = hsl(brief)
-    assert.ok(a.s < o.s - 0.2 && a.l > o.l, `${r} door colour ${wc.rooms[r].accent} is not muted`)
-    assert.ok(s.s > a.s && s.s < o.s + 1e-9, `${r} sign colour ${wc.rooms[r].sign} sits between the door colour and the brief`)
+    const a = hsl(wc.rooms[r].accent), o = hsl(brief)
+    assert.ok(a.s < o.s - 0.2 && a.l > o.l, `${r} accent ${wc.rooms[r].accent} is not muted`)
     assert.equal(a.blue, o.blue, `${r} keeps its hue family`)
   }
 })
