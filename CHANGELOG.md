@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Multi-island hub** — A small hub server (`hub/server.js`, no dependencies) lets newera.inc staff sign in with Google, pair their machine with a device code and see everyone's island in one sky; setup guide in `docs/hub-setup.md`
+- **World view** — The hub page has two modes: "Toàn cảnh" (the whole sky) and "Của tôi" (your own island); the local page shows a "Thế giới" chip once the machine has joined a hub
+- **Publisher commands** — `node server.js join <hub>`, `share kin|co-ban`, `private on|off`, `status` and `leave`; only an allow-list of fields leaves the machine, and `private on` shows the island as private within 3 seconds
+- **Device management** — Devices can be removed at `/me` on the hub; a removed machine's publisher logs `revoked` and stops sending
+
+### Changed
+
+- **Local server hardening** — The local server only trusts loopback host names on its own port (extra names via `ALLOWED_HOSTS`) and no longer answers cross-origin requests unless `ALLOWED_ORIGIN` is set
+
 ## [1.4.0] - 2026-11-05
 
 ### Added

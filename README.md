@@ -113,6 +113,22 @@ Open the ⚙ panel in the bottom-right corner of the office:
 
 ---
 
+## 🏝️ Chia sẻ đảo
+
+Nhân viên newera.inc có thể đưa đảo của mình lên một bầu trời chung (hub). Chỉ trạng thái đã lọc rời khỏi máy: không có
+nội dung, đường dẫn hay tên agent.
+
+```bash
+node server.js join https://terrarium.newera.inc   # ghép máy, duyệt mã trên trình duyệt
+node server.js share kin|co-ban                    # mức chia sẻ
+node server.js private on|off                      # ẩn nhân viên khỏi người khác
+node server.js status
+```
+
+Hướng dẫn dựng hub và biến môi trường: [docs/hub-setup.md](docs/hub-setup.md).
+
+---
+
 ## 🔄 Update
 
 ```
