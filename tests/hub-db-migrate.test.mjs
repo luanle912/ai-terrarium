@@ -393,7 +393,7 @@ test('upsertIsland claims a slot, renames an existing island, and throws on a fu
   db.close();
 });
 
-test('two handles racing for the last slot: exactly one wins', () => {
+test('two handles claiming the last slot one after the other: the second sees it taken', () => {
   const file = path.join(tmp(), 'hub.sqlite');
   const a = openDb(file), b = openDb(file);
   fillHub(a, 7);
@@ -404,4 +404,11 @@ test('two handles racing for the last slot: exactly one wins', () => {
   assert.equal([ra, rb].filter((r) => r.full).length, 1);
   assert.equal(a.islandCount(), 8);
   a.close(); b.close();
+});
+
+test('a second handle waits for the write lock instead of failing at once', () => {
+  const db = openDb(':memory:');
+  const t = db.raw.prepare('PRAGMA busy_timeout').get();
+  assert.equal(Object.values(t)[0], 5000);
+  db.close();
 });
