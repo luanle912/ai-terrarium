@@ -188,6 +188,16 @@ node server.js status                                   # Show the current hub c
 node server.js leave                                    # Revoke this device on the hub and remove the local config
 ```
 
+Owner của hub có thêm quyền "Xoá đảo" của một member. Người nghỉ việc mất quyền trong vòng 24 giờ, tự động
+(hub dùng quyền truy cập offline của Google, nên lần đăng nhập đầu có màn hình đồng ý).
+
+**Bầu trời 8 đảo.** Một hub chứa tối đa 8 đảo, mỗi đảo một chỗ cố định. Ở **Toàn cảnh**, đảo của bạn nằm **giữa**, to hơn
+một chút, 7 chỗ còn lại xếp vòng quanh (đảo offline mờ đi nhưng giữ chỗ, chỗ chưa ai dùng ghi "chỗ trống"). Không kéo,
+không zoom. **Bấm một đảo** để vào xem (mây khép rồi mở), nút **← Toàn cảnh** hoặc phím **Esc** để ra. Chưa có đảo thì ô
+giữa là "chỗ của bạn" (bấm để xem cách ghép máy); hub đủ 8 đảo thì ô giữa ghi "Hub đã đủ 8 đảo" và `join` báo
+`the hub is full (8 islands)`: nhờ owner "Xoá đảo" bớt một đảo để lấy chỗ. Trên điện thoại, đảo của bạn ở trên cùng, các
+đảo còn lại xếp hai cột bên dưới.
+
 Muốn dựng hub riêng (giới hạn theo tên miền công ty, owner, sao lưu): [docs/hub-setup.md](docs/hub-setup.md).
 Đặt `TERRARIUM_HUB=<url>` để nút Tham gia trỏ về hub của bạn.
 

@@ -681,8 +681,30 @@ audit(id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER, action TEXT
 | Một đảo / "Của tôi" | Một đảo **đầy đủ**, mọi khung, `k` theo bề ngang thật như mức `full` hôm nay. Canvas `full` được trả (`releaseCanvas`) khi rời màn này. |
 | Đảo không vẽ | Vẫn mô phỏng với `dt` lớn, tối đa 4 lần/giây (`OFF_MS`), để vào màn một đảo không thấy nhân viên đứng im. |
 
-Mục tiêu vẫn là **JS mỗi khung p95 ≤ 8ms** ở "Toàn cảnh" 8 đảo × 6 session và ở màn một đảo, đo như GĐ2. Khung dài nhất
-trong lúc chuyển cảnh mây (gồm khung đổi màn, khi đảo đầy đủ được vẽ lần đầu) ghi lại vào đây khi đo xong.
+Mục tiêu vẫn là **JS mỗi khung p95 ≤ 8ms** ở "Toàn cảnh" 8 đảo × 6 session và ở màn một đảo, đo như GĐ2.
+
+**Số đo GĐ3** (2026-11-05; dev hub cổng ngẫu nhiên, DB tạm, 8 đảo × 6 session ghép máy + publish như GĐ2 Task 9; Chrome
+headless `--disable-gpu`, 1280×800, người xem ở slot 0 ở giữa; JS mỗi khung đo 10 giây bằng cách bọc `frame`; chuyển cảnh
+đo 5 lần mỗi chiều, gồm khung đổi màn):
+
+| | p95 JS mỗi khung | Khung dài nhất |
+|---|---|---|
+| "Toàn cảnh", Task 5 (máy rảnh) | **0,5ms** (cùng bộ dữ liệu, trước khi làm lại: 12,9ms) | |
+| Chuyển cảnh mây, Task 6 (máy rảnh) | **10,3ms** | **19ms** (khung đổi màn, lúc mây đang phủ kín) |
+| "Toàn cảnh", đo lại ở Task 7 | 3,2 đến 4,5ms (trung vị 1,2 đến 2,7) | 6,5 đến 11,8ms |
+| Một đảo / "Của tôi", Task 7 | 13,7 đến 25,2ms (trung vị 11,6 đến 19,7) | 17 đến 66ms |
+| Chuyển cảnh mây (hai chiều), Task 7 | 13 đến 18ms | 18 đến 30ms |
+| Trang local (cổng 4317, không đổi), cùng máy, để so | 4,5ms (tải 3,5) và 12,2ms (tải 15 đến 20) | 9,2 và 16,5ms |
+
+Cách đọc: lần đo lại chạy lúc máy đang rất bận (load average 6 đến 22, nhiều tiến trình Chrome khác chạy song song), nên mọi
+số đều bị đẩy lên, kể cả trang local không đổi một dòng (4,5ms lúc rảnh, 12,2ms lúc bận). Kết luận:
+
+- **"Toàn cảnh" đạt mục tiêu** ngay cả khi máy bận (p95 ≤ 4,5ms).
+- **Một đảo (đầy đủ) và chuyển cảnh chưa chứng minh được ≤ 8ms** bằng render phần mềm: khung của đảo đầy đủ là một lần
+  `IslandScene.draw` (khoảng 4,6ms trung vị) cộng với việc chép ảnh đảo lên canvas màn (`drawImage`, cũng chạy bằng CPU khi
+  `--disable-gpu`), và nó có cùng chi phí với trang local trên cùng máy. Số của Task 6 (10,3ms / 19ms) là lần đo máy rảnh
+  duy nhất của chuyển cảnh. Cần đo lại một lần trên máy rảnh hoặc có GPU trước khi coi mục tiêu này là đạt; chưa ghi nhận lỗi
+  nào trong code của GĐ3 gây ra chi phí này.
 
 Bảng và số GĐ1–GĐ2 (không còn áp dụng từ GĐ3):
 
