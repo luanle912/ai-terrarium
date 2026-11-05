@@ -180,8 +180,7 @@ test('join stores the token 0600 and prints only the code and link', async () =>
   const h = fakeHub((n, j) => n === 1 ? j(428, { error: 'authorization_pending' }) : n === 2 ? j(429, { error: 'slow_down' }) : j(200, { token: 'trd_SECRETSECRET', device_id: 'dev1', island_id: 'isl1' }));
   const cfg = await join('https://hub.example/', { name: 'Laptop', dir, fetch: h.fetch, log: (l) => logs.push(l), openBrowser: (u) => opened.push(u), sleep: async (ms) => { sleeps.push(ms); } });
   assert.deepEqual(sleeps, [5000, 5000, 10000]);
-  assert.deepEqual(opened, ['https://hub.example/device']);
-  assert.ok(!opened[0].includes('KHMT'), 'link carries no code');
+  assert.deepEqual(opened, ['https://hub.example/device?code=KHMT-BQXP']);
   const out = logs.join('\n');
   assert.match(out, /KHMT-BQXP/); assert.match(out, /hub\.example\/device/);
   assert.ok(!out.includes('trd_') && !out.includes('SECRETSECRET'));
@@ -192,6 +191,13 @@ test('join stores the token 0600 and prints only the code and link', async () =>
   assert.equal(saved.deviceId, 'dev1'); assert.equal(saved.islandId, 'isl1');
   assert.match(saved.salt, /^[0-9a-f]{64}$/);
   assert.equal(saved.share, 'kin'); assert.equal(saved.private, false); assert.deepEqual(saved.projects, []);
+});
+
+test('join stops polling and writes nothing once shouldStop says so', async () => {
+  const dir = path.join(tmp(), 'c');
+  const h = fakeHub((n, j) => j(200, { token: 'trd_x', device_id: 'd', island_id: 'i' }));
+  await assert.rejects(join('https://hub.example', { dir, fetch: h.fetch, log() {}, openBrowser() {}, sleep: async () => {}, shouldStop: () => true }), /cancelled/);
+  assert.equal(readConfig(dir), null);
 });
 
 test('join reports expired, denied', async () => {
