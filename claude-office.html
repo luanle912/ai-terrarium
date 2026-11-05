@@ -3117,6 +3117,28 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
   const TITLE={fontFamily:"'Pixelify Sans',monospace",fontSize:17,fontWeight:600,color:'#ffffff',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'};
   const MUTED={fontSize:10,color:'var(--muted)'};
   const field=(label,val,key)=>h('div',{key:key||label,style:{display:'flex',flexDirection:'column',gap:2,minWidth:0}},h('span',{style:MUTED},label),h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},val));
+  const ME_EVERY_MS=10000,STALL_MS=10000,HEX_ID=/^[0-9a-f]{16}$/;
+  const SEND_LABEL=new Map([['sending',['Đang gửi','#46a758']],['private',['Riêng tư','#8b8fa3']],['offline',['Mất kết nối','#e5484d']],['revoked',['Đã thu hồi','#8b8fa3']]]);
+  const NAME_ERR='Tên 1–24 ký tự: chữ, số, khoảng trắng, - _ .';
+  const LINK={color:'#9fd3ff'};
+  const isJson=r=>/^application\/json\b/i.test(r.headers.get('content-type')||'');
+  // What /api/config says now: 'world' (with cfg), 'signedout' (401), 'other' (200 JSON, not world mode) or 'down'
+  // (network error, any other status, or not JSON).
+  const probeConfig=()=>fetch('/api/config',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}})
+    .then(r=>{if(r.status===401)return{kind:'signedout'};if(r.status!==200||!isJson(r))return{kind:'down'};
+      return r.json().then(cfg=>cfg&&cfg.mode==='world'&&cfg.me&&typeof cfg.me==='object'?{kind:'world',cfg}:{kind:'other'});})
+    .catch(()=>({kind:'down'}));
+  const when=ms=>{const d=new Date(ms);return Number.isFinite(ms)?d.toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'—';};
+  const INPUT={flex:1,minWidth:0,background:'var(--bg)',border:'1px solid var(--border)',color:'var(--fg)',padding:'5px 8px',fontFamily:'inherit',fontSize:12};
+  const SMALL_BTN={padding:'3px 8px',fontSize:11,flex:'none'};
+  const ERR={color:'#ff9b9e',lineHeight:1.4};
+  // "<question>" + confirm / cancel, inline where the action was asked for.
+  const confirmRow=(text,okLabel,c,onOk,onCancel)=>h('div',{style:{display:'flex',flexDirection:'column',gap:6,padding:8,background:'var(--bg)',borderLeft:'4px solid #e5484d'}},
+    h('span',{style:{lineHeight:1.4,overflowWrap:'anywhere'}},text),
+    h('div',{style:{display:'flex',gap:6}},
+      h('button',{className:'btn',disabled:!!c.busy,onClick:onOk,style:{...SMALL_BTN,borderColor:'#e5484d',background:'#e5484d',color:'#ffffff',fontWeight:600}},c.busy?'Đang gửi…':okLabel),
+      h('button',{className:'btn',disabled:!!c.busy,onClick:onCancel,style:SMALL_BTN},'Huỷ')),
+    c.err&&h('span',{role:'alert',style:ERR},c.err));
 
   Object.assign(ClaudeOffice.prototype,{
     // Decide the mode once, before any data source opens: world only on a 200 JSON answer saying so (the local
@@ -3147,7 +3169,9 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
 
     startWorld(cfg){
       let view='all';try{const v=this.storage&&this.storage.getItem(VIEW_KEY);if(v==='mine'||v==='all')view=v;}catch(_){}
-      this.world={me:cfg.me,islands:[],scenes:new Map(),pos:new Map(),viewers:0,conn:'connecting',view,cam:null,goal:null,user:false,zoomAt:0,sw:0,sh:0,mmAt:0};
+      if(this.world)clearInterval(this.world.meTimer);// "Thử lại" starts a fresh world
+      this.world={me:cfg.me,csrf:typeof cfg.csrf==='string'?cfg.csrf:'',islands:[],scenes:new Map(),pos:new Map(),viewers:0,conn:'connecting',view,cam:null,goal:null,user:false,zoomAt:0,sw:0,sh:0,mmAt:0,
+        dead:false,errAt:0,mine:null,meErr:false,meSeq:0,draft:null,confirm:null};
       this.setState({sel:null,selIsland:null,live:'off'});
       // The pointer handlers bound at mount drive the local camera; the world has its own, bound to the world stage
       // element when React mounts it (the local stage element goes away).
@@ -3159,17 +3183,24 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       this.setWorldCanvas=el=>{this.worldCanvas=el;};this.setMinimap=el=>{this.minimapEl=el;};
       const w=this.world,parse=e=>{try{const d=JSON.parse(e.data);return d&&typeof d==='object'?d:null;}catch(_){return null;}};
       const es=new EventSource('/api/world/stream');w.es=es;
-      es.onopen=()=>{w.conn='ok';};
-      // A dropped connection retries by itself; a refused one (401/403: signed out, expired, banned) closes for good.
-      es.onerror=()=>{if(es.readyState===EventSource.CLOSED)this.worldEnded();else w.conn='error';};
+      es.onopen=()=>{if(!w.dead){w.conn='ok';w.errAt=0;}};
+      // A dropped connection retries by itself; a refused one (401/403 signed out or banned, 429/503 too many streams)
+      // closes for good. Retrying that keeps failing for STALL_MS also ends the stream, so a stopped hub is told apart.
+      es.onerror=()=>{if(w.dead)return;
+        if(es.readyState===EventSource.CLOSED)return this.worldEnded(true);
+        const now=performance.now();if(!w.errAt)w.errAt=now;
+        if(now-w.errAt>=STALL_MS)this.worldEnded(false);else w.conn='error';};
       es.addEventListener('world',e=>{const d=parse(e);if(d)this.worldMeta(d);});
-      es.addEventListener('island',e=>{const d=parse(e);if(!d||typeof d.id!=='string'||w.conn==='ended')return;
+      es.addEventListener('island',e=>{const d=parse(e);if(!d||typeof d.id!=='string'||w.dead)return;
         if(w.metaSeen&&!w.islands.some(i=>i.id===d.id))return;// not (or no longer) in the world list
         let sc=w.scenes.get(d.id);if(!sc){sc=new IslandScene(this,d.id);w.scenes.set(d.id,sc);}
         sc.sync(Array.isArray(d.sessions)?d.sessions.filter(s=>s&&typeof s.id==='string'):[]);});
       es.addEventListener('remove',e=>{const d=parse(e);if(!d||typeof d.id!=='string')return;
         w.scenes.delete(d.id);w.islands=w.islands.filter(i=>i.id!==d.id);this.relayout();
-        if(this.state.selIsland===d.id)this.setState({sel:null,selIsland:null});});
+        if(this.state.selIsland===d.id)this.setState({sel:null,selIsland:null});
+        if(w.confirm&&w.confirm.id===d.id)w.confirm=null;});
+      w.meTimer=setInterval(()=>{if(this.world===w&&w.view==='mine'&&!w.dead)this.loadMe();},ME_EVERY_MS);
+      if(view==='mine')this.loadMe();
     },
     worldMeta(d){
       const w=this.world;
@@ -3180,15 +3211,74 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       for(const i of w.islands)if(!w.scenes.has(i.id))w.scenes.set(i.id,new IslandScene(this,i.id));
       this.relayout();
     },
-    // The stream was refused for good: drop everything shown, then reload if the hub no longer says world mode
-    // (signed out: the hub sends the login page), else offer to sign in again.
-    worldEnded(){
-      const w=this.world;if(w.conn==='ended')return;
-      w.conn='ended';w.es&&w.es.close();w.scenes.clear();w.islands=[];w.pos=new Map();w.viewers=0;
+    // The stream is gone (refused: closed by the hub's answer; else it kept failing): drop everything shown and ask
+    // /api/config why. Signed out → reload (the hub sends the login page); still world mode → the hub refused the
+    // stream (too many tabs) or, for a stalled one, came back; no answer → unreachable. Both get "Thử lại".
+    worldEnded(refused){
+      const w=this.world;if(w.dead)return;
+      w.dead=true;w.es&&w.es.close();w.scenes.clear();w.islands=[];w.pos=new Map();w.viewers=0;w.confirm=null;
       this.setState({sel:null,selIsland:null});
-      fetch('/api/config',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}})
-        .then(r=>r.status===200&&/^application\/json\b/i.test(r.headers.get('content-type')||'')?r.json():null)
-        .then(cfg=>{if(!cfg||cfg.mode!=='world')location.reload();}).catch(()=>{});
+      probeConfig().then(x=>{if(this.world!==w)return;
+        if(x.kind==='signedout')return location.reload();
+        if(x.kind==='other'){w.conn='ended';this.forceUpdate();return location.reload();}
+        if(x.kind==='world'&&!refused)return this.startWorld(x.cfg);
+        w.conn=x.kind==='world'?'refused':'unreachable';this.forceUpdate();});
+    },
+    retryWorld(){
+      const w=this.world;if(w.retrying)return;
+      w.retrying=true;w.es&&w.es.close();this.forceUpdate();
+      probeConfig().then(x=>{if(this.world!==w)return;w.retrying=false;
+        if(x.kind==='signedout')return location.reload();
+        if(x.kind==='world')return this.startWorld(x.cfg);
+        this.forceUpdate();});// still failing: keep the state, the button works again
+    },
+    // ---- "Của tôi": my island, colours and devices from GET /api/me ----
+    loadMe(){
+      const w=this.world,seq=++w.meSeq;
+      return fetch('/api/me',{credentials:'same-origin',cache:'no-store',headers:{accept:'application/json'}})
+        .then(r=>r.status===200&&isJson(r)?r.json():Promise.reject(r.status))
+        .then(d=>{if(this.world!==w||seq!==w.meSeq)return;// an older answer than one already asked for
+          if(!d||typeof d!=='object'||!Array.isArray(d.devices))throw new Error('shape');
+          const island=d.island&&typeof d.island==='object'&&HEX_ID.test(d.island.id)?d.island:null;
+          w.mine={island,colors:(Array.isArray(d.colors)?d.colors:[]).filter(c=>okColor(c)===c),devices:d.devices.filter(x=>x&&typeof x==='object'&&HEX_ID.test(x.id))};
+          w.meErr=false;
+          if(!w.draft||!w.draft.dirty||!island)w.draft=island?{name:String(island.name||''),color:island.color,dirty:false}:null;
+          // Pairing or removal since the page loaded moves "my island" (and the layout that puts it first).
+          const id=island?island.id:null;if(id!==w.me.islandId){w.me={...w.me,islandId:id};this.relayout();}})
+        .catch(()=>{if(this.world===w&&seq===w.meSeq)w.meErr=true;})// keep what was shown
+        .then(()=>{if(this.world===w)this.forceUpdate();});
+    },
+    postJson(path,body){
+      return fetch(path,{method:'POST',credentials:'same-origin',cache:'no-store',
+        headers:{'Content-Type':'application/json','X-CSRF-Token':this.world.csrf,accept:'application/json'},body:JSON.stringify(body||{})})
+        .then(r=>(isJson(r)?r.json().catch(()=>null):Promise.resolve(null)).then(data=>({status:r.status,data})))
+        .catch(()=>({status:0,data:null}));
+    },
+    saveIsland(){
+      const w=this.world,d=w.draft;if(!d||w.saving)return;
+      w.saving=true;w.saveMsg=null;this.forceUpdate();
+      this.postJson('/api/me/island',{name:d.name,color:d.color}).then(({status,data})=>{if(this.world!==w)return;w.saving=false;
+        const i=status===200&&data&&data.island;
+        if(i){w.draft={name:String(i.name||''),color:i.color,dirty:false};w.saveMsg={ok:true,text:'Đã lưu.'};}
+        else w.saveMsg={ok:false,text:status===400?NAME_ERR:status===404?'Bạn chưa có đảo.':'Không lưu được, thử lại sau.'};
+        this.loadMe();});
+    },
+    // Revoke one of my devices, after the in-panel "Thu hồi <tên>?".
+    revokeDevice(id){
+      const w=this.world,c=w.confirm;if(!c||c.busy||!HEX_ID.test(id))return;
+      c.busy=true;c.err=null;this.forceUpdate();
+      this.postJson('/api/me/devices/'+id+'/revoke').then(({status})=>{if(this.world!==w)return;
+        if(status===200){if(w.confirm===c)w.confirm=null;}else{c.busy=false;c.err='Không thu hồi được máy.';}
+        this.loadMe();});
+    },
+    // Owner: remove someone's island. Success shows up as the stream's 'remove' event, which closes the panel.
+    removeIsland(id){
+      const w=this.world,c=w.confirm;if(!c||c.busy||!HEX_ID.test(id))return;
+      c.busy=true;c.err=null;this.forceUpdate();
+      this.postJson('/api/owner/islands/'+id+'/remove').then(({status,data})=>{if(this.world!==w||w.confirm!==c)return;
+        if(status===200)return;// stays "Đang gửi…" until the 'remove' event
+        c.busy=false;c.err=status===403&&data&&data.error==='owner_island'?'Không xoá được đảo của owner.':'Không xoá được đảo.';
+        this.forceUpdate();});
     },
     myIsland(){const w=this.world,id=w.me.islandId;return id?w.islands.find(i=>i.id===id)||null:null;},
     // Layout is index based (a removed island moves the later ones); the camera tweens to the new places.
@@ -3201,7 +3291,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     setView(view){
       const w=this.world;if(w.view===view)return;w.view=view;w.user=false;w.goal=this.homeCam();
       try{this.storage&&this.storage.setItem(VIEW_KEY,view);}catch(_){}
-      this.setState({sel:null,selIsland:null});
+      w.confirm=null;this.setState({sel:null,selIsland:null});
+      if(view==='mine'&&!w.dead)this.loadMe();
     },
     // The islands drawn in the current view, back to front: [{id, meta, sc, p}].
     shownIslands(){
@@ -3381,8 +3472,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const w=this.world,{showSettings}=this.state,mine=this.myIsland(),online=w.islands.filter(i=>i.online!==false).length;
       const pad={paddingLeft:'max(16px, env(safe-area-inset-left, 0px))',paddingRight:'max(16px, env(safe-area-inset-right, 0px))'};
       const hdrCtl={padding:'4px 10px',fontSize:11};
-      const connCol=w.conn==='ok'?'#46a758':w.conn==='error'||w.conn==='ended'?'#e5484d':'#f5a524';
-      const connText=w.conn==='ok'?'Đã kết nối':w.conn==='error'?'Mất kết nối, đang thử lại':w.conn==='ended'?'Phiên đã hết':'Đang kết nối';
+      const connCol=w.conn==='ok'?'#46a758':w.conn==='connecting'?'#f5a524':'#e5484d';
+      const connText={ok:'Đã kết nối',error:'Mất kết nối, đang thử lại',ended:'Phiên đã hết',refused:'Hub từ chối luồng xem',unreachable:'Không liên lạc được hub'}[w.conn]||'Đang kết nối';
       const tab=(v,label)=>h('button',{key:v,className:'btn'+(w.view===v?' btn-active':''),style:hdrCtl,'aria-pressed':w.view===v,onClick:()=>this.setView(v)},label);
       return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:8,paddingTop:12,paddingBottom:12,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
         h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'8px 16px'}},
@@ -3400,7 +3491,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
           h('canvas',{ref:this.setBack,style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:0,display:'block'}}),
           h('canvas',{ref:this.setWorldCanvas,onClick:e=>this.onWorldClick(e),style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:1,display:'block'}}),
           h('canvas',{ref:this.setFront,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:2,pointerEvents:'none',display:'block'}}),
-          w.view==='all'&&w.conn!=='ended'&&h('canvas',{ref:this.setMinimap,width:168,height:110,'aria-label':'Bản đồ nhỏ',onClick:e=>this.onMinimapClick(e),
+          w.view==='all'&&!w.dead&&h('canvas',{ref:this.setMinimap,width:168,height:110,'aria-label':'Bản đồ nhỏ',onClick:e=>this.onMinimapClick(e),
             style:{position:'absolute',zIndex:5,left:12,bottom:12,width:168,height:110,border:'2px solid var(--border)',cursor:'pointer'}}),
           this.worldPanel(mine),
           h('button',{className:'settings-toggle','aria-label':'Cài đặt',title:'Cài đặt: tốc độ, thời tiết',onClick:()=>this.setState(p=>({showSettings:!p.showSettings}))},'⚙'),
@@ -3409,11 +3500,19 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     },
     worldPanel(mine){
       const w=this.world,{sel,selIsland}=this.state;
-      if(w.conn==='ended')return h('div',{style:PANEL},
-        h('div',{style:TITLE},'Phiên đã hết'),
-        h('span',{style:{lineHeight:1.5}},'Hub đã ngắt luồng dữ liệu (đăng xuất, hết hạn hoặc bị chặn).'),
-        h('a',{href:'/auth/login',className:'btn btn-accent',style:{textAlign:'center',textDecoration:'none'}},'Đăng nhập lại'));
-      const close=h('button',{className:'btn',onClick:()=>this.setState({sel:null,selIsland:null}),style:{width:28,height:28,padding:0,flex:'none'}},'×');
+      if(w.dead){
+        if(w.conn==='refused'||w.conn==='unreachable'){const refused=w.conn==='refused';
+          return h('div',{style:PANEL},
+            h('div',{style:TITLE},refused?'Không mở được luồng xem':'Mất kết nối'),
+            h('span',{role:'alert',style:{lineHeight:1.5}},refused?'Hub từ chối luồng xem (có thể đang mở quá 5 tab).':'Không liên lạc được hub.'),
+            h('button',{className:'btn btn-accent',disabled:!!w.retrying,onClick:()=>this.retryWorld()},w.retrying?'Đang thử…':'Thử lại'));}
+        if(w.conn==='ended')return h('div',{style:PANEL},
+          h('div',{style:TITLE},'Phiên đã hết'),
+          h('span',{style:{lineHeight:1.5}},'Hub đã ngắt luồng dữ liệu (đăng xuất, hết hạn hoặc bị chặn).'),
+          h('a',{href:'/auth/login',className:'btn btn-accent',style:{textAlign:'center',textDecoration:'none'}},'Đăng nhập lại'));
+        return h('div',{style:PANEL},h('div',{style:TITLE},'Mất luồng dữ liệu'),h('span',{style:{color:'var(--muted)'}},'Đang hỏi hub…'));
+      }
+      const close=h('button',{className:'btn',onClick:()=>{w.confirm=null;this.setState({sel:null,selIsland:null});},style:{width:28,height:28,padding:0,flex:'none'}},'×');
       const sc=selIsland&&w.scenes.get(selIsland),meta=selIsland&&w.islands.find(i=>i.id===selIsland);
       const a=sc&&sel!=null&&sc.byId(sel);
       if(a){// Hub data has no names, prompts or folders: status, kind of work, room, and tool / model on "Cơ bản".
@@ -3432,11 +3531,16 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
             field('VAI TRÒ',par?'Sub-agent của '+par.short:'Main session')));
       }
       if(w.view==='all'&&sc&&meta){
+        const head=h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+          h('span',{style:{width:14,height:14,background:okColor(meta.color),flex:'none'}}),
+          h('div',{style:{...TITLE,flex:1,minWidth:0}},meta.name||'Đảo'),close);
+        // Owners may remove anyone's island but their own (the hub also refuses another owner's).
+        const canRemove=w.me.role==='owner'&&meta.id!==w.me.islandId;
+        const ask=canRemove&&w.confirm&&w.confirm.kind==='remove'&&w.confirm.id===meta.id?w.confirm:null;
+        if(ask)return h('div',{style:PANEL},head,
+          confirmRow('Xoá đảo này? Mọi máy của người đó bị thu hồi. Họ vẫn ghép lại được.','Xoá',ask,()=>this.removeIsland(meta.id),()=>{w.confirm=null;this.forceUpdate();}));
         const counts=new Map();for(const x of sc.agents)if(!x.leaving)counts.set(x.dept,(counts.get(x.dept)||0)+1);
-        return h('div',{style:PANEL},
-          h('div',{style:{display:'flex',alignItems:'center',gap:10}},
-            h('span',{style:{width:14,height:14,background:okColor(meta.color),flex:'none'}}),
-            h('div',{style:{...TITLE,flex:1,minWidth:0}},meta.name||'Đảo'),close),
+        return h('div',{style:PANEL},head,
           h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:'10px 14px'}},
             field('TRẠNG THÁI',meta.online===false?'Offline':'Online'),
             field('MỨC CHIA SẺ',meta.private?'Riêng tư':SHARE_LABEL.get(meta.share)||'—'),
@@ -3447,12 +3551,16 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
             counts.size?[...counts].map(([dk,n],i)=>{const Dp=sc.depts.get(dk);return h('div',{key:i,style:{display:'flex',alignItems:'center',gap:8}},
               h('span',{style:{width:8,height:8,background:Dp?Dp.color:'#8b8fa3',display:'inline-block',flex:'none'}}),
               h('span',{style:{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},dk),h('strong',{style:{color:'#ffffff'}},n));})
-            :h('span',{style:{color:'var(--muted)'}},'Chưa có session nào.')));
+            :h('span',{style:{color:'var(--muted)'}},'Chưa có session nào.')),
+          canRemove&&h('button',{className:'btn',onClick:()=>{w.confirm={kind:'remove',id:meta.id};this.forceUpdate();},
+            style:{...SMALL_BTN,alignSelf:'flex-start',borderColor:'#e5484d',color:'#ff9b9e'}},'Xoá đảo'));
       }
       if(w.view!=='mine')return null;
-      const fullLink=h('a',{href:'http://localhost:4317',target:'_blank',rel:'noopener noreferrer',style:{color:'#9fd3ff'}},'Mở bản đầy đủ trên máy này');
-      const meLink=h('a',{href:'/me',style:{color:'#9fd3ff'}},'Quản lý máy ở trang Đảo của tôi');
-      if(!w.me.islandId){const origin=location.origin;
+      const fullLink=h('a',{href:'http://localhost:4317',target:'_blank',rel:'noopener noreferrer',style:LINK},'Mở bản đầy đủ trên máy này');
+      const meLink=h('a',{href:'/me',style:LINK},'Quản lý máy ở trang Đảo của tôi');
+      const leaveLink=h('a',{href:'/me/leave',style:LINK},'Rời hub');
+      const isl=w.mine?w.mine.island:null;
+      if(w.mine?!isl:!w.me.islandId){const origin=location.origin;
         return h('div',{style:PANEL},
           h('div',{style:TITLE},'Bạn chưa có đảo'),
           h('span',{style:{lineHeight:1.5}},'Ghép máy đang chạy Claude Code với thế giới:'),
@@ -3461,13 +3569,49 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
             h('li',null,'Terminal in một mã dạng XXXX-XXXX và một link. Mở link, đăng nhập bằng tài khoản này.'),
             h('li',null,'Gõ đúng mã thấy trên terminal rồi bấm Cho phép. Chỉ làm vậy nếu bạn vừa chạy lệnh trên máy của mình.'),
             h('li',null,'Giữ server chạy; đảo của bạn hiện ra sau vài giây.')),
-          meLink);
+          w.meErr&&h('span',{role:'alert',style:ERR},'Không tải được danh sách máy'),
+          meLink,leaveLink);
       }
-      const sending=mine&&mine.online!==false;
+      const devs=w.mine?w.mine.devices:[],colors=w.mine?w.mine.colors:[],d=w.draft,sending=mine&&mine.online!==false;
+      const asking=(x,where)=>{const c=w.confirm;return c&&c.kind==='revoke'&&c.id===x.id&&c.where===where?c:null;};
+      const askRevoke=(x,where)=>h('button',{className:'btn',style:SMALL_BTN,onClick:()=>{w.confirm={kind:'revoke',id:x.id,where};this.forceUpdate();}},'Thu hồi');
+      const revokeAsk=(x,c)=>confirmRow('Thu hồi '+(clip(x.name,40)||'máy này')+'?','Thu hồi',c,()=>this.revokeDevice(x.id),()=>{w.confirm=null;this.forceUpdate();});
+      const edit=patch=>{const dr=w.draft;if(!dr)return;Object.assign(dr,patch,{dirty:true});w.saveMsg=null;this.forceUpdate();};
       return h('div',{style:PANEL},
         h('div',{style:{display:'flex',alignItems:'center',gap:10}},
-          h('span',{style:{width:14,height:14,background:okColor(mine&&mine.color),flex:'none'}}),
-          h('div',{style:{...TITLE,flex:1,minWidth:0}},mine?mine.name||'Đảo của tôi':'Đảo của tôi')),
+          h('span',{style:{width:14,height:14,background:okColor(mine?mine.color:isl&&isl.color),flex:'none'}}),
+          h('div',{style:{...TITLE,flex:1,minWidth:0}},(mine?mine.name:isl&&isl.name)||'Đảo của tôi')),
+        // A device paired in the last 7 days: say so, in case it was not this person.
+        devs.filter(x=>x.isNew&&x.send!=='revoked').map(x=>{const c=asking(x,'new');
+          return h('div',{key:'new-'+x.id,style:{display:'flex',flexDirection:'column',gap:6,padding:8,background:'var(--bg)',borderLeft:'4px solid #ffd166'}},
+            h('div',{style:{display:'flex',alignItems:'center',gap:8}},
+              h('span',{style:{flex:1,minWidth:0,lineHeight:1.4,overflowWrap:'anywhere'}},'Máy mới: '+(clip(x.name,40)||'—')+', lúc '+when(x.createdAt)),
+              !c&&askRevoke(x,'new')),
+            c&&revokeAsk(x,c));}),
+        d&&h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
+          h('span',{style:MUTED},'TÊN VÀ MÀU ĐẢO'),
+          h('div',{style:{display:'flex',gap:6}},
+            h('input',{type:'text','aria-label':'Tên đảo',maxLength:24,value:d.name,style:INPUT,
+              onChange:e=>edit({name:e.target.value}),onKeyDown:e=>{if(e.key==='Enter')this.saveIsland();}}),
+            h('button',{className:'btn',disabled:!!w.saving,style:SMALL_BTN,onClick:()=>this.saveIsland()},w.saving?'Đang lưu…':'Lưu')),
+          colors.length>0&&h('div',{role:'group','aria-label':'Màu đảo',style:{display:'flex',flexWrap:'wrap',gap:6}},
+            colors.map(c=>h('button',{key:c,type:'button',title:c,'aria-label':'Màu '+c,'aria-pressed':d.color===c,onClick:()=>edit({color:c}),
+              style:{width:24,height:24,padding:0,cursor:'pointer',boxSizing:'border-box',background:c,border:d.color===c?'3px solid #ffffff':'2px solid var(--border)'}}))),
+          w.saveMsg&&h('span',w.saveMsg.ok?{role:'status',style:{color:'#46a758'}}:{role:'alert',style:ERR},w.saveMsg.text)),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+          h('span',{style:MUTED},'MÁY ĐÃ GHÉP'),
+          !w.mine?(!w.meErr&&h('span',{style:{color:'var(--muted)'}},'Đang tải…')):
+          devs.length?devs.map(x=>{const[lab,col]=SEND_LABEL.get(x.send)||['—','#8b8fa3'],revoked=x.send==='revoked',c=asking(x,'list');
+            return h('div',{key:x.id,style:{display:'flex',flexDirection:'column',gap:6}},
+              h('div',{style:{display:'flex',alignItems:'center',gap:8,opacity:revoked?0.6:1}},
+                h('span',{style:{width:8,height:8,borderRadius:'50%',background:col,flex:'none'}}),
+                h('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:1}},
+                  h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#ffffff'}},clip(x.name,40)||'—'),
+                  h('span',{style:MUTED},lab+(!revoked&&SHARE_LABEL.has(x.share)?' · mức '+SHARE_LABEL.get(x.share):''))),
+                !revoked&&!c&&askRevoke(x,'list')),
+              c&&revokeAsk(x,c));})
+          :h('span',{style:{color:'var(--muted)'}},'Chưa có máy nào.'),
+          w.meErr&&h('span',{role:'alert',style:ERR},'Không tải được danh sách máy')),
         !mine&&h('span',{style:{color:'var(--muted)',lineHeight:1.5}},'Chưa máy nào gửi trạng thái. Chạy server của plugin trên máy đã ghép.'),
         mine&&h('div',{style:{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:'10px 14px'}},
           field('MỨC CHIA SẺ',SHARE_LABEL.get(mine.share)||'—'),
@@ -3475,7 +3619,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
           field('TRẠNG THÁI GỬI',sending?'Đang gửi':'Mất kết nối'),
           field('SESSION',String((w.scenes.get(mine.id)||{raw:new Map()}).raw.size))),
         h('span',{style:{color:'var(--muted)',lineHeight:1.5}},'Đây là bản đã lọc, đúng như người khác thấy. Tên session, câu lệnh và bong bóng chữ chỉ có trên máy của bạn.'),
-        fullLink,meLink);
+        fullLink,meLink,leaveLink);
     },
     worldSettings(){
       const st=this.state;
