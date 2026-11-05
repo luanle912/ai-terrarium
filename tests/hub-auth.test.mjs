@@ -286,3 +286,16 @@ test('dev login: off by default, on for localhost, still domain checked, no Secu
   }
   await h.hub.close();
 });
+
+test('google token fetch carries a timeout signal and an abort is a clean login failure', async () => {
+  let seen;
+  const h = setup({}, async (url, opts) => { seen = opts; throw Object.assign(new Error('aborted'), { name: 'TimeoutError' }); });
+  const l = await startLogin(h);
+  const cb = await call(h.hub, 'GET', `/auth/callback?code=c&state=${l.state}`, { cookie: l.cookie });
+  assert.ok(seen.signal && typeof seen.signal.aborted === 'boolean', 'AbortSignal passed to fetch');
+  assert.equal(cb.status, 502);
+  assert.ok(!cookiesOf(cb).some((c) => c.startsWith('__Host-tr_sess=') && !/Max-Age=0/.test(c)), 'no session created');
+  // the hub is still alive afterwards
+  assert.equal((await call(h.hub, 'GET', '/auth/login')).status, 302);
+  await h.hub.close();
+});

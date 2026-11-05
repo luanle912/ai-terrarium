@@ -173,6 +173,7 @@ function routes(ctx) {
             code, client_id: config.googleClientId, client_secret: config.googleClientSecret,
             redirect_uri: config.origin + '/auth/callback', grant_type: 'authorization_code', code_verifier: row.verifier,
           }).toString(),
+          signal: AbortSignal.timeout(10000),
         });
       } catch { throw new HttpError(502, 'could not reach Google'); }
       if (!tokenRes || !tokenRes.ok) throw new HttpError(400, 'sign-in failed');

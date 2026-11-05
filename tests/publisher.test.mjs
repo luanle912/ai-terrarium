@@ -259,3 +259,56 @@ test('default openBrowser: no shell, refuses metacharacters', () => {
   assert.deepEqual(run('darwin', 'https://hub.example/device').calls, [['open', ['https://hub.example/device']]]);
   assert.deepEqual(run('linux', 'https://hub.example/device').calls, [['xdg-open', ['https://hub.example/device']]]);
 });
+
+test('a bad salt in config.json does not crash the publisher: one log line, stays off', async () => {
+  const dir = tmp(); mkCfg(dir, { salt: 'not-hex' });
+  const r = rig(dir, ok, { v: snap(1) });
+  await r.step();
+  await r.run(5000);
+  assert.equal(r.calls.length, 0);
+  assert.equal(r.pub.state().state, 'off');
+  assert.equal(r.logs.filter((l) => /salt/.test(l)).length, 1, 'logged once, not every tick');
+  assert.ok(!r.logs.some((l) => /publisher error/.test(l)));
+  // fixing the config brings it up without a restart
+  mkCfg(dir);
+  fs.utimesSync(path.join(dir, 'config.json'), new Date(), new Date(Date.now() + 9000));
+  await r.run(3000);
+  assert.equal(r.calls.length, 1);
+  r.pub.stop();
+});
+
+test('join clamps the hub-provided interval to 1..60 s and expires_in to 1800 s', async () => {
+  const run = async (start) => {
+    const sleeps = [];
+    const fetch = async (url) => {
+      const j = (status, body) => ({ status, json: async () => body });
+      if (url.endsWith('/api/device/start')) return j(200, { device_code: 'DC', user_code: 'AAAA-BBBB', verification_uri: 'https://hub.example/device', ...start });
+      return j(428, {});
+    };
+    await assert.rejects(join('https://hub.example', { dir: path.join(tmp(), 'c'), fetch, log() {}, openBrowser() {}, sleep: async (ms) => { sleeps.push(ms); } }), /expired/);
+    return sleeps;
+  };
+  for (const interval of [-1, 0, 0.001]) {
+    const s = await run({ interval, expires_in: 10 });
+    assert.ok(s.every((ms) => ms >= 1000), `interval ${interval}: ${s.slice(0, 3)}`);
+  }
+  assert.ok((await run({ interval: 'abc', expires_in: 10 })).every((ms) => ms === 5000), 'non-number -> 5');
+  assert.ok((await run({ interval: 9999, expires_in: 10 })).every((ms) => ms === 60000), 'capped at 60');
+  const big = await run({ interval: 60, expires_in: 1e9 });
+  assert.ok(big.length <= 32, 'expires_in capped at 1800 s, got ' + big.length);
+  const low = await run({ interval: 60, expires_in: 0 });
+  assert.ok(low.length >= 10 && low.length <= 12, 'expires_in < 1 -> 600 s, got ' + low.length);
+});
+
+test('join strips control characters from hub-provided strings before printing', async () => {
+  const logs = [];
+  const fetch = async (url) => {
+    const j = (status, body) => ({ status, json: async () => body });
+    if (url.endsWith('/api/device/start')) return j(200, { device_code: 'DC', user_code: 'AB\x1b[2JCD\x07', verification_uri: 'https://hub.example/\x1b]0;pwn\x07device\x9b', expires_in: 600, interval: 5 });
+    return j(200, { token: 'trd_x', device_id: 'd', island_id: 'i' });
+  };
+  await join('https://hub.example', { dir: path.join(tmp(), 'c'), fetch, log: (l) => logs.push(l), openBrowser() {}, sleep: async () => {} });
+  const out = logs.join('\n');
+  assert.ok(!/[\x00-\x09\x0b-\x1f\x7f-\x9f]/.test(out), 'no control chars (newlines from log joins excepted)');
+  assert.match(out, /AB\[2JCD/);
+});
