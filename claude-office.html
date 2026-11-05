@@ -490,7 +490,26 @@ globalThis.WorldLogic = (() => {
     return out
   }
   // Level of detail from an island's on-screen width.
-  const lodFor = (screenW, stageW) => (screenW >= 0.5 * stageW ? 'full' : screenW >= 120 ? 'mid' : 'thumb')
+  const THUMB_PX = 120
+  const lodFor = (screenW, stageW) => (screenW >= 0.5 * stageW ? 'full' : screenW >= THUMB_PX ? 'mid' : 'thumb')
+
+  // Redraw budget: of the islands due for a redraw, take the `budget` that have waited longest.
+  // Never-drawn islands carry drawnAt = -Infinity and queue like the rest (no exemption).
+  const pickRedraws = (due, budget) =>
+    new Set([...due].sort((a, b) => a.drawnAt - b.drawnAt).slice(0, Math.max(0, budget)).map((d) => d.id))
+
+  // Public session view (hub payload) -> the shape the island renderer takes.
+  const clientSessions = (publicSessions) => {
+    const out = []
+    for (const s of publicSessions || []) {
+      if (!s || typeof s.id !== 'string') continue
+      const c = { id: s.id, parentId: s.parent, status: s.status, waitingOn: s.waitingOn, talkingTo: s.talkingTo, project: s.dept, kind: s.kind }
+      if (s.tool !== undefined) c.tool = s.tool
+      if (s.model !== undefined) c.model = s.model
+      out.push(c)
+    }
+    return out
+  }
   // rect = {x, y, w, h} in stage px; true when any part is on the stage.
   const visible = (r, stageW, stageH) => r.x + r.w > 0 && r.y + r.h > 0 && r.x < stageW && r.y < stageH
   const toScreen = (cam, wx, wy, stageW, stageH) => ({ x: (wx - cam.x) * cam.z + stageW / 2, y: (wy - cam.y) * cam.z + stageH / 2 })
@@ -513,7 +532,7 @@ globalThis.WorldLogic = (() => {
     const close = Math.abs(goal.z - n.z) < 0.5 && Math.hypot(goal.x - n.x, goal.y - n.y) * goal.z < 0.5
     return close ? { x: goal.x, y: goal.y, z: goal.z } : n
   }
-  return { SPACING, ISLAND_ASPECT, layout, lodFor, visible, fitAll, focusOn, camStep, toWorld, toScreen }
+  return { SPACING, ISLAND_ASPECT, THUMB_PX, layout, lodFor, pickRedraws, clientSessions, visible, fitAll, focusOn, camStep, toWorld, toScreen }
 })()
 </script>
 <script id="sky-render">
