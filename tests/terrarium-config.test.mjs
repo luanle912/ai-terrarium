@@ -98,3 +98,11 @@ test('unknown argv returns null', async () => {
   assert.equal(await runCommand([], { dir, log() {} }), null)
   assert.equal(await runCommand(['--port', '1'], { dir, log() {} }), null)
 })
+
+test('status strips control characters from what it prints', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tc-ctl-'));
+  writeConfig(dir, { hub: 'https://hub.example/\x1b[31m', token: 'trd_abcd', share: 'kin', projects: ['a\x1b[2Jb'], private: false });
+  const logs = [];
+  await runCommand(['status'], { dir, log: (l) => logs.push(l) });
+  assert.ok(!/[\x00-\x1f\x7f-\x9f]/.test(logs.join('')), JSON.stringify(logs));
+});

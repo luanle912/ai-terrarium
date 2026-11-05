@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const { createPublicView, kindOf, STATUSES, KINDS, MAX_SESSIONS } = require('../lib/public-view.js')
 
-const SALT = 'a1'.repeat(16)
+const SALT = 'a1'.repeat(32)
 const mk = (o = {}) => ({
   id: 'real-id-1', parentId: null, name: 'secret-session-name', project: 'ai-terrarium', cwd: '/Users/victim/secret',
   model: 'claude-opus-4-5', tokens: 123, status: 'working', tool: 'Bash',
@@ -29,7 +29,7 @@ test('ids are stable, salted and 12 hex', () => {
   const s = snap([mk()])
   const a = createPublicView(SALT)(s, opts()).sessions[0].id
   const b = createPublicView(SALT)(s, opts()).sessions[0].id
-  const c = createPublicView('b2'.repeat(16))(s, opts()).sessions[0].id
+  const c = createPublicView('b2'.repeat(32))(s, opts()).sessions[0].id
   assert.equal(a, b)
   assert.notEqual(a, c)
   assert.match(a, /^[0-9a-f]{12}$/)
@@ -152,3 +152,9 @@ test('co-ban listed project failing the dept regex becomes a letter', () => {
   const out = view(s, opts({ share: 'co-ban', projects: bad })).sessions
   for (const x of out) assert.match(x.dept, /^[A-P]$/)
 })
+
+test('createPublicView rejects a salt that is not 64 hex chars', () => {
+  for (const bad of ['', 'zz', 'ab'.repeat(16), 'ab'.repeat(33), 'g'.repeat(64), undefined, null, 5])
+    assert.throws(() => createPublicView(bad), /salt/, String(bad));
+  assert.doesNotThrow(() => createPublicView('AB'.repeat(32)));
+});

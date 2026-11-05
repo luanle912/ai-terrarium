@@ -237,3 +237,24 @@ test('createHub exposes db and world and closes cleanly', async () => {
     assert.equal(typeof hub.world.publish, "function");
   });
 });
+
+test('plain http public URL is only allowed for loopback hosts', () => {
+  assert.throws(() => loadConfig({ ...OK, HUB_PUBLIC_URL: 'http://terrarium.lan:4318' }), /HUB_PUBLIC_URL/);
+  assert.equal(loadConfig({ ...OK, HUB_PUBLIC_URL: 'http://localhost:4318' }).origin, 'http://localhost:4318');
+  assert.equal(loadConfig({ ...OK, HUB_PUBLIC_URL: 'http://127.0.0.1:4318' }).secure, false);
+  assert.equal(loadConfig({ ...OK, HUB_PUBLIC_URL: 'http://[::1]:4318' }).secure, false);
+  assert.equal(loadConfig({ ...OK, HUB_PUBLIC_URL: 'https://x.example' }).secure, true);
+  // reported together with the other errors
+  assert.throws(() => loadConfig({ HUB_PUBLIC_URL: 'http://terrarium.lan' }), (e) => /HUB_PUBLIC_URL/.test(e.message) && /HUB_ALLOWED_DOMAINS/.test(e.message));
+});
+
+test('dev login refuses a non-loopback HUB_HOST', () => {
+  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ...dev } = OK;
+  const base = { ...dev, HUB_DEV_LOGIN: '1', HUB_PUBLIC_URL: 'http://localhost:4318' };
+  for (const h of ['0.0.0.0', '192.168.1.5', '::'])
+    assert.throws(() => loadConfig({ ...base, HUB_HOST: h }), /HUB_HOST/, h);
+  for (const h of ['127.0.0.1', '::1', 'localhost', undefined])
+    assert.equal(loadConfig({ ...base, HUB_HOST: h }).devLogin, true, String(h));
+  // non-dev hubs may bind anywhere
+  assert.equal(loadConfig({ ...OK, HUB_HOST: '0.0.0.0' }).host, '0.0.0.0');
+});

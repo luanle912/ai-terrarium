@@ -4,6 +4,9 @@
 
 const list = (v) => String(v || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
+const LOOPBACK_URL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
+const LOOPBACK_BIND_HOSTS = ['localhost', '127.0.0.1', '::1'];
+
 function loadConfig(env = process.env) {
   const problems = [];
   const need = (name, why) => problems.push(`${name}: ${why}`);
@@ -21,6 +24,10 @@ function loadConfig(env = process.env) {
       if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('protocol');
       origin = u.origin;
       secure = u.protocol === 'https:';
+      // S10: plain http only for loopback (session cookies are Secure-only and tokens must not cross a LAN in clear).
+      if (!secure && !LOOPBACK_URL_HOSTS.includes(u.hostname)) {
+        need('HUB_PUBLIC_URL', 'http:// is only allowed for localhost, 127.0.0.1 or [::1]; use https://');
+      }
       publicUrl = publicUrl.replace(/\/+$/, '');
     } catch {
       need('HUB_PUBLIC_URL', 'not a valid http(s) URL');
@@ -40,6 +47,11 @@ function loadConfig(env = process.env) {
       local = u.protocol === 'http:' && !u.username && !u.password && (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
     } catch { /* invalid URL is reported above */ }
     if (!local) need('HUB_DEV_LOGIN', 'HUB_DEV_LOGIN=1 is only allowed when HUB_PUBLIC_URL is http://localhost or http://127.0.0.1');
+  }
+
+  // Dev login has no real auth, so the hub must not listen beyond this machine.
+  if (devLogin && env.HUB_HOST && !LOOPBACK_BIND_HOSTS.includes(String(env.HUB_HOST).trim().toLowerCase())) {
+    need('HUB_HOST', 'HUB_DEV_LOGIN=1 requires HUB_HOST to be 127.0.0.1, ::1 or localhost');
   }
 
   const googleClientId = String(env.GOOGLE_CLIENT_ID || '');
