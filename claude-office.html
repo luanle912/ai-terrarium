@@ -293,6 +293,12 @@ vi:{
 "world.header.viewMode":"Chế độ xem",
 "world.view.all":"Toàn cảnh",
 "world.view.mine":"Của tôi",
+"world.sheet.agentAria":"Nhân viên {dept}",
+"world.sheet.islandAria":"Đảo {name}",
+"world.sheet.pairHint":"Ghép một máy để có đảo",
+"world.sheet.noDevice":"Chưa máy nào gửi",
+"world.sheet.collapse":"Thu gọn",
+"world.sheet.expand":"Mở rộng",
 "world.back.aria":"Về Toàn cảnh (Esc)",
 "world.slots.label":"Đảo",
 "world.slots.online":"· {n} online",
@@ -617,6 +623,12 @@ en:{
 "world.header.viewMode":"View mode",
 "world.view.all":"Overview",
 "world.view.mine":"Mine",
+"world.sheet.agentAria":"Staff member {dept}",
+"world.sheet.islandAria":"Island {name}",
+"world.sheet.pairHint":"Pair a machine to get an island",
+"world.sheet.noDevice":"No machine sending yet",
+"world.sheet.collapse":"Collapse",
+"world.sheet.expand":"Expand",
 "world.back.aria":"Back to Overview (Esc)",
 "world.slots.label":"Islands",
 "world.slots.online":"· {n} online",
@@ -941,6 +953,12 @@ ja:{
 "world.header.viewMode":"表示モード",
 "world.view.all":"全体",
 "world.view.mine":"自分",
+"world.sheet.agentAria":"スタッフ {dept}",
+"world.sheet.islandAria":"島 {name}",
+"world.sheet.pairHint":"マシンをペアリングすると島ができます",
+"world.sheet.noDevice":"まだ送信中のマシンはありません",
+"world.sheet.collapse":"折りたたむ",
+"world.sheet.expand":"展開",
 "world.back.aria":"全体に戻る (Esc)",
 "world.slots.label":"島",
 "world.slots.online":"· {n} オンライン",
@@ -1265,6 +1283,12 @@ ko:{
 "world.header.viewMode":"보기 모드",
 "world.view.all":"전체 보기",
 "world.view.mine":"내 섬만",
+"world.sheet.agentAria":"직원 {dept}",
+"world.sheet.islandAria":"섬 {name}",
+"world.sheet.pairHint":"기기를 페어링하면 섬이 생겨요",
+"world.sheet.noDevice":"아직 전송 중인 기기가 없어요",
+"world.sheet.collapse":"접기",
+"world.sheet.expand":"펼치기",
 "world.back.aria":"전체 보기로 돌아가기 (Esc)",
 "world.slots.label":"섬",
 "world.slots.online":"· {n} 온라인",
@@ -1589,6 +1613,12 @@ zh:{
 "world.header.viewMode":"视图模式",
 "world.view.all":"全景",
 "world.view.mine":"我的",
+"world.sheet.agentAria":"员工 {dept}",
+"world.sheet.islandAria":"岛屿 {name}",
+"world.sheet.pairHint":"配对一台设备即可拥有岛屿",
+"world.sheet.noDevice":"还没有设备在发送",
+"world.sheet.collapse":"收起",
+"world.sheet.expand":"展开",
 "world.back.aria":"返回全景 (Esc)",
 "world.slots.label":"岛屿",
 "world.slots.online":"· {n} 在线",
@@ -1913,6 +1943,12 @@ es:{
 "world.header.viewMode":"Modo de vista",
 "world.view.all":"Vista general",
 "world.view.mine":"La mía",
+"world.sheet.agentAria":"Empleado {dept}",
+"world.sheet.islandAria":"Isla {name}",
+"world.sheet.pairHint":"Vincula un equipo para tener isla",
+"world.sheet.noDevice":"Ningún equipo envía todavía",
+"world.sheet.collapse":"Contraer",
+"world.sheet.expand":"Expandir",
 "world.back.aria":"Volver a la vista general (Esc)",
 "world.slots.label":"Islas",
 "world.slots.online":"· {n} en línea",
@@ -6339,7 +6375,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const a=sc&&sel!=null&&sc.byId(sel);
       if(a){// Hub data has no names, prompts or folders: status, kind of work, room, and tool / model on "Cơ bản".
         const raw=sc.raw.get(a.sid)||{},Dp=sc.depts.get(a.dept),stx=ST[a.status]||ST.working,par=a.parent&&sc.byId(a.parent);
-        return this.worldSheet({label:'Nhân viên '+clip(a.dept,40),
+        return this.worldSheet({label:tr('world.sheet.agentAria',{dept:clip(a.dept,40)}),
           icon:h('div',{style:{width:34,height:34,background:Dp?Dp.color:'#8b8fa3',color:'#ffffff',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Pixelify Sans',monospace",fontSize:13,fontWeight:700,flex:'none'}},clip(a.short,4)),
           title:clip(a.dept,40),sub:(meta?clip(meta.name,40)+' · ':'')+stx[0],extra:close},[
           h('div',{style:{display:'flex',flexDirection:'column',gap:4,padding:10,background:'var(--bg)',borderLeft:'4px solid '+stx[1]}},h('span',{style:{fontWeight:600,color:stx[1]}},stx[0])),
@@ -6351,8 +6387,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
             field(tr('world.agent.field.role'),par?tr('world.agent.role.sub',{parent:par.short}):tr('world.agent.role.main')))]);
       }
       if(w.view==='one'&&sc&&meta){
-        const tl=tally(sc),bar={label:'Đảo '+(meta.name||''),icon:swatch(meta.color),title:meta.name||'Đảo',extra:close,
-          sub:(meta.online===false?'Offline':'Online')+' · '+(meta.private?'riêng tư':tl.busy+' đang làm')};
+        const tl=tally(sc),bar={label:tr('world.sheet.islandAria',{name:meta.name||''}),icon:swatch(meta.color),title:meta.name||tr('world.island.fallbackName'),extra:close,
+          sub:(meta.online===false?tr('world.island.offline'):tr('world.island.online'))+' · '+(meta.private?tr('world.label.private'):tr('world.label.busy',{n:tl.busy}))};
         // Owners may remove anyone's island but their own (the hub also refuses another owner's).
         const canRemove=w.me.role==='owner'&&meta.id!==this.myIslandId()&&meta.id!==w.me.islandId;
         const ask=canRemove&&w.confirm&&w.confirm.kind==='remove'&&w.confirm.id===meta.id?w.confirm:null;
@@ -6380,7 +6416,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const leaveLink=h('a',{href:'/me/leave',style:LINK},tr('world.mine.link.leave'));
       const isl=w.mine?w.mine.island:null;
       if(w.mine?!isl:!w.me.islandId){const origin=location.origin;
-        return this.worldSheet({icon:swatch(GOLD),title:tr('world.join.title'),sub:'Ghép một máy để có đảo'},[
+        return this.worldSheet({icon:swatch(GOLD),title:tr('world.join.title'),sub:tr('world.sheet.pairHint')},[
           h('span',{style:{lineHeight:1.5}},tr('world.join.intro')),
           h('ol',{style:{margin:0,paddingLeft:18,display:'flex',flexDirection:'column',gap:6,lineHeight:1.5}},
             h('li',null,tr('world.join.step1'),h('code',{style:{display:'block',marginTop:4,background:'var(--bg)',padding:'6px 8px',color:'#ffd166',fontSize:11,wordBreak:'break-all',userSelect:'all'}},'node server.js join '+origin)),
@@ -6399,8 +6435,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const revokeAsk=(x,c)=>confirmRow(tr('world.mine.revoke.confirm',{name:clip(x.name,40)||tr('world.mine.revoke.thisDevice')}),tr('world.mine.revoke.button'),c,()=>this.revokeDevice(x.id),()=>{w.confirm=null;this.forceUpdate();});
       const edit=patch=>{const dr=w.draft;if(!dr)return;Object.assign(dr,patch,{dirty:true});w.saveMsg=null;this.forceUpdate();};
       const mt=mine&&tally(w.scenes.get(mine.id));
-      return this.worldSheet({label:'Của tôi',icon:swatch(mine?mine.color:isl&&isl.color),title:(mine?mine.name:isl&&isl.name)||tr('world.mine.fallbackName'),
-        sub:!mine?'Chưa máy nào gửi':(sending?'Đang gửi':'Mất kết nối')+' · '+(mine.private?'riêng tư':mt.busy+' đang làm')},[
+      return this.worldSheet({label:tr('world.view.mine'),icon:swatch(mine?mine.color:isl&&isl.color),title:(mine?mine.name:isl&&isl.name)||tr('world.mine.fallbackName'),
+        sub:!mine?tr('world.sheet.noDevice'):(sending?tr('world.mine.sending'):tr('world.mine.disconnected'))+' · '+(mine.private?tr('world.label.private'):tr('world.label.busy',{n:mt.busy}))},[
         // A device paired in the last 7 days: say so, in case it was not this person.
         fold?h('div',{key:'new-fold',style:{display:'flex',alignItems:'center',gap:8,padding:8,background:'var(--bg)',borderLeft:'4px solid #ffd166'}},
           h('span',{style:{flex:1,minWidth:0,lineHeight:1.4}},tr('world.mine.newDevices',{n:fresh.length})),
@@ -6454,7 +6490,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const chev=phone===open?'▾':'▴';
       return h('section',{key:'sheet:'+w.view+':'+(w.focus||''),className:'sky-sheet'+(phone?' is-phone':''),'aria-label':o.label||o.title},
         h('div',{className:'sky-sheet-head'},
-          h('button',{type:'button',className:'sky-sheet-bar','aria-expanded':open,'aria-controls':id,title:open?'Thu gọn':'Mở rộng',
+          h('button',{type:'button',className:'sky-sheet-bar','aria-expanded':open,'aria-controls':id,title:open?tr('world.sheet.collapse'):tr('world.sheet.expand'),
             onClick:()=>{w.sheetOpen=!open;this.forceUpdate();}},
             o.icon,
             h('span',{className:'sky-sheet-name'},h('span',{style:TITLE},o.title),o.sub&&h('span',{style:{...MUTED,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},o.sub)),
