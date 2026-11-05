@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Languages** — The office page speaks Vietnamese, English, Japanese, Korean, Simplified Chinese and Spanish. It follows the browser language (English when there is no match), and a "Language" picker at the top of the ⚙ panel switches and remembers the choice; strings live in one table per language in the page, and `tests/i18n.test.mjs` checks every language has every key with the same placeholders
 - **Multi-island hub** — A small hub server (`hub/server.js`, no dependencies) lets newera.inc staff sign in with Google, pair their machine with a device code and see everyone's island in one sky; setup guide in `docs/hub-setup.md`
 - **World view** — The hub page has two modes: "Toàn cảnh" (the whole sky) and "Của tôi" (your own island); the local page shows a "Thế giới" chip once the machine has joined a hub
 - **Publisher commands** — `node server.js join <hub>`, `share kin|co-ban`, `private on|off`, `status` and `leave`; only an allow-list of fields leaves the machine, and `private on` shows the island as private within 3 seconds
