@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Upgrading from GĐ1** — The hub DB upgrades in place (`PRAGMA user_version` 2); stop the hub, back up `hub.sqlite`, set `HUB_SECRET_KEY`, start the new version; everyone signs in again within 24 hours so their machines keep sending
 - **`leave` revokes on the hub** — `node server.js leave` now revokes the device on the hub before removing the local config; `join` again also revokes the old token
 - **Local server hardening** — The local server only trusts loopback host names on its own port (extra names via `ALLOWED_HOSTS`) and no longer answers cross-origin requests unless `ALLOWED_ORIGIN` is set
+- **World view performance** — Small islands keep their canvas and first draws are spread over frames, so "Toàn cảnh" with 10 islands stays under 1 ms of script per frame even without a GPU, and switching back from "Của tôi" no longer stutters
+- **Hub islands follow v1.4.x drawing** — Islands in the world view use the new desk design, pantry and office dogs; the 5H/7D usage board is left off on hub islands and in "Xem như người khác" because those carry no usage data
 
 ### Fixed
 
