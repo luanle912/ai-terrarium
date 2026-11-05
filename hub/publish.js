@@ -9,7 +9,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { HttpError, send, sendJson, SECURITY_HEADERS } = require('./http.js');
-const { sha256hex } = require('./auth.js');
+const { sha256hex, NO_REFRESH_TTL_MS } = require('./auth.js');
 const { validatePublish } = require('./validate.js');
 const { mePage, PAGE_CSP } = require('./pages.js');
 
@@ -114,13 +114,19 @@ function routes(ctx) {
     for (const s of [...streams]) { streams.delete(s); try { s.res.end(); } catch { /* ignore */ } }
   });
 
-  function bearerDevice(req) {
+  // Returns {device, island}, null (401), or false when it already replied 403 login_required.
+  function bearerDevice(req, res) {
     const m = /^Bearer (\S{1,200})$/.exec(String(req.headers.authorization || ''));
     if (!m) return null;
     const device = db.getDeviceByTokenHash(sha256hex(m[1]));
     if (!device || device.revoked_at != null) return null;
     const user = db.getUserById(device.user_id);
     if (!user || user.banned_at != null) return null;
+    // Without a refresh token Google cannot be re-checked, so the device stops after 24 h until the next login.
+    if (!user.refresh_enc && deps.now() - (user.last_login_at || 0) > NO_REFRESH_TTL_MS) {
+      sendJson(res, 403, { error: 'login_required' });
+      return false;
+    }
     const island = db.getIslandByUser(user.id);
     return island ? { device, island } : null;
   }
@@ -133,7 +139,8 @@ function routes(ctx) {
   list.push({
     method: 'POST', path: '/api/publish',
     async handler(req, res) {
-      const auth = bearerDevice(req); // cookies are ignored on purpose
+      const auth = bearerDevice(req, res); // cookies are ignored on purpose
+      if (auth === false) return;
       if (!auth) throw new HttpError(401, 'unauthorized');
       const now = deps.now();
       if (!limiters.publish.take(auth.device.id, now)) {

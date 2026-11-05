@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { startDevHub, devLogin, pairDevice, postJson } from './hub-helpers.mjs';
+import { startDevHub, devLogin, pairDevice, postJson, makeGoogle, googleLogin, NOW } from './hub-helpers.mjs';
 
 const require = createRequire(import.meta.url);
 const { validatePublish } = require('../hub/validate.js');
@@ -376,7 +376,7 @@ test('world state rebuilds from the next publish after a restart', async () => {
     assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 40 }), bearer(dev.token))).status, 204);
     const cfg = h1.config;
     await h1.hub.close(); // keep the temp dir until the end
-    hub2 = createHub(loadConfig({ HUB_PUBLIC_URL: cfg.publicUrl, HUB_ALLOWED_DOMAINS: 'newera.inc', HUB_OWNER_EMAILS: 'boss@newera.inc', HUB_DEV_LOGIN: '1', HUB_DB: dbPath, HUB_PORT: String(port) }), { now: () => h1.clock.t, log: () => {} });
+    hub2 = createHub(loadConfig({ HUB_PUBLIC_URL: cfg.publicUrl, HUB_ALLOWED_DOMAINS: 'newera.inc', HUB_OWNER_EMAILS: 'boss@newera.inc', HUB_SECRET_KEY: cfg.secretKey.toString('base64'), HUB_DEV_LOGIN: '1', HUB_DB: dbPath, HUB_PORT: String(port) }), { now: () => h1.clock.t, log: () => {} });
     await new Promise((res, rej) => { hub2.server.once('error', rej); hub2.server.listen(port, '127.0.0.1', res); });
     assert.equal(hub2.world.islands().length, 0);
     await new Promise((r) => setTimeout(r, 50));
@@ -425,5 +425,53 @@ test('/me lists devices, escapes names, has revoke and logout forms', async () =
     const out = await fetch(h.url + '/auth/logout', { method: 'POST', redirect: 'manual', headers: { cookie: login.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: login.csrf }) });
     assert.equal(out.status, 302);
     assert.equal((await fetch(h.url + '/me', { headers: { cookie: login.cookie }, redirect: 'manual' })).status, 302);
+  } finally { await h.close(); }
+});
+
+test('device of a user without refresh token gets 403 login_required after 24 h', async () => {
+  const h = await startDevHub();
+  try {
+    const login = await devLogin(h.url, 'an@newera.inc', 'An');
+    const dev = await pairDevice(h.url, login, 'Laptop');
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    h.clock.advance(24 * 3600 * 1000);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204); // exactly 24 h is still fine
+    h.clock.advance(1);
+    const late = await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
+    assert.equal(late.status, 403);
+    assert.deepEqual(await late.json(), { error: 'login_required' });
+    // a fresh login brings it back
+    await devLogin(h.url, 'an@newera.inc', 'An');
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    // a revoked device is still a plain 401, even when stale
+    h.clock.advance(25 * 3600 * 1000);
+    h.hub.db.revokeDevicesForUser(h.hub.db.getUserBySub('dev:an@newera.inc').id, h.clock.t);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 401);
+  } finally { await h.close(); }
+});
+
+test('a user with a refresh token never gets login_required', async () => {
+  const google = makeGoogle({ now: () => NOW });
+  const h = await startDevHub({ google });
+  try {
+    const login = await googleLogin(h.url, google, 'an@newera.inc', { name: 'An' });
+    const dev = await pairDevice(h.url, login, 'Laptop');
+    h.clock.advance(30 * 24 * 3600 * 1000);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+  } finally { await h.close(); }
+});
+
+test('re-login closes the event stream of the old session', async () => {
+  const google = makeGoogle({ now: () => NOW });
+  const h = await startDevHub({ google });
+  try {
+    const a = await googleLogin(h.url, google, 'an@newera.inc', { name: 'An' });
+    const st = await openStream(h.url, a.cookie);
+    try {
+      await st.until((e) => e.event === 'world');
+      const b = await googleLogin(h.url, google, 'an@newera.inc', { name: 'An', cookie: a.cookie });
+      assert.notEqual(b.cookie, a.cookie);
+      assert.equal(await st.waitEnd(), true);
+    } finally { st.close(); }
   } finally { await h.close(); }
 });

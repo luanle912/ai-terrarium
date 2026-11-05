@@ -2,7 +2,7 @@
 //   startDevHub(opts?)           -> {url, hub, config, clock, logs, close()}
 //        opts: {env: {...extra env}, now: () => ms (default: controllable clock), deps: {...extra createHub deps}}
 //        temp sqlite file, random free port, HUB_DEV_LOGIN on http://127.0.0.1:<port>, domains newera.inc,
-//        owner boss@newera.inc. clock = {t, advance(ms)} drives deps.now unless opts.now is given.
+//        owner boss@newera.inc, random HUB_SECRET_KEY. clock = {t, advance(ms)} drives deps.now unless opts.now is given.
 //   devLogin(url, email, name?)  -> {cookie, csrf}   (cookie = "tr_sess=...", ready for the Cookie header)
 //   pairDevice(url, login, name?) -> {token, device_id, island_id, user_code}  (start -> approve form -> token)
 //   makeGoogle({now})            -> fake Google: fetch (JWKS, token, revoke), sign(claims, {kid?, key?}), rotate(),
@@ -36,6 +36,7 @@ export async function startDevHub(opts = {}) {
   const logs = [];
   const config = loadConfig({
     HUB_PUBLIC_URL: url, HUB_ALLOWED_DOMAINS: 'newera.inc', HUB_OWNER_EMAILS: 'boss@newera.inc',
+    HUB_SECRET_KEY: crypto.randomBytes(32).toString('base64'),
     HUB_DEV_LOGIN: '1', HUB_DB: path.join(dir, 'hub.sqlite'), HUB_PORT: String(port),
     ...(opts.google ? { GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'test-secret' } : {}), ...(opts.env || {}),
   });

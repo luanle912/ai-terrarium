@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const { loadConfig } = require('../hub/config.js');
 const { createHub } = require('../hub/server.js');
 const { checkClaims, sha256hex } = require('../hub/auth.js');
+const { open } = require('../hub/secret.js');
 import { makeGoogle } from './hub-helpers.mjs';
 
 const NOW = 1_800_000_000_000;
@@ -14,6 +15,7 @@ const CID = 'test-client'; // the audience makeGoogle() puts in its default clai
 const BASE = {
   HUB_PUBLIC_URL: 'https://terrarium.newera.inc', HUB_ALLOWED_DOMAINS: 'newera.inc',
   HUB_OWNER_EMAILS: 'boss@newera.inc', GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'sekret', HUB_DB: ':memory:',
+  HUB_SECRET_KEY: crypto.randomBytes(32).toString('base64'),
 };
 const good = (over = {}) => ({
   iss: 'https://accounts.google.com', aud: CID, sub: 's1', email: 'a@newera.inc', email_verified: true, hd: 'newera.inc',
@@ -63,17 +65,22 @@ const call = (hub, method, url, headers = {}) => new Promise((resolve, reject) =
 const cookiesOf = (r) => [].concat(r.headers['Set-Cookie'] || []);
 const pair = (c) => c.split(';')[0];
 
-async function startLogin(h) {
-  const r = await call(h.hub, 'GET', '/auth/login');
+async function startLogin(h, p = '/auth/login') {
+  const r = await call(h.hub, 'GET', p);
   const loc = new URL(r.headers.Location);
   return { r, state: loc.searchParams.get('state'), nonce: loc.searchParams.get('nonce'), loc, cookie: pair(cookiesOf(r)[0]) };
 }
-async function signIn(h, claims = {}) {
-  const l = await startLogin(h);
+// opts.cookie = an existing session cookie sent along (as a browser that is already signed in would).
+async function signIn(h, claims = {}, opts = {}) {
+  const l = await startLogin(h, opts.path);
   h.google.claims = good({ nonce: l.nonce, ...claims });
-  const cb = await call(h.hub, 'GET', `/auth/callback?code=c&state=${l.state}`, { cookie: l.cookie });
-  return { l, cb, cookie: cb.status === 302 ? pair(cookiesOf(cb)[0]) : null };
+  const jar = [opts.cookie, l.cookie].filter(Boolean).join('; ');
+  const cb = await call(h.hub, 'GET', `/auth/callback?code=c&state=${l.state}`, { cookie: jar });
+  const sess = cookiesOf(cb).map(pair).find((c) => c.startsWith('__Host-tr_sess=') && !c.endsWith('='));
+  return { l, cb, cookie: sess || null };
 }
+const noRefresh = (h) => { h.google.onToken = (params) => ({ status: 200, body: { id_token: h.google.sign({ sub: 's1', email: 'a@newera.inc', iat: NOW / 1000 - 10, exp: NOW / 1000 + 3600, ...h.google.claims }) } }); };
+const sessionRow = (h, cookie) => h.hub.db.getSession(sha256hex(cookie.split('=')[1]));
 
 test('login sets state cookie and redirects to google with hd and pkce', async () => {
   const h = setup();
@@ -198,7 +205,7 @@ test('api config needs a session and returns csrf', async () => {
   assert.equal(r.status, 200);
   const j = JSON.parse(r.text);
   assert.equal(j.mode, 'world');
-  assert.deepEqual(j.me, { id: 1, name: 'Ann', email: 'a@newera.inc', islandId: null });
+  assert.deepEqual(j.me, { id: 1, name: 'Ann', email: 'a@newera.inc', islandId: null, role: 'member' });
   assert.ok(j.csrf.length >= 40);
   h.hub.db.upsertIsland({ id: 'isl1', userId: 1, name: 'x', color: '#fff', now: NOW });
   assert.equal(JSON.parse((await call(h.hub, 'GET', '/api/config', { cookie })).text).me.islandId, 'isl1');
@@ -298,5 +305,125 @@ test('google token fetch carries a timeout signal and an abort is a clean login 
   assert.ok(!cookiesOf(cb).some((c) => c.startsWith('__Host-tr_sess=') && !/Max-Age=0/.test(c)), 'no session created');
   // the hub is still alive afterwards
   assert.equal((await call(h.hub, 'GET', '/auth/login')).status, 302);
+  await h.hub.close();
+});
+
+// ---- refresh token, session length, role ----
+test('login asks for offline access', async () => {
+  const h = setup();
+  const { loc } = await startLogin(h);
+  assert.equal(loc.searchParams.get('access_type'), 'offline');
+  assert.equal(loc.searchParams.get('prompt'), 'select_account');
+  assert.match(loc.href, /access_type=offline/);
+  await h.hub.close();
+});
+
+test('callback stores the refresh token encrypted', async () => {
+  const h = setup();
+  const { cb } = await signIn(h);
+  assert.equal(cb.status, 302);
+  const u = h.hub.db.getUserBySub('s1');
+  assert.ok(u.refresh_enc);
+  assert.ok(!u.refresh_enc.includes('rt-1'));
+  assert.equal(open(h.hub.ctx.config.secretKey, u.refresh_enc, 'user:' + u.id), 'rt-1');
+  assert.throws(() => open(h.hub.ctx.config.secretKey, u.refresh_enc, 'user:' + (u.id + 1)));
+  // never in the request log
+  assert.ok(!h.logs.some((l) => l.includes('rt-1') || l.includes(u.refresh_enc) || l.includes(h.hub.ctx.config.secretKey.toString('base64'))));
+  await h.hub.close();
+});
+
+test('no refresh token: one consent retry, then a 24 h session', async () => {
+  const h = setup();
+  noRefresh(h);
+  const first = await signIn(h);
+  assert.equal(first.cb.status, 302);
+  assert.equal(first.cb.headers.Location, '/auth/login?consent=1');
+  assert.equal(first.cookie, null);
+  assert.equal(h.hub.db.raw.prepare('SELECT COUNT(*) n FROM sessions').get().n, 0);
+  const retry = await startLogin(h, '/auth/login?consent=1');
+  assert.equal(retry.loc.searchParams.get('prompt'), 'consent');
+  assert.equal(retry.loc.searchParams.get('access_type'), 'offline');
+  const second = await signIn(h, {}, { path: '/auth/login?consent=1' });
+  assert.equal(second.cb.status, 302);
+  assert.equal(second.cb.headers.Location, '/');
+  const row = sessionRow(h, second.cookie);
+  assert.equal(row.expires_at - row.created_at, 86400000);
+  assert.equal(h.hub.db.getUserBySub('s1').refresh_enc, null);
+  await h.hub.close();
+});
+
+test('a session with a refresh token lasts 7 days', async () => {
+  const h = setup();
+  const { cookie } = await signIn(h);
+  const row = sessionRow(h, cookie);
+  assert.equal(row.expires_at - row.created_at, 7 * 86400000);
+  assert.equal(h.hub.db.getUserBySub('s1').checked_at, NOW);
+  await h.hub.close();
+});
+
+test('a returning user without a new refresh token keeps the stored one and gets 7 days', async () => {
+  const h = setup();
+  await signIn(h);
+  noRefresh(h);
+  const { cb, cookie } = await signIn(h);
+  assert.equal(cb.headers.Location, '/');
+  const row = sessionRow(h, cookie);
+  assert.equal(row.expires_at - row.created_at, 7 * 86400000);
+  await h.hub.close();
+});
+
+test('logging in again ends the previous session of this browser', async () => {
+  const h = setup();
+  const ended = [];
+  h.hub.ctx.helpers.onSessionEnd((e) => ended.push(e));
+  const a = await signIn(h);
+  const b = await signIn(h, {}, { cookie: a.cookie });
+  assert.notEqual(a.cookie, b.cookie);
+  assert.equal(sessionRow(h, a.cookie), undefined);
+  assert.ok(sessionRow(h, b.cookie));
+  assert.deepEqual(ended.map((e) => e.reason), ['relogin']);
+  assert.equal(ended[0].tokenHash, sha256hex(a.cookie.split('=')[1]));
+  await h.hub.close();
+});
+
+test('a google_revoked ban is lifted by a fresh login', async () => {
+  const h = setup();
+  await signIn(h);
+  const u = h.hub.db.getUserBySub('s1');
+  h.hub.db.banUser(u.id, 'google_revoked', NOW);
+  const { cb, cookie } = await signIn(h);
+  assert.equal(cb.status, 302);
+  assert.ok(cookie);
+  const after = h.hub.db.getUserBySub('s1');
+  assert.equal(after.banned_at, null);
+  assert.equal(after.ban_reason, null);
+  assert.ok(h.hub.db.listAudit().some((a) => a.action === 'ban_lifted' && a.target === String(u.id)));
+  await h.hub.close();
+});
+
+test('a ban without reason stays', async () => {
+  const h = setup();
+  await signIn(h);
+  const u = h.hub.db.getUserBySub('s1');
+  h.hub.db.banUser(u.id, null, NOW);
+  const { cb } = await signIn(h);
+  assert.equal(cb.status, 403);
+  assert.notEqual(h.hub.db.getUserBySub('s1').banned_at, null);
+  assert.ok(!h.hub.db.listAudit().some((a) => a.action === 'ban_lifted'));
+  await h.hub.close();
+});
+
+test('api config role follows env', async () => {
+  const h = setup();
+  const boss = await signIn(h, { sub: 'b', email: 'boss@newera.inc' });
+  const ann = await signIn(h, { sub: 'a', email: 'ann@newera.inc' });
+  const role = async (c) => JSON.parse((await call(h.hub, 'GET', '/api/config', { cookie: c })).text).me.role;
+  assert.equal(await role(boss.cookie), 'owner');
+  assert.equal(await role(ann.cookie), 'member');
+  h.hub.ctx.config.ownerEmails = ['ann@newera.inc'];
+  assert.equal(await role(boss.cookie), 'member');
+  assert.equal(await role(ann.cookie), 'owner');
+  assert.equal(h.hub.ctx.helpers.isOwner({ email: 'ANN@newera.inc' }), true);
+  assert.equal(h.hub.ctx.helpers.isOwner({ email: null }), false);
   await h.hub.close();
 });

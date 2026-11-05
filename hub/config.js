@@ -61,6 +61,16 @@ function loadConfig(env = process.env) {
     if (!googleClientSecret) need('GOOGLE_CLIENT_SECRET', 'required unless HUB_DEV_LOGIN=1');
   }
 
+  // Encrypts the Google refresh token at rest (AES-256-GCM). Required even for dev login.
+  let secretKey = null;
+  const rawKey = String(env.HUB_SECRET_KEY || '').trim();
+  if (!rawKey) need('HUB_SECRET_KEY', 'required (32 random bytes, base64; e.g. openssl rand -base64 32)');
+  else {
+    const buf = /^[A-Za-z0-9+/]+={0,2}$/.test(rawKey) ? Buffer.from(rawKey, 'base64') : null;
+    if (!buf || buf.length !== 32) need('HUB_SECRET_KEY', 'must be base64 of exactly 32 bytes (e.g. openssl rand -base64 32)');
+    else secretKey = buf;
+  }
+
   let port = 4318;
   if (env.HUB_PORT !== undefined && env.HUB_PORT !== '') {
     port = Number(env.HUB_PORT);
@@ -71,7 +81,7 @@ function loadConfig(env = process.env) {
 
   return {
     publicUrl, origin, secure, allowedDomains, ownerEmails,
-    googleClientId, googleClientSecret,
+    googleClientId, googleClientSecret, secretKey,
     port, host: env.HUB_HOST || '127.0.0.1', dbPath: env.HUB_DB || './data/hub.sqlite',
     trustProxy, devLogin,
   };

@@ -19,6 +19,7 @@ const OK = {
   HUB_OWNER_EMAILS: 'kiet.nc@newera.inc',
   GOOGLE_CLIENT_ID: 'id',
   GOOGLE_CLIENT_SECRET: 'secret',
+  HUB_SECRET_KEY: Buffer.alloc(32, 7).toString('base64'),
 };
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'hub-base-'));
 
@@ -29,8 +30,20 @@ test('refuses to start without allowed domains', () => {
 
 test('lists every missing variable at once', () => {
   assert.throws(() => loadConfig({}), (e) =>
-    ['HUB_PUBLIC_URL', 'HUB_ALLOWED_DOMAINS', 'HUB_OWNER_EMAILS', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']
+    ['HUB_PUBLIC_URL', 'HUB_ALLOWED_DOMAINS', 'HUB_OWNER_EMAILS', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'HUB_SECRET_KEY']
       .every((k) => e.message.includes(k)));
+});
+
+test('HUB_SECRET_KEY is required and must be 32 bytes', () => {
+  assert.throws(() => loadConfig({ ...OK, HUB_SECRET_KEY: undefined }), /HUB_SECRET_KEY/);
+  assert.throws(() => loadConfig({ ...OK, HUB_SECRET_KEY: Buffer.alloc(16, 1).toString('base64') }), /HUB_SECRET_KEY/);
+  assert.throws(() => loadConfig({ ...OK, HUB_SECRET_KEY: 'not base64 at all!' }), /HUB_SECRET_KEY/);
+  // required in dev mode too
+  const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, HUB_SECRET_KEY, ...dev } = OK;
+  assert.throws(() => loadConfig({ ...dev, HUB_DEV_LOGIN: '1', HUB_PUBLIC_URL: 'http://localhost:4318' }), /HUB_SECRET_KEY/);
+  const c = loadConfig(OK);
+  assert.ok(Buffer.isBuffer(c.secretKey));
+  assert.equal(c.secretKey.length, 32);
 });
 
 test('dev login only on localhost', () => {
