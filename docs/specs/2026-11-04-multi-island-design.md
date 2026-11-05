@@ -27,12 +27,58 @@ Vì vậy spec chia hai giai đoạn. Plan đầu tiên chỉ làm **GĐ1**. M�
   không vẽ, đảo xa vẽ `k = 1` tối đa 10 lần/giây), chip "Thế giới" trên trang local.
 - `docs/hub-setup.md` đủ để dựng hub và tạo OAuth client.
 
-**GĐ2: sau khi GĐ1 chạy ổn**
-- Mất quyền tự động trong 24 giờ (B12), kiểm chữ ký JWKS.
-- Trang `/admin`: cấm, bỏ cấm, vai trò (B6), nhật ký quản trị.
-- CSP đầy đủ theo hash và SRI cho React (S13), HSTS.
-- Bảng giới hạn tốc độ đầy đủ (S14), giới hạn số luồng SSE mỗi người.
-- Đổi tên và màu đảo, rời hub, thông báo máy mới (B10), "Xem như người khác".
+**GĐ2: sau khi GĐ1 chạy ổn** (anh Kiet chốt 2026-11-05; plan: `docs/plans/2026-11-05-multi-island-gd2-plan.md`)
+
+Các quyết định dưới đây **ghi đè** mọi chỗ khác trong spec còn nói tới `admin`, trang `/admin`, đổi vai trò, hay cấm
+và bỏ cấm bằng tay (§2 mục 7, C1, B6, §8.1 dòng `hub/pages.js`, §9.5, §11.2, §12).
+
+- **Không có trang `/admin`, không có vai trò lưu trong DB.**
+  - Quản trị = **owner** = email nằm trong env `HUB_OWNER_EMAILS`, tính lại ở mỗi request. DB không lưu `owner`,
+    `admin` hay `member`; cột `users.role` bị bỏ. Không có route `POST /api/admin/users/:id/role`.
+  - `GET /api/config` trả thêm `me.role: 'owner'|'member'`, tính từ env, để giao diện biết khi nào hiện hành động owner.
+  - **Hành động owner duy nhất là "Xoá đảo"**, làm ngay trong chế độ thế giới: owner bấm đảo của người khác ở
+    "Toàn cảnh", bảng bên phải có nút "Xoá đảo", bấm xong phải xác nhận một lần nữa. Kết quả: thu hồi mọi máy của
+    người đó, xoá đảo khỏi RAM và khỏi DB, ghi nhật ký. Publisher không giữ kết nối nào, nên "đóng kết nối" nghĩa là
+    lần gửi kế tiếp của máy đó nhận 401 và dừng. **Đây không phải cấm**: người đó vẫn đăng nhập, xem và ghép máy lại
+    được (đảo mới được tạo khi ghép).
+  - Owner **không** xoá được đảo của owner khác. Owner muốn bỏ đảo của chính mình thì dùng luồng "Rời hub".
+  - **Bỏ khỏi GĐ2**: giao diện cấm và bỏ cấm bằng tay, danh sách người bị cấm, trang xem nhật ký quản trị.
+    Bảng `audit` **vẫn được ghi**, chỉ chưa có chỗ xem (người vận hành đọc thẳng file DB nếu cần).
+- **Cơ chế cấm nội bộ vẫn có**, chỉ phục vụ B12: `users.banned_at` và `users.ban_reason`. Người bị cấm không có phiên
+  xem và máy của họ nhận 401. Lệnh cấm có `ban_reason` khác `google_revoked` (ví dụ dòng cũ từ GĐ1 có `banned_at` mà
+  không có lý do) chỉ gỡ được bằng tay trong DB. Không có giao diện quản lý. Lý do duy nhất trong
+  GĐ2 là `google_revoked` (gồm cả trường hợp ID token khi làm mới không còn khớp tên miền).
+  - Vì không còn nút bỏ cấm, **một lần đăng nhập mới qua đủ các bước §9.1 sẽ tự gỡ cấm `google_revoked`**,
+    cho mọi người chứ không chỉ owner (ghi nhật ký `ban_lifted`). Người đã nghỉ việc không đăng nhập được nữa vì
+    Workspace đã khoá tài khoản, nên việc này không mở lại cửa cho họ.
+- **B12 làm đủ** như §7b, cộng các điểm cụ thể sau:
+  - `/auth/login` luôn gửi `access_type=offline` và `prompt=select_account`. Lúc đó hub chưa biết là ai, nên không thể
+    biết đã có refresh token hay chưa. Ở `/auth/callback`, nếu Google không trả `refresh_token` và hub cũng chưa có
+    cho người này, hub chuyển hướng lại một lần với `prompt=consent`. Lần thứ hai vẫn không có thì chấp nhận, người
+    đó sống theo luật 24 giờ.
+  - Máy của người không có refresh token quá 24 giờ sau lần đăng nhập gần nhất nhận **403 `login_required`** (không
+    phải 401), để publisher tạm dừng chứ không tự đánh dấu `revoked`.
+  - Cấm giữ lại bản ghi `islands` (tên, màu) và chỉ gỡ đảo khỏi RAM. "Xoá đảo" của owner và "Rời hub" mới xoá bản ghi.
+- **Kiểm chữ ký ID token qua JWKS** (`hub/jwt.js`, chỉ `node:crypto`), cache theo `Cache-Control`, tải lại khi gặp
+  `kid` lạ nhưng tối đa một lần mỗi phút. Áp cho cả ID token lúc đăng nhập và lúc làm mới (B12).
+- **CSP đầy đủ theo hash và SRI cho React** (S13), `Strict-Transport-Security` khi `https`, thêm
+  `Cross-Origin-Opener-Policy: same-origin` (S12).
+- **Bảng giới hạn tốc độ đầy đủ** (S14). Luồng SSE: 5 luồng đồng thời mỗi người, 300 toàn hub.
+- **Tự quản lý đảo trên web**: đổi tên và màu đảo (bảng "Của tôi" và trang `/me`), thu hồi máy, rời hub (trang `/me`,
+  có bước xác nhận). "Của tôi" liệt kê máy và trạng thái gửi của từng máy, lấy từ endpoint JSON `GET /api/me`.
+- **Thông báo "Máy mới"** (B10) ở "Của tôi" và `/me` trong 7 ngày, kèm nút thu hồi.
+- **"Xem như người khác"** trên trang local (§12.4).
+- **Việc dời lại từ các vòng review GĐ1**: `?server=` bị bỏ qua khi trang local được phục vụ qua `https:` (B9 nửa sau);
+  duyệt mã thiết bị chỉ thành công khi mã chưa duyệt, chưa từ chối, chưa hết hạn; hiệu năng "Toàn cảnh" 10 đảo; nút
+  "Thử lại" khi `/api/config` lỗi tạm thời; đăng nhập lại thu hồi phiên cũ của trình duyệt đó; publisher nhận 401 không
+  đánh dấu nhầm cấu hình mới; `join` lại (và `leave`) tự thu hồi token cũ trên hub; phòng ban quá 16 project không
+  bị trùng chữ cái.
+- **Schema GĐ2** (bổ sung §10.3; DB GĐ1 được nâng cấp tại chỗ bằng `PRAGMA user_version`):
+  - `users`: bỏ `role`; thêm `refresh_enc TEXT`, `checked_at INTEGER`, `check_fail_since INTEGER`,
+    `check_warned_at INTEGER`, `ban_reason TEXT`;
+  - `login_states`: thêm `consent INTEGER NOT NULL DEFAULT 0`;
+  - tạo bảng `audit` như §10.3, kèm chỉ mục theo `at`;
+  - phiên của người chưa có refresh token bị rút về tối đa 24 giờ kể từ lúc tạo.
 
 ## 1. Ý định và lý do
 
@@ -160,13 +206,15 @@ Reviewer đọc spec với vai người build và đã đối chiếu với code
     hai phòng khác nhau. Ở mức Kín, nhãn hiển thị là `A`, `B`… đánh lại theo thứ tự trên toàn đảo;
   - đảo hiện "riêng tư" khi **mọi** máy đang online đều riêng tư. Máy riêng tư không đóng góp session;
   - nhãn mức chia sẻ của đảo là mức **chặt nhất** trong các máy đang online. Bảng "Của tôi" hiện mức của từng máy.
-- B6. **Vai trò**:
-  - `owner` tính lại ở **mỗi lần đăng nhập** từ `HUB_OWNER_EMAILS`: bỏ email khỏi env thì lần đăng nhập sau người
-    đó về `member`. Không đổi được `owner` trên giao diện;
+- B6. **Vai trò** (sửa theo §0 GĐ2, anh Kiet chốt 2026-11-05):
+  - chỉ có hai vai trò, `owner` và `member`, **không lưu trong DB**. `owner` là người có email nằm trong
+    `HUB_OWNER_EMAILS`, tính lại ở **mỗi request**: bỏ email khỏi env thì người đó về `member` ngay. Không có vai trò
+    `admin`, không đổi vai trò trên giao diện;
   - email bị Workspace xoá rồi cấp lại cho người khác sẽ có `sub` mới, tức là một người dùng mới. Nếu email đó
     vẫn nằm trong env thì người mới thành owner; việc này do quản trị Workspace kiểm soát, ghi rõ trong
     `docs/hub-setup.md`;
-  - `admin` cấm được `member`. Chỉ `owner` cấm được `admin`. Không ai cấm được `owner`.
+  - quyền duy nhất của owner là **"Xoá đảo"** của một `member` ngay trên chế độ thế giới (§9.5, §12.2). Owner không
+    xoá được đảo của owner khác. Không có cấm hay bỏ cấm bằng tay; cấm chỉ xảy ra tự động theo B12.
 - B7. **Chống CSRF lúc đăng nhập** (login CSRF): `/auth/login` đặt thêm cookie
   `__Host-tr_login` (HttpOnly, SameSite=Lax, 10 phút) chứa mã băm của `state`. `/auth/callback` chỉ nhận khi cookie
   khớp `state`, rồi xoá cookie.
@@ -330,18 +378,24 @@ Thông số:
 
 | Ai | Endpoint | Việc |
 |---|---|---|
-| Mọi người | `GET /me` (trang) | Đảo của tôi, danh sách máy, đổi tên đảo, thu hồi máy, rời hub |
-| Mọi người | `POST /api/me/island` | Đổi tên (1–24 ký tự, chữ/số/khoảng trắng/`-_.`, có tiếng Việt) và màu (một trong 8 màu có sẵn) |
-| Mọi người | `POST /api/me/devices/:id/revoke` | Thu hồi máy |
-| Mọi người | `POST /api/me/leave` | Xoá đảo, máy, phiên. Bản ghi `users` giữ lại `sub` và trạng thái cấm, xoá tên và email |
-| Mọi người | `POST /auth/logout` | Xoá phiên |
-| Admin, owner | `GET /admin` (trang), `GET /api/admin/users` | Danh sách người dùng: tên, email, vai trò, số máy, lần cuối hoạt động |
-| Admin, owner | `POST /api/admin/users/:id/ban`, `/unban` | Cấm: thu hồi mọi máy và phiên, gỡ đảo. Không cấm được owner |
-| Owner | `POST /api/admin/users/:id/role` | Đổi `member` ↔ `admin` |
-| Admin, owner | `GET /api/admin/audit` | 200 dòng nhật ký gần nhất |
+Sửa theo §0 GĐ2 (anh Kiet chốt 2026-11-05): không có trang `/admin`, không có route `/api/admin/*`.
 
-Mọi `POST` từ trình duyệt bắt buộc header `X-CSRF-Token` khớp phiên **và** `Origin` bằng đúng origin của
-`HUB_PUBLIC_URL`.
+| Ai | Endpoint | Việc |
+|---|---|---|
+| Mọi người | `GET /me` (trang) | Đảo của tôi, danh sách máy, thông báo "Máy mới" (B10), đổi tên và màu đảo, thu hồi máy, link rời hub |
+| Mọi người | `GET /api/me` | JSON cho bảng "Của tôi": đảo, danh sách máy kèm trạng thái gửi của từng máy (từ RAM), máy mới trong 7 ngày |
+| Mọi người | `POST /api/me/island` (JSON), `POST /me/island` (form) | Đổi tên (1–24 ký tự, chữ/số/khoảng trắng/`-_.`, có tiếng Việt) và màu (một trong 8 màu có sẵn) |
+| Mọi người | `POST /api/me/devices/:id/revoke` (JSON), `POST /me/devices/revoke` (form) | Thu hồi máy |
+| Mọi người | `GET /me/leave` (trang xác nhận), `POST /me/leave` (form) | Rời hub: xoá đảo, máy, phiên, huỷ refresh token Google. Bản ghi `users` giữ lại `sub` và trạng thái cấm, xoá tên và email |
+| Máy (Bearer) | `POST /api/device/revoke-self` | Máy tự thu hồi token của nó (dùng khi `join` lại hoặc `leave`) |
+| Mọi người | `POST /auth/logout` | Xoá phiên |
+| Owner (env) | `POST /api/owner/islands/:id/remove` (JSON) | "Xoá đảo": thu hồi mọi máy của chủ đảo, xoá đảo khỏi RAM và DB, ghi nhật ký. Không phải cấm. Từ chối (403) khi chủ đảo là owner, kể cả chính mình |
+
+Nhật ký (`audit`) được ghi cho: ghép máy, thu hồi máy, đổi tên/màu đảo, xoá đảo, rời hub, cấm và gỡ cấm tự động (B12),
+cảnh báo kiểm Google lỗi quá 72 giờ. GĐ2 chưa có chỗ xem nhật ký trên web.
+
+Mọi `POST` từ trình duyệt bắt buộc header `X-CSRF-Token` (hoặc trường form `csrf`) khớp phiên **và** `Origin` bằng
+đúng origin của `HUB_PUBLIC_URL`.
 
 ### 9.6 Lệnh dòng lệnh của publisher
 
@@ -519,6 +573,18 @@ audit(id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER, action TEXT
     không tính vào ngân sách vẽ). Bảng bên phải là thông tin quản lý đảo của mình: mức chia sẻ, riêng tư hay không,
     danh sách máy và trạng thái gửi, link tới `/me`. Người chưa có đảo thì thấy hướng dẫn ghép máy (§9.2).
   - Chế độ đang chọn lưu trong `localStorage`. Mặc định là "Toàn cảnh".
+- **Bổ sung GĐ2** (anh Kiet chốt 2026-11-05, thay cho trang `/admin`):
+  - **"Của tôi"**, bảng bên phải lấy dữ liệu từ `GET /api/me`:
+    - danh sách máy, mỗi máy có trạng thái gửi (đang gửi / riêng tư / mất kết nối / đã thu hồi) và mức chia sẻ;
+    - thông báo "Máy mới: <tên>, lúc <giờ>" cho máy thêm trong 7 ngày (B10), kèm nút "Thu hồi" có bước xác nhận;
+    - đổi tên đảo và chọn một trong 8 màu ngay trong bảng;
+    - link "Rời hub" tới `/me/leave`. Việc rời hub chỉ làm ở trang `/me`, có trang xác nhận riêng.
+  - **"Toàn cảnh", khi người xem là owner** (`me.role === 'owner'`) và đảo đang chọn không phải của mình: bảng đảo có
+    thêm nút "Xoá đảo". Bấm thì bảng đổi thành câu xác nhận ("Xoá đảo này? Mọi máy của người đó bị thu hồi. Họ vẫn
+    ghép lại được.") với hai nút "Xoá" và "Huỷ". Hub từ chối đảo của owner khác thì bảng hiện lý do.
+  - Khi luồng SSE bị từ chối nhưng `/api/config` vẫn trả chế độ thế giới (ví dụ mở quá 5 tab), hoặc `/api/config` lỗi
+    tạm thời, bảng hiện lý do và nút **"Thử lại"** thay vì "Phiên đã hết". "Phiên đã hết" chỉ dành cho lúc hub không
+    còn nhận phiên.
   - Hub chỉ có dữ liệu đã lọc, nên "Của tôi" trên hub hiện **đúng thứ người khác thấy**. Bản đầy đủ (tên session,
     câu lệnh, bong bóng chữ) vẫn ở trang local `http://localhost:4317`. "Của tôi" có link "Mở bản đầy đủ trên máy
     này" trỏ tới đó (em chọn: trang hub **không** đọc dữ liệu từ server local, để một lỗi XSS trên hub không thể lộ
@@ -536,12 +602,22 @@ audit(id INTEGER PRIMARY KEY, at INTEGER NOT NULL, actor_id INTEGER, action TEXT
 
 Mục tiêu: với 10 đảo × 6 nhân vật, **JS mỗi khung p95 ≤ 8ms** trên máy anh Kiet, đo bằng cùng cách đã đo hôm nay.
 
+GĐ2: đo GĐ1 bằng render phần mềm cho khoảng 9ms ở "Toàn cảnh" 10 đảo. Hai con số "10 lần/giây" và "120px" ở bảng
+trên được phép chỉnh (tối đa 5 lần/giây và 160px) để đạt mục tiêu; giá trị chốt ghi lại vào đây khi đo xong. Không hạ
+chất lượng đảo đang xem. Canvas `mid` và `thumb` được giữ lại khi đảo rời khỏi khung (chỉ canvas `full` bị trả), và
+đảo chưa có canvas cũng phải xếp hàng theo ngân sách vẽ mỗi khung, để chuyển "Của tôi" → "Toàn cảnh" không bị giật.
+
 ### 12.4 Trang local
 
 - Thanh trên có thêm chip "Thế giới": chưa ghép / đang gửi (mức Kín) / riêng tư / mất kết nối / bị thu hồi. Lấy từ
   `GET /api/public-preview` → `{state, share, private, hub, view}`.
 - Cài đặt có công tắc **"Xem như người khác"**: khi bật, cảnh local vẽ `view` (kết quả `publicView`) thay cho ảnh
   chụp đầy đủ.
+  - GĐ2 (em chọn): công tắc dùng được cả khi máy **chưa ghép**. Khi đó server local dùng một `salt` tạm sinh lúc khởi
+    động (chỉ nằm trong RAM) và mức Kín, để người dùng xem trước mình sẽ lộ gì trước khi `join`. Đã ghép thì dùng đúng
+    mức chia sẻ, danh sách project và chế độ riêng tư trong cấu hình.
+  - Khi bật: không có bong bóng chữ, bảng chi tiết chỉ hiện trạng thái, nhóm việc, phòng ban, tool và model nếu có (như
+    đảo người khác trong chế độ thế giới). Trạng thái bật/tắt không lưu, tải lại trang là tắt. Tắt thì trang y như cũ.
 
 ## 13. Kiểm thử
 
