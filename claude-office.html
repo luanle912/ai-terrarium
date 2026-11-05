@@ -4105,6 +4105,45 @@ function cycle(t){
 globalThis.SmokeLogic={layout,cycle,PERIOD};
 })();
 </script>
+<script id="people-logic">
+// Who an agent is to look at: man or woman, skin, hair, clothes. Fixed per session id (sid), so reloading the page or
+// another island showing the same session never changes anyone. No DOM, no canvas; tests/people-logic.test.mjs runs
+// this block.
+(function(){
+'use strict';
+// FNV-1a, 32 bit: the same string gives the same number in every browser and in node.
+function hash(s){s=String(s);let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193);}return h>>>0;}
+// One independent draw per trait: the sid salted with the trait's name. FNV's low bits follow the characters' low
+// bits, so two salts of one sid would share their parity; the murmur3 finaliser stirs every bit in first.
+const fmix=h=>{h^=h>>>16;h=Math.imul(h,0x85ebca6b);h^=h>>>13;h=Math.imul(h,0xc2b2ae35);h^=h>>>16;return h>>>0;};
+const roll=(sid,salt,n)=>fmix(hash(salt+':'+sid))%n;
+const take=(sid,salt,list)=>list[roll(sid,salt,list.length)];
+const genderOf=sid=>roll(sid,'gender',2)?'f':'m';
+// Palettes. A colour listed twice comes up twice as often.
+const SKIN=['#f7dcc4','#f2c9a0','#e8b48a','#d9a273','#c68a5e','#a86b45','#8a5534','#6b3f26'];
+const HAIR=['#1c1714','#1c1714','#3b2617','#3b2617','#5a3a22','#5a3a22','#7a4a2a','#8a3b2a','#b8612f','#d9a441','#c9b48a','#9aa0a8','#e8e2d6'];
+const PANTS=['#2d3142','#3b4a6b','#4a3b2f','#22303a','#5a5f73','#6b5a45','#33333d'];
+const SKIRT=['#2d3142','#3b4a6b','#6b2d3f','#4a5a3b','#a0806a'];
+const LAYER=['#3a3f52','#e8e2d6','#8a6a4a','#2f4a3a','#5a4a6a'];
+// Styles per gender (the drawing code in the main script knows each name).
+const STYLE={
+  m:{hair:['crop','side','quiff','buzz','curly','cap'],beard:[null,null,null,'stubble','full','moustache'],top:['tee','shirt','hoodie','jacket'],
+    acc:[null,null,null,null,null,null,'glasses','glasses','headset'],shoes:['#141414','#141414','#4a2f1f']},
+  f:{hair:['long','wavy','bob','ponytail','bun'],beard:[null],top:['blouse','tee','cardigan','dress'],
+    acc:[null,null,null,null,'glasses','headset','earrings','earrings'],shoes:['#141414','#7a2d3a','#4a2f1f']}};
+const LAYERED=new Set(['jacket','cardigan']);
+// The whole look of one session. `shirt` (the department colour) is not part of it: it stays the team's colour.
+function look(sid){
+  sid=String(sid);const g=genderOf(sid),S=STYLE[g],top=take(sid,'top',S.top);
+  const bottom=g==='m'?'pants':top==='dress'||roll(sid,'bottom',3)<2?'skirt':'pants';
+  return{gender:g,skin:take(sid,'skin',SKIN),hair:take(sid,'hair',HAIR),hairStyle:take(sid,'hairStyle',S.hair),beard:take(sid,'beard',S.beard),
+    top,layer:LAYERED.has(top)?take(sid,'layer',LAYER):null,bottom,
+    legs:bottom==='pants'?take(sid,'pants',PANTS):top==='dress'?null:take(sid,'skirt',SKIRT),
+    shoes:take(sid,'shoes',S.shoes),acc:take(sid,'acc',S.acc)};
+}
+globalThis.PeopleLogic={hash,genderOf,look,SKIN,HAIR,PANTS,SKIRT,LAYER,STYLE};
+})();
+</script>
 <script id="restroom-logic">
 // The restroom block against the pantry's east side: an open-top (cutaway) annex on the office floor with the men's
 // room, the women's room and a shared lobby, plus the rhythm of one visit. No DOM, no canvas;
@@ -4175,13 +4214,24 @@ function step(L,a,b,inOffice){
 // less than DOORWAY tiles from the wall), away from the first such person. Cheap: one pass over the people per frame.
 const DOORWAY=0.75;
 const doorSwing=(L,people)=>L.doors.map(d=>{for(const p of people)if(p.x>d.x0&&p.x<d.x1&&Math.abs(p.y-d.y)<DOORWAY)return p.y<d.y?1:-1;return 0;});
-// Which room an agent uses, fixed per agent so it always walks to the same door.
-const roomOf=id=>id%2?'m':'f';
+// Which room an agent uses: men to WC NAM ('m'), women to WC NỮ ('f'). An agent without a gender (or a bare id, as
+// before genders) goes by its id: odd to the men's room, even to the women's.
+const roomOf=who=>{if(who&&typeof who==='object'){if(who.gender==='m'||who.gender==='f')return who.gender;who=who.id;}return who%2?'m':'f';};
+// An idle agent's next spot, from `free` (indices into `spots` nobody holds). About one choice in four (SHARE) is a
+// free stall in the agent's own room; otherwise, or when its stalls are all taken, one of the other free spots.
+// A stall is held by one person for the whole visit, so a room never has more people than stalls and nobody queues.
+// `room` null (just been) means no stall at all; null back when nothing is free. `rand` is Math.random or a seeded one.
+const SHARE=0.25;
+function pickIdle(spots,free,room,rand,share=SHARE){
+  const wc=room?free.filter(i=>spots[i].act==='wc'&&spots[i].room===room):[],rest=free.filter(i=>spots[i].act!=='wc');
+  const pool=wc.length&&(!rest.length||rand()<share)?wc:rest;
+  return pool.length?pool[Math.floor(rand()*pool.length)]:null;
+}
 // One visit, in simulated seconds spent standing (walking does not count): a moment at the stall door while it opens,
 // a while inside with the door shut, a moment coming back out, washing hands at the vanity, then on to somewhere else.
 const DOOR=0.8,INSIDE=6,OUT=0.6,WASH=2.5,VISIT=DOOR+INSIDE+OUT+WASH;
 const visit=t=>t<DOOR?'door':t<DOOR+INSIDE?'inside':t<DOOR+INSIDE+OUT?'out':t<VISIT?'wash':'done';
-globalThis.RestroomLogic={layout,onFloor,step,doorSwing,DOORWAY,roomOf,visit,VISIT,DOOR,INSIDE,OUT,WASH};
+globalThis.RestroomLogic={layout,onFloor,step,doorSwing,DOORWAY,roomOf,pickIdle,SHARE,visit,VISIT,DOOR,INSIDE,OUT,WASH};
 })();
 </script>
 <script>
@@ -4291,8 +4341,126 @@ const THEMES={
 function dayFactor(){const d=new Date(),t=d.getHours()+d.getMinutes()/60;if(t<5)return 0;if(t<6.5)return(1-Math.cos((t-5)/1.5*Math.PI))/2;if(t<16.5)return 1;if(t<18)return(1+Math.cos((t-16.5)/1.5*Math.PI))/2;return 0;}
 function lerpHex(a,b,t){const pa=parseInt(a.slice(1),16),pb=parseInt(b.slice(1),16);const r=Math.round(((pa>>16)&255)*(1-t)+((pb>>16)&255)*t),g=Math.round(((pa>>8)&255)*(1-t)+((pb>>8)&255)*t),bl=Math.round((pa&255)*(1-t)+(pb&255)*t);return'#'+((1<<24)+(r<<16)+(g<<8)+bl).toString(16).slice(1);}
 function lerpTheme(f){const n=THEMES.night,d=THEMES.day,o={_day:f};for(const k in n){if(k==='label')o[k]=f>0.5?d[k]:n[k];else if(k==='stroke')o[k]=null;else if(k==='shadow'){const pa=n[k].match(/[\d.]+/g).map(Number),pb=d[k].match(/[\d.]+/g).map(Number);o[k]='rgba('+pa.map((v,i)=>{const r=v*(1-f)+pb[i]*f;return i<3?Math.round(r):Math.round(r*100)/100;}).join(',')+')'}else if(typeof n[k]==='string'&&n[k][0]==='#')o[k]=lerpHex(n[k],d[k],f);else o[k]=n[k];}return o;}
-const SKIN=['#f2c9a0','#d9a273','#a86b45','#f5d7bd','#c68a5e'];
-const HAIR=['#2b1d14','#5a3a22','#d9a441','#1a1a1a','#8a3b2a','#e8e2d6','#3c3c52'];
+// ---- People: the parts that differ from one look to the next (PeopleLogic.look) ----
+// Every function takes the scene's 1px rect R and the agent's look L. Men and women are told apart by silhouette
+// (hair past the shoulders, a bun or a ponytail, an A-line skirt; short hair, a beard, a collar and tie), not by
+// single pixels, so they still read at the world view's level of detail.
+const LOOK_TIE='#e8d27a',LOOK_CLIP='#e93d82',LOOK_LIPS='#c0405a',LOOK_BLUSH='#e0707a',LOOK_GOLD='#ffd166';
+const LOOK=a=>a.look||(a.look=PeopleLogic.look(a.sid||a.id));
+const hairTones=L=>[L.hair,shade(L.hair,-26),shade(L.hair,28)];
+const capOf=sh=>shade(sh,-45);
+const PERSON={
+  // Standing, facing front. The face spans sx-3..sx+2, rows hy..hy+5.
+  hairFront(R,L,sx,hy,sh){const[hr,hrD,hrL]=hairTones(L);
+    switch(L.hairStyle){
+      case 'long':case 'wavy':R(sx-3,hy-1,6,2,hr);R(sx-4,hy,1,9,hr);R(sx+3,hy,1,9,hrD);R(sx-3,hy+1,2,1,hr);R(sx+2,hy+1,1,2,hrD);R(sx-2,hy-1,2,1,hrL);
+        if(L.hairStyle==='wavy'){R(sx-5,hy+3,1,2,hr);R(sx-5,hy+7,1,2,hr);R(sx+4,hy+5,1,2,hrD);}break;
+      case 'bob':R(sx-3,hy-1,6,2,hr);R(sx-4,hy,1,7,hr);R(sx+3,hy,1,7,hrD);R(sx-5,hy+1,1,5,hr);R(sx+4,hy+1,1,5,hrD);R(sx-3,hy+1,5,1,hr);R(sx+2,hy+1,1,1,hrD);R(sx-2,hy-1,2,1,hrL);R(sx+1,hy,1,1,LOOK_CLIP);break;
+      case 'ponytail':R(sx-3,hy-1,6,2,hr);R(sx-3,hy+1,1,1,hr);R(sx+2,hy+1,1,1,hrD);R(sx+3,hy,1,1,LOOK_TIE);R(sx+3,hy+1,1,4,hrD);R(sx+4,hy+2,1,4,hrD);R(sx-2,hy-1,2,1,hrL);break;
+      case 'bun':R(sx-3,hy-1,6,2,hr);R(sx-3,hy+1,1,2,hr);R(sx+2,hy+1,1,2,hrD);R(sx-2,hy-3,4,2,hr);R(sx-1,hy-4,2,1,hr);R(sx-1,hy-3,1,1,hrL);break;
+      case 'side':R(sx-3,hy-1,6,2,hr);R(sx-3,hy+1,3,1,hr);R(sx+2,hy+1,1,1,hrD);R(sx-3,hy-1,2,1,hrL);R(sx-1,hy-1,1,1,hrD);break;
+      case 'quiff':R(sx-3,hy-1,6,2,hr);R(sx-2,hy-2,5,1,hr);R(sx-1,hy-3,3,1,hrL);R(sx-3,hy+1,1,1,hr);R(sx+2,hy+1,1,1,hrD);break;
+      case 'buzz':R(sx-3,hy-1,6,1,hr);R(sx-3,hy,6,1,mix(hr,L.skin,0.45));break;
+      case 'curly':R(sx-4,hy-1,8,2,hr);R(sx-3,hy-2,2,1,hr);R(sx,hy-2,2,1,hr);R(sx-4,hy+1,1,1,hr);R(sx+3,hy+1,1,1,hrD);R(sx-2,hy-1,1,1,hrL);R(sx+1,hy-1,1,1,hrL);break;
+      case 'cap':{const c=capOf(sh);R(sx-3,hy+1,1,1,hr);R(sx+2,hy+1,1,1,hrD);R(sx-3,hy-2,6,2,c);R(sx-4,hy,8,1,shade(c,-15));R(sx-1,hy-2,2,1,shade(c,45));break;}
+      default:R(sx-3,hy-1,6,2,hr);R(sx-3,hy+1,1,2,hr);R(sx+2,hy+1,1,1,hrD);R(sx-2,hy-1,2,1,hrL);}
+  },
+  // Standing, seen from behind: the back of the head; long hair falls over the upper back.
+  hairBack(R,L,sx,hy,sh,sk){const[hr,hrD,hrL]=hairTones(L),st=L.hairStyle,ears=()=>{R(sx-4,hy+2,1,2,sk);R(sx+3,hy+2,1,2,sk);};
+    if(st==='long'||st==='wavy'){R(sx-3,hy-1,6,1,hr);R(sx-4,hy,8,9,hr);R(sx+2,hy,2,9,hrD);R(sx-2,hy-1,2,1,hrL);
+      if(st==='wavy'){R(sx-4,hy+9,1,1,hr);R(sx-1,hy+9,2,1,hr);R(sx+3,hy+9,1,1,hrD);}return;}
+    if(st==='bob'){R(sx-3,hy-1,6,1,hr);R(sx-4,hy,8,7,hr);R(sx-5,hy+1,10,5,hr);R(sx+2,hy,2,7,hrD);R(sx+4,hy+1,1,5,hrD);R(sx-2,hy-1,2,1,hrL);R(sx+1,hy,1,1,LOOK_CLIP);return;}
+    if(st==='curly'){R(sx-4,hy-1,8,6,hr);R(sx+2,hy-1,2,6,hrD);R(sx-3,hy-2,2,1,hr);R(sx,hy-2,2,1,hr);return;}
+    if(st==='buzz'){R(sx-3,hy-1,6,3,hr);R(sx-3,hy+2,6,3,mix(hr,sk,0.45));ears();return;}
+    R(sx-3,hy-1,6,6,hr);R(sx+1,hy-1,2,6,hrD);ears();
+    if(st==='ponytail'){R(sx-1,hy+1,2,1,LOOK_TIE);R(sx-1,hy+2,2,6,hrD);R(sx,hy+8,1,1,hrD);}
+    else if(st==='bun'){R(sx-2,hy-3,4,2,hr);R(sx-1,hy-4,2,1,hr);R(sx-1,hy-3,1,1,hrL);}
+    else if(st==='quiff')R(sx-2,hy-2,4,1,hr);
+    else if(st==='cap'){const c=capOf(sh);R(sx-3,hy-2,6,3,c);R(sx-1,hy+1,2,1,shade(c,-25));}
+  },
+  // Eyes, mouth, cheeks, beard (standing, facing front; drawn after the hair).
+  face(R,L,sx,hy,sk,skD,blink,talk,glasses){const[hr,hrD]=hairTones(L),open='#7a3b2a';
+    if(glasses){R(sx-3,hy+3,2,1,'#1a1a1a');R(sx+1,hy+3,2,1,'#1a1a1a');R(sx-1,hy+3,2,1,'#555');}
+    else{R(sx-2,hy+3,1,1,blink?skD:'#1a1a1a');R(sx+1,hy+3,1,1,blink?skD:'#1a1a1a');}
+    if(L.gender==='f'){R(sx-3,hy+4,1,1,mix(sk,LOOK_BLUSH,0.4));R(sx+2,hy+4,1,1,mix(skD,LOOK_BLUSH,0.3));R(sx-1,hy+5,2,1,talk?open:mix(sk,LOOK_LIPS,0.6));
+      if(L.acc==='earrings'){R(sx-4,hy+4,1,1,LOOK_GOLD);R(sx+3,hy+4,1,1,shade(LOOK_GOLD,-40));}return;}
+    R(sx-3,hy+4,1,1,shade(sk,-10));
+    if(L.beard==='stubble'){R(sx-3,hy+4,6,2,mix(sk,hr,0.32));R(sx+2,hy+4,1,2,mix(skD,hr,0.32));}
+    else if(L.beard==='full'){R(sx-3,hy+4,6,2,hr);R(sx+2,hy+4,1,2,hrD);R(sx-2,hy+6,4,1,hr);}
+    else if(L.beard==='moustache')R(sx-2,hy+4,4,1,hr);
+    R(sx-1,hy+5,2,1,talk?open:L.beard==='full'?shade(hr,-30):skD);
+  },
+  // The top over the plain torso (sx-4..sx+3, rows by-11..by-5). Returns the sleeve colour for the arms.
+  top(R,L,sx,by,sh,sk,skD,front){const shD=shade(sh,-30),shL=shade(sh,30),ly=L.layer;
+    if(ly&&!front){R(sx-4,by-11,8,7,ly);R(sx+2,by-11,2,7,shade(ly,-28));R(sx-4,by-11,1,7,shade(ly,20));return ly;}
+    if(ly){R(sx-4,by-11,2,7,ly);R(sx+2,by-11,2,7,shade(ly,-28));R(sx-4,by-11,1,7,shade(ly,20));R(sx-2,by-11,1,2,shade(ly,14));R(sx+1,by-11,1,2,shade(ly,-40));}
+    if(!front)return ly||sh;
+    switch(L.top){
+      case 'shirt':{const tie=mix(sh,'#1a1a2a',0.65);R(sx-2,by-11,1,1,'#f4f4f4');R(sx+1,by-11,1,1,'#f4f4f4');R(sx-1,by-11,2,1,tie);R(sx-1,by-10,2,3,tie);R(sx-1,by-7,1,1,tie);break;}
+      case 'hoodie':R(sx-3,by-12,6,1,shD);R(sx-2,by-10,1,2,'#eeeeee');R(sx+1,by-10,1,2,'#eeeeee');R(sx-3,by-7,6,1,shD);break;
+      case 'jacket':R(sx-1,by-11,2,1,'#f4f4f4');break;
+      case 'blouse':R(sx-2,by-11,4,1,sk);R(sx-1,by-10,2,1,sk);R(sx-3,by-11,1,1,shL);R(sx+2,by-11,1,1,shL);break;
+      case 'cardigan':R(sx-1,by-11,2,1,sk);R(sx-2,by-9,1,1,shade(ly,45));R(sx-2,by-7,1,1,shade(ly,45));break;
+      case 'dress':R(sx-2,by-11,4,1,sk);R(sx-4,by-7,8,1,shade(sh,-55));break;
+      default:R(sx-1,by-11,2,1,skD);if(L.gender==='f')R(sx-2,by-9,2,1,shL);}
+    return ly||sh;
+  },
+  // Legs: trousers with a belt, or an A-line skirt with bare legs. l2 lifts the right foot (tapping).
+  legs(R,L,sx,by,sh,l1,l2,front){const sk=L.skin,shoe=L.shoes;
+    if(L.bottom!=='skirt'){const p=L.legs||'#2d3142';R(sx-3,by-4,2,4,p);R(sx+1,by-4,2,4,shade(p,-15));R(sx-3,by-1,2,1,shoe);R(sx+1,by-1-l2,2,1,shoe);
+      if(front)R(sx-4,by-6,8,1,shade(p,-20));return;}
+    const c=L.legs||sh,cD=shade(c,-28);
+    R(sx-2,by-3+l1,1,2-l1,sk);R(sx+1,by-3+l2,1,2-l2,shade(sk,-20));R(sx-3,by-1,2,1,shoe);R(sx+1,by-1-l2,2,1,shoe);
+    R(sx-4,by-6,8,2,c);R(sx-5,by-4,10,2,c);R(sx+2,by-6,2,2,cD);R(sx+2,by-4,3,2,cD);R(sx-5,by-3,7,1,shade(c,-12));
+  },
+  // On a stool or a chair: thighs forward, shins down.
+  legsSit(R,L,sx,by,sh){const sk=L.skin,shoe=L.shoes;
+    if(L.bottom!=='skirt'){const p=L.legs||'#2d3142';R(sx-3,by-5,2,3,p);R(sx+1,by-5,2,3,shade(p,-15));R(sx-3,by-2,2,5,p);R(sx+1,by-2,2,5,shade(p,-15));}
+    else{const c=L.legs||sh;R(sx-2,by-2,1,5,sk);R(sx+1,by-2,1,5,shade(sk,-20));R(sx-4,by-5,8,3,c);R(sx+1,by-5,3,3,shade(c,-28));}
+    R(sx-3,by+3,2,1,shoe);R(sx+1,by+3,2,1,shoe);
+  },
+  // At the desk, seen from behind (8×8 head at hy): what shows over the chair back.
+  hairSeat(R,L,sx,hy,sh,sk){const[hr,hrD,hrL]=hairTones(L),st=L.hairStyle,ears=()=>{R(sx-5,hy+3,1,2,sk);R(sx+4,hy+3,1,2,sk);};
+    if(st==='buzz'){const b=mix(hr,sk,0.4);R(sx-4,hy,8,8,b);R(sx+1,hy,3,8,shade(b,-14));R(sx-4,hy,8,2,hr);ears();return;}
+    R(sx-4,hy,8,8,hr);R(sx+1,hy,3,8,hrD);R(sx-3,hy+1,2,1,hrL);
+    if(st==='long'||st==='wavy'){R(sx-5,hy+2,1,9,hr);R(sx+4,hy+2,1,9,hrD);R(sx-4,hy+8,8,4,hr);R(sx+1,hy+8,3,4,hrD);
+      if(st==='wavy'){R(sx-3,hy+12,2,1,hr);R(sx+1,hy+12,2,1,hrD);R(sx-6,hy+5,1,2,hr);}return;}
+    if(st==='bob'){R(sx-5,hy+2,1,6,hr);R(sx+4,hy+2,1,6,hrD);R(sx-4,hy+8,8,1,hr);R(sx+1,hy+8,3,1,hrD);R(sx+2,hy+1,1,1,LOOK_CLIP);return;}
+    if(st==='curly'){R(sx-5,hy+1,10,6,hr);R(sx+1,hy+1,4,6,hrD);R(sx-4,hy-1,2,1,hr);R(sx-1,hy-1,2,1,hr);R(sx+2,hy-1,2,1,hrD);return;}
+    ears();
+    if(st==='ponytail'){R(sx-1,hy+6,2,1,LOOK_TIE);R(sx-1,hy+7,2,5,hrD);R(sx-1,hy+12,1,1,hrD);}
+    else if(st==='bun'){R(sx-2,hy-2,4,2,hr);R(sx-1,hy-3,2,1,hr);R(sx-2,hy-2,1,1,hrL);}
+    else if(st==='quiff'){R(sx-3,hy-1,6,1,hr);R(sx-1,hy-2,3,1,hrL);}
+    else if(st==='cap'){const c=capOf(sh);R(sx-4,hy,8,3,c);R(sx+1,hy,3,3,shade(c,-15));R(sx-1,hy+3,2,1,shade(c,-25));}
+  },
+  // At the desk, turned to the right (talking to a visitor, asking for approval): profile with the beard.
+  hairProfile(R,L,sx,hy,sh,sk){const[hr]=hairTones(L),hrD=shade(hr,-26),st=L.hairStyle;
+    R(sx-4,hy,8,8,hr);R(sx+1,hy+2,3,5,sk);R(sx+3,hy+3,1,1,'#1a1a1a');R(sx+1,hy,3,2,shade(hr,-12));
+    if(st==='long'||st==='wavy'){R(sx-5,hy+2,1,9,hr);R(sx-4,hy+8,5,4,hr);}
+    else if(st==='bob'){R(sx-5,hy+2,1,6,hr);R(sx-4,hy+8,4,1,hr);}
+    else{R(sx-5,hy+3,1,2,sk);
+      if(st==='ponytail'){R(sx-5,hy+2,1,1,LOOK_TIE);R(sx-6,hy+3,1,5,hrD);}
+      else if(st==='bun')R(sx-6,hy+1,2,3,hr);
+      else if(st==='cap'){const c=capOf(sh);R(sx-4,hy,8,2,c);R(sx+2,hy+2,4,1,shade(c,-15));}}
+    if(L.gender==='f'){R(sx+3,hy+6,1,1,mix(sk,LOOK_LIPS,0.6));if(L.acc==='earrings')R(sx-1,hy+5,1,1,LOOK_GOLD);}
+    else if(L.beard==='full'){R(sx,hy+5,4,2,hr);R(sx+3,hy+6,1,1,shade(hr,-30));}
+    else if(L.beard==='stubble')R(sx+1,hy+5,3,2,mix(sk,hr,0.32));
+    else if(L.beard==='moustache')R(sx+2,hy+5,2,1,hr);
+  },
+  // In the pond: wet hair and the beard above the water line (face at sx-3..sx+2, rows y0-11..y0-6).
+  hairBath(R,L,sx,y0,sk){const[hr,hrD]=hairTones(L),st=L.hairStyle;
+    R(sx-3,y0-12,6,2,hr);
+    if(st==='long'||st==='wavy'){R(sx-4,y0-11,1,7,hr);R(sx+3,y0-11,1,7,hrD);}
+    else if(st==='bob'){R(sx-4,y0-11,1,5,hr);R(sx+3,y0-11,1,5,hrD);}
+    else if(st==='bun')R(sx-2,y0-14,3,2,hr);
+    else if(st==='ponytail')R(sx+3,y0-11,1,4,hrD);
+    else if(st==='quiff')R(sx-2,y0-13,4,1,hr);
+    if(L.gender==='f')R(sx-1,y0-6,2,1,mix(sk,LOOK_LIPS,0.6));
+    else if(L.beard==='full'){R(sx-3,y0-7,6,2,hr);R(sx-2,y0-5,4,1,hr);}
+    else if(L.beard==='stubble')R(sx-3,y0-7,6,2,mix(sk,hr,0.32));
+    else if(L.beard==='moustache')R(sx-2,y0-7,4,1,hr);
+  },
+};
 const SHIRT=['#e5484d','#3e8ed0','#46a758','#f5a524','#8e4ec6','#12a594','#e93d82','#5b5bd6','#ff8b3d','#2f9ab8','#9b7b4f','#6a7bd8'];
 const TOOLS=[['Read','Header.tsx'],['Edit','routes.ts'],['Bash','npm test'],['Grep','useSession'],['Write','CHANGELOG.md'],['Bash','git diff'],['Glob','**/*.test.ts'],['WebFetch','docs.anthropic.com'],['TodoWrite','4 tasks'],['Edit','package.json'],['Bash','tsc --noEmit'],['Read','schema.prisma']];
 const TALK=tr('office.sim.talkTopics');
@@ -4315,7 +4483,6 @@ const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'11010
 const RESTROOM_GLYPH=ch=>{if(ch==='\u1EEE')return['.##.','##..','#.##','#.#.','#.#.','#.#.','###.'];if(ch==='\u1EA2')return['##.','.#.','.#.','#.#','###','#.#','#.#'];
   const f=FONT[ch];if(!f)return[];const r=[];for(let i=0;i<5;i++)r.push(f.slice(i*3,i*3+3).replace(/1/g,'#').replace(/0/g,'.'));return r;};
 function text3(ctx,str,x,y,col){ctx.fillStyle=col;x=Math.round(x);y=Math.round(y);[...String(str).toUpperCase()].forEach((ch,i)=>{const f=FONT[ch];if(!f)return;for(let b=0;b<15;b++)if(f[b]==='1')ctx.fillRect(x+i*4+(b%3),y+Math.floor(b/3),1,1);});}
-const PANTS=['#2d3142','#3b4a6b','#4a3b2f','#22303a','#5a5f73'];
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const clock=()=>new Date().toTimeString().slice(0,8);
@@ -4514,12 +4681,14 @@ class ClaudeOffice extends React.Component{
     const Dp=this.dept(dk);
     const desk=parent?parent.desk:this.freeDeskFor(dk);if(desk<0)return null;
     const num=parent?0:++Dp.n;
-    const d=DESKS[desk],id=++this.seq,now=Date.now(),k=this.usedLooks++;
+    const d=DESKS[desk],id=++this.seq,now=Date.now();
+    // Man or woman and the whole look come from the session id (PeopleLogic), so a reload never changes anyone.
+    const sid=live?live.id:'sess_'+Math.random().toString(36).slice(2,10),look=PeopleLogic.look(sid);
     const a={id,desk,parent:parent?parent.id:null,
       dept:dk,name:live?(live.name||dk)+(parent||live.parentId?' · sub-agent':''):(parent?parent.short.toLowerCase()+'-subagent':dk+' #'+num),
       short:parent?parent.short.slice(0,3)+'·':Dp.label+(num||''),
-      skin:SKIN[k%SKIN.length],hair:HAIR[(k*3)%HAIR.length],hs:k%4,acc:k%5===2?'glasses':k%5===4?'headset':null,pants:PANTS[k%PANTS.length],shirt:Dp.color,
-      sid:live?live.id:'sess_'+Math.random().toString(36).slice(2,10),
+      gender:look.gender,look,skin:look.skin,hair:look.hair,acc:look.acc,pants:look.legs,shirt:Dp.color,
+      sid,
       model:live?(live.model||'—'):(Math.random()<0.6?'claude-sonnet':'claude-opus'),
       cwd:live?(live.cwd||'—'):'~/code/'+dk,
       status:(seated&&!parent)?'working':'entering',tool:pick(TOOLS),msg:'',target:null,
@@ -4626,9 +4795,9 @@ class ClaudeOffice extends React.Component{
       const taken=new Set(this.agents.filter(o=>o!==a&&!o.leaving&&o.status==='idle'&&o.idleSpot!=null).map(o=>o.idleSpot));
       // A restroom visit is short: once it is over the person moves on, and does not go back while still idle.
       if(a.idleSpot!=null&&IDLE_SPOTS[a.idleSpot].act==='wc'&&RestroomLogic.visit(a.wcT||0)==='done'){a.idleSpot=null;a.wcDone=true;}
-      // Each agent always uses the same room (RestroomLogic.roomOf), so only that room's stalls are open to it.
-      const wcOk=i=>IDLE_SPOTS[i].act!=='wc'||(!a.wcDone&&IDLE_SPOTS[i].room===RestroomLogic.roomOf(a.id));
-      if(a.idleSpot==null||taken.has(a.idleSpot)){const free=IDLE_SPOTS.map((_,i)=>i).filter(i=>!taken.has(i)&&wcOk(i));a.idleSpot=free.length?pick(free):null;}
+      // Men use WC NAM and women WC NỮ (RestroomLogic.roomOf); about one idle choice in four is a free stall there.
+      if(a.idleSpot==null||taken.has(a.idleSpot)){const free=IDLE_SPOTS.map((_,i)=>i).filter(i=>!taken.has(i));
+        a.idleSpot=RestroomLogic.pickIdle(IDLE_SPOTS,free,a.wcDone?null:RestroomLogic.roomOf(a),Math.random);}
       if(a.idleSpot!=null){const sp=IDLE_SPOTS[a.idleSpot];
         // After the stall comes the vanity: same visit, so the visit clock keeps running (keepWc).
         if(sp.act==='wc'&&RestroomLogic.visit(a.wcT||0)==='wash')return{key:'wash'+a.idleSpot,tile:sp.wash.tile,pt:sp.wash.pt,spot:sp,keepWc:true};
@@ -5185,15 +5354,14 @@ class ClaudeOffice extends React.Component{
       const R=rect,bob=Math.round(Math.sin(t*2+a.id)*0.6),y0=sy+1+bob;
       for(let k=0;k<2;k++){const p=(t*0.5+k*0.5+a.id*0.13)%1;ctx.strokeStyle='rgba(255,255,255,'+(0.55*(1-p))+')';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(sx,sy+1,5+p*6,2+p*2.5,0,0,Math.PI*2);ctx.stroke();}
       R(sx-4,y0-5,8,4,a.shirt);R(sx+2,y0-5,2,4,shade(a.shirt,-30));
-      R(sx-3,y0-11,6,6,a.skin);R(sx+2,y0-11,1,6,shade(a.skin,-25));R(sx-3,y0-12,6,2,a.hair);
+      R(sx-3,y0-11,6,6,a.skin);R(sx+2,y0-11,1,6,shade(a.skin,-25));PERSON.hairBath(R,LOOK(a),sx,y0,a.skin);
       R(sx-2,y0-8,1,1,'#1a1a1a');R(sx+1,y0-8,1,1,'#1a1a1a');
       ctx.fillStyle='rgba(120,190,240,0.55)';ctx.beginPath();ctx.ellipse(sx,y0-1,6,2,0,0,Math.PI*2);ctx.fill();
       if(a.parent){R(sx-3,y0-13,6,1,'#ffd166');}
       return;
     }
     if(!a.seated){ctx.fillStyle=th.shadow;ctx.beginPath();ctx.ellipse(sx,sy,6,3,0,0,Math.PI*2);ctx.fill();}
-    const R=rect,sh=a.shirt,shD=shade(sh,-30),shL=shade(sh,30),sk=a.skin,skD=shade(sk,-25),hr=a.hair,pants=a.pants||'#2d3142';
-    const hs=a.hs||0,cap=shade(sh,-45),st=a.status;
+    const R=rect,sh=a.shirt,shD=shade(sh,-30),shL=shade(sh,30),sk=a.skin,skD=shade(sk,-25),L=LOOK(a),st=a.status;
     if(a.seated){
       const skey=st==='working'&&a.tool&&a.tool[0]==='Bash'?'terminal':st==='talking'?'visitor':st==='waiting'?'subagent':st;
       if(skey==='reading'){sx+=1;sy-=1;}if(skey==='thinking'||skey==='terminal'){sx-=1;sy+=1;}
@@ -5217,8 +5385,8 @@ class ClaudeOffice extends React.Component{
       R(sx-5,sy-11,10,11,sh);R(sx+2,sy-11,3,11,shD);R(sx-5,sy-11,10,1,shL);R(sx-1,sy-10,1,9,shD);
       R(sx-1,sy-13,3,2,skD);
       const hy=sy-21+(skey==='reading'?1:0);
-      if(skey==='visitor'||skey==='permission'){R(sx-4,hy,8,8,hr);R(sx+1,hy+2,3,5,sk);R(sx+3,hy+3,1,1,'#1a1a1a');R(sx+1,hy,3,2,shade(hr,-12));R(sx-5,hy+3,1,2,sk);}
-      else{R(sx-4,hy,8,8,hr);R(sx+1,hy,3,8,shade(hr,-12));R(sx-5,hy+3,1,2,sk);R(sx+4,hy+3,1,2,sk);R(sx-3,hy+1,2,1,shade(hr,25));}
+      if(skey==='visitor'||skey==='permission')PERSON.hairProfile(R,L,sx,hy,sh,sk);
+      else PERSON.hairSeat(R,L,sx,hy,sh,sk);
       post.forEach(f=>f());
       if(a.parent){R(sx-3,hy-1,6,2,'#ffd166');R(sx,hy-4,1,3,'#ffd166');R(sx-1,hy-5,3,1,'#ffffff');}
       const ix=sx+4,iy=sy-36;
@@ -5233,34 +5401,26 @@ class ClaudeOffice extends React.Component{
       const sit=a.stool&&!a.moving;
       const walk=a.moving?Math.floor(t*9+a.id)%2:0,tap=st==='waiting'&&!a.moving?Math.floor(t*5)%2:0,by=sy-(a.moving&&walk?1:0)-(sit?(a.stool===2?9:4):0);
       const l1=walk?1:0,l2=walk?0:(tap?1:0);
-      if(sit){R(sx-3,by-5,2,3,pants);R(sx+1,by-5,2,3,shade(pants,-15));R(sx-3,by-2,2,5,pants);R(sx+1,by-2,2,5,shade(pants,-15));R(sx-3,by+3,2,1,'#141414');R(sx+1,by+3,2,1,'#141414');}
-      else{R(sx-3,by-5+l1,2,5-l1,pants);R(sx+1,by-5+l2,2,5-l2,shade(pants,-15));
-      R(sx-3,by-1,2,1,'#141414');R(sx+1,by-1-l2,2,1,'#141414');}
       R(sx-4,by-11,8,7,sh);R(sx+2,by-11,2,7,shD);R(sx-4,by-11,1,7,shL);
-      if(a.dirFront){R(sx-1,by-11,2,2,'#ffffff');R(sx-4,by-6,8,1,shade(pants,-20));}
+      // the top (collar and tie, hoodie, open jacket or cardigan, blouse, dress) and its sleeve colour for the arms
+      const slv=PERSON.top(R,L,sx,by,sh,sk,skD,a.dirFront),slvD=shade(slv,-30);
+      if(sit)PERSON.legsSit(R,L,sx,by,sh);else PERSON.legs(R,L,sx,by,sh,l1,l2,a.dirFront);
       const sw=a.moving?(walk?1:-1):0,wave=st==='talking'&&!a.moving?Math.floor(t*4)%2:0,up=st==='done'&&!a.moving;
       const act=!a.moving&&st==='idle'?a.actNow:null;
       const tp=t+a.id*1.37;// per-person phase, so a group of smokers never moves in step
-      if(act&&(!sit||act==='smoke')){this.actArms(R,act,sx,by,act==='smoke'?tp:t,sh,shD,sk);}
-      else if(up){R(sx-6,by-17,2,7,sh);R(sx+4,by-17,2,7,sh);R(sx-6,by-18,2,2,sk);R(sx+4,by-18,2,2,sk);}
-      else{R(sx-5,by-11+sw,1,5,shD);R(sx-5,by-6+sw,1,1,sk);
-        if(st==='waiting'&&!a.moving){R(sx+4,by-10,1,3,shD);R(sx+3,by-7,1,1,sk);}
-        else{R(sx+4,by-11-sw-(wave?3:0),1,5,shD);R(sx+4,by-6-sw-(wave?3:0),1,1,sk);}}
+      if(act&&(!sit||act==='smoke')){this.actArms(R,act,sx,by,act==='smoke'?tp:t,slv,slvD,sk);}
+      else if(up){R(sx-6,by-17,2,7,slv);R(sx+4,by-17,2,7,slv);R(sx-6,by-18,2,2,sk);R(sx+4,by-18,2,2,sk);}
+      else{R(sx-5,by-11+sw,1,5,slvD);R(sx-5,by-6+sw,1,1,sk);
+        if(st==='waiting'&&!a.moving){R(sx+4,by-10,1,3,slvD);R(sx+3,by-7,1,1,sk);}
+        else{R(sx+4,by-11-sw-(wave?3:0),1,5,slvD);R(sx+4,by-6-sw-(wave?3:0),1,1,sk);}}
       R(sx-1,by-12,2,1,skD);
       const hy=by-18;
       R(sx-3,hy,6,6,sk);R(sx+2,hy,1,6,skD);
       if(a.dirFront){
-        R(sx-3,hy-1,6,2,hr);R(sx-3,hy+1,1,2,hr);R(sx+2,hy+1,1,2,hr);
-        if(hs===1){R(sx-4,hy,1,6,hr);R(sx+3,hy,1,6,hr);}if(hs===2){R(sx-1,hy-3,3,2,hr);}if(hs===3){R(sx-3,hy-2,6,2,cap);R(sx-4,hy,8,1,cap);}
+        PERSON.hairFront(R,L,sx,hy,sh);
         const blink=((t+a.id*0.71)%3.2)<0.12;
-        if(a.acc==='glasses'){R(sx-3,hy+3,2,1,'#1a1a1a');R(sx+1,hy+3,2,1,'#1a1a1a');R(sx-1,hy+3,2,1,'#555');}
-        else{R(sx-2,hy+3,1,blink?1:1,blink?skD:'#1a1a1a');R(sx+1,hy+3,1,1,blink?skD:'#1a1a1a');}
-        if(st==='talking'&&!a.moving&&Math.floor(t*6)%2)R(sx-1,hy+5,2,1,'#7a3b2a');else R(sx-1,hy+5,2,1,skD);
-        R(sx-3,hy+4,1,1,shade(sk,-10));
-      }else{
-        R(sx-3,hy-1,6,6,hr);R(sx-4,hy+2,1,2,sk);R(sx+3,hy+2,1,2,sk);
-        if(hs===1)R(sx-3,hy+5,6,3,hr);if(hs===2)R(sx-1,hy-3,3,2,hr);if(hs===3){R(sx-3,hy-2,6,2,cap);}
-      }
+        PERSON.face(R,L,sx,hy,sk,skD,blink,st==='talking'&&!a.moving&&Math.floor(t*6)%2,a.acc==='glasses');
+      }else PERSON.hairBack(R,L,sx,hy,sh,sk);
       if(a.acc==='headset'){R(sx-3,hy-2,6,1,'#1a1a1a');R(sx-4,hy+1,1,3,'#1a1a1a');R(sx+3,hy+1,1,3,'#1a1a1a');}
       if(act==='smoke'){// ember at the cigarette tip (brighter during a drag), a thin wisp rising off it, a puff after each drag
         const{drag,exhale}=SmokeLogic.cycle(tp),[ex,ey]=drag?[sx-1,by-13]:[sx+7,by-8],reduced=this.env&&this.env.reduced;
@@ -5335,6 +5495,11 @@ class ClaudeOffice extends React.Component{
     box(x+0.14,y+0.42,0.26,0.4,0.5,2.5,'#f6f4ee');
     box(x+0.2,y+0.5,0.2,0.24,2.5,6,a.skin);
     box(x+0.18,y+0.48,0.12,0.28,2.5,6.5,a.hair);
+    // long hair fans out over the pillow; a bun or a ponytail sits at the back of the head
+    const hs=LOOK(a).hairStyle;
+    if(hs==='long'||hs==='wavy'||hs==='bob')box(x+0.09,y+0.44,0.11,hs==='bob'?0.32:0.38,0.5,hs==='bob'?4:3,a.hair);
+    else if(hs==='bun')box(x+0.12,y+0.56,0.07,0.12,4,6.5,a.hair);
+    else if(hs==='ponytail')box(x+0.08,y+0.58,0.11,0.08,0.5,2.5,shade(a.hair,-26));
     if(a.parent)box(x+0.18,y+0.48,0.08,0.28,6.5,7,'#ffd166');
     box(x+0.4,y+0.44,0.34,0.36,0.5,4.5+br,a.shirt);
     const bl=shade(a.shirt,-50)===a.shirt?'#5b8def':['#3e8ed0','#e5484d','#46a758','#8e4ec6'][a.id%4];

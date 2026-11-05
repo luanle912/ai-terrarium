@@ -35,7 +35,9 @@ như `restroom-logic`.
 | `genderOf(sid)` | `'m'` hoặc `'f'` |
 | `look(sid)` | toàn bộ diện mạo: `gender, skin, hair, hairStyle, beard, top, layer, bottom, legs, shoes, acc` |
 
-Mỗi đặc điểm là một lần rút độc lập: `hash(tên đặc điểm + ':' + sid) % số lựa chọn`. Một số lựa chọn được lặp trong
+Mỗi đặc điểm là một lần rút độc lập: `fmix(hash(tên đặc điểm + ':' + sid)) % số lựa chọn`. Bit thấp của FNV-1a
+chỉ phụ thuộc bit thấp của các ký tự, nên hai muối khác nhau của cùng một sid sẽ cùng chẵn lẻ (lúc làm, nam không
+bao giờ ra kiểu tóc `side`); bộ trộn cuối của murmur3 (`fmix`) khuấy đều mọi bit trước khi lấy dư. Một số lựa chọn được lặp trong
 mảng để hay gặp hơn (tóc đen, nâu; không râu).
 
 ### 3.1. Bảng màu
@@ -79,8 +81,8 @@ Nam và nữ phân biệt bằng **hình bóng**, không bằng chi tiết một
 
 Ban đêm người không bị làm tối (như hiện nay), nên màu tóc tối trên sàn tối vẫn tách nhờ mặt và áo.
 
-Mã vẽ đặt trong các hàm cấp cao (`drawHair`, `drawFace`...) cạnh bảng màu trong script chính, không thêm method
-mới vào `ClaudeOffice`, nên `SCENE_METHODS` không đổi.
+Mã vẽ đặt trong object cấp cao `PERSON` (`hairFront`, `hairBack`, `face`, `top`, `legs`, `legsSit`, `hairSeat`,
+`hairProfile`, `hairBath`) trong script chính, không thêm method mới vào `ClaudeOffice`, nên `SCENE_METHODS` không đổi.
 
 ## 5. Nhà vệ sinh theo giới tính
 

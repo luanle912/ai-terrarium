@@ -180,9 +180,82 @@ test('from the pantry, every stall and vanity is reached through the lobby and t
   assert.equal(RestroomLogic.step(wc, [29, 3], [30, 3], inOffice), false, 'never through the wall between the rooms')
 })
 
-test('every agent always uses the same room, and both rooms get used', () => {
-  const rooms = [1, 2, 3, 4, 5, 6].map(RestroomLogic.roomOf)
+test('men use WC NAM and women WC NỮ, whatever their id', () => {
+  for (let id = 1; id < 20; id++) {
+    assert.equal(RestroomLogic.roomOf({ id, gender: 'm' }), 'm')
+    assert.equal(RestroomLogic.roomOf({ id, gender: 'f' }), 'f')
+  }
+  // the rooms are the layout's rooms
+  assert.deepEqual(Object.keys(wc.rooms).sort(), ['f', 'm'])
+})
+
+test('an agent without a gender still always uses the same room, and both rooms get used', () => {
+  const rooms = [1, 2, 3, 4, 5, 6].map(id => RestroomLogic.roomOf({ id }))
   assert.deepEqual([...new Set(rooms)].sort(), ['f', 'm'])
+  for (let id = 1; id < 20; id++) {
+    assert.equal(RestroomLogic.roomOf({ id }), RestroomLogic.roomOf({ id }))
+    assert.equal(RestroomLogic.roomOf({ id, gender: 'x' }), RestroomLogic.roomOf(id), 'an unknown gender falls back to the id')
+  }
+})
+
+// ---- how often, and how many at once ----
+
+// A seeded generator (LCG), so the frequencies below are the same on every run.
+const seeded = seed => () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32
+// The idle spots as the page builds them: some pantry spots, then the restroom's stalls.
+const OTHER = Array.from({ length: 20 }, (_, i) => ({ act: i % 2 ? 'coffee' : 'phone' }))
+const SPOTS = [...OTHER, ...wc.spots]
+const ALL = SPOTS.map((_, i) => i)
+const stallsOf = room => wc.spots.filter(s => s.room === room).length
+
+test('pickIdle: about one idle choice in four is the restroom, always a stall of the agent\'s own room', () => {
+  assert.equal(RestroomLogic.SHARE, 0.25)
+  for (const room of ['m', 'f']) {
+    const rand = seeded(room === 'm' ? 7 : 11), N = 4000
+    let n = 0
+    for (let k = 0; k < N; k++) {
+      const i = RestroomLogic.pickIdle(SPOTS, ALL, room, rand)
+      assert.ok(i !== null)
+      if (SPOTS[i].act === 'wc') { n++; assert.equal(SPOTS[i].room, room, 'never the other room') }
+    }
+    assert.ok(n / N > 0.2 && n / N < 0.3, `${room}: ${Math.round(n / N * 100)} % restroom`)
+  }
+})
+
+test('pickIdle: with its own stalls taken, or just been, the agent picks something else', () => {
+  const rand = seeded(3)
+  const noM = ALL.filter(i => !(SPOTS[i].act === 'wc' && SPOTS[i].room === 'm'))
+  for (let k = 0; k < 500; k++) {
+    assert.notEqual(SPOTS[RestroomLogic.pickIdle(SPOTS, noM, 'm', rand)].act, 'wc', 'men\'s stalls full: no stall at all')
+    assert.notEqual(SPOTS[RestroomLogic.pickIdle(SPOTS, ALL, null, rand)].act, 'wc', 'just been: no stall')
+  }
+  // nothing else free: the stall it is, if there is one; nothing at all: null
+  const onlyStalls = ALL.filter(i => SPOTS[i].act === 'wc')
+  assert.equal(SPOTS[RestroomLogic.pickIdle(SPOTS, onlyStalls, 'f', rand)].room, 'f')
+  assert.equal(RestroomLogic.pickIdle(SPOTS, onlyStalls, null, rand), null)
+  assert.equal(RestroomLogic.pickIdle(SPOTS, [], 'm', rand), null)
+})
+
+test('pickIdle: a dozen idle agents never put more people in a room than it has stalls', () => {
+  const rand = seeded(99)
+  const agents = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, gender: i % 3 ? 'm' : 'f', spot: null, left: 0 }))
+  let peak = { m: 0, f: 0 }, visits = 0
+  for (let tick = 0; tick < 5000; tick++) {
+    for (const a of agents) {
+      if (a.spot !== null && --a.left > 0) continue
+      const taken = new Set(agents.filter(o => o !== a && o.spot !== null).map(o => o.spot))
+      a.spot = RestroomLogic.pickIdle(SPOTS, ALL.filter(i => !taken.has(i)), RestroomLogic.roomOf(a), rand)
+      a.left = 1 + Math.floor(rand() * 10)
+      if (a.spot !== null && SPOTS[a.spot].act === 'wc') visits++
+    }
+    for (const room of ['m', 'f']) {
+      const n = agents.filter(a => a.spot !== null && SPOTS[a.spot].act === 'wc' && SPOTS[a.spot].room === room).length
+      peak[room] = Math.max(peak[room], n)
+      assert.ok(n <= stallsOf(room), `${n} people in a ${stallsOf(room)}-stall room`)
+    }
+    for (const a of agents) if (a.spot !== null) assert.ok(SPOTS[a.spot].act !== 'wc' || SPOTS[a.spot].room === RestroomLogic.roomOf(a))
+  }
+  assert.ok(visits > 0 && peak.m >= 1 && peak.f >= 1, 'both rooms get used')
 })
 
 // ---- the smoking corner beside it ----
