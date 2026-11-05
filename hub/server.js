@@ -18,6 +18,7 @@ const { createJwks } = require('./jwt.js');
 const { createAccounts } = require('./accounts.js');
 const { createGoogleCheck } = require('./google-check.js');
 const { sha256hex } = require('./auth.js');
+const { errorPage, PAGE_CSP } = require('./pages.js');
 
 const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes, require('./publish.js').routes, require('./me.js').routes];
 
@@ -83,7 +84,11 @@ function createHub(config, deps = {}) {
     if (!seen.has(req)) seen.set(req, lookup(req));
     return seen.get(req);
   };
-  const server = http.createServer(createRouter(routes, { log: d.log, now: d.now, hsts: config.secure }));
+  const htmlError = (status, message) => ({
+    body: errorPage(status, message),
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, 'Cache-Control': 'no-store' },
+  });
+  const server = http.createServer(createRouter(routes, { log: d.log, now: d.now, hsts: config.secure, htmlError }));
 
   const setTimer = deps.setInterval || setInterval; // injectable so tests can check unref/clear
   const clearTimer = deps.clearInterval || clearInterval;

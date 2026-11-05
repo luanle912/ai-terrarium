@@ -5,11 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.5.0] - 2026-11-05
 
 ### Added
 
-- **Multi-island hub** — A small hub server (`hub/server.js`, no dependencies) lets newera.inc staff sign in with Google, pair their machine with a device code and see everyone's island in one sky; setup guide in `docs/hub-setup.md`
+- **Languages** — The office page speaks Vietnamese, English, Japanese, Korean, Simplified Chinese and Spanish. It follows the browser language (English when there is no match), and a "Language" picker at the top of the ⚙ panel switches and remembers the choice; strings live in one table per language in the page, and `tests/i18n.test.mjs` checks every language has every key with the same placeholders
+- **Multi-island hub** — A small hub server (`hub/server.js`, no dependencies) lets people sign in with Google, pair their machine and see everyone's island in one sky. A public hub runs at https://terrarium.openlabs.click; setup guide for your own in `docs/hub-setup.md`
+- **Join the world from Settings** — Joining used to mean running `node server.js join` in a terminal, copying a code and typing it into the hub. The ⚙ Settings panel now has a **World** section (Thế giới): *Join the world* asks the hub for a code and opens its approval page with the code already filled in, so joining is one click on "Cho phép"; *Leave world* (click twice to confirm) removes this machine from the hub and forgets the local settings; *Cancel* stops a join that is still waiting. The header keeps just the status chip, and clicking it opens the world on the hub. All of it is translated into the six page languages
+- **Open sign-in** — Setting `HUB_ALLOWED_DOMAINS=*` lets any verified Google account sign in, personal Gmail included; before, only accounts of a listed company domain could, and Google's account chooser hid Gmail accounts
+- **Welcome page** — Visitors who are not signed in now land on a short page with the island logo, what the hub shows and does not show, and a "Đăng nhập bằng Google" button, instead of being sent straight to Google's sign-in screen
+- **Logo** — A pixel-art floating island with the little office, a pond and an autumn tree (`assets/logo.png`), shown on the hub pages and usable as the Google sign-in app logo
 - **World view** — The hub page has two modes: "Toàn cảnh" (the whole sky) and "Của tôi" (your own island); the local page shows a "Thế giới" chip once the machine has joined a hub
 - **Publisher commands** — `node server.js join <hub>`, `share kin|co-ban`, `private on|off`, `status` and `leave`; only an allow-list of fields leaves the machine, and `private on` shows the island as private within 3 seconds
 - **Device management** — Devices can be removed at `/me` on the hub; a removed machine's publisher logs `revoked` and stops sending
@@ -22,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Hub pages redesigned** — The pairing, approval, "Của tôi", leave and error pages were plain black-on-white HTML that looked nothing like the app. They now share the app's dark pixel style: the logo and pixel font, cards with a hard drop shadow, chunky buttons. The approval page shows the machine's name and its code in large type; after "Cho phép" it names the machine and opens the world by itself after 3 seconds; "Của tôi" shows each device with a Đang gửi / Riêng tư / Ngoại tuyến / Đã thu hồi tag and picks the island colour from swatches; and a browser that runs into an error (wrong account, expired sign-in, missing page) gets a page in Vietnamese with a way back instead of a line of English text
+- **Approval links carry the code** — The link a machine opens now goes straight to the confirm page for its code, and if you are not signed in yet you land back on that page after signing in. Opening a link never approves anything by itself: "Cho phép" still has to be clicked, and wrong codes in links count toward the same 5-try lock as typed ones
+- **Default hub** — The local page joins `https://terrarium.openlabs.click`; set `TERRARIUM_HUB` to use another hub
 - **`HUB_SECRET_KEY` is required** — 32 random bytes in base64, even with dev login; it encrypts stored refresh tokens. Changing it drops all stored refresh tokens, so everyone falls back to the 24-hour rule until they sign in again
 - **Hub security** — ID tokens are verified against Google's JWKS; the world page is served with a hash-based CSP and SRI for React; HSTS on `https://` and `Cross-Origin-Opener-Policy: same-origin`; full per-route rate limits and SSE stream caps (5 per user, 300 total)
 - **Upgrading from GĐ1** — The hub DB upgrades in place (`PRAGMA user_version` 2); stop the hub, back up `hub.sqlite`, set `HUB_SECRET_KEY`, start the new version; everyone signs in again within 24 hours so their machines keep sending
@@ -277,6 +285,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.5.0]: https://github.com/luanle912/ai-terrarium/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/luanle912/ai-terrarium/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/luanle912/ai-terrarium/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/luanle912/ai-terrarium/compare/v1.3.5...v1.4.0

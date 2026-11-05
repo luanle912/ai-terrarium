@@ -12,6 +12,7 @@ const PERM_MS = (+process.env.PERM_SEC || 8) * 1e3;
 const PERM_TOOLS = new Set(['Bash', 'Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'WebFetch']);
 const MAX_CLIENTS = 20;
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
+const DEFAULT_HUB = 'https://terrarium.openlabs.click';
 const USAGE_GLOB = path.join(os.homedir(), '.claude', 'plugins', 'store');
 let usageCache = []; let usageCacheTs = 0;
 // Sources, in order: <configDir>/usage.json (written by `server.js statusline`), then the legacy usage-quota* files.
@@ -249,14 +250,67 @@ function hostAllowed(host, port, extra = []) {
 // CORS: echo only the one configured origin; everything else gets no CORS header at all.
 function corsOrigin(origin, allowedOrigin) { return origin && allowedOrigin && origin === allowedOrigin ? origin : null; }
 
-function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }) } = {}) {
+// Only this page may start pairing: its Origin must be our own, and the custom header forces a CORS preflight that a
+// foreign site never gets past (we answer no OPTIONS), so a drive-by page cannot pair this machine to its own hub.
+function joinRequestAllowed(req, port, extra = [], action = 'join') {
+  if (String(req.headers['x-terrarium'] || '') !== action) return false;
+  const o = req.headers.origin;
+  if (!o) return true;
+  return ['localhost', '127.0.0.1', '[::1]'].map(n => `http://${n}:${port}`).concat(extra.map(e => 'http://' + String(e).toLowerCase())).includes(String(o).toLowerCase());
+}
+
+// The "Tham gia / Thoát thế giới" buttons: pair with the default hub in the background, or leave it.
+// `gen` retires an older join attempt, so a cancelled one can neither write a config nor overwrite the status.
+function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date.now }) {
+  let cur = { phase: 'idle' }, gen = 0;
+  return {
+    status() { return { ...cur }; },
+    start() {
+      const c = readCfg();
+      if (c && typeof c.token === 'string' && c.token && !c.revoked) {
+        try { openBrowser(c.hub); } catch {}
+        return Promise.resolve({ phase: 'joined', hub: c.hub });
+      }
+      if ((cur.phase === 'pending' && now() < cur.expiresAt) || cur.phase === 'starting') return Promise.resolve({ ...cur });
+      const my = ++gen;
+      cur = { phase: 'starting' };
+      return new Promise(resolve => {
+        const set = v => { if (gen === my) cur = v; resolve({ ...v }); };
+        join(hub, { name, openBrowser, log: () => {}, shouldStop: () => gen !== my,
+          onStart: s => set({ phase: 'pending', code: s.userCode, url: s.url, expiresAt: now() + s.expiresIn * 1000 }) })
+          .then(() => set({ phase: 'joined', hub }))
+          .catch(e => set({ phase: 'error', error: String((e && e.message) || 'join failed').slice(0, 200) }));
+      });
+    },
+    // Cancels a pending join, then revokes this device on the hub and removes the local config.
+    async leave() {
+      gen++;
+      cur = { phase: 'idle' };
+      const lines = [];
+      const code = await leave(l => lines.push(String(l)));
+      if (code) return { phase: 'error', error: 'local_config' };
+      return lines.some(l => /Could not reach the hub/.test(l)) ? { phase: 'left', warn: 'hub_unreachable' } : { phase: 'left' };
+    },
+  };
+}
+
+function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null } = {}) {
   return (req, res) => {
     if (!hostAllowed(req.headers.host, port, allowedHosts)) { res.writeHead(403); res.end('Forbidden'); return; }
+    const route = (req.url || '').split('?')[0];
+    if ((route === '/api/join' || route === '/api/leave') && req.method === 'POST' && joinFlow) {
+      const action = route === '/api/join' ? 'join' : 'leave';
+      if (!joinRequestAllowed(req, port, allowedHosts, action)) { res.writeHead(403); res.end('Forbidden'); return; }
+      (action === 'join' ? joinFlow.start() : joinFlow.leave())
+        .then(j => { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(j)); })
+        .catch(() => { res.writeHead(500); res.end('error'); });
+      return;
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); res.end('Method Not Allowed'); return; }
     const co = corsOrigin(req.headers.origin, allowedOrigin);
     if (co) { res.setHeader('Access-Control-Allow-Origin', co); res.setHeader('Vary', 'Origin'); }
-    const route = (req.url || '').split('?')[0];
-    if (route === '/events') {
+    if (route === '/api/join' && joinFlow) { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(joinFlow.status())); }
+    else if (route === '/events') {
       if (clients.size >= MAX_CLIENTS) { res.writeHead(429); res.end('Too many connections'); return; }
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       doScan(); res.write('data: ' + JSON.stringify(snap()) + '\n\n'); clients.add(res); req.on('close', () => clients.delete(res));
@@ -315,7 +369,12 @@ async function main() {
   let publisher = null;
   // The salt only lives in RAM: it is used for the preview before joining, never written to disk.
   const publicPreview = makePublicPreview({ publisher: { state: () => publisher ? publisher.state() : { state: 'off' }, view: () => publisher ? publisher.view() : null }, getSnapshot: snapshot, salt: crypto.randomBytes(32).toString('hex') });
-  listenWithRetry(http.createServer(createHandler({ publicPreview })), PORT, '127.0.0.1')
+  const joinFlow = makeJoinFlow({
+    join: pub.join, readCfg: () => cfgLib.readConfig(cfgLib.configDir()), openBrowser: pub.makeOpenBrowser(),
+    leave: log => cfgLib.runCommand(['leave'], { log, revokeSelf: pub.revokeSelf }),
+    hub: process.env.TERRARIUM_HUB || DEFAULT_HUB, name: os.hostname(),
+  });
+  listenWithRetry(http.createServer(createHandler({ publicPreview, joinFlow })), PORT, '127.0.0.1')
     .then(() => {
       console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`);
       // Only the process that holds the port publishes.
@@ -323,5 +382,5 @@ async function main() {
     });
 }
 
-module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage };
+module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage, makeJoinFlow, joinRequestAllowed };
 if (require.main === module) main();

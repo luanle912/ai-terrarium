@@ -70,10 +70,13 @@ function routes(ctx) {
     handler(req, res) {
       const s = helpers.requireSession(req);
       if (!s) return redirect(res, '/auth/login');
-      html(res, mePage({
-        csrf: s.session.csrf, user: s.user, island: db.getIslandByUser(s.user.id), devices: db.listDevices(s.user.id),
-        colors: ISLAND_COLORS, now: deps.now(),
-      }));
+      const island = db.getIslandByUser(s.user.id);
+      const live = new Map(island ? world.devicesOf(island.id).map((d) => [d.deviceId, d]) : []);
+      const devices = db.listDevices(s.user.id).map((d) => {
+        const w = d.revoked_at == null && live.get(d.id);
+        return { ...d, send: d.revoked_at != null ? 'revoked' : w && w.online ? (w.private ? 'private' : 'sending') : 'offline' };
+      });
+      html(res, mePage({ csrf: s.session.csrf, user: s.user, island, devices, colors: ISLAND_COLORS, now: deps.now() }));
     },
   });
 
