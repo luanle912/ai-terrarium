@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Smoking corner moved beside the restroom** — The whole corner (pad, pergola, bench, ash bin, planted screen, light, extinguisher and sign) now stands right against the restroom block's east side on a new strip of land, its planted screen facing the block; a stepping-stone path runs from the east stairs along the front of the block to its entrance, smokers come in only through that entrance, never over the bench back, and the dogs still keep out
 - **Restroom use** — Men now go to WC NAM and women to WC NỮ (it used to go by odd and even numbers), and idle agents pick the restroom about one time in four instead of rarely; a room never holds more people than it has stalls, so when they are all taken the others go for a coffee or a stretch instead of queueing
 
+### Fixed
+
+- **Checking a code on a full hub** — Looking up a pairing code while the hub already has 8 islands now only shows "Hub đã đủ 8 đảo"; the code stays valid, so it can still be approved if a place frees up before it expires
+- **Smoother sky of islands** — The simple islands are kept as GPU-friendly images with a least-recently-used cache (no burst of redraws at dusk), the 8 name plates are measured once instead of every frame, and the hub no longer reads its database for every island update or re-sends every island after a removal
+
 ### Removed
 
 - **Free camera and minimap of the world view** — Dragging, zooming, flying to an island and the minimap are gone from the hub page (the local page on port 4317 keeps its own drag and zoom)
