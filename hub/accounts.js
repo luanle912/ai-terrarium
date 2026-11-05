@@ -66,8 +66,11 @@ function createAccounts(ctx) {
     db.revokeDevicesForUser(userId, deps.now());
     const island = db.getIslandByUser(userId);
     if (!island) return false;
-    db.deleteIslandByUser(userId); // first: the world's `remove` is only sent once the row is gone
-    ctx.world.removeIsland(island.id);
+    try {
+      db.deleteIslandByUser(userId); // first: the world's `remove` is only sent once the row is gone
+    } finally {
+      ctx.world.removeIsland(island.id); // runs even if the delete threw; the error still propagates
+    }
     audit('island_removed', { actorId, target: 'island:' + island.id + ' user:' + userId, ip });
     return true;
   }

@@ -80,7 +80,10 @@ function routes(ctx) {
         if (row.slot != null) broadcast('island', { id: e.id, sessions: [] });
         return broadcast('world', worldPayload());
       }
-      return broadcast('remove', { id: e.id });
+      broadcast('remove', { id: e.id });
+      // A freed slot may promote a hidden island whose `island` events were dropped while hidden: send every live one.
+      for (const r of db.listSlottedIslands()) if (world.snapshotFor(r.id).length > 0) sendIsland(r.id);
+      return;
     }
     if (e.type === 'island') {
       if (!isSlotted(e.id)) return;
