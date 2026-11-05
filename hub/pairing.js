@@ -76,11 +76,13 @@ function routes(ctx) {
     return r.full ? null : r.island;
   }
 
-  // The hub is full and this user has no island: the code is refused for good (not a wrong code, so no recordWrong).
+  // The hub is full and this user has no island. On approve the code is refused for good (not a wrong code, so no
+  // recordWrong); a lookup only warns, so the same code still works once an owner frees a slot.
+  function warnFull(res, s) { return html(res, 400, devicePage({ csrf: s.session.csrf, error: HUB_FULL_MSG })); }
   function refuseFull(res, s, row, req) {
     db.denyDeviceCode(row.code_hash, 'hub_full');
     ctx.accounts.audit('pair_refused_full', { actorId: s.user.id, target: 'user:' + s.user.id, ip: helpers.clientIp(req) });
-    return html(res, 400, devicePage({ csrf: s.session.csrf, error: HUB_FULL_MSG }));
+    return warnFull(res, s);
   }
 
   const list = [];
@@ -190,7 +192,9 @@ function routes(ctx) {
         return html(res, 400, devicePage({ csrf, error: 'Mã không đúng hoặc đã hết hạn.' }));
       }
       const device = { name: row.name, userCode: row.user_code, requestedAt: row.created_at };
-      if (action !== 'deny' && !db.getIslandByUser(s.user.id) && db.islandCount() >= db.MAX_ISLANDS) return refuseFull(res, s, row, req);
+      if (action !== 'deny' && !db.getIslandByUser(s.user.id) && db.islandCount() >= db.MAX_ISLANDS) {
+        return action === 'lookup' ? warnFull(res, s) : refuseFull(res, s, row, req);
+      }
       if (action === 'lookup') return html(res, 200, devicePage({ csrf, device }));
       if (action === 'deny') { db.denyDeviceCode(row.code_hash); return html(res, 200, devicePage({ csrf, done: 'denied' })); }
       // C2: the island appears with the first approved device; losing the race for the last slot is a refusal
