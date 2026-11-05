@@ -110,7 +110,7 @@ test('status strips control characters from what it prints', async () => {
 test('leave revokes on the hub first', async () => {
   const dir = tmp(); writeConfig(dir, base())
   const calls = []
-  const r = await run(dir, ['leave'], { revokeSelf: async (hub, token) => { calls.push([hub, token, fs.existsSync(path.join(dir, 'config.json'))]); return true } })
+  const r = await run(dir, ['leave'], { revokeSelf: async (hub, token) => { calls.push([hub, token, fs.existsSync(path.join(dir, 'config.json'))]); return 'ok' } })
   assert.equal(r.code, 0)
   assert.deepEqual(calls, [['https://hub.example', TOKEN, true]])
   assert.match(r.out, /Revoked this device on the hub\./)
@@ -118,13 +118,22 @@ test('leave revokes on the hub first', async () => {
   // already revoked: nothing to call
   writeConfig(dir, { ...base(), revoked: true })
   let n = 0
-  await run(dir, ['leave'], { revokeSelf: async () => { n++; return true } })
+  await run(dir, ['leave'], { revokeSelf: async () => { n++; return 'ok' } })
   assert.equal(n, 0)
+})
+
+test('leave says so when the hub no longer knows this device (401)', async () => {
+  const dir = tmp(); writeConfig(dir, base())
+  const r = await run(dir, ['leave'], { revokeSelf: async () => 'gone' })
+  assert.equal(r.code, 0)
+  assert.match(r.out, /This device was already removed on the hub\./)
+  assert.doesNotMatch(r.out, /Could not reach/)
+  assert.equal(fs.existsSync(path.join(dir, 'config.json')), false)
 })
 
 test('leave still removes the file when the hub is unreachable', async () => {
   const dir = tmp(); writeConfig(dir, base())
-  const r = await run(dir, ['leave'], { revokeSelf: async () => false })
+  const r = await run(dir, ['leave'], { revokeSelf: async () => 'failed' })
   assert.equal(r.code, 0)
   assert.match(r.out, /Could not reach the hub; revoke this device at https:\/\/hub\.example\/me\./)
   assert.equal(fs.existsSync(path.join(dir, 'config.json')), false)

@@ -64,7 +64,8 @@ nhất. Publisher tạm dừng (không đánh dấu `revoked`); đăng nhập l�
 được gỡ cấm khi đăng nhập thành công lại.
 
 **Đổi khoá.** Đổi `HUB_SECRET_KEY` thì hub không giải mã được các refresh token cũ: hub bỏ chúng (ghi `refresh_unreadable`
-vào `audit`) và mọi người về luật 24 giờ cho tới khi đăng nhập lại và cấp lại refresh token. Đừng đổi khoá nếu không cần.
+vào `audit`) và những người đó về luật 24 giờ: phiên xem của họ bị cắt khi quá 24 giờ kể từ lúc tạo (dù ban đầu sống 7 ngày),
+và máy nhận 403 `login_required`, cho tới khi đăng nhập lại và cấp lại refresh token. Đừng đổi khoá nếu không cần.
 
 **Giới hạn của Google:** mỗi tài khoản chỉ giữ tối đa 100 refresh token cho mỗi OAuth client; cấp token thứ 101 thì
 token cũ nhất bị huỷ. Với việc người dùng đăng nhập lại bình thường thì không chạm giới hạn này.
@@ -196,3 +197,6 @@ DB GĐ1 được nâng cấp tại chỗ khi bản mới khởi động (`PRAGMA
 Người dùng GĐ1 chưa có refresh token, nên phiên của họ bị rút về tối đa 24 giờ kể từ lúc tạo và máy của họ nhận
 403 `login_required` khi quá 24 giờ kể từ lần đăng nhập gần nhất. Mọi người cần **đăng nhập lại trên hub trong 24 giờ**
 (sẽ thấy màn hình đồng ý của Google) để máy tiếp tục gửi; publisher tự gửi tiếp sau đó, không cần `join` lại.
+
+Nếu hub đứng sau proxy, kiểm tra `HUB_TRUST_PROXY` **trước khi nâng cấp** (mục 2 và 3): đăng nhập bị giới hạn 30 lần mỗi giờ theo IP,
+nên nếu hub không thấy IP thật thì cả văn phòng dùng chung một lượt đếm và dễ bị khoá đúng ngày nâng cấp.

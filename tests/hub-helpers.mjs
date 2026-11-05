@@ -165,7 +165,8 @@ export async function googleLogin(url, google, email, { cookie, name } = {}) {
   let loc = cb.headers.get('location');
   redirects.push(loc);
   if (loc && loc.includes('consent=1')) {
-    const c = await fetch(new URL(loc, url), { redirect: 'manual', headers: sess ? { cookie: sess } : {} });
+    const consent = cookieOf(cb, /^(__Host-)?tr_consent=./); // the ticket the callback issued for this hop
+    const c = await fetch(new URL(loc, url), { redirect: 'manual', headers: { cookie: [sess, consent].filter(Boolean).join('; ') } });
     sess = cookieOf(c, /^(__Host-)?tr_sess=/) || sess;
     const next = c.headers.get('location');
     if (next) redirects.push(next);
