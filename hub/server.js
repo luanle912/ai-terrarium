@@ -18,7 +18,7 @@ const { createJwks } = require('./jwt.js');
 const { createAccounts } = require('./accounts.js');
 const { createGoogleCheck } = require('./google-check.js');
 
-const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes, require('./publish.js').routes];
+const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes, require('./publish.js').routes, require('./me.js').routes];
 
 const HOUR = 3600 * 1000;
 

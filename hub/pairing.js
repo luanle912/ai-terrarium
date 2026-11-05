@@ -119,6 +119,7 @@ function routes(ctx) {
       const token = 'trd_' + crypto.randomBytes(32).toString('base64url');
       const id = crypto.randomBytes(8).toString('hex');
       db.createDevice({ id, userId: user.id, name: row.name, tokenHash: sha256hex(token), now });
+      ctx.accounts.audit('device_paired', { actorId: user.id, target: 'device:' + id, ip: helpers.clientIp(req) });
       json(res, 200, { token, device_id: id, island_id: island.id });
     },
   });

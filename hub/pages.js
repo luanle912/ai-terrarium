@@ -39,29 +39,49 @@ function devicePage({ csrf, error, device, done } = {}) {
     `<button type="submit" name="action" value="lookup">Tiếp tục</button></form>`);
 }
 
-// mePage({csrf, user: {name, email}, island: {name, color} | null, devices: [{id, name, created_at, last_used_at, revoked_at}]})
+// mePage({csrf, user: {name, email}, island: {name, color} | null, colors, now,
+//         devices: [{id, name, created_at, last_used_at, revoked_at}]})
 const when = (t) => (t == null ? '-' : new Date(t).toISOString().replace('T', ' ').slice(0, 16) + ' UTC');
+const NEW_DEVICE_MS = 7 * 24 * 3600 * 1000;
+const safeColor = (c) => (/^#[0-9a-fA-F]{6}$/.test(c) ? c : '#888');
 
-function mePage({ csrf, user, island, devices = [] } = {}) {
+function mePage({ csrf, user, island, devices = [], colors = ISLAND_COLORS, now = Date.now() } = {}) {
   const c = escapeHtml(csrf);
+  const revokeForm = (d) => `<form method="post" action="/me/devices/revoke"><input type="hidden" name="csrf" value="${c}">` +
+    `<input type="hidden" name="device_id" value="${escapeHtml(d.id)}"><button type="submit">Thu hồi</button></form>`;
   const isl = island
-    ? `<p>Đảo của bạn: <strong style="border-left:.8rem solid ${escapeHtml(/^#[0-9a-fA-F]{6}$/.test(island.color) ? island.color : '#888')};padding-left:.4rem">${escapeHtml(island.name)}</strong></p>`
+    ? `<p>Đảo của bạn: <strong style="border-left:.8rem solid ${escapeHtml(safeColor(island.color))};padding-left:.4rem">${escapeHtml(island.name)}</strong></p>` +
+      `<form method="post" action="/me/island"><input type="hidden" name="csrf" value="${c}">` +
+      `<p><label>Tên đảo <input type="text" name="name" value="${escapeHtml(island.name)}" maxlength="24" required style="letter-spacing:0;text-transform:none"></label></p>` +
+      `<p>${colors.map((col) => `<label style="margin-right:.6rem"><input type="radio" name="color" value="${escapeHtml(col)}"${col === island.color ? ' checked' : ''}> ` +
+        `<span style="display:inline-block;width:1rem;height:1rem;vertical-align:middle;background:${escapeHtml(safeColor(col))}"></span></label>`).join('')}</p>` +
+      `<button type="submit">Lưu</button></form>`
     : `<p>Bạn chưa có đảo. <a href="/device">Ghép máy đầu tiên</a> để tạo đảo.</p>`;
+  const fresh = devices.filter((d) => d.revoked_at == null && now - d.created_at < NEW_DEVICE_MS).map((d) =>
+    `<div class="warn"><p>Máy mới: <strong>${escapeHtml(d.name)}</strong>, lúc ${escapeHtml(when(d.created_at))}</p>` +
+    `<p>Không phải bạn ghép? Thu hồi ngay.</p>${revokeForm(d)}</div>`).join('');
   const rows = devices.map((d) => {
-    const revoked = d.revoked_at != null;
-    const action = revoked
-      ? `Đã thu hồi lúc ${escapeHtml(when(d.revoked_at))}`
-      : `<form method="post" action="/me/devices/revoke"><input type="hidden" name="csrf" value="${c}">` +
-        `<input type="hidden" name="device_id" value="${escapeHtml(d.id)}"><button type="submit">Thu hồi</button></form>`;
+    const action = d.revoked_at != null ? `Đã thu hồi lúc ${escapeHtml(when(d.revoked_at))}` : revokeForm(d);
     return `<tr><td>${escapeHtml(d.name)}</td><td>${escapeHtml(when(d.created_at))}</td><td>${escapeHtml(when(d.last_used_at))}</td><td>${action}</td></tr>`;
   }).join('');
   const table = devices.length
     ? `<table><thead><tr><th>Máy</th><th>Tạo lúc</th><th>Dùng lần cuối</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
     : '<p>Chưa có máy nào.</p>';
   return layout('Của tôi',
-    `<h1>${escapeHtml((user && user.name) || 'Tôi')}</h1><p>${escapeHtml((user && user.email) || '')}</p>${isl}<h2>Máy</h2>${table}` +
-    `<p><a href="/device">Ghép máy mới</a> &middot; <a href="/">Về thế giới</a></p>` +
+    `<h1>${escapeHtml((user && user.name) || 'Tôi')}</h1><p>${escapeHtml((user && user.email) || '')}</p>${fresh}${isl}<h2>Máy</h2>${table}` +
+    `<p><a href="/device">Ghép máy mới</a> &middot; <a href="/">Về thế giới</a> &middot; <a href="/me/leave">Rời hub</a></p>` +
     `<form method="post" action="/auth/logout"><input type="hidden" name="csrf" value="${c}"><button type="submit">Đăng xuất</button></form>`);
 }
 
-module.exports = { escapeHtml, devicePage, mePage, ISLAND_COLORS, PAGE_CSP };
+function leavePage({ csrf } = {}) {
+  return layout('Rời hub',
+    `<h1>Rời hub?</h1><p class="warn">Đảo và mọi máy đã ghép của bạn sẽ bị xoá, quyền truy cập Google của hub bị thu hồi và bạn bị đăng xuất. ` +
+    `Không thể hoàn tác. Bạn vẫn có thể đăng nhập lại sau này để tạo đảo mới.</p>` +
+    `<form method="post" action="/me/leave"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button type="submit">Rời hub</button> <a href="/me">Quay lại</a></form>`);
+}
+
+function leftPage() {
+  return layout('Đã rời hub', `<h1>Đã rời hub</h1><p>Đảo và các máy của bạn đã được xoá. Bạn có thể <a href="/auth/login">đăng nhập lại</a> bất cứ lúc nào.</p>`);
+}
+
+module.exports = { escapeHtml, devicePage, mePage, leavePage, leftPage, ISLAND_COLORS, PAGE_CSP };
