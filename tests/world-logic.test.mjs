@@ -258,15 +258,56 @@ test('transStep with reduced motion fades, swapping at 100 ms and ending at 200 
   assert.equal(W.transStep(t, 200, true).done, true)
 })
 
-test('a second navigation while the clouds run is ignored, not queued', () => {
-  // navigate() starts a transition only when canNavigate allows it; the target of the first one is kept.
-  let trans = null
-  const go = (to, now) => { if (!W.canNavigate(trans, now, false)) return false; trans = { start: now, to, swapped: false }; return true }
-  assert.equal(go({ view: 'one', focus: 'A' }, 0), true)
-  assert.equal(go({ view: 'one', focus: 'B' }, 40), false)
-  assert.equal(go({ view: 'all' }, 500), false)
-  assert.equal(trans.to.focus, 'A')
-  assert.equal(go({ view: 'all' }, 850), true)
+test('beginTrans: a second navigation while the clouds run is ignored, not queued', () => {
+  const cur = { trans: null, reduced: false, view: 'all', focus: null }
+  const go = (to, now, reduced = false) => { const t = W.beginTrans(cur, to, now, reduced); if (t) { cur.trans = t; cur.reduced = reduced } return t }
+  assert.deepEqual(go({ view: 'one', focus: 'A' }, 0), { start: 0, to: { view: 'one', focus: 'A' }, swapped: false })
+  assert.equal(go({ view: 'one', focus: 'B' }, 40), null)
+  assert.equal(go({ view: 'all' }, 500), null)
+  assert.equal(cur.trans.to.focus, 'A')
+  cur.view = 'one'; cur.focus = 'A'
+  assert.equal(go({ view: 'one', focus: 'A' }, 900), null, 'already there')
+  assert.ok(go({ view: 'all' }, 900, true))
+  assert.equal(go({ view: 'mine' }, 1050, false), null, 'the reduced fade still runs (200 ms)')
+  assert.ok(go({ view: 'mine' }, 1100, false))
+})
+
+test('beginTrans: the same view is a no-op, another island is not', () => {
+  const at = { trans: null, reduced: false, view: 'one', focus: 'A' }
+  assert.equal(W.beginTrans(at, { view: 'one', focus: 'A' }, 0, false), null)
+  assert.ok(W.beginTrans(at, { view: 'one', focus: 'B' }, 0, false))
+  assert.equal(W.beginTrans({ ...at, view: 'mine' }, { view: 'mine' }, 0, false), null)
+})
+
+// ---- one-island placement (fix round 1) ----
+const LWt = 1000, FHt = 500, LHt = 700
+test('oneArea: a phone keeps the island between the back control and the collapsed sheet', () => {
+  const a = W.oneArea(360, 600, { phone: true, panelOpen: false, panelW: 324, top: 54, bottom: 70, lw: LWt, fh: FHt })
+  assert.deepEqual(a, { x: 0, y: 54, w: 360, h: 476 })
+  const r = W.fitOne(a, LWt, FHt, LHt)
+  assert.ok(r.y >= 54 && r.y + r.fh <= 600 - 70 + 1e-9)
+  assert.equal(r.w, 360)
+})
+
+test('oneArea: on a wide stage an open panel moves the island left when it keeps at least 70 % of its size', () => {
+  const o = { phone: false, panelOpen: true, panelW: 324, top: 0, bottom: 0, lw: LWt, fh: FHt }
+  // fitted to height: 900 wide both ways, so the island moves out from under the panel
+  const a = W.oneArea(1400, 450, o)
+  assert.deepEqual(a, { x: 0, y: 0, w: 1076, h: 450 })
+  const r = W.fitOne(a, LWt, FHt, LHt)
+  assert.ok(r.x + r.w <= 1400 - 324 + 1e-9)
+  // fitted to width: losing the panel column would shrink it below 70 %, so it stays full width
+  assert.deepEqual(W.oneArea(900, 900, o), { x: 0, y: 0, w: 900, h: 900 })
+  // panel collapsed: full stage
+  assert.deepEqual(W.oneArea(1400, 450, { ...o, panelOpen: false }), { x: 0, y: 0, w: 1400, h: 450 })
+})
+
+test('fitOne centres the island top (fh) in the area, like the local page', () => {
+  const r = W.fitOne({ x: 10, y: 20, w: 1000, h: 1000 }, LWt, FHt, LHt)
+  assert.deepEqual(r, { x: 10, y: 20 + 250, w: 1000, h: 700, fh: 500 })
+  const q = W.fitOne({ x: 0, y: 0, w: 2000, h: 250 }, LWt, FHt, LHt)
+  assert.equal(q.w, 500)
+  assert.equal(q.x, 750)
 })
 
 test('landingView falls back to "Toàn cảnh" when the island is gone before the swap', () => {
@@ -298,6 +339,8 @@ test('Esc closes an open confirm first, then goes back; never while typing', () 
   assert.equal(W.escAction({ ...base, settings: true }), 'none')
   assert.equal(W.escAction({ ...base, view: 'all' }), 'none')
   assert.equal(W.escAction({ ...base, view: 'all', confirm: true }), 'none')
+  assert.equal(W.escAction({ ...base, mod: true }), 'none', 'Ctrl, Meta or Alt held')
+  assert.equal(W.escAction({ ...base, mod: true, confirm: true }), 'none')
 })
 
 // ---- /api/me probe for an island that may be mine (Task 5 review) ----
