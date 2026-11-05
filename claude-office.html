@@ -1,5 +1,6 @@
 <title>Claude Office</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 :root{--bg:#0e1117;--fg:#e6e9ef;--muted:#8b93a7;--border:#2a3142;--surface:#151a24;--accent:#7fb2ff;--warn:#ffd166;color-scheme:dark}
@@ -13,6 +14,10 @@ button{font-family:inherit}
 .btn-active{background:var(--fg);color:var(--bg)}
 .btn-accent{border-color:var(--warn);background:var(--warn);color:#1a1300;font-weight:600}
 .btn-accent:hover{background:#ffe08f}
+/* a single-row strip that scrolls sideways on small screens, without a visible scrollbar */
+.hscroll{scrollbar-width:none;overscroll-behavior-x:contain}.hscroll::-webkit-scrollbar{display:none}
+/* On a phone the island is ~350 px wide, so full-size bubbles would cover the office; same query as narrowMq */
+@media (max-width: 640px), (max-height: 520px){.app{--bubble-k:0.7;--bubble-w:150px}}
 .chip{display:flex;align-items:center;gap:6px;padding:3px 8px;background:var(--surface);border:1px solid #232a39;color:#aab2c5;white-space:nowrap;flex:none;font-size:11px}
 .settings-toggle{position:absolute;bottom:12px;right:12px;z-index:100;width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--surface);color:var(--fg);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px}
 .settings-toggle:hover{background:#1d2433}
@@ -135,14 +140,101 @@ function buildIsland({W,H,lawn=LAWN,back=LAWN_BACK}){
   const pond=new Set();
   for(let dy=-1;dy<=1;dy++)for(let dx=-2;dx<=0;dx++){const x=fall.x+dx,y=fall.y+dy;if(cells.has(key(x,y))&&!nearOffice(x,y)&&!inSpot(x,y))pond.add(key(x,y));}
   const pondSpots=[{x:fall.x-1,y:fall.y},{x:fall.x-1,y:fall.y-1},{x:fall.x-2,y:fall.y},{x:fall.x-1,y:fall.y+1}].filter(s=>pond.has(key(s.x,s.y))).slice(0,2);
+  const paths=lawnPaths(W,H,stairs(W,H),pondSpots);
   const decor=[];
   for(const c of list){
-    if(nearOffice(c.x,c.y)||inSpot(c.x,c.y)||pond.has(key(c.x,c.y)))continue;
+    if(nearOffice(c.x,c.y)||inSpot(c.x,c.y)||pond.has(key(c.x,c.y))||paths.cells.has(key(c.x,c.y)))continue;
     const r=hash(c.x,c.y,2);
     // Sparse on purpose: a few trees read as a lawn, dozens read as clutter.
     if(r<0.035)decor.push({x:c.x,y:c.y,kind:'tree'});else if(r<0.06)decor.push({x:c.x,y:c.y,kind:'rock'});else if(r<0.2)decor.push({x:c.x,y:c.y,kind:'flower'});
   }
-  return{cells,list,depth:new Map(list.map(c=>[key(c.x,c.y),c.d])),bounds:{minX,maxX,minY,maxY},spots,decor,waterfall:{x:fall.x,y:fall.y},pond:{cells:pond,spots:pondSpots}};
+  return{cells,list,depth:new Map(list.map(c=>[key(c.x,c.y),c.d])),bounds:{minX,maxX,minY,maxY},spots,decor,waterfall:{x:fall.x,y:fall.y},pond:{cells:pond,spots:pondSpots},paths};
+}
+
+// ---- garden paths ----
+// Stepping-stone paths laid where agents really walk (desire lines): from the foot of each stair flight to the pond,
+// plus a short spur from the east stairs to the edge of the east-back spot (the smoking area). They run one tile
+// clear of the plinth front, so the big front lawn stays whole. Each leg is a list of waypoints that share a row or a
+// column; `cells` are the tiles they cover (agents prefer them), `lines` the same legs in world coordinates for drawing,
+// starting just past the bottom step instead of at the tile centre under it.
+function lawnPaths(W,H,st,pondSpots){
+  const e=st.find(s=>s.side==='east'),s=st.find(s=>s.side==='south');
+  const bath=pondSpots.reduce((a,b)=>b.y<a.y?b:a),row=H+1,sx=s.x+s.len-1;
+  const legs=[
+    {at:'south',pts:[[sx,H],[sx,row],[bath.x,row],[bath.x,bath.y-1]]},
+    {at:'east',pts:[[e.x,e.y+e.len-1],[e.x,row]]},
+    {at:'east',pts:[[e.x,e.y],[e.x+1,e.y],[e.x+1,e.y-1]]},
+  ];
+  const cells=new Set();
+  for(const{pts}of legs)for(let i=1;i<pts.length;i++){
+    const[a,b]=[pts[i-1],pts[i]],dx=Math.sign(b[0]-a[0]),dy=Math.sign(b[1]-a[1]);
+    for(let x=a[0],y=a[1];;x+=dx,y+=dy){cells.add(key(x,y));if(x===b[0]&&y===b[1])break;}
+  }
+  // A line starts on the lawn just past the bottom step and heads straight for the next tile centre, so a long first
+  // run does not drift sideways from the stairs toward the next waypoint.
+  const lines=legs.map(({at,pts})=>{
+    const[[x,y],[bx,by]]=pts,c=([x,y])=>[x+0.5,y+0.5],next=[x+0.5+Math.sign(bx-x),y+0.5+Math.sign(by-y)];
+    const out=[at==='east'?[x+STAIR_RUN+0.25,y+0.5]:[x+0.5,y+STAIR_RUN+0.25],next];
+    for(const p of pts.slice(1)){const q=c(p);if(q[0]!==out[out.length-1][0]||q[1]!==out[out.length-1][1])out.push(q);}
+    return out;
+  });
+  const strips=lines.map(smoothLine);
+  return{cells,lines,strips,stones:layStones(strips)};
+}
+// Corner cutting (Chaikin, twice) so a leg's right-angle turns read as soft curves; the end points stay put.
+function smoothLine(l){
+  let p=l;
+  for(let n=0;n<2;n++){const q=[p[0]];for(let i=0;i<p.length-1;i++){const[a,b]=[p[i],p[i+1]];q.push([a[0]*0.75+b[0]*0.25,a[1]*0.75+b[1]*0.25],[a[0]*0.25+b[0]*0.75,a[1]*0.25+b[1]*0.75]);}q.push(p[p.length-1]);p=q;}
+  return p;
+}
+// Stepping stones along the smoothed legs. A tile is ~0.65 m, so a stone every 0.95 tile is the usual ~60 cm stride and
+// a stone ~0.64 tile across is ~40 cm; the first stone of a leg is a wider landing slab at the foot of the stairs.
+// Where a leg runs into another, the stone already laid there is kept. Each stone gets an irregular 8-point outline
+// in world coordinates, wider across the walk than along it, from per-stone noise so it is the same on every machine.
+const STONE_STEP=0.95;
+function layStones(strips){
+  const stones=[];
+  for(const l of strips){
+    const seg=[];let len=0;
+    for(let i=1;i<l.length;i++){const d=Math.hypot(l[i][0]-l[i-1][0],l[i][1]-l[i-1][1]);seg.push([len,d]);len+=d;}
+    const at=s=>{let i=0;while(i<seg.length-1&&seg[i][0]+seg[i][1]<s)i++;const[s0,d]=seg[i],f=d?Math.min(1,(s-s0)/d):0,a=l[i],b=l[i+1];
+      return{x:a[0]+(b[0]-a[0])*f,y:a[1]+(b[1]-a[1])*f,tx:(b[0]-a[0])/(d||1),ty:(b[1]-a[1])/(d||1)};};
+    // spread the stones evenly from end to end, never wider than a stride, so the last one lands at the end of the leg
+    const n=Math.max(1,Math.ceil(len/STONE_STEP)),marks=Array.from({length:n+1},(_,i)=>len*i/n);
+    marks.forEach((s,i)=>{const p=at(s);if(!stones.some(o=>Math.hypot(o.x-p.x,o.y-p.y)<0.6))stones.push({...p,first:i===0});});
+  }
+  for(const st of stones){
+    const ra=st.first?0.3:0.24,rb=st.first?0.42:0.32;st.outline=[];
+    for(let j=0;j<8;j++){const th=j*Math.PI/4+(hash(st.x*9,st.y*9,20+j)-0.5)*0.35,r=0.88+hash(st.x*9,st.y*9,30+j)*0.24;
+      const ca=Math.cos(th)*ra*r,cb=Math.sin(th)*rb*r;st.outline.push([st.x+st.tx*ca-st.ty*cb,st.y+st.ty*ca+st.tx*cb]);}
+  }
+  return stones.sort((a,b)=>(a.x+a.y)-(b.x+b.y));
+}
+
+// Cheapest route between two tiles (Dijkstra). `canStep(a,b)` says whether one step from a to b is allowed and
+// `cost(b)` what it costs; with every cost 1 this is a plain shortest route. The frontier is a sorted array: the grid
+// is about a thousand cells and routes are only planned when an agent picks a new goal.
+const GRASS_COST=2;
+function cheapestPath(from,to,canStep,cost){
+  const goal=key(to[0],to[1]),start=key(from[0],from[1]);
+  const dist=new Map([[start,0]]),prev=new Map([[start,null]]),open=[[0,from]];
+  while(open.length){
+    const[d,c]=open.shift(),kc=key(c[0],c[1]);
+    if(d>dist.get(kc))continue;
+    if(kc===goal)break;
+    for(const[dx,dy]of N4){
+      const n=[c[0]+dx,c[1]+dy],kn=key(n[0],n[1]);
+      if(!canStep(c,n))continue;
+      const nd=d+cost(n);
+      if(dist.has(kn)&&dist.get(kn)<=nd)continue;
+      dist.set(kn,nd);prev.set(kn,c);
+      let i=open.length;while(i>0&&open[i-1][0]>nd)i--;
+      open.splice(i,0,[nd,n]);
+    }
+  }
+  if(!prev.has(goal)||goal===start)return[];
+  const out=[];for(let c=to;key(c[0],c[1])!==start;c=prev.get(key(c[0],c[1])))out.unshift(c);
+  return out;
 }
 
 // ---- walking outside the office ----
@@ -316,7 +408,7 @@ function skyColors(df,hour,fx){
   return out;
 }
 
-globalThis.SkyLogic={stepSnow,stairs,canCross,lawnWalk,groundZ,STAIR_RUN,flashLevel,PREVIEW_MS,startPreview,stepPreview,LAWN_BACK,mixHex,skyColors,WEATHER_KEY,loadWeatherSettings,saveWeatherSettings,geocodeUrl,forecastUrl,fetchRealWeather,LAWN,WATERFALL_LEN,DECOR_TOP,outdoorSpots,buildIsland,sceneFrame,
+globalThis.SkyLogic={stepSnow,stairs,canCross,lawnWalk,lawnPaths,cheapestPath,GRASS_COST,groundZ,STAIR_RUN,flashLevel,PREVIEW_MS,startPreview,stepPreview,LAWN_BACK,mixHex,skyColors,WEATHER_KEY,loadWeatherSettings,saveWeatherSettings,geocodeUrl,forecastUrl,fetchRealWeather,LAWN,WATERFALL_LEN,DECOR_TOP,outdoorSpots,buildIsland,sceneFrame,
   WEATHERS,WEIGHTS,FX,pickNextWeather,changeDelayMs,transitionMs,wmoToWeather,initialWeather,weatherFx,startTransition,stepRandom,snowCover,lightningDelayMs,lightningFlashMs};
 })();
 </script>
@@ -501,6 +593,21 @@ function renderIsland(island,frame,k,env){
       }
     }
   }
+  // Garden paths (SkyLogic.lawnPaths): a faint worn strip in the grass where feet go, and flat stepping stones on it
+  // that sit 1 px proud of the grass.
+  if(island.paths){
+    // The worn strip is stroked in the ground plane: with the iso projection as the canvas transform a round-capped
+    // line becomes a band lying on the lawn, joins and ends included.
+    ctx.save();ctx.setTransform(k*TW,k*TH,-k*TW,k*TH,k*OX,k*OY);
+    ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=0.62;ctx.globalAlpha=0.3;ctx.strokeStyle=night(mix('#a8955a',SNOW,snow*0.6),df);
+    for(const l of island.paths.strips){ctx.beginPath();l.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();}
+    ctx.restore();
+    for(const st of island.paths.stones){
+      const top=night(mix(hash(st.x*5,st.y*5,11)>0.5?'#c9c3b8':'#bdb6aa',SNOW,snow*0.55),df);
+      poly(st.outline.map(([x,y])=>P(x,y,0)),mix(top,'#000000',0.32));
+      poly(st.outline.map(([x,y])=>P(x,y,1)),top);
+    }
+  }
   // vines hanging from the front shore
   ctx.fillStyle=night('#3f7f33',df);
   island.list.forEach((c,i)=>{if(has(c.x,c.y+1)||hash(c.x,c.y,4)>0.35)return;const[vx,vy]=P(c.x+0.5,c.y+1,-2);ctx.fillRect(Math.round(vx),Math.round(vy),1,Math.round(5+hash(c.x,c.y,5)*12));});
@@ -597,6 +704,636 @@ function drawFront(ctx,w,h,t,env){
 window.SkyRender={mix,night,renderIsland,drawWaterfall,drawPond,drawTree,drawBack,drawFront};
 })();
 </script>
+<script id="dog-logic">
+// The three office dogs out on the lawn: where they may go, what they do next and which pose they show.
+// Pure (no DOM, no canvas): the page and tests/dog-logic.test.mjs both run this block. Randomness comes in
+// through world.rand so a test can replay a whole day.
+(function(){
+'use strict';
+const BREEDS=['corgi','husky','dalmatian'];
+const key=(x,y)=>x+','+y,fl=Math.floor;
+// Tiles per second. A corgi's short legs cover less ground; the long-legged dalmatian is the fastest.
+const STROLL=1.1,RUN=3.2,LEGS={corgi:0.88,husky:1.06,dalmatian:1.12};
+const N8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+const isNight=h=>h>=22||h<6;
+// How far a dog's colours blend toward the night blue (#0d1322): half of what the lawn gets (SkyRender.night uses
+// (1-df)*0.6). The dogs are characters, like the people (who are not dimmed at all), so they must stay readable at
+// night while still looking lit by the same moon.
+const nightMix=df=>(1-df)*0.3;
+
+// Lawn cells a dog may stand on: the walkable lawn minus water and reserved areas, and only in front of or beside
+// the office. Behind the walls (x<0 or y<0) a dog would be drawn over the wall, since it sorts with the office items.
+function roamCells(walk,{W,H,pond,avoid=[]}){
+  const out=new Set();
+  for(const k of walk){
+    const[x,y]=k.split(',').map(Number);
+    if(x<0||y<0||(x<W&&y<H)||pond.has(k))continue;
+    if(avoid.some(r=>x>=r.x&&x<r.x+r.w&&y>=r.y&&y<r.y+r.h))continue;
+    out.add(k);
+  }
+  // Keep only the largest connected piece (same moves as path()): a cell boxed in by a tree, a rock and the cliff
+  // would trap a dog that started or wandered there.
+  let best=new Set();const seen=new Set();
+  for(const k of out){
+    if(seen.has(k))continue;
+    const part=new Set([k]),q=[k.split(',').map(Number)];seen.add(k);
+    for(let i=0;i<q.length;i++){const[x,y]=q[i];
+      for(const[dx,dy]of N8){const c=key(x+dx,y+dy);
+        if(seen.has(c)||!out.has(c))continue;
+        if(dx&&dy&&(!out.has(key(x+dx,y))||!out.has(key(x,y+dy))))continue;
+        seen.add(c);part.add(c);q.push([x+dx,y+dy]);}}
+    if(part.size>best.size)best=part;
+  }
+  return best;
+}
+// Shortest path over roam cells, 8 directions, never cutting the corner of a cell the dog may not enter.
+function path(roam,from,to){
+  const s=key(from[0],from[1]),g=key(to[0],to[1]);
+  if(!roam.has(g))return[];
+  const prev=new Map([[s,null]]),q=[[from[0],from[1]]];
+  for(let i=0;i<q.length&&!prev.has(g);i++){
+    const[x,y]=q[i];
+    for(const[dx,dy]of N8){
+      const nx=x+dx,ny=y+dy,k=key(nx,ny);
+      if(prev.has(k)||!roam.has(k))continue;
+      if(dx&&dy&&(!roam.has(key(x+dx,y))||!roam.has(key(x,y+dy))))continue;
+      prev.set(k,key(x,y));q.push([nx,ny]);
+    }
+  }
+  if(!prev.has(g))return[];
+  const out=[];for(let k=g;k!==null;k=prev.get(k))out.push(k.split(',').map(Number));
+  return out.reverse();
+}
+// `clear` holds the cells dogs may run across but never settle on (stone paths, the foot of each stair flight):
+// every spot where a dog lies, sits, sleeps, sniffs or drinks is picked outside it.
+// Lawn cells right at the water's edge, each with the water cell it faces.
+function drinkSpots(roam,pond,clear=new Set()){
+  const out=[],seen=new Set();
+  for(const k of pond){const[px,py]=k.split(',').map(Number);
+    for(const[dx,dy]of N8.slice(0,4)){const x=px+dx,y=py+dy,c=key(x,y);if(roam.has(c)&&!clear.has(c)&&!seen.has(c)){seen.add(c);out.push({x,y,tx:px,ty:py});}}}
+  return out;
+}
+// Where the dogs curl up at night: three cells together at the foot of a tree, off the paths. Ties go to the cell
+// nearer the viewer, so the trunk does not hide a sleeping dog.
+function denCells(roam,tree,clear=new Set()){
+  const tx=tree[0]+0.5,ty=tree[1]+0.5,cells=[...roam].filter(k=>!clear.has(k)).map(k=>k.split(',').map(Number));
+  const by=(a,b)=>((a[0]+0.5-tx)**2+(a[1]+0.5-ty)**2)-((b[0]+0.5-tx)**2+(b[1]+0.5-ty)**2)||(b[0]+b[1])-(a[0]+a[1]);
+  const den=[];
+  while(den.length<3){
+    const next=cells.filter(c=>!den.some(o=>o[0]===c[0]&&o[1]===c[1])&&(!den.length||den.some(o=>Math.max(Math.abs(o[0]-c[0]),Math.abs(o[1]-c[1]))===1))).sort(by)[0];
+    if(!next)break;den.push(next);
+  }
+  return den;
+}
+
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+// Facing on screen: +1 = right. Screen x grows with x−y, so that is what decides left or right.
+const faceToward=(d,tx,ty)=>((tx-ty)-(d.x-d.y))<0?-1:1;
+const tileOf=d=>[fl(d.x),fl(d.y)];
+const pick=(arr,r)=>arr[fl(r()*arr.length)%arr.length];
+function goTo(d,w,tile,speed){
+  const p=path(w.roam,tileOf(d),tile);
+  if(!p.length)return false;
+  d.path=p.slice(1).map(c=>[c[0]+0.5,c[1]+0.5]);
+  if(!d.path.length)d.path=[[tile[0]+0.5,tile[1]+0.5]];
+  d.speed=speed;return true;
+}
+const settleable=(w,c)=>!(w.clear&&w.clear.has(key(c[0],c[1])));
+// A random cell within r tiles where a dog may stop (null when none turned up).
+function near(d,w,r){
+  for(let i=0;i<20;i++){const c=pick(w.roamList,w.rand);if(Math.abs(c[0]+0.5-d.x)<=r&&Math.abs(c[1]+0.5-d.y)<=r&&settleable(w,c))return c;}
+  return null;
+}
+function idle(d,w,s,happy){d.act='idle';d.path=[];d.until=w.now+s;d.wag=!!happy;d.partner=null;d.lead=false;}
+function wander(d,w){d.act='wander';d.wag=false;const c=near(d,w,6);if(!c||!goTo(d,w,c,STROLL*LEGS[d.breed]))idle(d,w,1+w.rand()*2);}
+function rest(d,dogs,w){
+  d.act='rest';d.wag=false;d.until=Infinity;
+  // Half the time lie down next to a dog that is already resting.
+  const buddy=dogs.find(o=>o!==d&&o.act==='rest'&&!o.path.length);
+  const spot=(buddy&&w.rand()<0.5&&near(buddy,w,1.5))||near(d,w,5);
+  if(!spot||!goTo(d,w,spot,STROLL*LEGS[d.breed]))wander(d,w);
+}
+function drink(d,w){
+  if(!w.drink.length)return wander(d,w);
+  const s=[...w.drink].sort((a,b)=>Math.hypot(a.x-d.x,a.y-d.y)-Math.hypot(b.x-d.x,b.y-d.y))[fl(w.rand()*3)%w.drink.length];
+  d.act='drink';d.wag=false;d.spot=s;d.until=Infinity;
+  if(!goTo(d,w,[s.x,s.y],STROLL*LEGS[d.breed]))wander(d,w);
+}
+// Chase: the runner dashes off, stops to look back when it has room, the chaser closes in; a catch ends in a play
+// bow, then they swap. The chaser is always a little faster than the runner so every round ends.
+function startChase(a,b,w){
+  a.rounds=1+(w.rand()<0.6?1:0)+(w.rand()<0.3?1:0);
+  round(a,b,w);
+}
+function round(a,b,w){
+  const rs=RUN*LEGS[b.breed];
+  b.act='flee';b.partner=a;b.lead=false;b.wag=true;flee(b,a,w,rs);
+  a.act='chase';a.partner=b;a.lead=true;a.wag=true;a.repath=0;a.roundEnd=w.now+12;a.speed=Math.max(RUN*LEGS[a.breed],rs*1.15);a.path=[];
+}
+function flee(b,a,w,speed){
+  let best=null,bd=-1;
+  for(let i=0;i<10;i++){const c=pick(w.roamList,w.rand),dx=c[0]+0.5-b.x,dy=c[1]+0.5-b.y;
+    if(Math.abs(dx)>7||Math.abs(dy)>7||!settleable(w,c))continue;const da=Math.hypot(c[0]+0.5-a.x,c[1]+0.5-a.y);if(da>bd){bd=da;best=c;}}
+  if(!best||!goTo(b,w,best,speed||b.speed)){b.path=[];}
+}
+function bow(a,b,w,s){
+  for(const[d,o]of[[a,b],[b,a]]){d.act='bow';d.path=[];d.face=faceToward(d,o.x,o.y);d.until=w.now+s;d.wag=true;}
+}
+// Play: one trots up to the other, then both bow and hop at each other for a few seconds.
+function startPlay(a,b,w){
+  a.act='play';a.partner=b;a.lead=true;a.wag=true;a.until=Infinity;
+  b.act='play';b.partner=a;b.lead=false;b.wag=true;b.until=Infinity;b.path=[];b.face=faceToward(b,a.x,a.y);
+  const t=tileOf(b),side=[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy])=>[t[0]+dx,t[1]+dy]).filter(c=>w.roam.has(key(...c))&&settleable(w,c));
+  if(!side.length||!goTo(a,w,pick(side,w.rand),RUN*0.7*LEGS[a.breed])){idle(a,w,1,true);idle(b,w,1,true);}
+}
+// Zoomies: the husky tears round a loop of nearby points on its own.
+function zoom(d,w){d.act='zoom';d.wag=true;d.laps=3+fl(w.rand()*3);const c=near(d,w,5);if(!c||!goTo(d,w,c,RUN*1.15*LEGS[d.breed]))idle(d,w,1,true);}
+
+const isFree=d=>d.act==='idle'||d.act==='wander'||d.act==='sniff';
+function next(d,dogs,w){
+  const evening=w.hour>=18,free=dogs.filter(o=>o!==d&&isFree(o));
+  const opts=[['wander',4],['rest',evening?3.2:1.4],['drink',0.8]];
+  // With reduced motion (w.calm) they only stroll, sniff, drink and nap: no dashing about.
+  if(free.length&&!w.calm)opts.push(['chase',evening?0.3:1.3],['play',evening?0.3:0.9]);
+  if(d.breed==='husky'&&!w.calm)opts.push(['zoom',0.35+1.6*(w.snow||0)]);
+  let r=w.rand()*opts.reduce((s,o)=>s+o[1],0),choice=opts[0][0];
+  for(const[o,wt]of opts){if(r<wt){choice=o;break;}r-=wt;}
+  const mate=()=>pick(free,w.rand);
+  if(choice==='wander')wander(d,w);else if(choice==='rest')rest(d,dogs,w);else if(choice==='drink')drink(d,w);
+  else if(choice==='chase')startChase(d,mate(),w);else if(choice==='play')startPlay(d,mate(),w);else zoom(d,w);
+}
+
+// A person out on the lawn (bathing in the pond, walking past) gets one dog trotting over to sit by them, wagging.
+const GREET_AGAIN=90;
+// Dogs keep away from the smoke: nobody greets a person smoking or heading to the smoking corner (act 'smoke').
+const greetable=w=>(w.agents||[]).filter(a=>a.act!=='smoke');
+function greet(dogs,w){
+  for(const a of greetable(w)){
+    if(dogs.some(d=>d.greet===a.id&&(d.act==='greet'||d.act==='sit')))continue;
+    if(dogs.some(d=>(d.greeted||{})[a.id]>w.now-GREET_AGAIN))continue;
+    const cand=dogs.filter(d=>isFree(d)||(d.act==='rest'&&!d.path.length)).sort((p,q)=>Math.hypot(p.x-a.x,p.y-a.y)-Math.hypot(q.x-a.x,q.y-a.y))[0];
+    if(!cand)continue;
+    cand.greeted=cand.greeted||{};cand.greeted[a.id]=w.now;
+    cand.act='greet';cand.greet=a.id;cand.wag=true;cand.until=w.now+25;cand.repath=0;
+  }
+}
+// The cell a greeting dog sits on: right beside the person, or on the nearest bank when they bathe out in the pond
+// with water all round; off the path if any such cell is free, else on it anyway.
+function greetSpot(d,a,w){
+  const t=[fl(a.x),fl(a.y)];
+  for(const r of[1,2]){
+    const cands=[];
+    // Ring 2 leaves out its far corners (2.8 tiles off) so the dog still sits close by.
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++)if(Math.max(Math.abs(dx),Math.abs(dy))===r&&Math.hypot(dx,dy)<2.3&&w.roam.has(key(t[0]+dx,t[1]+dy)))cands.push([t[0]+dx,t[1]+dy]);
+    if(!cands.length)continue;
+    const off=cands.filter(c=>settleable(w,c));
+    // The viewer's side first (largest x+y), so furniture and the person never hide the dog; then the nearest.
+    return(off.length?off:cands).sort((p,q)=>(q[0]+q[1])-(p[0]+p[1])||Math.hypot(p[0]+0.5-d.x,p[1]+0.5-d.y)-Math.hypot(q[0]+0.5-d.x,q[1]+0.5-d.y))[0];
+  }
+  return null;
+}
+
+function move(d,w,dt){
+  let step=(d.speed||0)*dt;
+  while(step>0&&d.path.length){
+    const[tx,ty]=d.path[0],dx=tx-d.x,dy=ty-d.y,len=Math.hypot(dx,dy);
+    if(len>0.001&&Math.abs(dx-dy)>0.001)d.face=dx-dy<0?-1:1;
+    if(len<=step){d.x=tx;d.y=ty;d.path.shift();step-=len;}else{d.x+=dx/len*step;d.y+=dy/len*step;step=0;}
+  }
+}
+// What a dog does once it has got where it was going.
+function arrive(d,dogs,w){
+  const r=w.rand;
+  switch(d.act){
+    case'wander':if(r()<0.5){d.act='sniff';d.until=w.now+1.5+r()*2;}else idle(d,w,1+r()*2);break;
+    case'rest':d.until=w.now+14+r()*22;break;
+    case'drink':d.face=faceToward(d,d.spot.tx+0.5,d.spot.ty+0.5);d.until=w.now+3+r()*2.5;break;
+    case'den':d.act='sleep';d.face=(dogs.indexOf(d)%2)?-1:1;break;
+    case'zoom':{const c=--d.laps>0&&near(d,w,5);if(c)goTo(d,w,c,d.speed);else idle(d,w,2+r()*2,true);break;}
+    case'flee':d.face=faceToward(d,d.partner.x,d.partner.y);break;
+    case'play':if(d.lead){const b=d.partner;d.face=faceToward(d,b.x,b.y);b.face=faceToward(b,d.x,d.y);d.until=b.until=w.now+3.5+r()*2.5;d.playing=b.playing=true;}break;
+  }
+}
+function tick(d,dogs,w){
+  const done=w.now>=d.until,still=!d.path.length;
+  switch(d.act){
+    case'idle':case'sniff':if(done)next(d,dogs,w);break;
+    case'wander':case'zoom':case'den':if(still&&d.act==='wander')next(d,dogs,w);break;
+    case'rest':case'drink':if(still&&done)idle(d,w,1+w.rand()*2);break;
+    case'sleep':break;
+    case'chase':{
+      const b=d.partner;
+      if(dist(d,b)<0.9||w.now>d.roundEnd){d.rounds--;bow(d,b,w,1.4);break;}
+      if(w.now>=d.repath){d.repath=w.now+0.4;goTo(d,w,tileOf(b),d.speed);}
+      break;}
+    case'flee':{const a=d.partner;if(still&&dist(d,a)<2.6)flee(d,a,w,d.speed);break;}
+    case'bow':
+      if(done&&d.lead){const b=d.partner;
+        if(d.rounds>0){b.rounds=d.rounds;d.lead=false;round(b,d,w);}
+        else{idle(d,w,2+w.rand()*2,true);idle(b,w,2+w.rand()*2,true);}}
+      else if(done&&!d.partner)idle(d,w,1);
+      break;
+    case'play':
+      if(d.lead&&d.playing&&done){const b=d.partner;d.playing=b.playing=false;idle(d,w,2,true);idle(b,w,2.5,true);}
+      break;
+    case'greet':{
+      const a=greetable(w).find(o=>o.id===d.greet);
+      if(!a||done){d.greet=null;idle(d,w,1);break;}
+      // Re-aim once a second (the person may still be walking); sit once standing still on the chosen cell.
+      if(w.now>=d.repath){d.repath=w.now+1;d.seat=greetSpot(d,a,w);if(d.seat&&(d.seat[0]!==fl(d.x)||d.seat[1]!==fl(d.y)))goTo(d,w,d.seat,RUN*0.75*LEGS[d.breed]);}
+      if(still&&d.seat&&d.seat[0]===fl(d.x)&&d.seat[1]===fl(d.y)){d.act='sit';d.face=faceToward(d,a.x,a.y);d.until=w.now+8+w.rand()*5;d.since=w.now;}
+      break;}
+    case'sit':{const a=greetable(w).find(o=>o.id===d.greet);if(a)d.face=faceToward(d,a.x,a.y);if(!a||done){d.greet=null;idle(d,w,1.5,true);}break;}
+  }
+}
+
+function create(w){
+  const used=new Set(),ok=c=>!used.has(key(...c))&&settleable(w,c);
+  return BREEDS.map((breed,id)=>{
+    let c=pick(w.roamList,w.rand);for(let i=0;i<40&&!ok(c);i++)c=pick(w.roamList,w.rand);used.add(key(...c));
+    return{id,breed,x:c[0]+0.5,y:c[1]+0.5,act:'idle',until:w.now+0.5+w.rand()*2,path:[],speed:0,face:id===1?-1:1,wag:false};
+  });
+}
+function step(dogs,w,dt){
+  const night=isNight(w.hour);
+  for(const d of dogs){
+    if(night&&d.act!=='sleep'&&d.act!=='den'){
+      // Everyone heads for their own cell of the den; games and greetings simply stop.
+      const c=(w.den||[])[d.id!=null?d.id:dogs.indexOf(d)];d.partner=null;d.lead=false;d.greet=null;d.wag=false;
+      d.act='den';if(!c||!goTo(d,w,c,STROLL*LEGS[d.breed])){d.act='sleep';d.path=[];}
+      else{// Curl up a little toward the middle of the den so the three sleep in a huddle, each still in its own cell.
+        const mx=w.den.reduce((s,o)=>s+o[0]+0.5,0)/w.den.length,my=w.den.reduce((s,o)=>s+o[1]+0.5,0)/w.den.length,end=d.path[d.path.length-1];
+        end[0]+=Math.max(-0.3,Math.min(0.3,mx-end[0]));end[1]+=Math.max(-0.3,Math.min(0.3,my-end[1]));}
+    }else if(!night&&(d.act==='sleep'||d.act==='den'))idle(d,w,1+w.rand()*3,true);
+  }
+  if(!night)greet(dogs,w);
+  for(const d of dogs){
+    const had=d.path.length>0;move(d,w,dt);
+    if(had&&!d.path.length)arrive(d,dogs,w);
+    tick(d,dogs,w);
+  }
+}
+
+// Which sprite frame to show, mirrored or not, and how many pixels to lift it (a hop).
+function pose(d,t){
+  const ph=(t+(d.id||0)*0.37);
+  if(d.path&&d.path.length){
+    if((d.speed||0)>=2){const hz=d.breed==='corgi'?11:8;return{frame:fl(ph*hz)%2?'run2':'run1',dy:fl(ph*hz)%2?1:0,flip:d.face<0};}
+    return{frame:fl(ph*5)%2?'run2':'stand',dy:0,flip:d.face<0};
+  }
+  let frame='stand',dy=0;
+  switch(d.act){
+    case'rest':frame='lie';break;
+    case'sleep':frame='sleep';break;
+    case'drink':case'sniff':frame='drink';break;
+    case'sit':frame='sit';break;
+    case'bow':frame='bow';break;
+    case'play':if(d.playing){const p=(ph*1.6)%2;if(p<1){frame='bow';}else{frame='run1';dy=Math.round(Math.sin((p-1)*Math.PI)*3);}}break;
+    // Standing about, a happy dog keeps wagging; any other wags for a moment every few seconds.
+    default:frame=(d.wag?fl(ph*4)%2:((ph*0.4)%4<0.5?fl(ph*4)%2:0))?'wag':'stand';
+  }
+  return{frame,dy,flip:d.face<0};
+}
+
+globalThis.DogLogic={BREEDS,STROLL,RUN,isNight,nightMix,roamCells,path,drinkSpots,denCells,faceToward,create,step,pose,startChase,startPlay,wander,greetSpot};
+})();
+</script>
+<script id="dog-sprites">
+// Pixel sprites for the three office dogs, all drawn facing right; the page mirrors them to face left.
+// Each letter is a palette colour ('.' is empty). The bottom row is where the paws touch the lawn and `ax` is the
+// column under the dog's middle. A frame may also be {from, set} to patch a few pixels of another frame.
+(function(){
+'use strict';
+const BREEDS={
+  corgi:{name:'Corgi',ax:7,pal:{o:'#d9822b',O:'#b2621c',w:'#f6f1e7',s:'#d8cfbf',k:'#1d1a18',p:'#e7a3a0',g:'#c3b8a6',c:'#3e8ed0',t:'#e0606a'},
+    frames:{
+      stand:[
+        '.........o..o..',
+        '........oo.op..',
+        '........oooowo.',
+        '........oookwwk',
+        '.oooooooocwwww.',
+        'wooooooooowww..',
+        'wOooooooooww...',
+        '.wssssssswww...',
+        '.ooO....wwg....',
+        '.wws....wws....'],
+      wag:{from:'stand',set:[[0,6,'.'],[0,4,'w'],[14,4,'t']]},
+      run1:[
+        '.........o..o...',
+        '........oo.op...',
+        '........oooowo..',
+        '........oookwwk.',
+        '.oooooooocwwwwt.',
+        'wooooooooowww...',
+        'wOooooooooww....',
+        '.wssssssswww....',
+        'oO.........ww...',
+        'w...........ws..'],
+      run2:[
+        '.........o..o..',
+        '........oo.op..',
+        '........oooowo.',
+        '........oookwwk',
+        '.oooooooocwwwwt',
+        'wooooooooowww..',
+        'wOooooooooww...',
+        '.wssssssswww...',
+        '...oOg.wwg.....',
+        '...wsw.ws......'],
+      sit:{ax:6,rows:[
+        '......o..o..',
+        '.....oo.op..',
+        '.....oooowo.',
+        '.....oookwwk',
+        '....oocwwww.',
+        '...oooowww..',
+        '..ooooowww..',
+        '.wooooowww..',
+        '.wwooOowwg..',
+        'wwsooO.wwg..',
+        '.wsss..wws..']},
+      lie:[
+        '..........o..o..',
+        '.........oo.op..',
+        '.........oooowo.',
+        '.........oookwwk',
+        '.ooooooooocwwww.',
+        'wooooooooooww...',
+        'wOssssssssswwww.'],
+      sleep:[
+        '................',
+        '................',
+        '................',
+        '..........o..o..',
+        '.ooooooooooo.op.',
+        'woooooooooocoOwwk',
+        'wOssssssssswwwww.'],
+      bow:[
+        '..........o..o..',
+        'ww.......oo.op..',
+        'wooooo...oooowo.',
+        '.ooooooooooookwwk',
+        '.Ooooooooocwwwwt.',
+        '.oO..sssswwww....',
+        '.ww....wwwwwwww..'],
+      drink:[
+        '...............',
+        '...............',
+        '...............',
+        '...............',
+        '.ooooooooo.....',
+        'woooooooooo.o.o',
+        'wOooooooocoooop',
+        '.wssssssswwoooo',
+        '.ooO....wwgokww',
+        '.wws....wws.wwk'],
+    }},
+  husky:{name:'Husky',ax:8,pal:{G:'#727b8c',D:'#4c5361',w:'#f2f4f7',s:'#c8cdd8',k:'#1b1d22',b:'#58b4ff',p:'#e7a3a0',c:'#f5a524',t:'#e0606a'},
+    frames:{
+      stand:[
+        '...........D.D...',
+        '..GG......DGGpG..',
+        '.G..G....GGGwGG..',
+        '.Gw.G....GwwbGwwk',
+        '..ww.....cwwwwww.',
+        '..DDDDDDDcGwwss..',
+        '..GGGGGGGGGww....',
+        '..wGGGGGGGwww....',
+        '...wsssssswww....',
+        '...wws....wws....',
+        '...wws....wws....',
+        '...wws....wws....'],
+      wag:{from:'stand',set:[[2,1,'.'],[3,1,'.'],[1,2,'.'],[4,2,'G'],[1,1,'G'],[2,1,'G'],[16,4,'t']]},
+      run1:[
+        '............D.D...',
+        '...........DGGpG..',
+        '..........GGGwGG..',
+        '..........GwwbGwwk',
+        '..........cwwwwwwt',
+        '.GGDDDDDDDcGwwss..',
+        'Gw.GGGGGGGGGww....',
+        'w..wGGGGGGGwww....',
+        '..wwsssssswwww....',
+        '.ws.........ws....',
+        'ws...........ws...',
+        'w.............w...'],
+      run2:[
+        '...........D.D...',
+        '..GG......DGGpG..',
+        '.G..G....GGGwGG..',
+        '.Gw.G....GwwbGwwk',
+        '..ww.....cwwwwwwt',
+        '..DDDDDDDcGwwss..',
+        '..GGGGGGGGGww....',
+        '..wGGGGGGGwww....',
+        '...wsssssswww....',
+        '....ws..wws......',
+        '....ws.ws........',
+        '....ws.w.........'],
+      sit:{ax:6,rows:[
+        '.......D.D...',
+        '......DGGpG..',
+        '.....GGGwGG..',
+        '.....GwwbGwwk',
+        '.....cwwwwww.',
+        '....GcGwwss..',
+        '...GGGGwww...',
+        '..GGGGGwww...',
+        '.GGGGGGwww...',
+        'GwGGGDGwws...',
+        'wwwwGD.wws...',
+        '.wsss..wws...',
+        'wwsss..wws...']},
+      lie:[
+        '............D.D...',
+        '...........DGGpG..',
+        '..........GGGwGG..',
+        '..........GwwbGwwk',
+        '.GG.......cwwwwww.',
+        'G..DDDDDDDcGwwss..',
+        'Gw.GGGGGGGGGwwwww.',
+        '.wwwsssssssswwwww.'],
+      sleep:[
+        '..................',
+        '..................',
+        '..................',
+        '...........D.D....',
+        '.GG.......DGGpG...',
+        'G..DDDDDDDGGGwGG..',
+        'Gw.GGGGGGGGDwwGwwk',
+        '.wwwsssssssswwwww.'],
+      bow:[
+        '..GG..............',
+        '.G..G.............',
+        '.Gw.DDDD..........',
+        '..wGGGGGDDD.D.D...',
+        '..GGGGGGGGcDGGpG..',
+        '..wGGGGGGGcGGwGG..',
+        '...wsssssswGwbGwwk',
+        '...ws....wwwwwwww.',
+        '...ws.....wwwwwwww',
+        '...ws.............'],
+      drink:[
+        '.................',
+        '..GG.............',
+        '.G..G............',
+        '.Gw.G............',
+        '..ww.............',
+        '..DDDDDDDDD......',
+        '..GGGGGGGGGGc.D.D',
+        '..wGGGGGGGGcGDGpG',
+        '...wsssssswwGGwGG',
+        '...wws....wwGwbww',
+        '...wws....wws.www',
+        '...wws....wws..wk'],
+    }},
+  dalmatian:{name:'Dalmatian',ax:8,pal:{w:'#f4f1ea',s:'#d3ccc0',k:'#22242b',g:'#b1aa9e',p:'#e8a0a0',c:'#e5484d',t:'#e0606a'},
+    frames:{
+      stand:[
+        '.............www.',
+        '...........kkwww.',
+        'w..........kkwkww',
+        '.w.........kwwwwk',
+        '.w.........cwss..',
+        '..wwwkwwwkwcw....',
+        '..wwwwkwwwwkw....',
+        '..wwkwwwwkwww....',
+        '..wwws....sww....',
+        '...wwg....wwg....',
+        '...kwg....wwg....',
+        '...wwg....wkg....',
+        '...wwg....wwg....'],
+      wag:{from:'stand',set:[[0,2,'.'],[1,3,'.'],[0,3,'w'],[0,4,'w'],[15,4,'t']]},
+      run1:[
+        '..............www.',
+        '............kkwww.',
+        '............kkwkww',
+        '.ww.........kwwwwk',
+        '...w........cwsst.',
+        '...wwkwwwwkwwc....',
+        '..wwwwwkwwwwkw....',
+        '..wkwwwwwkwwwww...',
+        '.wwws.....swwww...',
+        'wwg..........wg...',
+        'kg............wg..',
+        'w..............ww.'],
+      run2:[
+        '.............www.',
+        '...........kkwww.',
+        '...........kkwkww',
+        'ww.........kwwwwk',
+        '..w........cwsst.',
+        '..wwwkwwwkwcw....',
+        '..wwwwkwwwwkw....',
+        '..wwkwwwwkwww....',
+        '..wwws....sww....',
+        '....wwg..wwg.....',
+        '....kwg..wkg.....',
+        '....wwg..wwg.....',
+        '.....wg...wg.....'],
+      sit:{ax:6,rows:[
+        '.........www.',
+        '.......kkwww.',
+        '.......kkwkww',
+        '.......kwwwwk',
+        '.......cwss..',
+        '.....wwcww...',
+        '....wwkwww...',
+        '...wkwwwkw...',
+        '..wwwwwwww...',
+        '.wwkwwwwwg...',
+        '.wwwwkgwwg...',
+        'wwwwwg.wwg...',
+        '.wswwg.wkg...',
+        'wwsss..wwg...']},
+      lie:[
+        '..............www.',
+        '............kkwww.',
+        '............kkwkww',
+        '............kwwwwk',
+        '..wwkwwwwkwwcwss..',
+        'wwwwwwkwwwwkwwwwww',
+        '.wkwssssssswwwwwww'],
+      sleep:[
+        '..................',
+        '..................',
+        '..................',
+        '.............www..',
+        '..wwkwwwwkwkkwwwwk',
+        'wwwwwwkwwwwkkswwww',
+        '.wkwssssssswwwwwww'],
+      bow:[
+        'w.................',
+        '.w.wwk............',
+        '.wwwwwwkw.........',
+        '..wkwwwwwwk...www.',
+        '..wwwwkwwwwcckwww.',
+        '..ws..sswwwckkwkww',
+        '..ww.....wwckwwwwk',
+        '..kw.......wwss...',
+        '..ww......wwwwwww.',
+        '..ww......wwwwwww.'],
+      drink:[
+        '.................',
+        '.................',
+        '.................',
+        'w................',
+        '.w...............',
+        '..wwwkwwwkwww....',
+        '..wwwwkwwwwkwc...',
+        '..wwkwwwwkwwwww..',
+        '..wwws....swkwww.',
+        '...wwg....wwkkkw.',
+        '...kwg....wwgkww.',
+        '...wwg....wkg.ww.',
+        '...wwg....wwg..wk'],
+    }},
+};
+const cache=new Map();
+function frame(b,name){
+  const id=b+'/'+name;if(cache.has(id))return cache.get(id);
+  const B=BREEDS[b],src0=B.frames[name],src=Array.isArray(src0)?{rows:src0}:src0;let rows;
+  if(src.rows)rows=src.rows;
+  else{rows=frame(b,src.from).rows.map(r=>r.split(''));for(const[x,y,c]of src.set||[])rows[y][x]=c;rows=rows.map(r=>r.join(''));}
+  const w=Math.max(...rows.map(r=>r.length));
+  const f={rows,w,h:rows.length,ax:src.ax!=null?src.ax:(src.from?frame(b,src.from).ax:B.ax)};
+  cache.set(id,f);return f;
+}
+const frameNames=b=>Object.keys(BREEDS[b].frames);
+globalThis.DogSprites={BREEDS,frame,frameNames};
+})();
+</script>
+<script id="smoke-logic">
+// The smoking corner on the east-back lawn: where things stand and the rhythm of a cigarette. No DOM, no canvas;
+// tests/smoke-logic.test.mjs runs this block.
+(function(){
+'use strict';
+const k=(x,y)=>x+','+y;
+// Laid out from the corner of the 4×4 outdoor spot (SkyLogic.outdoorSpots 'east-back'). The entrance is the first two
+// tiles of the front row, where the lawn path from the east stairs arrives; the planted trough takes the column facing
+// the pantry. The bench seats sit along the back row and the two standing places flank the ash bin in the next row.
+function layout(zone){
+  const X=zone.x,Y=zone.y,seat=(dx,px)=>({act:'smoke',tile:[X+dx,Y],pt:[X+px,Y+0.45],stool:1,front:true});
+  // The stone pad walks like the garden path (cheaper than grass), so smokers come in at the entrance and stay on it.
+  const paved=[];for(let y=Y;y<Y+zone.h;y++)for(let x=X;x<X+zone.w;x++)paved.push(k(x,y));
+  return{x:X,y:Y,paved,
+    entry:[[X,Y+zone.h-1],[X+1,Y+zone.h-1]],
+    blocked:[k(X,Y),k(X,Y+1),k(X,Y+2)],
+    spots:[seat(1,1.8),seat(2,2.7),seat(3,3.6),
+      {act:'smoke',tile:[X+1,Y+1],pt:[X+1.55,Y+1.95],front:true},{act:'smoke',tile:[X+2,Y+1],pt:[X+2.95,Y+1.95],front:true}]};
+}
+// Every PERIOD seconds a smoker takes a drag (hand at the mouth, ember bright) and then lets out a puff that fades;
+// `exhale` runs 0..1 over that puff and is null the rest of the time.
+const PERIOD=5,DRAG=0.22,PUFF_END=0.5;
+function cycle(t){
+  const c=((t/PERIOD)%1+1)%1;
+  if(c<DRAG)return{drag:true,exhale:null};
+  return{drag:false,exhale:c<PUFF_END?(c-DRAG)/(PUFF_END-DRAG):null};
+}
+globalThis.SmokeLogic={layout,cycle,PERIOD};
+})();
+</script>
 <script>
 "use strict";
 const h=React.createElement;
@@ -613,6 +1350,19 @@ const P=(x,y,z=0)=>PG(x,y,z+FLOOR_Z);
 // Agents can step down the stairs onto the lawn, so a person stands at the ground height of wherever they are.
 const STAIRS=SkyLogic.stairs(W,H),LAWN_WALK=SkyLogic.lawnWalk(ISLAND,W,H);
 const PA=(x,y,z=0)=>PG(x,y,z+SkyLogic.groundZ(x,y,W,H,STAIRS,FLOOR_Z));
+// The smoking corner fills the east-back outdoor spot. Only its planted trough is taken off the walkable lawn: seats,
+// the ash bin and the posts are thin enough to step past, and an agent's own spot must stay walkable to path from it.
+const SMOKE=SmokeLogic.layout(ISLAND.spots.find(s=>s.id==='east-back'));
+SMOKE.blocked.forEach(k=>LAWN_WALK.delete(k));
+const SMOKE_PAVED=new Set(SMOKE.paved);
+// The office dogs live on the lawn in front of and beside the office, never in the pond or the smoking corner.
+const DOG_ROAM=DogLogic.roamCells(LAWN_WALK,{W,H,pond:ISLAND.pond.cells,avoid:ISLAND.spots.filter(s=>s.id==='east-back')});
+// They run across the stone paths and past the stairs but never lie, sit, sniff or sleep on them (the stairs' foot and
+// the tile beyond it stay free). At night they curl up at the foot of the tree at (33,8), a quiet corner of the east
+// lawn away from both paths and still in view at 1×.
+const DOG_CLEAR=new Set(ISLAND.paths.cells);
+STAIRS.forEach(s=>{for(let i=0;i<s.len;i++)for(let o=0;o<2;o++)DOG_CLEAR.add(s.side==='east'?(s.x+o)+','+(s.y+i):(s.x+i)+','+(s.y+o));});
+const DOG_PLACES={W,H,roam:DOG_ROAM,roamList:[...DOG_ROAM].map(k=>k.split(',').map(Number)),clear:DOG_CLEAR,den:DogLogic.denCells(DOG_ROAM,[33,8],DOG_CLEAR),drink:DogLogic.drinkSpots(DOG_ROAM,ISLAND.pond.cells,DOG_CLEAR)};
 const REAL_WEATHER_EVERY_MS=15*60_000;
 const WEATHER_LABEL={clear:'Trời quang',cloudy:'Nhiều mây',rain:'Mưa',storm:'Giông',snow:'Tuyết',fog:'Sương mù'};
 const WEATHER_PREVIEW=[['clear','Quang'],['cloudy','Mây'],['rain','Mưa'],['storm','Giông'],['snow','Tuyết'],['fog','Sương']];
@@ -638,9 +1388,11 @@ const IDLE_SPOTS=[
  {act:'sky',tile:[25,12],pt:[25.7,12.1],stool:2,front:true},
  {act:'phone',tile:[25,6],pt:[25.5,6.5],front:true},{act:'stretch',tile:[21,6],pt:[21.5,6.4],front:true},
  {act:'stretch',tile:[25,8],pt:[25.5,8.3],front:true},{act:'phone',tile:[24,12],pt:[24.5,12.5],front:true},
+ // the smoking corner out on the lawn, reached down the east stairs: three seats on the bench, two by the ash bin
+ ...SMOKE.spots,
  // bathing in the pond out on the lawn, reached down the pantry stairs
  ...ISLAND.pond.spots.map(s=>({act:'bath',tile:[s.x,s.y],pt:[s.x+0.5,s.y+0.5],front:true}))];
-const ACT_TXT={table:'nhâm nhi cà phê',meal:'ngồi ăn nhẹ',sky:'ngắm mây',coffee:'pha cà phê',fridge:'lục tủ lạnh',water:'lấy nước',microwave:'hâm đồ ăn',snack:'chọn snack',phone:'lướt điện thoại',stretch:'vươn vai',bath:'tắm hồ'};
+const ACT_TXT={table:'nhâm nhi cà phê',meal:'ngồi ăn nhẹ',sky:'ngắm mây',coffee:'pha cà phê',fridge:'lục tủ lạnh',water:'lấy nước',microwave:'hâm đồ ăn',snack:'chọn snack',smoke:'hút thuốc',phone:'lướt điện thoại',stretch:'vươn vai',bath:'tắm hồ'};
 const SEGS=[], EDGE=new Set();
 const addV=(zi,X,y)=>{SEGS.push({zi,v:true,X,y});EDGE.add((X-1)+','+y+'|'+X+','+y);EDGE.add(X+','+y+'|'+(X-1)+','+y);};
 const addH=(zi,Y,x)=>{SEGS.push({zi,v:false,Y,x});EDGE.add(x+','+(Y-1)+'|'+x+','+Y);EDGE.add(x+','+Y+'|'+x+','+(Y-1));};
@@ -695,12 +1447,10 @@ const cwdKey=s=>{if(!s||s==='—')return null;const p=s.replace(/\/+$/,'').split
 
 function bfs(from,to){
   // Office floor cells avoid furniture; lawn cells come from the island's walkable set; the two only meet at the stairs.
-  const key=p=>p[0]+','+p[1], ok=(x,y)=>x>=0&&y>=0&&x<W&&y<H?!BLOCK.has(x+','+y):LAWN_WALK.has(x+','+y);
-  const prev=new Map([[key(from),null]]), q=[from];
-  while(q.length){const c=q.shift(); if(c[0]===to[0]&&c[1]===to[1])break;
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const n=[c[0]+dx,c[1]+dy],k=key(n); if(!prev.has(k)&&!EDGE.has(key(c)+'|'+k)&&SkyLogic.canCross(c,n,W,H,STAIRS)&&(ok(n[0],n[1])||(n[0]===to[0]&&n[1]===to[1]))){prev.set(k,c);q.push(n);}}}
-  if(!prev.has(key(to)))return[];
-  const out=[];let c=to;while(c&&key(c)!==key(from)){out.unshift(c);c=prev.get(key(c));}return out;
+  // Out on the lawn grass costs more than the garden path, so agents keep to the path unless it is a long way round.
+  const key=p=>p[0]+','+p[1], inside=(x,y)=>x>=0&&y>=0&&x<W&&y<H, ok=(x,y)=>inside(x,y)?!BLOCK.has(x+','+y):LAWN_WALK.has(x+','+y);
+  const canStep=(c,n)=>!EDGE.has(key(c)+'|'+key(n))&&SkyLogic.canCross(c,n,W,H,STAIRS)&&(ok(n[0],n[1])||(n[0]===to[0]&&n[1]===to[1]));
+  return SkyLogic.cheapestPath(from,to,canStep,n=>inside(n[0],n[1])||ISLAND.paths.cells.has(key(n))||SMOKE_PAVED.has(key(n))?1:SkyLogic.GRASS_COST);
 }
 
 class ClaudeOffice extends React.Component{
@@ -715,6 +1465,7 @@ class ClaudeOffice extends React.Component{
     this.state={sel:null,paused:false,tick:0,live:'off',
       dataSource:'live',endpoint:ep,agentCount:6,speed:1,showBubbles:true,autoApprove:false,showSettings:false,
       weatherMode:ws.mode,city:ws.city,cityDraft:ws.city,realStatus:{state:'idle',text:''}};
+    this.dogWorld={...DOG_PLACES,agents:[],hour:12,snow:0,calm:false,now:0,rand:Math.random};this.dogs=DogLogic.create(this.dogWorld);this.dogSprites=new Map();
     this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';this.goneSids=new Set();this.depts=new Map();
     this.setCanvas=el=>{this.canvas=el;};
     this.setStage=el=>{this.stageEl=el;};
@@ -723,6 +1474,9 @@ class ClaudeOffice extends React.Component{
     this.wx={...SkyLogic.initialWeather('clear',Date.now()),nextAt:Date.now()+SkyLogic.changeDelayMs(Math.random())};
     this.snow=0;this.snowShown=0;this.flash=0;this.flashStart=0;this.flashMs=0;this.nextFlashAt=0;this.preview=null;this.lastSky=Date.now();
     this.reducedMq=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
+    // Phones (narrow, or a phone on its side) get a compact header: one row of controls plus one sideways-scrolling strip,
+    // so the island keeps the height. render() runs every 300 ms (uiTimer), so it simply reads the query each time.
+    this.narrowMq=window.matchMedia?window.matchMedia('(max-width: 640px), (max-height: 520px)'):null;
     // Camera: drag pans, wheel/trackpad pinch zooms about the cursor, two fingers pinch-zoom (CameraLogic). kZoom is the zoom the canvas resolution
     // follows; it catches up 150 ms after the last wheel tick so the island bitmap is not re-baked on every tick.
     this.cam={z:1,tx:0,ty:0};this.kZoom=1;this.drag=null;this.dragged=false;
@@ -771,6 +1525,7 @@ class ClaudeOffice extends React.Component{
     const loop=t=>{this.lastFrame=performance.now();this.frame(t);this.raf=requestAnimationFrame(loop);};
     this.raf=requestAnimationFrame(loop);
     window.__sky={preview:type=>this.previewWeather(type),state:()=>({to:this.wx.to,fx:SkyLogic.weatherFx(this.wx,Date.now()),snow:this.snow,snowShown:this.snowShown,flash:this.flash})};
+    window.__dogs={dogs:this.dogs,world:this.dogWorld};
     if(this.state.weatherMode==='real')this.refreshReal();
     this.realTimer=setInterval(()=>{if(this.state.weatherMode==='real')this.refreshReal();},REAL_WEATHER_EVERY_MS);
   }
@@ -1001,7 +1756,7 @@ class ClaudeOffice extends React.Component{
   frame(ts){
     if(this.world)return this.worldFrame(ts);
     const dt=Math.min(0.05,(ts-this.last)/1000);this.last=ts;
-    if(!this.state.paused){this.agents.forEach(a=>this.updateAgent(a,dt));
+    if(!this.state.paused){this.agents.forEach(a=>this.updateAgent(a,dt));this.stepDogs(dt);
       if(this.agents.some(a=>a.gone)){const goneA=this.agents.filter(a=>a.gone);goneA.forEach(a=>this.goneSids.add(a.sid));const goneIds=goneA.map(a=>a.id);this.agents=this.agents.filter(a=>!a.gone);if(goneIds.includes(this.state.sel))this.setState({sel:null});}}
     this.env=this.envNow();
     this.draw(ts/1000);
@@ -1044,7 +1799,7 @@ class ClaudeOffice extends React.Component{
   setCam(cam){if(cam.z===this.cam.z&&cam.tx===this.cam.tx&&cam.ty===this.cam.ty)return;this.cam=cam;const w=this.wrapEl;
     if(w){w.style.transform=cam.z===1&&!cam.tx&&!cam.ty?'':'translate('+cam.tx+'px,'+cam.ty+'px) scale('+cam.z+')';w.style.setProperty('--cam-inv',String(1/cam.z));}
     if(cam.z!==this.kZoom){clearTimeout(this.kTimer);this.kTimer=setTimeout(()=>{this.kZoom=this.cam.z;},150);}}
-  headPos(a){if(a.stool&&!a.moving){const[sx,sy]=P(a.x,a.y);return[sx,sy-(a.stool===2?30:25)];}if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=PA(a.x,a.y);if(a.actNow==="bath"&&!a.moving)return[sx,sy-11];return[sx,sy-(a.seated?23:21)];}
+  headPos(a){if(a.stool&&!a.moving){const[sx,sy]=PA(a.x,a.y);return[sx,sy-(a.stool===2?30:25)];}if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=PA(a.x,a.y);if(a.actNow==="bath"&&!a.moving)return[sx,sy-11];return[sx,sy-(a.seated?23:21)];}
 
   renderK(){return CameraLogic.renderScale(this.canvas.clientWidth,window.devicePixelRatio||1,this.kZoom,LW);}
   draw(t){
@@ -1205,12 +1960,14 @@ class ClaudeOffice extends React.Component{
     DESKS.forEach((d,i)=>{items.push({z:d.gx+d.gy+1.5,f:()=>this.drawDesk(G,d,i)});});
     {const own=this.colOwners();SEGS.forEach(sg=>items.push({z:sg.v?sg.X+sg.y+0.5:sg.x+0.5+sg.Y,f:()=>this.drawSeg(G,sg,own)}));}
     this.pantryItems(G,items);
+    this.smokingItems(G,items,snow);
     // Trees standing in front of the walls are depth-sorted with the office (trees behind the walls are baked into the island).
     ISLAND.decor.forEach(d=>{if(d.kind==='tree'&&d.x>=0&&d.y>=0)items.push({z:d.x+d.y+0.5,f:()=>SkyRender.drawTree(ctx,PG,d,dfB/10,snB/10)});});
     [[8.5,13.5],[19.5,13.5],[18.5,0.5]].forEach(([x,y])=>items.push({z:x+y,f:()=>{box(x-0.2,y-0.2,0.4,0.4,0,7,th.pot);const[px,py]=P(x,y,7);[[-5,-8,10,8,0],[-3,-14,6,6,1],[-7,-5,4,4,1],[3,-6,4,4,0],[-1,-17,3,4,0]].forEach(([a,b,w,hh,v])=>rect(px+a,py+b,w,hh,v?shade(th.plant,-25):th.plant));}}));
     items.push({z:9,f:()=>{box(8.55,0.05,0.9,0.4,0,42,shade(th.trim,-5));[10,20,30,40].forEach(z=>box(8.58,0.06,0.84,0.38,z,z+1,shade(th.trim,-30)));
       [[12,'#e5484d','#3e8ed0','#f5a524'],[22,'#46a758','#e8e2d6','#8e4ec6'],[32,'#12a594','#5b5bd6','#e93d82']].forEach(([z,...cs])=>cs.forEach((col,k)=>box(8.65+k*0.24,0.12,0.16,0.28,z,z+7-(k%2)*2,col)));}});
     if(this.treeOn)items.push({z:39.55,f:()=>{const ST_=window.SeasonTree;if(!ST_)return;box(25.82,12.97,0.76,0.76,0,4,th.stroke?'#ffffff':lerpHex('#454b5c','#c2beb3',df));const[bx,by]=P(26.2,13.35,4);ctx.save();ctx.translate(Math.round(bx),Math.round(by));ST_.drawSeasonTree(ctx,0,0,this.season,t);ctx.restore();}});
+    this.dogs.forEach(d=>items.push({z:d.x+d.y,f:()=>this.drawDog(G,d,t,dfB,snB)}));
     this.agents.forEach(a=>{if(a.sleeping){const d=DESKS[a.desk];items.push({z:d.gx+d.gy+0.5,f:()=>this.drawSleeper(G,a)});items.push({z:d.gx+d.gy+2,f:()=>{const[hx,hy]=this.headPos(a);for(let k=0;k<3;k++){const p=(t*0.5+k*0.33)%1;ctx.globalAlpha=Math.min(1,(1-p)*1.4);text3(ctx,'Z',hx-2+p*8+Math.sin(p*6)*2,hy-4-p*22,th.stroke?'#33415c':'#e6e9ef');ctx.globalAlpha=1;}}});}else{items.push({z:a.x+a.y+(a.seated?0.2:a.stool?0.1:0),f:()=>this.drawPerson(G,a)});}});
     items.sort((p,q)=>p.z-q.z).forEach(it=>it.f());
     // A storm darkens the island and office; source-atop only tints what is already drawn, never the sky behind.
@@ -1291,7 +2048,68 @@ class ClaudeOffice extends React.Component{
     [9.7,10.9,12.1].forEach(y=>items.push({z:25.7+y-0.05,f:()=>{box(25.66,y-0.04,0.08,0.08,0,10,metal);box(25.51,y-0.19,0.38,0.38,10,12,S?'#ffffff':th.chair);}}));
     items.push({z:38,f:()=>box(26.25,9.2,0.65,3.4,0,15,top,wood,shade(wood,-20))});
   }
-
+  // Smoking corner on the east-back lawn (SmokeLogic.layout): a stone pad, a planted trough screening it from the
+  // pantry, a bench under a vine-covered cantilever pergola, an ash bin, and a light, an extinguisher and a sign by the
+  // entrance. It all stands on the grass, so it is drawn with PG (P is lifted by the plinth) and its colours go through
+  // night() and the snow cover like the rest of the island.
+  smokingItems(G,items,snow){
+    const{ctx,poly,df}=G,X=SMOKE.x,Y=SMOKE.y,Z=X+Y,N=c=>SkyRender.night(c,df),SN=(c,k)=>N(mix(c,'#eef3f7',snow*k));
+    const gbox=(x,y,w,hh,z0,z1,top,l,r)=>{poly([PG(x,y+hh,z0),PG(x+w,y+hh,z0),PG(x+w,y+hh,z1),PG(x,y+hh,z1)],l||shade(top,-22),null);poly([PG(x+w,y,z0),PG(x+w,y+hh,z0),PG(x+w,y+hh,z1),PG(x+w,y,z1)],r||shade(top,-38),null);poly([PG(x,y,z1),PG(x+w,y,z1),PG(x+w,y+hh,z1),PG(x,y+hh,z1)],top,null);};
+    const R=(x,y,w,hh,c)=>{ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,hh);};
+    const wood=N('#a8763e'),metal=N('#3d4350'),leaf=SN('#3e9a45',0.45),leafL=SN('#57b85a',0.6),leafD=N('#2f7a36');
+    // A rounded pixel shrub: lit on top, its right third in shade like every other box in the scene.
+    const bush=(x,y,z,r)=>{const[cx,cy]=PG(x,y,z);for(let dy=-r;dy<=r;dy++){const w=Math.round(Math.sqrt(r*r-dy*dy)*1.2),c=dy<-r*0.45?leafL:leaf;R(cx-w,cy+dy,w*2,1,c);R(cx+Math.round(w*0.3),cy+dy,Math.round(w*0.7),1,leafD);}
+      R(cx-Math.round(r*0.5),cy-Math.round(r*0.3),2,1,leafL);R(cx-1,cy+Math.round(r*0.2),2,1,leafL);};
+    // Stone pavers, not grass: a dropped cigarette must land on something that cannot catch fire.
+    items.push({z:-1,f:()=>{gbox(X,Y,4,4,0,0.6,SN('#a39c90',0.8));
+      for(let y=0;y<4;y+=0.5)for(let x=0;x<4;x+=0.5)poly([PG(X+x+0.04,Y+y+0.04,0.6),PG(X+x+0.46,Y+y+0.04,0.6),PG(X+x+0.46,Y+y+0.46,0.6),PG(X+x+0.04,Y+y+0.46,0.6)],SN((x+y)*2%2?'#c9c3b8':'#bdb6aa',0.8),null);
+      // after dark the entrance light leaves a warm pool on the stones, under everyone standing there
+      if(df<0.6){const[lx,ly]=PG(X+0.4,Y+3.8,0.6);ctx.globalAlpha=0.22*(1-df/0.6);ctx.fillStyle='#ffd98a';ctx.beginPath();ctx.ellipse(lx,ly,18,9,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;}}});
+    // The planted trough on the side facing the pantry, about 1.2 m tall: it screens the view and breaks the drift of
+    // smoke. One item per tile so it sorts between people on the lawn behind it and people in the corner.
+    [0,1,2].forEach(r=>items.push({z:Z+1.8+r,f:()=>{const y0=Y+(r===0?0.1:r),y1=Y+(r===2?2.9:r+1);
+      gbox(X+0.1,y0,0.45,y1-y0,0,5,SN('#b9b2a3',0.6));
+      bush(X+0.3,Y+r+0.2,11,r===0?5:6);bush(X+0.36,Y+r+0.62,10,7);if(r===2)bush(X+0.33,Y+2.82,8,5);}}));
+    // Slatted bench with a backrest across the back of the corner, facing the lawn.
+    items.push({z:Z+2,f:()=>{const bw=N('#c79a5e');
+      [1.45,2.5,3.55].forEach(x=>gbox(X+x,Y+0.2,0.08,0.36,0,5.8,metal));
+      gbox(X+1.3,Y+0.12,2.5,0.5,5.8,7,SN('#c79a5e',0.7),shade(bw,-25),shade(bw,-40));
+      for(let k=1;k<4;k++)poly([PG(X+1.3,Y+0.12+k*0.125,7),PG(X+3.8,Y+0.12+k*0.125,7),PG(X+3.8,Y+0.13+k*0.125,7),PG(X+1.3,Y+0.13+k*0.125,7)],shade(bw,-30),null);
+      gbox(X+1.3,Y+0.06,2.5,0.06,7,13,bw,shade(bw,-25),shade(bw,-40));}});
+    // The pergola only roofs the bench (1.2 tiles deep) and is drawn before anyone in the corner. Deeper, its front beam
+    // would cross the people on the bench; at this depth every beam and rafter projects above their heads, so drawing
+    // it first never hides a face, and the floating status badges stay on top of it.
+    // Posts: two at the back, one at the front on the pantry side; the front-right corner is held by a knee brace, since
+    // a post there would stand right in front of the end seat. A back post sorts by its own near corner: a dog sitting
+    // on the lawn just behind it (y = Y-1) must be drawn first, and nobody on the bench stands in its column.
+    [1.0,3.83].forEach(x=>items.push({z:X+x+Y+0.12,f:()=>gbox(X+x,Y,0.12,0.12,0,38,wood)}));
+    items.push({z:Z+2.08,f:()=>{gbox(X+1.0,Y+1.0,0.12,0.12,0,38,wood);
+      // a trellis between the two pantry-side posts, with the vine climbing it and both posts
+      const tx=X+1.06,bar=(y0,y1,z0,z1)=>poly([PG(tx,y0,z0),PG(tx,y1,z1),PG(tx,y1,z1+1),PG(tx,y0,z0+1)],shade(wood,-12),null);
+      for(let z=8;z<36;z+=7)bar(Y+0.12,Y+1.0,z,z);
+      for(const y of[Y+0.4,Y+0.72])poly([PG(tx,y,0),PG(tx,y+0.05,0),PG(tx,y+0.05,36),PG(tx,y,36)],shade(wood,-12),null);
+      for(const[x,y]of[[X+1.06,Y+0.06],[X+1.06,Y+1.06]])for(let z=4;z<38;z+=4){const[vx,vy]=PG(x,y,z);R(vx-2+((z>>2)%2)*2,vy-2,3,2,(z>>2)%3?leaf:leafD);}
+      for(const[y,z,r]of[[0.35,14,3],[0.6,24,4],[0.3,31,3],[0.8,9,3]])bush(tx,Y+y,z,r);}});
+    items.push({z:Z+2.1,f:()=>{
+      gbox(X+0.9,Y,3.15,0.1,36,38,wood);gbox(X+0.9,Y+1.0,3.15,0.1,36,38,wood);
+      {const bx=X+3.89,brace=(y0,z0,y1,z1)=>poly([PG(bx,y0,z0),PG(bx,y1,z1),PG(bx,y1,z1+1.5),PG(bx,y0,z0+1.5)],shade(wood,-20),null);brace(Y+0.12,27,Y+0.75,36);}
+      // three rafters between the two outer ones, all overhanging the beams a little
+      for(const x of[1.0,1.75,2.5,3.25,3.85])gbox(X+x,Y-0.15,0.07,1.4,38,39.2,SN('#b98a52',0.7),shade(wood,-10),shade(wood,-25));
+      // the vine spreads over the back beam and the pantry side of the roof
+      for(const[x,y,r]of[[1.2,0.05,4],[1.8,-0.05,5],[2.5,0.1,4],[3.2,-0.05,5],[3.85,0.3,4],[1.05,0.65,4],[1.15,1.1,4]]){
+        bush(X+x,Y+y,40.5,r);const[vx,vy]=PG(X+x,Y+y,39.2);if(r>4){R(vx-2,vy+2,1,4,leafD);R(vx+3,vy+1,1,3,leafD);}}}});
+    // Free-standing stainless ash bin with a sand top, between the two standing places.
+    items.push({z:Z+4.1,f:()=>{gbox(X+2.15,Y+1.45,0.26,0.26,0,9,N('#c9d3e3'),N('#9aa6bd'),N('#7d889c'));gbox(X+2.18,Y+1.48,0.2,0.2,9,9.4,N('#d9cbb5'));
+      const[bx,by]=PG(X+2.28,Y+1.58,9.4);R(bx-1,by,2,1,N('#f3efe2'));R(bx+1,by-1,1,1,N('#f3efe2'));}});
+    // By the entrance: an extinguisher on the trough's end and a low bollard light that glows warm after dark.
+    items.push({z:Z+4.05,f:()=>{gbox(X+0.18,Y+2.9,0.14,0.1,1,8,N('#e5484d'),N('#b8373b'),N('#9a2e31'));{const[ex,ey]=PG(X+0.25,Y+3.0,8);R(ex-1,ey-1,2,1,'#1a1a1a');}
+      gbox(X+0.1,Y+3.62,0.14,0.14,0,9,metal);const glow=df<0.6;gbox(X+0.08,Y+3.6,0.18,0.18,9,10.5,glow?'#ffd98a':N('#e8e2d6'),glow?'#f5c46a':undefined,glow?'#e8b25a':undefined);gbox(X+0.06,Y+3.58,0.22,0.22,10.5,11.2,metal);}});
+    // Designated-area sign: a green plate with the smoking pictogram (no words needed), lying in the plane y = const.
+    items.push({z:Z+7.6,f:()=>{gbox(X+3.58,Y+3.72,0.06,0.06,0,13,metal);
+      poly([PG(X+3.25,Y+3.7,13),PG(X+3.9,Y+3.7,13),PG(X+3.9,Y+3.7,19.5),PG(X+3.25,Y+3.7,19.5)],N('#1f8a4c'),null);
+      const[sx,sy]=PG(X+3.25,Y+3.7,19.5);ctx.save();ctx.translate(Math.round(sx),Math.round(sy));ctx.transform(1,0.5,0,1,0,0);
+      ctx.fillStyle=N('#ffffff');ctx.fillRect(2,4,6,1);ctx.fillRect(3,2,1,1);ctx.fillRect(4,1,1,1);ctx.fillRect(5,2,1,1);ctx.fillStyle='#ff9a3d';ctx.fillRect(8,4,1,1);ctx.restore();}});
+  }
   drawDesk(G,d,i){
     const{ctx,poly,box,rect,t,df}=G,{gx,gy}=d,owner=this.agents.find(a=>a.desk===i&&!a.leaving&&!a.parent);
     const at=owner&&owner.seated,st=owner&&owner.status;
@@ -1346,6 +2164,9 @@ class ClaudeOffice extends React.Component{
     else if(act==='snack'){L();R(sx+4,by-10,3,1,shD);R(sx+7,by-10-(Math.floor(t*3)%2),1,1,sk);}
     else if(act==='microwave'){L();R(sx+4,by-13,1,5,shD);R(sx+4,by-14,1,1,sk);}
     else if(act==='phone'){R(sx-5,by-11,1,4,shD);R(sx+4,by-11,1,4,shD);R(sx-4,by-8,8,1,sk);R(sx-1,by-11,3,4,'#1a1a1a');R(sx,by-10,1,2,ph?'#5ef2ff':'#8be0b4');}
+    else if(act==='smoke'){// every few seconds the hand comes up for a slow drag; the rest of the time it rests at the waist
+      L();if(SmokeLogic.cycle(t).drag){R(sx+4,by-13,1,3,shD);R(sx+2,by-14,2,1,sk);R(sx,by-13,2,1,'#f3efe2');}
+      else{R(sx+4,by-11,1,4,shD);R(sx+4,by-7,1,1,sk);R(sx+5,by-8,2,1,'#f3efe2');}}
     else if(act==='stretch'){const p=Math.floor(t*1.5)%2;R(sx-6,by-17+p*2,2,7,sh);R(sx+4,by-17+(1-p)*2,2,7,sh);R(sx-6,by-18+p*2,2,1,sk);R(sx+4,by-18+(1-p)*2,2,1,sk);}
     else L();
   }
@@ -1395,7 +2216,8 @@ class ClaudeOffice extends React.Component{
       if(a.dirFront){R(sx-1,by-11,2,2,'#ffffff');R(sx-4,by-6,8,1,shade(pants,-20));}
       const sw=a.moving?(walk?1:-1):0,wave=st==='talking'&&!a.moving?Math.floor(t*4)%2:0,up=st==='done'&&!a.moving;
       const act=!a.moving&&st==='idle'?a.actNow:null;
-      if(act&&!sit){this.actArms(R,act,sx,by,t,sh,shD,sk);}
+      const tp=t+a.id*1.37;// per-person phase, so a group of smokers never moves in step
+      if(act&&(!sit||act==='smoke')){this.actArms(R,act,sx,by,act==='smoke'?tp:t,sh,shD,sk);}
       else if(up){R(sx-6,by-17,2,7,sh);R(sx+4,by-17,2,7,sh);R(sx-6,by-18,2,2,sk);R(sx+4,by-18,2,2,sk);}
       else{R(sx-5,by-11+sw,1,5,shD);R(sx-5,by-6+sw,1,1,sk);
         if(st==='waiting'&&!a.moving){R(sx+4,by-10,1,3,shD);R(sx+3,by-7,1,1,sk);}
@@ -1416,6 +2238,15 @@ class ClaudeOffice extends React.Component{
         if(hs===1)R(sx-3,hy+5,6,3,hr);if(hs===2)R(sx-1,hy-3,3,2,hr);if(hs===3){R(sx-3,hy-2,6,2,cap);}
       }
       if(a.acc==='headset'){R(sx-3,hy-2,6,1,'#1a1a1a');R(sx-4,hy+1,1,3,'#1a1a1a');R(sx+3,hy+1,1,3,'#1a1a1a');}
+      if(act==='smoke'){// ember at the cigarette tip (brighter during a drag), a thin wisp rising off it, a puff after each drag
+        const{drag,exhale}=SmokeLogic.cycle(tp),[ex,ey]=drag?[sx-1,by-13]:[sx+7,by-8],reduced=this.env&&this.env.reduced;
+        if(G.df<0.6){ctx.globalAlpha=0.35*(1-G.df/0.6);R(ex-1,ey,3,1,'#ff9a3d');R(ex,ey-1,1,3,'#ff9a3d');ctx.globalAlpha=1;}
+        R(ex,ey,1,1,drag?'#ffb347':'#e5484d');
+        if(!reduced){
+          for(let k=0;k<3;k++){const p=(tp*0.3+k/3)%1,s=p>0.55?2:1;ctx.globalAlpha=0.5*(1-p);R(ex+p*5+Math.sin(tp*1.3+k*2.1)*1.2,ey-2-p*14,s,s,'#dfe3ea');}
+          if(exhale!==null){const p=exhale;ctx.globalAlpha=0.45*(1-p);R(sx+1+p*5,by-14-p*7,2+Math.round(p*3),2,'#e6e9ef');}
+          ctx.globalAlpha=1;}
+      }
       if(st==='idle'&&!a.moving&&a.actNow==='table'){R(sx+4,by-9,2,3,'#ffffff');R(sx+6,by-8,1,1,'#ffffff');if(Math.floor(t*2+a.id)%2)R(sx+4,by-12,1,2,'#c9cfdc');}
       if(a.parent){R(sx-3,hy-2,6,2,'#ffd166');R(sx,hy-5,1,3,'#ffd166');R(sx-1,hy-6,3,1,'#ffffff');}
       if(st==='talking'&&!a.moving){for(let k=0;k<3;k++){if((Math.floor(t*4)+k)%3===0)continue;R(sx-8-k*2,hy+2-k,1,1+k,'#ffffff');}}
@@ -1430,6 +2261,44 @@ class ClaudeOffice extends React.Component{
     }
   }
 
+  stepDogs(dt){
+    const w=this.dogWorld,now=new Date();
+    w.now+=dt;w.hour=now.getHours()+now.getMinutes()/60;w.snow=this.snowShown||0;w.calm=!!(this.env&&this.env.reduced);
+    // People out on the lawn (down the stairs, bathing in the pond) are who the dogs run over to greet.
+    // `act` is what they are doing, or the idle spot they are walking to, so a smoker is left alone on the way too.
+    w.agents=this.agents.filter(a=>(a.x>=W||a.y>=H)&&LAWN_WALK.has(Math.floor(a.x)+','+Math.floor(a.y)))
+      .map(a=>({id:a.id,x:a.x,y:a.y,act:a.actNow||(a.status==='idle'&&a.idleSpot!=null&&IDLE_SPOTS[a.idleSpot]?IDLE_SPOTS[a.idleSpot].act:null)}));
+    DogLogic.step(this.dogs,w,dt);
+  }
+  // A dog's frame baked once per light level and snow level (like the island), then stamped with one drawImage.
+  dogSprite(breed,name,dfB,snB){
+    const k=breed+'/'+name+'/'+dfB+'/'+snB,hit=this.dogSprites.get(k);if(hit)return hit;
+    if(this.dogSprites.size>300)this.dogSprites.clear();
+    const f=DogSprites.frame(breed,name),pal=DogSprites.BREEDS[breed].pal,cv=document.createElement('canvas');
+    cv.width=f.w;cv.height=f.h;const c=cv.getContext('2d'),top=new Array(f.w).fill(-1);
+    f.rows.forEach((row,y)=>[...row].forEach((ch,x)=>{if(ch!=='.'&&top[x]<0)top[x]=y;}));
+    f.rows.forEach((row,y)=>[...row].forEach((ch,x)=>{
+      if(ch==='.')return;let col=pal[ch];
+      // Snow settles on whatever faces the sky: the top pixel of each column (back, head, ears, tail).
+      if(snB>=3&&top[x]===y)col=SkyRender.mix(col,'#eef3f7',snB/10*0.75);
+      c.fillStyle=SkyRender.mix(col,'#0d1322',DogLogic.nightMix(dfB/10));c.fillRect(x,y,1,1);
+    }));
+    this.dogSprites.set(k,cv);return cv;
+  }
+  drawDog(G,d,t,dfB,snB){
+    const{ctx,th,rect}=G,p=DogLogic.pose(d,t),f=DogSprites.frame(d.breed,p.frame),img=this.dogSprite(d.breed,p.frame,dfB,snB);
+    let[sx,sy]=PG(d.x,d.y);sx=Math.round(sx);sy=Math.round(sy);
+    const top=sy-f.h-p.dy,dir=p.flip?-1:1,nose=sx+dir*(f.w-f.ax-1);
+    ctx.fillStyle=th.shadow;ctx.beginPath();ctx.ellipse(sx,sy,Math.ceil(f.w/2)-1,2,0,0,Math.PI*2);ctx.fill();
+    // Mirroring is a transform on one drawImage; column ax lands on sx either way.
+    if(p.flip){ctx.save();ctx.translate(sx+1,0);ctx.scale(-1,1);ctx.drawImage(img,-f.ax,top);ctx.restore();}
+    else ctx.drawImage(img,sx-f.ax,top);
+    if(d.act==='drink'&&!d.path.length)for(let k=0;k<2;k++){const q=(t*0.7+k*0.5+d.id*0.3)%1;ctx.strokeStyle='rgba(255,255,255,'+(0.5*(1-q))+')';ctx.lineWidth=1;ctx.beginPath();ctx.ellipse(nose+dir*2,sy,2+q*4,1+q*2,0,0,Math.PI*2);ctx.stroke();}
+    if(d.act==='sleep'){const q=(t*0.3+d.id*0.33)%1;ctx.globalAlpha=Math.min(1,(1-q)*1.5)*0.85;text3(ctx,'Z',sx+dir*3+q*5,top-2-q*12,'#e6e9ef');ctx.globalAlpha=1;}
+    // Sitting down by a person: one small heart floats up and fades.
+    if(d.act==='sit'&&d.greet!=null){const q=(this.dogWorld.now-(d.since||0))/2.5;if(q<1){ctx.globalAlpha=1-q*q;const hx=nose-dir*3-2,hy=Math.round(top-4-q*8);
+      [[1,0],[3,0],[0,1],[1,1],[2,1],[3,1],[4,1],[1,2],[2,2],[3,2],[2,3]].forEach(([a,b])=>rect(hx+a,hy+b,1,1,'#e93d82'));ctx.globalAlpha=1;}}
+  }
   drawSleeper(G,a){
     const{ctx,poly,box,rect,th,t}=G,d=DESKS[a.desk],x=d.gx,y=d.gy;
     poly([P(x+0.08,y+0.3,0.5),P(x+1.32,y+0.3,0.5),P(x+1.32,y+1.12,0.5),P(x+0.08,y+1.12,0.5)],th.stroke?'#ffffff':'#d9c27a');
@@ -1464,7 +2333,7 @@ class ClaudeOffice extends React.Component{
       case 'waiting':return a.waitSub?'chờ sub-agent '+(t?t.name:''):'chờ '+(t?t.name:'?');
       case 'done':return 'xong task ✓';
       case 'entering':return a.parent?'sub-agent vào ca':'session mới';
-      case 'idle':return ({bath:'💦 ',sky:'☁️ ',microwave:'🍱 ',meal:'🍪 ',snack:'🍪 '}[a.actNow]||'☕ ')+(ACT_TXT[a.actNow]||'ra pantry giải lao');
+      case 'idle':return ({bath:'💦 ',smoke:'🚬 ',sky:'☁️ ',microwave:'🍱 ',meal:'🍪 ',snack:'🍪 '}[a.actNow]||'☕ ')+(ACT_TXT[a.actNow]||'ra pantry giải lao');
       case 'leaving':return 'rời đi…';
       default:return null;
     }
@@ -1493,7 +2362,7 @@ class ClaudeOffice extends React.Component{
       if(!txt)return null;
       const[sx,sy]=this.headPos(a),c=(ST[a.status]||ST.working)[1];
       return h('div',{key:a.id,ref:el=>{if(el)this.bubbleEls[a.id]=el;else delete this.bubbleEls[a.id];},
-        style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%) scale(var(--cam-inv,1))',transformOrigin:'50% 100%',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:240,overflow:'hidden',textOverflow:'ellipsis'}},
+        style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%) scale(calc(var(--cam-inv,1) * var(--bubble-k,1)))',transformOrigin:'50% 100%',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:'var(--bubble-w,240px)',overflow:'hidden',textOverflow:'ellipsis'}},
         h('b',{style:{color:c,fontFamily:"'Pixelify Sans',monospace",fontSize:11}},a.name),
         h('span',{style:{overflow:'hidden',textOverflow:'ellipsis'}},txt));
     });
@@ -1501,45 +2370,72 @@ class ClaudeOffice extends React.Component{
     const pad={paddingLeft:'max(16px, env(safe-area-inset-left, 0px))',paddingRight:'max(16px, env(safe-area-inset-right, 0px))'};
 
     const hdrCtl={padding:'4px 10px',fontSize:11};
+    const narrow=!!(this.narrowMq&&this.narrowMq.matches);
+    const logo=h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:20,fontWeight:700,letterSpacing:'0.02em',color:'#ffffff'}},'CLAUDE CO.');
+    const seasonChip=seasonInfo&&h('div',{className:'chip',style:{borderColor:seasonInfo.accent,gap:6}},
+      h('span',{style:{width:8,height:8,borderRadius:'50%',background:seasonInfo.accent,display:'inline-block',boxShadow:'0 0 4px '+seasonInfo.accent}}),
+      h('span',{style:{color:seasonInfo.accent,fontWeight:600}},seasonInfo.label)
+    );
+    const summaryChips=summary.map((c,i)=>h('div',{key:i,className:'chip'},
+      h('span',{style:{width:8,height:8,background:c.color,display:'inline-block'}}),
+      h('span',null,c.label),
+      h('strong',{style:{color:'#ffffff'}},c.n)
+    ));
+    const deptLabel=h('span',{style:{fontSize:10,color:'#5d6578'}},'PHÒNG BAN');
+    const deptChips=deptList.map((d,i)=>h('div',{key:i,style:{display:'flex',alignItems:'center',gap:6,padding:'2px 8px 2px 2px',background:'var(--surface)',border:'1px solid #232a39'}},
+      h('span',{style:{padding:'1px 5px',background:d.color,color:'#ffffff',fontFamily:"'Pixelify Sans',monospace",fontWeight:600,fontSize:11}},d.short),
+      h('span',{style:{color:'#c9cfdc',whiteSpace:'nowrap'}},d.label),
+      h('strong',{style:{color:'#ffffff'}},d.n)
+    ));
+    const srcPill=label=>h('div',{style:{display:'flex',alignItems:'center',gap:8,border:'2px solid var(--border)',background:'var(--surface)',...hdrCtl}},
+      h('span',{style:{width:8,height:8,background:srcColor,display:'inline-block'}}),
+      h('span',{style:{color:'var(--fg)',fontWeight:600,whiteSpace:narrow?'nowrap':undefined}},label)
+    );
+    const pauseBtn=label=>h('button',{className:'btn',title:narrow?(paused?'Tiếp tục':'Tạm dừng'):undefined,style:hdrCtl,onClick:()=>this.setState(p=>({paused:!p.paused}))},label);
+    const addBtn=label=>isSim&&h('button',{className:'btn btn-accent',title:narrow?'Thêm session':undefined,style:hdrCtl,onClick:()=>{const a=this.addAgent({});if(a)this.setState({sel:a.id});}},label);
 
-    return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:8,paddingTop:12,paddingBottom:12,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
-
-      h('header',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'8px 16px'}},
+    // Phone: one fixed-height row (logo, source, pause, add) and one strip of status and department chips that
+    // scrolls sideways instead of wrapping, so the header never pushes the island down. A phone on its side is wide but
+    // short, so there the strip sits inside the row between the logo and the controls.
+    const strip=flex=>h('div',{key:'strip',className:'hscroll',style:{display:'flex',alignItems:'center',gap:6,fontSize:11,flex,overflowX:'auto',whiteSpace:'nowrap',minWidth:0}},
+      seasonChip,this.worldChip(),summaryChips,deptList.length>0&&h('span',{style:{width:4,flex:'none'}}),deptList.length>0&&deptLabel,deptChips
+    );
+    const oneRow=narrow&&window.innerWidth>640;
+    const top=narrow?[
+      h('header',{key:'hdr',style:{display:'flex',alignItems:'center',gap:8,height:30,flex:'none',minWidth:0}},
+        h('div',{title:'Mỗi nhân viên là một Claude session đang chạy trên máy bạn',style:{flex:'none'}},logo),
+        oneRow?strip('1 1 0'):h('div',{style:{flex:'1 1 0',minWidth:0}}),
+        srcPill(isLive?(ls==='ok'?'LIVE':ls==='error'?'Mất kết nối':'Đang kết nối'):'MÔ PHỎNG'),
+        pauseBtn(paused?'▶':'❚❚'),
+        addBtn('+')
+      ),
+      !oneRow&&strip('none')
+    ]:[
+      h('header',{key:'hdr',style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'8px 16px'}},
         h('div',{title:'Mỗi nhân viên là một Claude session đang chạy trên máy bạn',style:{display:'flex',alignItems:'baseline',gap:8,flex:'none'}},
-          h('div',{style:{fontFamily:"'Pixelify Sans',monospace",fontSize:20,fontWeight:700,letterSpacing:'0.02em',color:'#ffffff'}},'CLAUDE CO.'),
+          logo,
           this.serverVersion&&h('span',{style:{fontSize:10,color:'var(--muted)',fontFamily:"'JetBrains Mono',monospace",opacity:0.6}},'v'+this.serverVersion)
         ),
         h('div',{style:{display:'flex',flexWrap:'wrap',gap:6,fontSize:11,alignItems:'center',flex:'1 1 360px',minWidth:0}},
-          seasonInfo&&h('div',{className:'chip',style:{borderColor:seasonInfo.accent,gap:6}},
-            h('span',{style:{width:8,height:8,borderRadius:'50%',background:seasonInfo.accent,display:'inline-block',boxShadow:'0 0 4px '+seasonInfo.accent}}),
-            h('span',{style:{color:seasonInfo.accent,fontWeight:600}},seasonInfo.label)
-          ),
+          seasonChip,
           this.worldChip(),
-          summary.map((c,i)=>h('div',{key:i,className:'chip'},
-            h('span',{style:{width:8,height:8,background:c.color,display:'inline-block'}}),
-            h('span',null,c.label),
-            h('strong',{style:{color:'#ffffff'}},c.n)
-          ))
+          summaryChips
         ),
         h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:8,flex:'none'}},
-          h('div',{style:{display:'flex',alignItems:'center',gap:8,border:'2px solid var(--border)',background:'var(--surface)',...hdrCtl}},
-            h('span',{style:{width:8,height:8,background:srcColor,display:'inline-block'}}),
-            h('span',{style:{color:'var(--fg)',fontWeight:600}},srcLabel)
-          ),
-          h('button',{className:'btn',style:hdrCtl,onClick:()=>this.setState(p=>({paused:!p.paused}))},paused?'▶ Tiếp tục':'❚❚ Tạm dừng'),
-          isSim&&h('button',{className:'btn btn-accent',style:hdrCtl,onClick:()=>{const a=this.addAgent({});if(a)this.setState({sel:a.id});}},
-            '+ Session')
+          srcPill(srcLabel),
+          pauseBtn(paused?'▶ Tiếp tục':'❚❚ Tạm dừng'),
+          addBtn('+ Session')
         )
       ),
+      deptList.length>0&&h('div',{key:'depts',style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,fontSize:11}},
+        deptLabel,
+        deptChips
+      )
+    ];
 
-      deptList.length>0&&h('div',{style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:6,fontSize:11}},
-        h('span',{style:{fontSize:10,color:'#5d6578'}},'PHÒNG BAN'),
-        deptList.map((d,i)=>h('div',{key:i,style:{display:'flex',alignItems:'center',gap:6,padding:'2px 8px 2px 2px',background:'var(--surface)',border:'1px solid #232a39'}},
-          h('span',{style:{padding:'1px 5px',background:d.color,color:'#ffffff',fontFamily:"'Pixelify Sans',monospace",fontWeight:600,fontSize:11}},d.short),
-          h('span',{style:{color:'#c9cfdc',whiteSpace:'nowrap'}},d.label),
-          h('strong',{style:{color:'#ffffff'}},d.n)
-        ))
-      ),
+    return h('div',{className:'app',style:{display:'flex',flexDirection:'column',gap:narrow?6:8,paddingTop:narrow?8:12,paddingBottom:narrow?8:12,boxSizing:'border-box',overflow:'hidden',background:'var(--bg)',...pad}},
+
+      top,
 
       isLive&&ls==='error'&&h('div',{style:{display:'flex',flexDirection:'column',gap:8,padding:'14px 16px',border:'2px solid #e5484d',background:'#2a1418',fontSize:12,lineHeight:1.6,color:'#ffd7d9'}},
         h('strong',{style:{color:'#ffffff',fontSize:13}},'Claude Office needs a local server'),
@@ -1659,9 +2555,12 @@ class ClaudeOffice extends React.Component{
 // methods, borrowed rather than copied, so every island in the world looks and moves exactly like the local page.
 // What belongs to one island lives here; the sky, light, speed and selection come from the host component.
 const SCENE_METHODS=['syncLive','addAgent','dept','colOwners','freeDeskFor','freeDesk','log','byId','leave','goalFor','updateAgent',
-  'draw','drawSeg','drawPlanter','pantryItems','drawDesk','actArms','drawPerson','drawSleeper','headPos','hit'];
+  'draw','drawSeg','drawPlanter','pantryItems','drawDesk','actArms','drawPerson','drawSleeper','headPos','hit',
+  'smokingItems','stepDogs','dogSprite','drawDog'];
 // Every island bakes the same ground for a given resolution, light and snow, so one bake per k serves them all.
 const SCENE_ISLAND_CACHE=new Map();
+// Dog sprites depend only on breed, frame and light, so all islands share one cache.
+const SCENE_DOG_SPRITES=new Map();
 class IslandScene{
   constructor(host,id){
     this.host=host;this.id=id;
@@ -1670,6 +2569,7 @@ class IslandScene{
     this.state={sel:null};// the host's selected agent, when it is on this island
     this.raw=new Map();// session id -> the session as the hub sent it (kind, tool, model for the detail panel)
     this.noUsage=true;// hubs carry no 5H / 7D usage, so the wall bars are left off
+    this.dogWorld={...DOG_PLACES,agents:[],hour:12,snow:0,calm:false,now:0,rand:Math.random};this.dogs=DogLogic.create(this.dogWorld);this.dogSprites=SCENE_DOG_SPRITES;
   }
   get theme(){return this.host.frameTheme||this.host.theme;}
   get env(){return this.host.env;}
@@ -1680,7 +2580,7 @@ class IslandScene{
   renderK(){return this.lodK;}// canvas px per scene px, chosen by the world view from the island's level of detail
   sync(sessions){this.raw=new Map(sessions.map(s=>[s.id,s]));this.syncLive({sessions});}
   frame(dt){
-    this.agents.forEach(a=>this.updateAgent(a,dt));
+    this.agents.forEach(a=>this.updateAgent(a,dt));this.stepDogs(dt);
     if(this.agents.some(a=>a.gone)){const gone=this.agents.filter(a=>a.gone);gone.forEach(a=>this.goneSids.add(a.sid));this.agents=this.agents.filter(a=>!a.gone);
       const h_=this.host;if(h_.state.selIsland===this.id&&gone.some(a=>a.id===h_.state.sel))h_.setState({sel:null});}
   }

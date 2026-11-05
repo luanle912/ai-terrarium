@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-11-05
+
+### Added
+
+- **Lawn paths** — Stepping-stone paths run from both flights of stairs to the pond and on to the smoking corner, drawn with the island for day, night and snow; agents going outside follow them instead of cutting across the grass
+- **Office dogs** — A corgi, a husky and a dalmatian live on the lawn: they stroll, drink at the pond, chase each other, trot over to greet people who come outside and, from 22:00, sleep together under the east tree. At night they dim only half as much as the scenery so they stay easy to see, and they leave people in the smoking corner alone
+- **Smoking corner** — Idle agents can step out to a paved corner on the east lawn: a bench under a vine-covered pergola, a stainless ash bin, a planted screen toward the pantry, and a light, an extinguisher and a sign at the entrance; speech bubbles of people sitting out on the lawn sit right above their heads
+
+### Fixed
+
+- **Phone layout** — The page now fits phone screens: it sizes to the device width, the header is one row with a status strip that scrolls sideways, and speech bubbles are smaller and narrower; the desktop layout is unchanged
+
 ## [1.3.5] - 2026-11-05
 
 ### Fixed
@@ -219,6 +231,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
+[1.4.0]: https://github.com/luanle912/ai-terrarium/compare/v1.3.5...v1.4.0
 [1.3.5]: https://github.com/luanle912/ai-terrarium/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/luanle912/ai-terrarium/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/luanle912/ai-terrarium/compare/v1.3.2...v1.3.3
