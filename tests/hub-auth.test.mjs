@@ -1,17 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { loadConfig } = require('../hub/config.js');
 const { createHub } = require('../hub/server.js');
-const { checkClaims, decodeJwtPayload, sha256hex } = require('../hub/auth.js');
+const { checkClaims, sha256hex } = require('../hub/auth.js');
+import { makeGoogle } from './hub-helpers.mjs';
 
 const NOW = 1_800_000_000_000;
-const CID = 'client-id';
+const CID = 'test-client'; // the audience makeGoogle() puts in its default claims
 const BASE = {
   HUB_PUBLIC_URL: 'https://terrarium.newera.inc', HUB_ALLOWED_DOMAINS: 'newera.inc',
-  HUB_OWNER_EMAILS: 'boss@newera.inc', GOOGLE_CLIENT_ID: CID, GOOGLE_CLIENT_SECRET: 'sekret', HUB_DB: ':memory:',
+  HUB_OWNER_EMAILS: 'boss@newera.inc', GOOGLE_CLIENT_ID: 'test-client', GOOGLE_CLIENT_SECRET: 'sekret', HUB_DB: ':memory:',
 };
 const good = (over = {}) => ({
   iss: 'https://accounts.google.com', aud: CID, sub: 's1', email: 'a@newera.inc', email_verified: true, hd: 'newera.inc',
@@ -37,26 +39,13 @@ test('checkClaims rejects each bad case', () => {
   assert.equal(chk({ iss: 'accounts.google.com' }).ok, true);
 });
 
-test('decodeJwtPayload reads the payload and rejects junk', () => {
-  const jwt = (p) => `h.${Buffer.from(JSON.stringify(p)).toString('base64url')}.s`;
-  assert.deepEqual(decodeJwtPayload(jwt({ a: 1 })), { a: 1 });
-  assert.throws(() => decodeJwtPayload('abc'));
-  assert.throws(() => decodeJwtPayload(jwt([1])));
-});
-
 // ---- hub harness ----
 function setup(env = {}, fetchImpl) {
   const clock = { t: NOW };
   const logs = [];
-  const calls = [];
-  const fakeFetch = fetchImpl || (async (url, opts) => {
-    calls.push({ url, opts });
-    const p = fakeFetch.claims();
-    return { ok: true, json: async () => ({ id_token: `h.${Buffer.from(JSON.stringify(p)).toString('base64url')}.s` }) };
-  });
-  const hub = createHub(loadConfig({ ...BASE, ...env }), { now: () => clock.t, log: (l) => logs.push(l), fetch: fakeFetch });
-  fakeFetch.claims = () => good();
-  return { hub, clock, logs, calls, fakeFetch };
+  const google = makeGoogle({ now: () => clock.t });
+  const hub = createHub(loadConfig({ ...BASE, ...env }), { now: () => clock.t, log: (l) => logs.push(l), fetch: fetchImpl || google.fetch });
+  return { hub, clock, logs, google };
 }
 const call = (hub, method, url, headers = {}) => new Promise((resolve, reject) => {
   const r = { method, url, headers, socket: { remoteAddress: '1.2.3.4' } };
@@ -81,7 +70,7 @@ async function startLogin(h) {
 }
 async function signIn(h, claims = {}) {
   const l = await startLogin(h);
-  h.fakeFetch.claims = () => good({ nonce: l.nonce, ...claims });
+  h.google.claims = good({ nonce: l.nonce, ...claims });
   const cb = await call(h.hub, 'GET', `/auth/callback?code=c&state=${l.state}`, { cookie: l.cookie });
   return { l, cb, cookie: cb.status === 302 ? pair(cookiesOf(cb)[0]) : null };
 }
@@ -111,9 +100,9 @@ test('callback rejects a state that is not bound to this browser', async () => {
   assert.equal(noCookie.status, 400);
   const other = await call(h.hub, 'GET', `/auth/callback?code=c&state=${l.state}`, { cookie: '__Host-tr_login=' + sha256hex('x') });
   assert.equal(other.status, 400);
-  assert.equal(h.calls.length, 0);
+  assert.equal(h.google.calls.length, 0);
   // the failed attempts did not burn the real state
-  h.fakeFetch.claims = () => good({ nonce: l.nonce });
+  h.google.claims = good({ nonce: l.nonce });
   const ok = await call(h.hub, 'GET', `/auth/callback?code=c&state=${l.state}`, { cookie: l.cookie });
   assert.equal(ok.status, 302);
   await h.hub.close();
@@ -130,9 +119,9 @@ test('callback with a valid code creates a session', async () => {
   assert.ok(cs.find((c) => c.startsWith('__Host-tr_login=;') && /Max-Age=0/.test(c)), 'login cookie cleared');
   assert.equal(h.hub.db.getUserBySub('s1').email, 'a@newera.inc');
   // token exchange carried the secret and verifier to Google only
-  const body = String(h.calls[0].opts.body);
-  assert.equal(h.calls[0].url, 'https://oauth2.googleapis.com/token');
-  assert.match(body, /client_secret=sekret/); assert.match(body, /code_verifier=/);
+  const { url, params } = h.google.calls[0];
+  assert.equal(url, 'https://oauth2.googleapis.com/token');
+  assert.equal(params.client_secret, 'sekret'); assert.ok(params.code_verifier);
   // DB stores only the hash of the token
   const tok = pair(sess).split('=')[1];
   assert.ok(h.hub.db.getSession(sha256hex(tok)));
@@ -167,6 +156,24 @@ test('callback refuses wrong domain, wrong nonce, failed exchange', async () => 
   h = setup({}, async () => ({ ok: false, json: async () => ({}) }));
   const l = await startLogin(h);
   assert.equal((await call(h.hub, 'GET', `/auth/callback?code=c&state=${l.state}`, { cookie: l.cookie })).status, 400);
+  await h.hub.close();
+});
+
+test('callback refuses a token with a bad signature', async () => {
+  const h = setup();
+  const l = await startLogin(h);
+  const claims = good({ nonce: l.nonce });
+  const other = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  h.google.onToken = () => ({ status: 200, body: { id_token: h.google.sign(claims, { key: other.privateKey }) } });
+  const cb = await call(h.hub, 'GET', `/auth/callback?code=c&state=${l.state}`, { cookie: l.cookie });
+  assert.equal(cb.status, 403);
+  assert.ok(!cookiesOf(cb).some((c) => c.startsWith('__Host-tr_sess=')), 'no session cookie');
+  assert.equal(h.hub.db.getUserBySub('s1'), undefined);
+  assert.equal(h.hub.db.raw.prepare('SELECT count(*) c FROM sessions').get().c, 0);
+  // and a token with no signature at all
+  const l2 = await startLogin(h);
+  h.google.onToken = () => ({ status: 200, body: { id_token: h.google.sign(good({ nonce: l2.nonce })).split('.').slice(0, 2).join('.') + '.' } });
+  assert.equal((await call(h.hub, 'GET', `/auth/callback?code=c&state=${l2.state}`, { cookie: l2.cookie })).status, 403);
   await h.hub.close();
 });
 
