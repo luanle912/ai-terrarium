@@ -194,6 +194,13 @@ test('join stores the token 0600 and prints only the code and link', async () =>
   assert.equal(saved.share, 'kin'); assert.equal(saved.private, false); assert.deepEqual(saved.projects, []);
 });
 
+test('join reports a full hub clearly', async () => {
+  for (const [error, re] of [['hub_full', /hub is full/], ['access_denied', /denied/]]) {
+    const h = fakeHub((n, j) => j(403, { error }));
+    await assert.rejects(join('https://hub.example', { dir: path.join(tmp(), 'c'), fetch: h.fetch, log() {}, openBrowser() {}, sleep: async () => {} }), re);
+  }
+});
+
 test('join reports expired, denied', async () => {
   for (const [status, re] of [[410, /expired/], [403, /denied/]]) {
     const dir = path.join(tmp(), 'c');
