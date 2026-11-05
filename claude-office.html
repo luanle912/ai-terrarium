@@ -1097,7 +1097,7 @@ function mistShape(v){
     const u=(i+0.5)/n,bump=Math.sin(Math.PI*u),cx=MIST_W*(0.1+0.8*u)+(hash(i,v,11)-0.5)*24,cy=MIST_H*(0.55+(hash(i,v,12)-0.5)*0.3);
     const rx=MIST_W*(0.09+0.08*hash(i,v,13))*(0.7+0.6*bump),ry=MIST_H*(0.16+0.22*bump*(0.5+0.5*hash(i,v,14)));
     g.save();g.translate(cx,cy);g.scale(rx/ry,1);
-    const rg=g.createRadialGradient(0,0,0,0,0,ry);rg.addColorStop(0,'rgba(255,255,255,0.5)');rg.addColorStop(0.55,'rgba(255,255,255,0.22)');rg.addColorStop(1,'rgba(255,255,255,0)');
+    const rg=g.createRadialGradient(0,0,0,0,0,ry);rg.addColorStop(0,'rgba(255,255,255,0.65)');rg.addColorStop(0.55,'rgba(255,255,255,0.32)');rg.addColorStop(1,'rgba(255,255,255,0)');
     g.fillStyle=rg;g.beginPath();g.arc(0,0,ry,0,7);g.fill();g.restore();
   }
   return c;
@@ -1124,7 +1124,7 @@ function mistRow(ctx,w,y,d,t,seed,cover,col,S,speedK,alpha){
   for(let i=0;i<count;i++){
     const cw=(150+hash(i,seed,1)*150)*s,ch=cw*(0.2+0.12*hash(i,seed,4)),speed=(3+2.5*hash(i,seed,5))*s*speedK;
     const x=((hash(i,seed,2)*span+t*speed)%span)-maxW,bob=Math.sin(t*0.25*speedK+i*1.9+seed)*2*s;
-    const breath=0.6+0.4*(0.5+0.5*Math.sin(t*0.15*speedK+hash(i,seed,6)*6.28));
+    const breath=0.7+0.3*(0.5+0.5*Math.sin(t*0.15*speedK+hash(i,seed,6)*6.28));
     mistWisp(ctx,x,y-ch*0.5+bob,cw,ch,Math.floor(hash(i,seed,3)*MIST_VARIANTS),lit,shade,alpha*breath);
   }
 }
@@ -1151,10 +1151,10 @@ function drawBack(ctx,w,h,t,env){
     const sg=ctx.createRadialGradient(sx,sy,2,sx,sy,80*S);sg.addColorStop(0,'rgba(255,248,215,'+(0.85*a)+')');sg.addColorStop(1,'rgba(255,248,215,0)');ctx.fillStyle=sg;ctx.fillRect(sx-80*S,sy-80*S,160*S,160*S);
     ctx.globalAlpha=a;ctx.fillStyle='#fffbe0';ctx.beginPath();ctx.arc(sx,sy,9*S,0,7);ctx.fill();ctx.globalAlpha=1;
   }
-  for(let r=0;r<3;r++){const d=r/3;mistRow(ctx,w,hy*(0.18+d*0.62),d*0.5,t,10+r*17,0.3+fx.cloud*0.9,col,S*0.8,speedK,0.45+fx.cloud*0.35);}
+  for(let r=0;r<3;r++){const d=r/3;mistRow(ctx,w,hy*(0.18+d*0.62),d*0.5,t,10+r*17,0.3+fx.cloud*0.9,col,S*0.8,speedK,0.55+fx.cloud*0.35);}
   [[0.07,0.97,0.8],[0.24,1.01,0.55],[0.78,0.98,0.7],[0.93,1.02,0.45]].forEach(([fx_,fy,sc],i)=>farIsland(ctx,w*fx_,hy*fy+Math.sin(t*0.4+i)*1.5*S,sc*S,col));
   const hb=ctx.createLinearGradient(0,hy-18*S,0,hy+18*S);hb.addColorStop(0,rgba(col.haze,0));hb.addColorStop(0.5,rgba(col.haze,0.9));hb.addColorStop(1,rgba(col.haze,0));ctx.fillStyle=hb;ctx.fillRect(0,hy-18*S,w,36*S);
-  for(let r=0;r<9;r++){const d=(r+1)/9;mistRow(ctx,w,hy+4*S+(h-hy)*d*d,d,t,100+r*29,1.1+fx.cloud*0.6,col,S,speedK,0.55+0.4*d);}
+  for(let r=0;r<9;r++){const d=(r+1)/9;mistRow(ctx,w,hy+4*S+(h-hy)*d*d,d,t,100+r*29,1.1+fx.cloud*0.6,col,S,speedK,0.65+0.35*d);}
   if(df>0.3&&fx.rain<0.3)for(let i=0;i<3;i++){const bx=((t*9*speedK+i*16)%(w+60))-30,by=hy*0.5+i*5*S+Math.sin(t*2+i)*2,f=Math.floor(t*5+i)%2;ctx.fillStyle=rgba('#35507a',df);ctx.fillRect(bx,by,1,1);ctx.fillRect(bx-2,by-f,2,1);ctx.fillRect(bx+1,by-f,2,1);}
 }
 // env adds flash (0..1, already 0 when reduced motion is on)
