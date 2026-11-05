@@ -50,18 +50,21 @@ function createHub(config, deps = {}) {
   const routes = [...ROUTE_MODULES, ...(deps.routeModules || [])].flatMap((m) => m(ctx));
   const server = http.createServer(createRouter(routes, { log: d.log, now: d.now }));
 
-  const sweep = setInterval(() => { try { db.cleanup(d.now()); } catch { d.log('cleanup failed'); } }, HOUR);
+  const setTimer = deps.setInterval || setInterval; // injectable so tests can check unref/clear
+  const clearTimer = deps.clearInterval || clearInterval;
+  const sweep = setTimer(() => { try { db.cleanup(d.now()); } catch { d.log('cleanup failed'); } }, HOUR);
   sweep.unref();
   // B12: hourly Google check; failures are logged without detail.
-  const googleTimer = setInterval(() => { ctx.googleCheck.runOnce().catch(() => d.log('google check failed')); }, HOUR);
+  const googleTimer = setTimer(() => { ctx.googleCheck.runOnce().catch(() => d.log('google check failed')); }, HOUR);
   googleTimer.unref();
 
   let closed = false;
   async function close() {
     if (closed) return;
     closed = true;
-    clearInterval(sweep);
-    clearInterval(googleTimer);
+    clearTimer(sweep);
+    clearTimer(googleTimer);
+    ctx.googleCheck.stop();
     for (const fn of ctx.closers) { try { fn(); } catch { /* ignore */ } }
     await new Promise((resolve) => {
       if (!server.listening) return resolve();

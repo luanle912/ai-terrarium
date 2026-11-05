@@ -52,6 +52,10 @@ async function setup(email = 'an@newera.inc') {
   const user = h.hub.db.getUserBySub('g:' + email);
   return { h, google, login, dev, user, db: h.hub.db, check: h.hub.ctx.googleCheck };
 }
+const idToken = (h, google, user, over = {}) => {
+  const nowS = Math.floor(h.clock.t / 1000);
+  return google.sign({ iss: 'https://accounts.google.com', aud: 'test-client', sub: user.google_sub, email: user.email, email_verified: true, hd: 'newera.inc', iat: nowS, exp: nowS + 3600, ...over });
+};
 const revokeCalls = (g) => g.calls.filter((c) => c.url.endsWith('/revoke'));
 const tokenCalls = (g) => g.calls.filter((c) => c.params.grant_type === 'refresh_token');
 
@@ -142,21 +146,103 @@ test('a refreshed id token for another google account bans, a good one passes', 
   } finally { await h.close(); }
 });
 
-test('an unreachable JWKS counts as a failed check, not a ban', async () => {
-  const { h, google, user, db, check } = await setup();
+test('a failing JWKS fetch with a rotated key is a failed check, never a ban (real createJwks)', async () => {
+  const { h, google, user, db, check } = await setup(); // the login primed the JWKS cache
   try {
-    google.onToken = () => {
-      const nowS = Math.floor(h.clock.t / 1000);
-      return { status: 200, body: { id_token: google.sign({ iss: 'https://accounts.google.com', aud: 'test-client', sub: user.google_sub, email: user.email, email_verified: true, hd: 'newera.inc', iat: nowS, exp: nowS + 3600 }, { kid: 'kid-unknown' }) } };
-    };
-    // an unknown kid is a rejected token (ban); a JWKS fetch that errors is "could not tell"
-    const real = h.hub.ctx.jwks.verify;
-    h.hub.ctx.jwks.verify = async () => { throw new Error('jwt: keys unavailable'); };
+    google.rotate(); // Google now signs with a kid the hub has not cached
+    google.certsDown = true;
+    google.onToken = () => ({ status: 200, body: { id_token: idToken(h, google, user) } });
     h.clock.advance(25 * HOUR);
     assert.deepEqual(await check.runOnce(), { checked: 0, banned: 0, failed: 1 });
     assert.equal(db.getUserById(user.id).banned_at, null);
-    h.hub.ctx.jwks.verify = real;
+    // once the endpoint is back (and the 1/min throttle has passed) the same token verifies
+    google.certsDown = false;
+    h.clock.advance(HOUR);
+    assert.deepEqual(await check.runOnce(), { checked: 1, banned: 0, failed: 0 });
   } finally { await h.close(); }
+});
+
+test('claim failures that are not about the account (iat, aud, exp) are failed checks', async () => {
+  const { h, google, user, db, check } = await setup();
+  try {
+    h.clock.advance(25 * HOUR);
+    for (const over of [{ iat: Math.floor(h.clock.t / 1000) + 3600 }, { aud: 'other-client' }, { iss: 'https://evil.example' }]) {
+      google.onToken = () => ({ status: 200, body: { id_token: idToken(h, google, user, over) } });
+      assert.deepEqual(await check.runOnce(), { checked: 0, banned: 0, failed: 1 }, JSON.stringify(over));
+    }
+    assert.equal(db.getUserById(user.id).banned_at, null);
+    // ...while an account-level failure bans
+    google.onToken = () => ({ status: 200, body: { id_token: idToken(h, google, user, { email_verified: false }) } });
+    assert.equal((await check.runOnce()).banned, 1);
+  } finally { await h.close(); }
+});
+
+test('only invalid_grant bans: invalid_client, 429 and unparseable 200 are failed checks', async () => {
+  const { h, google, user, db, check } = await setup();
+  try {
+    h.clock.advance(25 * HOUR);
+    const answers = [
+      { status: 400, body: { error: 'invalid_client' } }, { status: 401, body: { error: 'invalid_client' } },
+      { status: 429, body: {} }, { status: 403, body: { error: 'invalid_grant' } },
+      { status: 200, raw: 'not json at all' }, { status: 200, raw: '"a string"' }, { status: 200, raw: 'null' },
+    ];
+    for (const a of answers) {
+      google.onToken = () => a;
+      assert.deepEqual(await check.runOnce(), { checked: 0, banned: 0, failed: 1 }, JSON.stringify(a));
+    }
+    assert.equal(db.getUserById(user.id).banned_at, null);
+    assert.equal(db.getUserById(user.id).checked_at < h.clock.t - 24 * HOUR, true, 'a failed check does not count as checked');
+  } finally { await h.close(); }
+});
+
+test('one user whose check throws does not stop the next one', async () => {
+  const { h, google, user, db, check } = await setup();
+  try {
+    const bo = await googleLogin(h.url, google, 'bo@newera.inc');
+    assert.ok(bo.cookie);
+    const boId = db.getUserBySub('g:bo@newera.inc').id;
+    h.clock.advance(25 * HOUR);
+    const real = db.markChecked;
+    db.markChecked = (id, now) => { if (id === user.id) throw new Error('db hiccup'); return real(id, now); };
+    const r = await check.runOnce();
+    db.markChecked = real;
+    assert.deepEqual(r, { checked: 1, banned: 0, failed: 0 });
+    assert.equal(db.getUserById(boId).checked_at, h.clock.t);
+    assert.ok(h.logs.includes('google check failed for one user'));
+  } finally { await h.close(); }
+});
+
+test('concurrent runOnce calls make one token call per user', async () => {
+  const { h, google, db, check } = await setup();
+  try {
+    await googleLogin(h.url, google, 'bo@newera.inc');
+    h.clock.advance(25 * HOUR);
+    google.calls.length = 0;
+    const [a, b] = await Promise.all([check.runOnce(), check.runOnce()]);
+    assert.deepEqual(a, b);
+    assert.equal(a.checked, 2);
+    assert.equal(tokenCalls(google).length, 2);
+    void db;
+  } finally { await h.close(); }
+});
+
+test('close() stops a run in progress', async () => {
+  const { h, google, db, check } = await setup();
+  await googleLogin(h.url, google, 'bo@newera.inc');
+  h.clock.advance(25 * HOUR);
+  let release;
+  const gate = new Promise((res) => { release = res; });
+  const inner = google.onToken;
+  google.onToken = (p) => inner(p);
+  const realFetch = h.hub.ctx.deps.fetch;
+  h.hub.ctx.deps.fetch = async (...a) => { await gate; return realFetch(...a); };
+  const run = check.runOnce();
+  const closing = h.close();
+  release();
+  const r = await run;
+  await closing;
+  assert.ok(r.checked <= 1, 'the second user is not touched after close');
+  void db;
 });
 
 test('success updates checked_at and fresh users are skipped', async () => {
@@ -287,7 +373,30 @@ test('revokeGoogle clears the token even when Google fails or the blob is unread
   } finally { await h.close(); }
 });
 
-test('the hourly google check timer is unref-ed and stops with the hub', async () => {
-  const h = await startDevHub();
-  await h.close(); // would hang the test run if a timer were left ref-ed
+test('the hourly timers are unref-ed and cleared on close', async () => {
+  const made = [];
+  const cleared = [];
+  const h = await startDevHub({ deps: {
+    setInterval: (fn, ms) => { const t = setInterval(fn, ms); const rec = { ms, t, unrefd: false }; const u = t.unref.bind(t); t.unref = () => { rec.unrefd = true; return u(); }; made.push(rec); return t; },
+    clearInterval: (t) => { cleared.push(t); clearInterval(t); },
+  } });
+  assert.ok(made.some((m) => m.ms === 3600 * 1000), 'an hourly timer exists');
+  assert.ok(made.every((m) => m.unrefd), 'every hub timer is unref-ed');
+  await h.close();
+  for (const m of made) assert.ok(cleared.includes(m.t), 'cleared on close');
+});
+
+test('banUser still revokes the Google token and audits when an earlier step throws', async () => {
+  const { h, google, user, db } = await setup();
+  try {
+    const helpers = h.hub.ctx.helpers;
+    const real = helpers.endSessionsForUser;
+    helpers.endSessionsForUser = () => { throw new Error('boom'); };
+    google.calls.length = 0;
+    await assert.rejects(h.hub.ctx.accounts.banUser(user.id, 'abuse'), /boom/);
+    helpers.endSessionsForUser = real;
+    assert.equal(db.getUserById(user.id).refresh_enc, null);
+    assert.equal(revokeCalls(google).length, 1);
+    assert.ok(db.listAudit().some((a) => a.action === 'user_banned' && a.target === `user:${user.id} abuse`));
+  } finally { await h.close(); }
 });

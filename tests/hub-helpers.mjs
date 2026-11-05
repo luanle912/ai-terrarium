@@ -101,6 +101,7 @@ export function makeGoogle({ now = () => NOW } = {}) {
   const google = {
     calls: [],
     jwksFetches: 0,
+    certsDown: false, // true: the JWKS endpoint answers 503
     claims: { iss: 'https://accounts.google.com', aud: 'test-client', hd: 'newera.inc', email_verified: true },
 
     sign(claims, { kid = current.kid, key = current.privateKey } = {}) {
@@ -126,6 +127,7 @@ export function makeGoogle({ now = () => NOW } = {}) {
       const u = String(url);
       if (u === 'https://www.googleapis.com/oauth2/v3/certs') {
         google.jwksFetches += 1;
+        if (google.certsDown) return reply(503, {});
         const jwk = current.publicKey.export({ format: 'jwk' });
         return reply(200, { keys: [{ ...jwk, kid: current.kid, alg: 'RS256', use: 'sig' }] }, { 'cache-control': 'public, max-age=3600' });
       }
@@ -133,7 +135,7 @@ export function makeGoogle({ now = () => NOW } = {}) {
         const params = form(opts);
         google.calls.push({ url: u, params });
         const r = google.onToken(params);
-        return reply(r.status, r.body);
+        return r.raw !== undefined ? new Response(r.raw, { status: r.status }) : reply(r.status, r.body); // raw: a non-JSON body
       }
       if (u === 'https://oauth2.googleapis.com/revoke') {
         google.calls.push({ url: u, params: form(opts) });
