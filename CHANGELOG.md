@@ -9,11 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Sky of 8 islands** — A hub holds at most 8 islands (`MAX_ISLANDS`, no setting to raise it), each in a fixed slot 0-7 that never changes; the 9th person gets "Hub đã đủ 8 đảo" on the device page and in `join` (`the hub is full (8 islands); ask a hub owner to remove one`), and an owner's "Xoá đảo" or leaving the hub frees the slot for the next pairing; the hub DB upgrades in place to v3 (existing hubs with more than 8 islands keep them, the 9th onwards stay hidden until a slot frees up, see `docs/hub-setup.md`)
+- **Cloud transition** — Moving between "Toàn cảnh" and one island is a pixel-cloud transition (two banks close, the view swaps, they part; a short fade with reduced motion); Esc or "← Toàn cảnh" goes back
+- **Men and women** — Every agent is now a man or a woman, picked from its session id so a reload (or another island showing the same session) never changes anyone, and drawn to read that way at a glance: women with long, wavy, bob, ponytail or bun hair, a blouse, tee, cardigan or dress and often an A-line skirt, lips and sometimes earrings; men with a crop, side part, quiff, buzz cut, curls or a cap, often a beard or moustache, and a tee, collar and tie, hoodie or open jacket. Eight skin tones, ten hair colours and the clothes are combined per session, the shirt keeps its department colour, and every pose (walking, at the desk, on a stool, smoking, washing up, asleep on the desk, in the pond) shows the hair and beard
 - **Thai** — The office page also speaks Thai (ไทย); a browser set to Thai picks it on its own, and it is in the **Language** picker in ⚙
 
 ### Changed
 
 - **Clouds follow the zoom** — Zooming and panning the island now carries the sky with it by depth: the sky colour, sun, moon and stars stay put, far clouds and islands drift a little, the cloud sea grows toward the island's own zoom, the mist over the island moves with it exactly and the near mist bank a little more
+- **"Toàn cảnh" is centred on the viewer** — Your island sits in the middle, a little larger, with the other 7 places in a ring around it in the same order for everyone (2 columns below your island on a phone); free places read "chỗ trống", a viewer without an island sees "chỗ của bạn" or "Hub đã đủ 8 đảo", and islands are drawn in a light simplified style; no dragging or zooming
+- **A revoked or banned island stays offline in its slot** — Revoking someone's last device, or an automatic `google_revoked` ban, no longer removes the island from the sky: it goes offline with no staff and keeps its place (the machine is still cut at once); only "Xoá đảo" and leaving the hub free the slot
+- **One-island panel** — On a phone the island's panel is a bottom sheet that starts as a one-line bar (name and status) and opens on tap; on a wide screen it can be collapsed, and the island is drawn beside it rather than under it. Esc with a modifier key held no longer leaves the island
+- **Restroom rebuilt** — An open-top restroom block now continues the office past the pantry's east side, on the same floor and along the same back wall, drawn the way the office is drawn: a full office back wall, lower front and east walls with two doorways and swing doors that open as people pass, solid room walls inside for privacy, the pantry's floor tiles and planks, its cabinets, worktops, steel sinks, white pot plants and bar stool, the smoking corner's bench, small pictogram plaques beside each door and on a lobby sign post, and SẢNH CHUNG painted on the lobby floor like PANTRY. The men's room has two dusty-blue stalls and two urinals with solid screens, the women's room three dusty-pink stalls and a makeup corner, both with a double vanity under a mirror; a little land was added at the north-east corner so the block fits. Now and then an idle agent walks in from the pantry to their own room, disappears behind a stall door for a few seconds, washes their hands and moves on; the dogs stay out
+- **Smoking corner moved beside the restroom** — The whole corner (pad, pergola, bench, ash bin, planted screen, light, extinguisher and sign) now stands right against the restroom block's east side on a new strip of land, its planted screen facing the block; a stepping-stone path runs from the east stairs along the front of the block to its entrance, smokers come in only through that entrance, never over the bench back, and the dogs still keep out
+- **Restroom use** — Men now go to WC NAM and women to WC NỮ (it used to go by odd and even numbers), and idle agents pick the restroom about one time in four instead of rarely; a room never holds more people than it has stalls, so when they are all taken the others go for a coffee or a stretch instead of queueing
+
+### Fixed
+
+- **Checking a code on a full hub** — Looking up a pairing code while the hub already has 8 islands now only shows "Hub đã đủ 8 đảo"; the code stays valid, so it can still be approved if a place frees up before it expires
+- **Smoother sky of islands** — The simple islands are kept as GPU-friendly images with a least-recently-used cache (no burst of redraws at dusk), the 8 name plates are measured once instead of every frame, and the hub no longer reads its database for every island update or re-sends every island after a removal
+
+### Removed
+
+- **Free camera and minimap of the world view** — Dragging, zooming, flying to an island and the minimap are gone from the hub page (the local page on port 4317 keeps its own drag and zoom)
 
 ## [1.5.0] - 2026-11-05
 

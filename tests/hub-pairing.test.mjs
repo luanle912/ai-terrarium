@@ -318,3 +318,146 @@ test('revoke-self ignores cookies', async () => {
     assert.equal((await pub(h, d1.token)).status, 204);
   } finally { await h.close(); }
 });
+
+// ---- Sky of 8 islands: the hub refuses a ninth island at pairing ----
+const { HUB_FULL_MSG } = require('../hub/pairing.js');
+const auditOf = (h, action) => h.hub.db.listAudit(500).filter((a) => a.action === action);
+const fillIslands = (h, n) => {
+  for (let i = 0; i < n; i++) {
+    const u = h.hub.db.upsertUser({ googleSub: 'dev:fill' + i, email: `fill${i}@newera.inc`, name: 'F' + i, now: h.clock.t });
+    h.hub.db.claimIsland({ id: String(i).padStart(16, '0'), userId: u.id, name: 'Đảo F' + i, color: '#aabbcc', now: h.clock.t });
+  }
+};
+
+test('a ninth island is refused on the device page and the CLI gets hub_full', async () => {
+  const h = await startDevHub();
+  try {
+    fillIslands(h, 8);
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const s = await start(h);
+    const r = await postDeviceForm(h.url, login, { user_code: s.user_code, action: 'lookup' });
+    assert.equal(r.status, 400);
+    assert.ok((await r.text()).includes(HUB_FULL_MSG));
+    assert.equal(HUB_FULL_MSG, 'Hub đã đủ 8 đảo, nhờ owner xoá bớt.');
+    assert.equal(auditOf(h, 'pair_refused_full').length, 0, 'a lookup only warns');
+    const ap = await postDeviceForm(h.url, login, { user_code: s.user_code, action: 'approve' });
+    assert.equal(ap.status, 400);
+    assert.ok((await ap.text()).includes(HUB_FULL_MSG));
+    h.clock.advance(5000);
+    const t = await poll(h, s.device_code);
+    assert.equal(t.status, 403);
+    assert.deepEqual(await t.json(), { error: 'hub_full' });
+    assert.equal(h.hub.db.islandCount(), 8);
+    const a = auditOf(h, 'pair_refused_full');
+    assert.equal(a.length, 1);
+    assert.match(a[0].target, /^user:\d+$/);
+    // refusals are not wrong codes: five more of them must not lock the user out
+    for (let i = 0; i < 5; i++) {
+      const s2 = await start(h);
+      assert.equal((await postDeviceForm(h.url, login, { user_code: s2.user_code, action: 'approve' })).status, 400);
+    }
+    const bad = await postDeviceForm(h.url, login, { user_code: 'BBBB-CCCC', action: 'approve' });
+    assert.equal(bad.status, 400, 'not locked (429)');
+  } finally { await h.close(); }
+});
+
+test('a lookup on a full hub does not burn the code: once a slot frees, approve works with it', async () => {
+  const h = await startDevHub();
+  try {
+    fillIslands(h, 8);
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const s = await start(h);
+    const r = await postDeviceForm(h.url, login, { user_code: s.user_code, action: 'lookup' });
+    assert.equal(r.status, 400);
+    assert.ok((await r.text()).includes(HUB_FULL_MSG));
+    const row = h.hub.db.getDeviceCodeByUserCode(s.user_code);
+    assert.ok(!row.denied, 'the code is still usable');
+    h.clock.advance(5000);
+    assert.equal((await poll(h, s.device_code)).status, 428);
+    h.hub.db.deleteIslandByUser(h.hub.db.getIsland('0000000000000003').user_id);
+    const ap = await postDeviceForm(h.url, login, { user_code: s.user_code, action: 'approve' });
+    assert.equal(ap.status, 200);
+    h.clock.advance(5000);
+    const t = await poll(h, s.device_code);
+    assert.equal(t.status, 200);
+    const island = h.hub.db.getIsland((await t.json()).island_id);
+    assert.equal(island.slot, 3);
+    assert.equal(auditOf(h, 'pair_refused_full').length, 0);
+  } finally { await h.close(); }
+});
+
+test('two users racing for the last slot: exactly one wins', async () => {
+  const h = await startDevHub();
+  try {
+    fillIslands(h, 7);
+    const free = 7; // fill used slots 0-6
+    const [a, b] = [await devLogin(h.url, 'ann@newera.inc', 'Ann'), await devLogin(h.url, 'bob@newera.inc', 'Bob')];
+    const [sa, sb] = [await start(h), await start(h)];
+    assert.equal((await postDeviceForm(h.url, a, { user_code: sa.user_code, action: 'lookup' })).status, 200);
+    assert.equal((await postDeviceForm(h.url, b, { user_code: sb.user_code, action: 'lookup' })).status, 200);
+    const rs = await Promise.all([
+      postDeviceForm(h.url, a, { user_code: sa.user_code, action: 'approve' }),
+      postDeviceForm(h.url, b, { user_code: sb.user_code, action: 'approve' }),
+    ]);
+    const bodies = await Promise.all(rs.map((r) => r.text()));
+    assert.deepEqual(rs.map((r) => r.status).sort(), [200, 400]);
+    const win = rs.findIndex((r) => r.status === 200), lose = 1 - win;
+    assert.ok(bodies[win].includes('Đã cho phép'));
+    assert.ok(bodies[lose].includes(HUB_FULL_MSG));
+    assert.equal(h.hub.db.islandCount(), 8);
+    const winner = h.hub.db.getUserBySub(win === 0 ? 'dev:ann@newera.inc' : 'dev:bob@newera.inc');
+    assert.equal(h.hub.db.getIslandByUser(winner.id).slot, free);
+    h.clock.advance(5000);
+    const codes = [sa, sb];
+    assert.equal((await poll(h, codes[win].device_code)).status, 200);
+    const t = await poll(h, codes[lose].device_code);
+    assert.equal(t.status, 403);
+    assert.deepEqual(await t.json(), { error: 'hub_full' });
+  } finally { await h.close(); }
+});
+
+test('a user with an island pairs another device on a full hub', async () => {
+  const h = await startDevHub();
+  try {
+    fillIslands(h, 7);
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const p1 = await pairDevice(h.url, login, 'A');
+    assert.equal(h.hub.db.islandCount(), 8);
+    const p2 = await pairDevice(h.url, login, 'B');
+    assert.equal(p2.island_id, p1.island_id);
+    assert.equal(h.hub.db.islandCount(), 8);
+  } finally { await h.close(); }
+});
+
+test('after an owner removes an island the next pairing gets its slot', async () => {
+  const h = await startDevHub();
+  try {
+    fillIslands(h, 8);
+    const boss = await devLogin(h.url, 'boss@newera.inc', 'Boss');
+    const victim = h.hub.db.getIsland('0000000000000002');
+    assert.equal(victim.slot, 2);
+    const r = await postJson(h.url, `/api/owner/islands/${victim.id}/remove`, {}, { cookie: boss.cookie, origin: h.url, 'x-csrf-token': boss.csrf });
+    assert.equal(r.status, 200);
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const p = await pairDevice(h.url, login);
+    assert.equal(h.hub.db.getIsland(p.island_id).slot, 2);
+    assert.equal(h.hub.db.islandCount(), 8);
+  } finally { await h.close(); }
+});
+
+test('leaving frees a slot', async () => {
+  const h = await startDevHub();
+  try {
+    fillIslands(h, 7);
+    const leaver = await devLogin(h.url, 'cat@newera.inc', 'Cat');
+    const pc = await pairDevice(h.url, leaver);
+    const slot = h.hub.db.getIsland(pc.island_id).slot;
+    const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
+    const s = await start(h);
+    assert.equal((await postDeviceForm(h.url, login, { user_code: s.user_code, action: 'lookup' })).status, 400);
+    const lv = await fetch(h.url + '/me/leave', { method: 'POST', headers: { cookie: leaver.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: leaver.csrf }) });
+    assert.equal(lv.status, 200);
+    const p = await pairDevice(h.url, login, 'Again');
+    assert.equal(h.hub.db.getIsland(p.island_id).slot, slot);
+  } finally { await h.close(); }
+});

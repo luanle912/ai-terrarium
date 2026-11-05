@@ -1,6 +1,6 @@
 'use strict';
 // SQLite store (node:sqlite). Tables follow spec §10.3. The SCHEMA below is the phase-1 shape and stays verbatim;
-// migrate() upgrades it in place to SCHEMA_VERSION (PRAGMA user_version) so existing hub.sqlite files keep their data.
+// migrate() upgrades it in place (0 -> 2 -> 3) to SCHEMA_VERSION (PRAGMA user_version) so existing hub.sqlite files keep their data.
 // All queries are parameterized. Every helper lives on the object returned by openDb; later tasks call db.<name>.
 // Secrets (session tokens, device tokens, device codes) are stored as SHA-256 hashes by the CALLER; this layer
 // only stores what it is given. Island snapshots are never written here (RAM only).
@@ -31,12 +31,13 @@ CREATE TABLE IF NOT EXISTS login_states(
   state TEXT PRIMARY KEY, nonce TEXT NOT NULL, verifier TEXT NOT NULL, created_at INTEGER NOT NULL);
 `;
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
+const MAX_ISLANDS = 8; // fixed sky slots 0-7; islands beyond the cap stay hidden (slot NULL) until a slot frees up
 const LOGIN_STATE_TTL_MS = 10 * 60 * 1000;
 const AUDIT_TTL_MS = 180 * 24 * 3600 * 1000;
 const DAY_MS = 24 * 3600 * 1000;
 
-// user_version 0 (phase 1, or a fresh file just given the phase-1 SCHEMA) -> 2. One transaction: all or nothing.
+// user_version 0 (phase 1, or a fresh file just given the phase-1 SCHEMA) -> 2 -> 3. One transaction: all or nothing.
 function migrate(raw, now) {
   void now; // reserved: migrations so far need no clock
   const version = raw.prepare('PRAGMA user_version').get().user_version;
@@ -60,6 +61,17 @@ function migrate(raw, now) {
       raw.prepare(`UPDATE sessions SET expires_at = MIN(expires_at, created_at + ?)
                    WHERE user_id IN (SELECT id FROM users WHERE refresh_enc IS NULL)`).run(DAY_MS);
     }
+    if (version < 3) {
+      // Fixed sky slots: the 8 oldest islands get slots 0-7 by creation order, any others stay hidden (NULL).
+      raw.exec(`
+        ALTER TABLE islands ADD COLUMN slot INTEGER CHECK(slot BETWEEN 0 AND 7);
+        ALTER TABLE device_codes ADD COLUMN deny_reason TEXT;
+        WITH r AS (SELECT id, ROW_NUMBER() OVER (ORDER BY created_at, id) - 1 AS n FROM islands)
+          UPDATE islands SET slot = (SELECT n FROM r WHERE r.id = islands.id)
+          WHERE id IN (SELECT id FROM r WHERE n < 8);
+        CREATE UNIQUE INDEX islands_slot ON islands(slot) WHERE slot IS NOT NULL;
+      `);
+    }
     raw.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     raw.exec('COMMIT');
   } catch (e) {
@@ -76,6 +88,7 @@ function openDb(dbPath) {
   }
   const raw = new DatabaseSync(dbPath);
   raw.exec('PRAGMA journal_mode=WAL');
+  raw.exec('PRAGMA busy_timeout=5000'); // a second process waits for the write lock (claimIsland) instead of failing at once
   raw.exec('PRAGMA foreign_keys=ON');
   raw.exec(SCHEMA);
   migrate(raw, Date.now());
@@ -152,7 +165,7 @@ function openDb(dbPath) {
     approveDeviceCode: (codeHash, userId, now) => run(
       'UPDATE device_codes SET approved_user_id=? WHERE code_hash=? AND denied=0 AND approved_user_id IS NULL AND expires_at > ?',
       userId, codeHash, now).changes > 0,
-    denyDeviceCode: (codeHash) => run('UPDATE device_codes SET denied=1 WHERE code_hash=?', codeHash).changes > 0,
+    denyDeviceCode: (codeHash, reason = null) => run('UPDATE device_codes SET denied=1, deny_reason=? WHERE code_hash=?', reason, codeHash).changes > 0,
     touchDeviceCodePoll: (codeHash, now) => run('UPDATE device_codes SET last_poll_at=? WHERE code_hash=?', now, codeHash).changes > 0,
     deleteDeviceCode: (codeHash) => run('DELETE FROM device_codes WHERE code_hash=?', codeHash).changes > 0,
 
@@ -168,19 +181,64 @@ function openDb(dbPath) {
     revokeDevice: (id, userId, now) => run('UPDATE devices SET revoked_at=? WHERE id=? AND user_id=? AND revoked_at IS NULL', now, id, userId).changes > 0,
     revokeDevicesForUser: (userId, now) => run('UPDATE devices SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL', now, userId).changes,
 
-    // islands (one per user)
+    // islands (one per user, at most MAX_ISLANDS, each with a fixed sky slot 0-7 or NULL when hidden)
+    // Atomic get-or-create. Returns {island, created} or {full: true}; never writes when the hub is full.
+    claimIsland({ id, userId, name, color, now }) {
+      raw.exec('BEGIN IMMEDIATE');
+      try {
+        const existing = get('SELECT * FROM islands WHERE user_id=?', userId);
+        if (existing) { raw.exec('COMMIT'); return { island: existing, created: false }; }
+        if (get('SELECT COUNT(*) AS n FROM islands').n >= MAX_ISLANDS) { raw.exec('COMMIT'); return { full: true }; }
+        const used = new Set(all('SELECT slot FROM islands WHERE slot IS NOT NULL').map((r) => r.slot));
+        let slot = 0;
+        while (used.has(slot)) slot++;
+        run('INSERT INTO islands(id, user_id, name, color, created_at, slot) VALUES(?,?,?,?,?,?)', id, userId, name, color, now, slot);
+        const island = get('SELECT * FROM islands WHERE user_id=?', userId);
+        raw.exec('COMMIT');
+        return { island, created: true };
+      } catch (e) {
+        try { raw.exec('ROLLBACK'); } catch { /* nothing to roll back */ }
+        // The unique slot index is a last-resort guard: treat a lost race as a full hub.
+        if (/UNIQUE[^]*islands\.slot/.test(String(e && e.message))) return { full: true };
+        throw e;
+      }
+    },
+    // Legacy signature for older tests; hub code uses claimIsland.
     upsertIsland({ id, userId, name, color, now }) {
-      run(`INSERT INTO islands(id, user_id, name, color, created_at) VALUES(?,?,?,?,?)
-           ON CONFLICT(user_id) DO UPDATE SET name=excluded.name, color=excluded.color`, id, userId, name, color, now);
+      if (!get('SELECT 1 FROM islands WHERE user_id=?', userId)) {
+        const r = db.claimIsland({ id, userId, name, color, now });
+        if (r.full) throw new Error('hub full');
+        return r.island;
+      }
+      run('UPDATE islands SET name=?, color=? WHERE user_id=?', name, color, userId);
       return get('SELECT * FROM islands WHERE user_id=?', userId);
     },
+    listSlottedIslands: () => all('SELECT * FROM islands WHERE slot IS NOT NULL ORDER BY slot'),
+    islandCount: () => get('SELECT COUNT(*) AS n FROM islands').n,
     getIslandByUser: (userId) => get('SELECT * FROM islands WHERE user_id=?', userId),
     getIsland: (id) => get('SELECT * FROM islands WHERE id=?', id),
     updateIsland(userId, { name, color }) {
       run('UPDATE islands SET name=?, color=? WHERE user_id=?', name, color, userId);
       return get('SELECT * FROM islands WHERE user_id=?', userId);
     },
-    deleteIslandByUser: (userId) => run('DELETE FROM islands WHERE user_id=?', userId).changes > 0,
+    // Frees the island's slot; the oldest hidden island (if any) takes it over.
+    deleteIslandByUser(userId) {
+      raw.exec('BEGIN IMMEDIATE');
+      try {
+        const isl = get('SELECT id, slot FROM islands WHERE user_id=?', userId);
+        if (!isl) { raw.exec('COMMIT'); return false; }
+        run('DELETE FROM islands WHERE id=?', isl.id);
+        if (isl.slot !== null) {
+          const next = get('SELECT id FROM islands WHERE slot IS NULL ORDER BY created_at, id LIMIT 1');
+          if (next) run('UPDATE islands SET slot=? WHERE id=?', isl.slot, next.id);
+        }
+        raw.exec('COMMIT');
+        return true;
+      } catch (e) {
+        try { raw.exec('ROLLBACK'); } catch { /* nothing to roll back */ }
+        throw e;
+      }
+    },
 
     // audit (append-only log; no web viewer in phase 2)
     addAudit({ at, actorId = null, action, target = null, ip = null }) {
@@ -196,9 +254,11 @@ function openDb(dbPath) {
       run('DELETE FROM audit WHERE at < ?', now - AUDIT_TTL_MS);
     },
 
+    MAX_ISLANDS,
+
     close() { try { raw.close(); } catch { /* already closed */ } },
   };
   return db;
 }
 
-module.exports = { openDb, SCHEMA_VERSION };
+module.exports = { openDb, SCHEMA_VERSION, MAX_ISLANDS };
