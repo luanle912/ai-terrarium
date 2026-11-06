@@ -1,14 +1,8 @@
-// Runs the page's <script id="world-logic"> block the way the browser does (as a plain script that sets
+// Runs web/world-logic.js the way the browser does (as a plain script that sets
 // globalThis.WorldLogic), so the 8-slot sky layout, hit-testing and cloud-timeline maths can be tested without a DOM.
-import { readFileSync } from 'node:fs'
-import vm from 'node:vm'
-
-const PAGE = new URL('../claude-office.html', import.meta.url)
+import { runWeb } from './web.mjs'
 
 export function loadWorldLogic() {
-  const html = readFileSync(PAGE, 'utf8')
-  const match = /<script id="world-logic">([\s\S]*?)<\/script>/.exec(html)
-  if (!match) throw new Error('claude-office.html has no <script id="world-logic"> block')
-  vm.runInThisContext(match[1], { filename: 'claude-office.html#world-logic' })
+  runWeb('world-logic')
   return globalThis.WorldLogic
 }

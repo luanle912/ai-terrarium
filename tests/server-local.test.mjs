@@ -45,6 +45,28 @@ test('handler rejects foreign hosts, unknown paths and non-GET methods', async (
   } finally { await close(server); }
 });
 
+test('the page and every web/ file it loads are served, never cached stale, and nothing outside web/', async () => {
+  const server = http.createServer();
+  const port = await listen(server);
+  server.on('request', createHandler({ snapshot: () => ({ sessions: [] }), scan: () => {}, port, allowedHosts: [], allowedOrigin: '' }));
+  try {
+    const page = await request(port, { path: '/' });
+    assert.equal(page.status, 200);
+    assert.equal(page.headers['cache-control'], 'no-cache');
+    const assets = [...page.body.matchAll(/(?:src|href)="(web\/[^"]+)"/g)].map(m => '/' + m[1]);
+    assert.ok(assets.length > 20);
+    for (const a of assets) {
+      const r = await request(port, { path: a });
+      assert.equal(r.status, 200, a);
+      assert.equal(r.headers['cache-control'], 'no-cache');
+      assert.match(r.headers['content-type'], a.endsWith('.css') ? /^text\/css/ : /^text\/javascript/);
+    }
+    for (const bad of ['/web/../server.js', '/web/%2e%2e/server.js', '/web/i18n/../../server.js', '/web/x.html', '/web/a/b/c.js', '/web/nope.js']) {
+      assert.equal((await request(port, { path: bad })).status, 404, bad);
+    }
+  } finally { await close(server); }
+});
+
 test('POST /api/join only answers this page: own Origin and the X-Terrarium header', async () => {
   const server = http.createServer();
   const port = await listen(server);

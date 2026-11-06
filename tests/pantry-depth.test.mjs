@@ -1,16 +1,12 @@
-// Draw order of the pantry furniture: runs the page's <script id="pantry-items"> block (it only defines drawing
-// functions and the layout) and checks the depth keys PantryItems.depths() gives each LAYOUT entry.
+// Draw order of the pantry furniture: runs web/pantry-items.js (it only defines drawing functions and the layout) and
+// checks the depth keys PantryItems.depths() gives each LAYOUT entry.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import vm from 'node:vm'
+import { runWeb } from './web.mjs'
 
 function loadPantry() {
-  const html = readFileSync(new URL('../claude-office.html', import.meta.url), 'utf8')
-  const m = /<script id="pantry-items">([\s\S]*?)<\/script>/.exec(html)
-  if (!m) throw new Error('claude-office.html has no <script id="pantry-items"> block')
   const ctx = { window: {} }
-  vm.runInNewContext(m[1], ctx, { filename: 'claude-office.html#pantry-items' })
+  runWeb('pantry-items', ctx)
   return ctx.window.PantryItems
 }
 
