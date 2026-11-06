@@ -40,6 +40,28 @@ test('the waterfall pours over the front shore out of the lake', () => {
   assert.ok(y > H && island.pond.cells.has(x + ',' + y))
 })
 
+// ---- the scene frame ----
+
+const FRAME = { W, H, TW: 16, TH: 8, WALL: 64, pad: 16 }
+const fit = (f) => Math.min(1280 / f.LW, 720 / f.FH)
+// Screen y of a peak's tip in the scene canvas (the peak stands on its tile's centre).
+const peakTop = (f, p) => f.OY + (p.x + p.y + 1) * FRAME.TH - p.h
+
+test('the frame takes in both mountain peaks', () => {
+  const f = SkyLogic.sceneFrame(island, FRAME)
+  for (const p of island.mountain.peaks) assert.ok(peakTop(f, p) >= 0, `peak ${p.x},${p.y} runs off the top`)
+})
+
+test('the mountain never shrinks the office by more than 10%', () => {
+  const flat = SkyLogic.sceneFrame({ ...island, mountain: null }, FRAME)
+  assert.ok(fit(SkyLogic.sceneFrame(island, FRAME)) >= 0.9 * fit(flat))
+  // A mountain far too tall to fit is let run off the top instead of shrinking the office.
+  const tall = { ...island.mountain, peaks: island.mountain.peaks.map((p) => ({ ...p, h: p.h * 8 })) }
+  const f = SkyLogic.sceneFrame({ ...island, mountain: tall }, FRAME)
+  assert.ok(fit(f) >= 0.9 * fit(flat), `office at ${fit(f) / fit(flat)} of its size`)
+  assert.ok(f.FH > flat.FH, 'the frame still grows toward the mountain as far as it may')
+})
+
 // ---- weather ----
 
 // Small seeded generator so the statistics below are repeatable.
