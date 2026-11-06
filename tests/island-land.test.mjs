@@ -182,6 +182,20 @@ test('the lake is on the front lawn and feeds the main waterfall on the front sh
   for (const s of spots) assert.ok(cells.has(K(s.x, s.y)) && walk.has(K(s.x, s.y)), `bathing spot ${s.x},${s.y}`)
 })
 
+test('the lake is a rounded pond: no one-tile spurs or notches, open only to the front shore', () => {
+  const { cells } = island.pond
+  const wet = (x, y) => N4.filter(([a, b]) => cells.has(K(x + a, y + b))).length
+  for (const k of cells) {
+    const [x, y] = at(k)
+    assert.ok(wet(x, y) >= 2, `lake tile ${k} is a spur`)
+    for (const [a, b] of [[-1, 0], [1, 0], [0, -1]]) assert.ok(has(x + a, y + b), `lake tile ${k} opens onto the shore`)
+    for (const [a, b] of N4) {
+      const n = K(x + a, y + b)
+      if (has(x + a, y + b) && !cells.has(n) && !island.river.cells.has(n)) assert.ok(wet(x + a, y + b) <= 2, `lawn tile ${n} is a notch in the lake`)
+    }
+  }
+})
+
 test('the only way across the river is the bridge', () => {
   const { bridge, rest } = island
   assert.equal(bridge.cells.size, bridge.len)
@@ -276,14 +290,19 @@ test('the office dogs keep off the water and the mountain, drink at the lake and
   for (const [x, y] of den) assert.ok(roam.has(K(x, y)) && !clear.has(K(x, y)), `den cell ${x},${y} is not a quiet roam cell`)
 })
 
-test('the mountain falls pour over a ledge at the back of the river head, below the peaks', () => {
-  const { fall, shoulder, peaks } = island.mountain
+test('the mountain falls pour out of the gap between the two peaks, down into the river head', () => {
+  const { gap, peaks } = island.mountain
   const head = Math.min(...[...island.river.cells].map((k) => at(k)[1]))
-  assert.equal(fall.y, head, 'the falls stand at the back edge of the river head row')
-  for (const x of [fall.x0, fall.x1]) assert.ok(island.river.cells.has(K(Math.floor(x), head)), `fall edge ${x} is not over the river`)
-  assert.ok(fall.top > 0 && fall.top < Math.min(...peaks.map((p) => p.h)), 'the falls start below the lower peak')
-  assert.ok(shoulder && shoulder.h > fall.top && shoulder.R > 0, 'the shoulder rises behind the falls')
-  assert.ok(island.mountain.cells.has(K(Math.floor(shoulder.x), Math.floor(shoulder.y))), 'the shoulder is off the mountain')
+  assert.equal(gap.y, head, 'the falls stand at the back edge of the river head row')
+  for (const x of [gap.x - gap.w, gap.x + gap.w]) assert.ok(island.river.cells.has(K(Math.floor(x), head)), `fall edge ${x} is not over the river`)
+  assert.ok(gap.z > 0 && gap.z < Math.min(...peaks.map((p) => p.h)), 'the falls start below the lower peak')
+  // On screen ((x - y) * 16 px across), the source sits between the two peaks' tips, and it lies behind both of them
+  // (smaller x + y), so it shows in the notch between them rather than in front of either.
+  const sx = (x, y) => (x - y) * TW
+  const tips = peaks.map((p) => sx(p.x + 0.5, p.y + 0.5)).sort((a, b) => a - b)
+  const src = sx(gap.x, gap.y)
+  assert.ok(src > tips[0] + TW && src < tips[1] - TW, `the falls at ${src} px, the peaks at ${tips} px`)
+  for (const p of peaks) assert.ok(gap.x + gap.y < p.x + 0.5 + p.y + 0.5, `the falls are not behind the peak at ${p.x},${p.y}`)
 })
 
 test('the bridge deck lifts whoever crosses it, and nobody off it', () => {

@@ -84,11 +84,10 @@ mixin(
       } else L();
     }
 
-    // Fishing at the rest corner: a rod from the hand up and out over the lake, a thin line down to a tiny bob on the
-    // water a tile and a half out. The bob rides the water and now and then dips (a nibble) with a ring spreading
-    // round it; with reduced motion it lies still.
-    // The angler's rod, line and float, the float bobbing on the lake's surface (WATER_Z under the lawn) with a ring
-    // spreading round it. No allocation: one angler at most, drawn every frame.
+    // Fishing at the rest corner: a rod from the hand up and out over the lake, a thin line down to a tiny float on
+    // the lake's surface (WATER_Z under the lawn) a tile and a half out. The float bobs and now and then dips (a
+    // nibble) with a ring spreading round it; with reduced motion it lies still. No allocation: one angler at most,
+    // drawn every frame.
     drawRod(G, a, sx, by, t) {
       const { ctx, rect: R } = G,
         calm = this.env && this.env.reduced,

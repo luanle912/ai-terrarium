@@ -165,10 +165,10 @@ export function shoreFace(pt, P, C, x, y, plane) {
 // ---- the mountain ----
 // Each peak is a rocky cone of flat faces: a ring of SIDES points on the lawn, a smaller ring turned half a step at
 // MID of its height, and the tip. The radii waver from point to point, so the faces catch the light differently; the
-// lawn ring is pulled in wherever it would leave the mountain's tiles (the river gorge, the shore), so the stone
-// never stands in the water or overhangs the edge. Points are [x, y, z]: x and y in tiles, z in px. Cached per island.
-// The two peaks and the low shoulder at the river's head (island.mountain.shoulder) are cones; the rock ledge the
-// mountain falls pour over stands in front of the shoulder.
+// lawn ring is pulled in wherever the way out to it would leave the mountain's tiles (the river gorge, the shore), so
+// the stone never spans the water or overhangs the edge. Points are [x, y, z]: x and y in tiles, z in px. Cached per
+// island.
+// The rock of the gap between the peaks (island.mountain.gap), where the falls pour out, stands behind both of them.
 const SIDES = 9,
   MID = 0.45,
   shapes = new WeakMap();
@@ -177,7 +177,7 @@ function mountainShape(island) {
   if (!m) return null;
   if (shapes.has(m)) return shapes.get(m);
   const inM = (x, y) => m.cells.has(Math.floor(x) + ',' + Math.floor(y));
-  const cones = [...m.peaks, ...(m.shoulder ? [m.shoulder] : [])]
+  const cones = m.peaks
     .map((p, j) => {
       const x = p.x + 0.5,
         y = p.y + 0.5,
@@ -187,9 +187,14 @@ function mountainShape(island) {
         radii = [],
         mid = [];
       for (let i = 0; i < SIDES; i++) {
-        const a = ((i + 0.3 * j) / SIDES) * Math.PI * 2;
+        const a = ((i + 0.3 * j) / SIDES) * Math.PI * 2,
+          // whether the ray out to r leaves the mountain anywhere (it must not jump the river to the other bank)
+          leaves = r => {
+            for (let s = 0.25; s < r + 0.01; s += 0.25) if (!inM(x + Math.cos(a) * s, y + Math.sin(a) * s)) return true;
+            return false;
+          };
         let r = R * (0.82 + 0.3 * hash(i, j, 61));
-        while (r > 1 && !inM(x + Math.cos(a) * r, y + Math.sin(a) * r)) r -= 0.25;
+        while (r > 1 && leaves(r)) r -= 0.25;
         radii.push(r);
         base.push([x + Math.cos(a) * r, y + Math.sin(a) * r, 0]);
       }
@@ -234,14 +239,13 @@ const seen = n => n[0] + n[1] + n[2] > 0;
 const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 // The cones, the back one first. Every face is stone in one of three tones by the way it turns to the light (the
 // lower ring is never in the lightest one); grass climbs the foot in a wavy skirt, snow covers the top when the
-// island is snowed on, and a light seam runs down the front ridges where a lit face meets a shaded one. The falls'
-// ledge goes in among them by depth.
+// island is snowed on, and a light seam runs down the front ridges where a lit face meets a shaded one. The rock of
+// the gap the falls pour out of goes in among them by depth.
 export function drawMountain(pt, P, C, island, snow) {
   const cones = mountainShape(island);
   if (!cones) return;
-  const fall = island.mountain.fall,
-    ledgeZ = fall ? (fall.x0 + fall.x1) / 2 + fall.y : Infinity;
-  let ledge = !fall;
+  const gap = island.mountain.gap;
+  let rock = false;
   const stone = [STONE.light, STONE.mid, STONE.dark, STONE.deep],
     grass = ['#62b24e', '#55a344', '#47903b', '#3c7d33'],
     snowy = ['#f6f9fb', '#e6eef7', '#d3e0f0', '#c4d4ea'],
@@ -252,9 +256,9 @@ export function drawMountain(pt, P, C, island, snow) {
         true,
       );
   for (const c of cones) {
-    if (!ledge && c.x + c.y > ledgeZ) {
-      drawLedge(pt, P, C, fall);
-      ledge = true;
+    if (!rock && c.x + c.y > gap.x + gap.y) {
+      drawGap(pt, P, C, gap);
+      rock = true;
     }
     const faces = c.faces
       .map(f => ({ f, n: normalOf(f[0], f[1], f[2]) }))
@@ -304,35 +308,25 @@ export function drawMountain(pt, P, C, island, snow) {
       pt.poly([q, [q[0] + 1, q[1]], [r[0] + 1, r[1]], r], C(mix(STONE.light, '#ffffff', 0.3), 0.5));
     }
   }
-  if (!ledge) drawLedge(pt, P, C, fall);
+  if (!rock) drawGap(pt, P, C, gap);
 }
-// The rock ledge the mountain falls pour over: a craggy rock face across the back of the river's head, just behind the
-// water sheet, with a notch at the sheet's top (fall.top px up) where the water spills, low crags either side and
-// sloping shoulders down to the gorge's banks, and a dark wet streak behind the water, so the falls always have stone
-// behind them.
-function drawLedge(pt, P, C, fall) {
-  const Y = fall.y - 0.04,
-    back = fall.y - 0.6,
-    t = fall.top,
-    xs = [
-      fall.x0 - 0.9,
-      fall.x0 - 0.4,
-      fall.x0 - 0.08,
-      fall.x0,
-      fall.x1,
-      fall.x1 + 0.08,
-      fall.x1 + 0.4,
-      fall.x1 + 0.85,
-    ],
-    zs = [2, t - 3, t + 3, t, t, t + 3, t - 4, 1],
+// The rock of the gap between the peaks: a craggy saddle across the back of the river's head, just behind the water
+// sheet, with a notch at the sheet's top (gap.z px up) where the water spills, crags either side sloping down into the
+// peaks' flanks, and a dark wet streak behind the water, so the falls always have stone behind them.
+function drawGap(pt, P, C, gap) {
+  const x0 = gap.x - gap.w,
+    x1 = gap.x + gap.w,
+    Y = gap.y - 0.04,
+    back = gap.y - 0.6,
+    t = gap.z,
+    xs = [x0 - 1.3, x0 - 0.9, x0 - 0.4, x0 - 0.08, x0, x1, x1 + 0.08, x1 + 0.4, x1 + 1.3, x1 + 2],
+    zs = [0, 3, t - 3, t + 3, t, t, t + 3, t + 1, t - 2, t - 8],
     front = xs.map((x, i) => P(x, Y, zs[i])),
     rear = xs.map((x, i) => P(x, back, zs[i] - 1));
-  const x0 = xs[0],
-    x1 = xs[xs.length - 1];
-  pt.poly([P(x0, Y, WATER_Z), ...front, P(x1, Y, WATER_Z)], C(STONE.mid, 0.15), true);
-  pt.poly([P(xs[3], Y, WATER_Z), front[3], front[4], P(xs[4], Y, WATER_Z)], C(STONE.deep));
+  pt.poly([P(xs[0], Y, WATER_Z), ...front, P(xs[xs.length - 1], Y, WATER_Z)], C(STONE.mid, 0.15), true);
+  pt.poly([P(xs[4], Y, WATER_Z), front[4], front[5], P(xs[5], Y, WATER_Z)], C(STONE.deep));
   for (let i = 0; i < xs.length - 1; i++)
-    pt.poly([front[i], front[i + 1], rear[i + 1], rear[i]], C(i === 3 ? STONE.dark : STONE.light, 0.6), true);
+    pt.poly([front[i], front[i + 1], rear[i + 1], rear[i]], C(i === 4 ? STONE.dark : STONE.light, 0.6), true);
 }
 
 // ---- the bridge, the lamps, the bench ----

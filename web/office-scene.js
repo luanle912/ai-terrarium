@@ -87,18 +87,20 @@ export const PAVED = new Set(SMOKE.paved);
 // never in the lake, the river (the bridge deck is fine), on the mountain, the bench, the smoking corner or the
 // restroom. They drink at the lake. Trees, bushes, lamps, the bench and the bridge are sorted with them, but the
 // mountain is part of the island picture under every sprite, so no dog stands where it would be drawn over it: up to
-// as many rows behind a mountain cell as the stone above that cell rises (8 px a row). The strip right behind the
+// as many rows behind a mountain cell as the stone above that cell rises (8 px a row), and at least the two rows behind
+// its grassy foot. The strip right behind the
 // walls is left out too: web/office-draw.js would draw a dog there correctly, before the walls, but they would hide it
 // whole (the far bank beside the river included: the left wall covers the strip out to the island's edge).
 const REST = ISLAND.rest,
   FISH_PT = [REST.fish.x + 0.6, REST.fish.y + 0.5],
   M = ISLAND.mountain,
-  // the height of the stone over a point: each cone (and the ledge) as if it rose straight from its foot to its tip
+  // the height of the stone over a point: each cone as if it rose straight from its foot to its tip, and the rock of
+  // the gap the falls pour out of
   stoneH = (x, y) =>
     Math.max(
       0,
-      ...[...M.peaks, M.shoulder].map(p => p.h * (1 - Math.hypot(x - p.x - 0.5, y - p.y - 0.5) / (1.12 * p.R))),
-      Math.abs(x - (M.fall.x0 + M.fall.x1) / 2) < 1 && Math.abs(y - M.fall.y) < 1 ? M.fall.top + 7 : 0,
+      ...M.peaks.map(p => p.h * (1 - Math.hypot(x - p.x - 0.5, y - p.y - 0.5) / (1.12 * p.R))),
+      Math.abs(x - M.gap.x) < 1.5 && Math.abs(y - M.gap.y) < 1 ? M.gap.z + 7 : 0,
     );
 export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   W,
@@ -111,7 +113,7 @@ export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   wallReach: WALL_REACH,
   tall: [...M.cells].map(k => {
     const [x, y] = k.split(',').map(Number);
-    return [x, y, Math.ceil(stoneH(x + 0.5, y + 0.5) / TH)];
+    return [x, y, Math.max(2, Math.ceil(stoneH(x + 0.5, y + 0.5) / TH))];
   }),
 });
 // They run across the stone paths and past the stairs but never lie, sit, sniff or sleep on them (the stairs' foot and

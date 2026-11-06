@@ -163,33 +163,38 @@ function buildIsland({ W, H }) {
 // river mouth is the only way over; the rest corner (a bench and a fishing spot) waits on the far bank by the lake, and
 // the far bank runs on up to the foot of the mountain. The near bank (x = -1, under the left wall) is plain grass.
 const RIVER_X = -3, // the river's two columns are RIVER_X and RIVER_X + 1, leaving one tile of bank either side
-  RIVER_HEAD = -8; // its first row, in the gorge at the foot of the falls
-// Peaks in tiles, their height above the lawn in px and their foot's radius in tiles. The main one, further right on
-// screen, stands nearer the viewer, so it is more than twice as tall to read as the taller one (its tip sits higher
-// on screen than the lower peak's).
+  RIVER_HEAD = -11; // its first row, at the foot of the falls
+// Peaks in tiles, their height above the lawn in px and their foot's radius in tiles. They stand either side of the
+// river's head on screen, a little nearer the viewer than it: the lower one on the far bank, the main one on the back
+// lawn, so the river's head lies in the notch between them. The main one is half as tall again, and its tip sits well
+// above the lower peak's on screen.
 const PEAKS = [
-    { x: -3, y: -11, h: 40, R: 3.4, main: false },
-    { x: 3, y: -12, h: 92, R: 4.4, main: true },
+    { x: -4, y: -9, h: 44, R: 3, main: false },
+    { x: 1, y: -13, h: 68, R: 3.9, main: true },
   ],
-  GAP = { x: -1, y: -10 },
   MOUNTAIN_R = 4.5,
-  // a low rocky shoulder at the river's head, at the foot of the lower peak, behind the mountain falls
-  SHOULDER = { x: -3.1, y: -9.5, h: 33, R: 2.3 },
-  // The mountain falls pour over a notch in a rock ledge at the back of the river's head row, FALL_Z px up, into the
-  // river (web/island-art.js draws the ledge, web/island-life.js the water).
-  FALL_Z = 20;
-// The lake: an ellipse of tiles on the front lawn, reaching the front shore (centre y relative to H).
-const LAKE = { cx: 0, dy: 12, rx: 3.9, ry: 4.8 };
+  // The gap: the notch between the peaks the mountain falls pour out of, at the back of the river's head row, between
+  // its two columns, GAP_Z px up; the sheet of water is GAP_W tiles either side of it (web/island-art.js draws the rock
+  // of the notch, web/island-life.js the water).
+  GAP_Z = 18,
+  GAP_W = 0.45;
+// The lake: a rounded pond of tiles on the front lawn (a superellipse of power p, so its sides run straight and its
+// corners turn softly instead of stepping like a plus), reaching the front shore (centre y relative to H).
+const LAKE = { cx: 0, dy: 12, rx: 4.2, ry: 4.6, p: 2.4 };
 // The bridge's row, relative to H: two rows above the river mouth, one tile clear of the reserved south-left spot.
 const BRIDGE_DY = 4;
 
 function waters(cells, H, free) {
   const lake = new Set(),
-    cy = H + LAKE.dy;
+    cy = H + LAKE.dy,
+    // water may stand on free lawn with land behind it and to either side: it opens only toward the front shore
+    wettable = (x, y) => free(x, y) && N4.every(([a, b]) => b > 0 || cells.has(key(x + a, y + b)));
   for (const k of cells) {
     const [x, y] = pos(k);
-    if (((x + 0.5 - LAKE.cx) / LAKE.rx) ** 2 + ((y + 0.5 - cy) / LAKE.ry) ** 2 <= 1 && free(x, y)) lake.add(k);
+    const n = Math.abs((x + 0.5 - LAKE.cx) / LAKE.rx) ** LAKE.p + Math.abs((y + 0.5 - cy) / LAKE.ry) ** LAKE.p;
+    if (n <= 1 && wettable(x, y)) lake.add(k);
   }
+  smoothLake(lake, wettable);
   // The river runs down its two columns until either reaches the lake; the other column's last tiles join the lake,
   // so the mouth opens two tiles wide.
   let end = RIVER_HEAD;
@@ -228,6 +233,30 @@ function waters(cells, H, free) {
   };
 }
 
+// Round off the lake's rim the way the shore is kept free of one-tile bumps: a water tile with at most one water
+// neighbour (a spur) dries up and a free tile with three or more (a notch) fills in, until nothing changes.
+function smoothLake(lake, wettable) {
+  const wet = (x, y) => N4.filter(([a, b]) => lake.has(key(x + a, y + b))).length;
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const k of [...lake]) {
+      const [x, y] = pos(k);
+      if (wet(x, y) <= 1) {
+        lake.delete(k);
+        changed = true;
+      }
+    }
+    for (const k of [...lake]) {
+      const [x, y] = pos(k);
+      for (const [a, b] of N4)
+        if (!lake.has(key(x + a, y + b)) && wettable(x + a, y + b) && wet(x + a, y + b) >= 3) {
+          lake.add(key(x + a, y + b));
+          changed = true;
+        }
+    }
+  }
+}
+
 // The mountain covers the tiles within MOUNTAIN_R of the ridge between its peaks, plus every tile of the left strip
 // behind the river head, so nobody walks round the river's source; the river's own gorge is left open.
 function mountainOf(cells, river) {
@@ -247,10 +276,9 @@ function mountainOf(cells, river) {
   return {
     cells: out,
     peaks: PEAKS.map(p => ({ ...p })),
-    gap: { ...GAP },
-    shoulder: { ...SHOULDER },
-    // the falls: a sheet across the middle of the river's head row, in its back edge (the plane y = fall.y)
-    fall: { y: RIVER_HEAD, x0: RIVER_X + 0.55, x1: RIVER_X + 1.45, top: FALL_Z },
+    // where the falls start: x across the middle of the river's head row, y its back edge (the falls are a sheet in the
+    // plane y = gap.y, gap.w tiles either side of x), z px up
+    gap: { x: RIVER_X + 1, y: RIVER_HEAD, z: GAP_Z, w: GAP_W },
   };
 }
 
