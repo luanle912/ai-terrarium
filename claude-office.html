@@ -241,6 +241,7 @@ vi:{
 "world.chip.offline":"mất kết nối",
 "world.chip.revoked":"bị thu hồi",
 "world.chip.paused":"chờ đăng nhập lại hub",
+"world.chip.standby":"bản khác trên máy này đang gửi",
 "world.chip.title":"Trạng thái gửi đảo của máy này lên thế giới",
 "world.chip.label":"Thế giới: {status}",
 "world.chip.pending":"Thế giới: chờ duyệt · {code}",
@@ -567,6 +568,7 @@ en:{
 "world.chip.offline":"disconnected",
 "world.chip.revoked":"revoked",
 "world.chip.paused":"waiting for hub sign-in",
+"world.chip.standby":"another copy on this machine is sending",
 "world.chip.title":"Whether this machine is sending its island to the world",
 "world.chip.label":"World: {status}",
 "world.chip.pending":"World: awaiting approval · {code}",
@@ -893,6 +895,7 @@ ja:{
 "world.chip.offline":"切断",
 "world.chip.revoked":"取り消し済み",
 "world.chip.paused":"ハブへの再ログイン待ち",
+"world.chip.standby":"このマシンの別のインスタンスが送信中",
 "world.chip.title":"このマシンが島をワールドに送信しているかどうか",
 "world.chip.label":"ワールド：{status}",
 "world.chip.pending":"ワールド: 承認待ち · {code}",
@@ -1219,6 +1222,7 @@ ko:{
 "world.chip.offline":"연결 끊김",
 "world.chip.revoked":"해제됨",
 "world.chip.paused":"허브 재로그인 대기",
+"world.chip.standby":"이 컴퓨터의 다른 인스턴스가 전송 중",
 "world.chip.title":"이 컴퓨터가 섬을 월드로 전송하고 있는지 여부",
 "world.chip.label":"월드: {status}",
 "world.chip.pending":"월드: 승인 대기 · {code}",
@@ -1545,6 +1549,7 @@ zh:{
 "world.chip.offline":"已断开",
 "world.chip.revoked":"已被撤销",
 "world.chip.paused":"等待重新登录 hub",
+"world.chip.standby":"本机上的另一个实例正在发送",
 "world.chip.title":"本机是否正在向世界发送岛屿状态",
 "world.chip.label":"世界：{status}",
 "world.chip.pending":"世界：等待批准 · {code}",
@@ -1871,6 +1876,7 @@ es:{
 "world.chip.offline":"desconectado",
 "world.chip.revoked":"revocado",
 "world.chip.paused":"esperando inicio de sesión en el hub",
+"world.chip.standby":"otra copia en este equipo está enviando",
 "world.chip.title":"Indica si este equipo está enviando su isla al mundo",
 "world.chip.label":"Mundo: {status}",
 "world.chip.pending":"Mundo: esperando aprobación · {code}",
@@ -2196,6 +2202,7 @@ th:{
 "world.chip.offline":"ขาดการเชื่อมต่อ",
 "world.chip.revoked":"ถูกเพิกถอน",
 "world.chip.paused":"รอเข้าสู่ระบบ hub อีกครั้ง",
+"world.chip.standby":"อีกอินสแตนซ์บนเครื่องนี้กำลังส่ง",
 "world.chip.title":"สถานะการส่งเกาะของเครื่องนี้ขึ้นสู่โลก",
 "world.chip.label":"โลก: {status}",
 "world.chip.pending":"โลก: รออนุมัติ · {code}",
@@ -3486,6 +3493,18 @@ globalThis.WorldLogic = (() => {
 
   const ISLAND_ASPECT = 0.62  // island height / width
 
+  // Stream watchdog: the hub sends a named `ping` every 25 s. Only once one has arrived (old hubs send a bare comment,
+  // which a page cannot see) does silence for PING_STALE_MS mean the stream froze.
+  const PING_STALE_MS = 40000
+  const streamStale = ({ pingSeen, lastEventAt, now }) => !!pingSeen && now - lastEventAt >= PING_STALE_MS
+  // Agents that walked out: 'done' (a finished sub-agent) is skipped while still listed and forgotten once it leaves
+  // the list; 'missing' (it left because it was no longer listed) is never skipped, so it comes back when listed again.
+  function goneStep(gone, listed) {
+    const skip = new Set(), next = new Map()
+    for (const [sid, why] of gone) if (why === 'done' && listed.has(sid)) { skip.add(sid); next.set(sid, why) }
+    return { skip, gone: next }
+  }
+
   // Public session view (hub payload) -> the shape the island renderer takes.
   const clientSessions = (publicSessions) => {
     const out = []
@@ -3499,7 +3518,8 @@ globalThis.WorldLogic = (() => {
     return out
   }
   return { SLOTS, PHONE_MAX_W, CENTRE_SCALE, HOVER_LIFT, GUTTER, CLOUD_IN_MS, CLOUD_HOLD_MS, CLOUD_OUT_MS, CLOUD_MS, FADE_MS, skyLayout, skyHit, easeInOut, cloudPhase, cloudBands, canNavigate,
-    beginTrans, oneArea, fitOne, transStep, landingView, viewGone, escAction, meProbeState, meProbeStep, ISLAND_ASPECT, clientSessions }
+    beginTrans, oneArea, fitOne, transStep, landingView, viewGone, escAction, meProbeState, meProbeStep, ISLAND_ASPECT, clientSessions,
+    PING_STALE_MS, streamStale, goneStep }
 })()
 </script>
 <script id="sky-render">
@@ -4887,7 +4907,7 @@ class ClaudeOffice extends React.Component{
       dataSource:'live',endpoint:ep,asOthers:false,agentCount:6,speed:1,showBubbles:true,autoApprove:false,showSettings:false,
       weatherMode:ws.mode,city:ws.city,cityDraft:ws.city,realStatus:{state:'idle',text:''}};
     this.dogWorld={...DOG_PLACES,agents:[],hour:12,snow:0,calm:false,now:0,rand:Math.random};this.dogs=DogLogic.create(this.dogWorld);this.dogSprites=new Map();
-    this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';this.goneSids=new Set();this.depts=new Map();
+    this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';this.goneSids=new Map();this.depts=new Map();
     this.setCanvas=el=>{this.canvas=el;};
     this.setStage=el=>{this.stageEl=el;};
     this.setBack=el=>{this.backCanvas=el;};this.setFront=el=>{this.frontCanvas=el;};this.setWrap=el=>{this.wrapEl=el;};
@@ -4953,7 +4973,7 @@ class ClaudeOffice extends React.Component{
   componentWillUnmount(){const st=this.stageEl;if(st){st.removeEventListener('wheel',this.onWheel);st.removeEventListener('pointerdown',this.onDown);st.removeEventListener('pointermove',this.onDrag);st.removeEventListener('pointerup',this.onUp);st.removeEventListener('pointercancel',this.onUp);}
     this.ro&&this.ro.disconnect();clearTimeout(this.kTimer);clearInterval(this.simTimer);clearInterval(this.uiTimer);clearInterval(this.realTimer);cancelAnimationFrame(this.raf);this.es&&this.es.close();
     clearInterval(this.previewTimer);clearTimeout(this.joinTimer);clearTimeout(this.armTimer);this.world&&this.world.es&&this.world.es.close();if(this.onWorldKey)window.removeEventListener('keydown',this.onWorldKey);
-    if(this.world){clearTimeout(this.world.probeTimer);clearTimeout(this.world.meTimer);clearTimeout(this.world.waitTimer);}
+    if(this.world){clearTimeout(this.world.probeTimer);clearTimeout(this.world.meTimer);clearInterval(this.world.watch);clearTimeout(this.world.waitTimer);}
     if(this.onWorldVisible)document.removeEventListener('visibilitychange',this.onWorldVisible);}
   // ---- weather settings ----
   setWeather(patch){
@@ -4995,7 +5015,7 @@ class ClaudeOffice extends React.Component{
   get theme(){const f=dayFactor();if(f<=0)return Object.assign({_day:0},THEMES.night);if(f>=1)return Object.assign({_day:1},THEMES.day);return lerpTheme(f);}
 
   startSource(){
-    this.es&&this.es.close();this.es=null;this.agents=[];this.goneSids=new Set();this.depts=new Map();this.firstSnap=true;
+    this.es&&this.es.close();this.es=null;this.agents=[];this.goneSids=new Map();this.depts=new Map();this.firstSnap=true;
     this.stopOthers();
     if(this.isLive){
       const url=this.state.endpoint||'http://localhost:4317/events';
@@ -5073,7 +5093,7 @@ class ClaudeOffice extends React.Component{
   }
   log(a,text){a.hist.unshift({t:clock(),text});if(a.hist.length>7)a.hist.pop();}
   byId(id){return this.agents.find(a=>a.id===id);}
-  leave(a){if(a.leaving)return;a.leaving=true;a.status='leaving';this.log(a,tr('office.log.sessionEnded'));}
+  leave(a,why='missing'){if(a.leaving)return;a.leaving=true;a.leftWhy=why;a.status='leaving';this.log(a,tr('office.log.sessionEnded'));}
   setWork(a){a.status='working';a.target=null;a.tool=pick(TOOLS);a.until=Date.now()+rnd(2500,6500)/this.speed;this.log(a,a.tool[0]+' · '+a.tool[1]);}
 
   simTick(){
@@ -5116,12 +5136,17 @@ class ClaudeOffice extends React.Component{
 
   syncLive(snap){if(snap.usage)this.usage=snap.usage;if(snap.version)this.serverVersion=snap.version;
     const list=((snap&&snap.sessions)||[]).slice().sort((a,b)=>(!a.parentId?0:1)-(!b.parentId?0:1));
+    // Who walked out and why (WorldLogic.goneStep): a finished sub-agent stays out while still listed; one that left
+    // because its session vanished (island offline or private) comes back when listed again.
+    const{skip,gone}=WorldLogic.goneStep(this.goneSids,new Set(list.map(s=>s.id)));
     const seen=new Set();
     for(const s of list){
       seen.add(s.id);
-      if(this.goneSids.has(s.id)){seen.add(s.id);continue;}
+      if(skip.has(s.id))continue;
       let a=this.agents.find(x=>x.sid===s.id&&!x.leaving);
-      if(!a){if(this.agents.some(x=>x.sid===s.id&&x.leaving)){seen.add(s.id);continue;}
+      const back=!a&&this.agents.find(x=>x.sid===s.id&&x.leaving);
+      if(back){if(back.leftWhy!=='missing')continue;back.leaving=false;back.goalKey=null;a=back;}// still on the way out: back to the desk
+      if(!a){
         let par=null;if(s.parentId){par=this.agents.find(x=>x.sid===s.parentId&&!x.leaving);}
         a=this.addAgent({seated:this.firstSnap&&!par,parent:par,live:s});if(!a)continue;
         if(this.firstSnap&&par){const d=DESKS[par.desk];a.x=d.gx+2.45;a.y=d.gy+0.55;a.moving=false;a.path=[];a.goalKey='sub'+a.parent+'-0';}
@@ -5134,10 +5159,10 @@ class ClaudeOffice extends React.Component{
       a.target=t?t.id:null;
       if(a.status==='talking'&&s.talkingTo){const tgt=this.agents.find(x=>!x.leaving&&(x.name===s.talkingTo||x.short===s.talkingTo||x.sid===s.talkingTo));if(tgt)a.target=tgt.id;}
       if(a.status==='waiting'&&!a.target)a.status='working';
-      if(a.parent&&s.status==='done'){if(!a.doneAt)a.doneAt=Date.now();else if(Date.now()-a.doneAt>3000)this.leave(a);}else a.doneAt=0;
+      if(a.parent&&s.status==='done'){if(!a.doneAt)a.doneAt=Date.now();else if(Date.now()-a.doneAt>3000)this.leave(a,'done');}else a.doneAt=0;
     }
     this.agents.forEach(a=>{if(!seen.has(a.sid))this.leave(a);});
-    for(const sid of this.goneSids)if(!seen.has(sid))this.goneSids.delete(sid);
+    this.goneSids=gone;
     this.firstSnap=false;
   }
 
@@ -5209,7 +5234,7 @@ class ClaudeOffice extends React.Component{
     if(this.world)return this.worldFrame(ts);
     const dt=Math.min(0.05,(ts-this.last)/1000);this.last=ts;
     if(!this.state.paused){this.agents.forEach(a=>this.updateAgent(a,dt));this.stepDogs(dt);
-      if(this.agents.some(a=>a.gone)){const goneA=this.agents.filter(a=>a.gone);goneA.forEach(a=>this.goneSids.add(a.sid));const goneIds=goneA.map(a=>a.id);this.agents=this.agents.filter(a=>!a.gone);if(goneIds.includes(this.state.sel))this.setState({sel:null});}}
+      if(this.agents.some(a=>a.gone)){const goneA=this.agents.filter(a=>a.gone);goneA.forEach(a=>this.goneSids.set(a.sid,a.leftWhy||'missing'));const goneIds=goneA.map(a=>a.id);this.agents=this.agents.filter(a=>!a.gone);if(goneIds.includes(this.state.sel))this.setState({sel:null});}}
     this.env=this.envNow();
     this.draw(ts/1000);
     this.drawSky(ts/1000);
@@ -6151,7 +6176,7 @@ const SCENE_DOG_SPRITES=new Map();
 class IslandScene{
   constructor(host,id){
     this.host=host;this.id=id;
-    this.agents=[];this.seq=0;this.usedLooks=0;this.goneSids=new Set();this.depts=new Map();this.firstSnap=true;this.seasonKey='default';
+    this.agents=[];this.seq=0;this.usedLooks=0;this.goneSids=new Map();this.depts=new Map();this.firstSnap=true;this.seasonKey='default';
     this.canvas=document.createElement('canvas');this.k=null;this.lodK=1;this.lod=null;this.drawnAt=-1e9;this.simAt=0;
     this.state={sel:null};// the host's selected agent, when it is on this island
     this.raw=new Map();// session id -> the session as the hub sent it (kind, tool, model for the detail panel)
@@ -6168,7 +6193,7 @@ class IslandScene{
   sync(sessions){this.raw=new Map(sessions.map(s=>[s.id,s]));this.syncLive({sessions});}
   frame(dt){
     this.agents.forEach(a=>this.updateAgent(a,dt));this.stepDogs(dt);
-    if(this.agents.some(a=>a.gone)){const gone=this.agents.filter(a=>a.gone);gone.forEach(a=>this.goneSids.add(a.sid));this.agents=this.agents.filter(a=>!a.gone);
+    if(this.agents.some(a=>a.gone)){const gone=this.agents.filter(a=>a.gone);gone.forEach(a=>this.goneSids.set(a.sid,a.leftWhy||'missing'));this.agents=this.agents.filter(a=>!a.gone);
       const h_=this.host;if(h_.state.selIsland===this.id&&gone.some(a=>a.id===h_.state.sel))h_.setState({sel:null});}
   }
 }
@@ -6380,7 +6405,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const dot=col=>h('span',{style:{width:8,height:8,borderRadius:'50%',background:col,display:'inline-block'}});
       if(!c&&j&&j.phase==='pending')return h('div',{className:'chip',title:tr('world.chip.pendingTitle'),style:{borderColor:'#f5a524'}},dot('#f5a524'),h('span',null,tr('world.chip.pending',{code:String(j.code||'')})));
       if(!c)return null;
-      const[text,col]={sending:[tr('world.chip.sending',{share:SHARE_LABEL.get(c.share)}),'#46a758'],private:[tr('world.chip.private'),'#8b8fa3'],offline:[tr('world.chip.offline'),'#e5484d'],revoked:[tr('world.chip.revoked'),'#e5484d'],paused:[tr('world.chip.paused'),'#f5a524']}[c.state]||['…','#8b8fa3'];
+      const[text,col]={sending:[tr('world.chip.sending',{share:SHARE_LABEL.get(c.share)}),'#46a758'],private:[tr('world.chip.private'),'#8b8fa3'],offline:[tr('world.chip.offline'),'#e5484d'],revoked:[tr('world.chip.revoked'),'#e5484d'],paused:[tr('world.chip.paused'),'#f5a524'],standby:[tr('world.chip.standby'),'#8b8fa3']}[c.state]||['…','#8b8fa3'];
       const kids=[dot(col),h('span',null,tr('world.chip.label',{status:text}))];
       if(!c.hub)return h('div',{className:'chip',title:tr('world.chip.title'),style:{borderColor:col}},...kids);
       return h('a',{className:'chip',href:c.hub,target:'_blank',rel:'noopener noreferrer',title:tr('world.chip.openTitle'),style:{borderColor:col,textDecoration:'none'}},...kids);
@@ -6431,7 +6456,7 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
 
     startWorld(cfg){
       let view='all';try{const v=this.storage&&this.storage.getItem(VIEW_KEY);if(v==='mine'||v==='all')view=v;}catch(_){}
-      if(this.world){clearTimeout(this.world.meTimer);clearTimeout(this.world.waitTimer);clearTimeout(this.world.probeTimer);}// "Thử lại" starts a fresh world
+      if(this.world){clearTimeout(this.world.meTimer);clearInterval(this.world.watch);clearTimeout(this.world.waitTimer);clearTimeout(this.world.probeTimer);}// "Thử lại" starts a fresh world
       this.world={me:cfg.me,csrf:typeof cfg.csrf==='string'?cfg.csrf:'',islands:[],scenes:new Map(),viewers:0,capacity:WorldLogic.SLOTS,conn:'connecting',view,focus:null,hover:null,sw:0,sh:0,sky:null,
         dead:false,errAt:0,mine:null,meErr:false,meSeq:0,draft:null,confirm:null,probe:WorldLogic.meProbeState()};
       this.setState({sel:null,selIsland:null,live:'off'});
@@ -6443,24 +6468,13 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       this.setWorldCanvas=el=>{this.worldCanvas=el;};
       this.setWorldScroller=el=>{this.worldScroller=el;};this.setWorldSpacer=el=>{this.worldSpacer=el;};
       if(!this.onWorldHover)this.onWorldHover=e=>this.worldHover(e);
-      const w=this.world,parse=e=>{try{const d=JSON.parse(e.data);return d&&typeof d==='object'?d:null;}catch(_){return null;}};
-      const es=new EventSource('/api/world/stream');w.es=es;
-      es.onopen=()=>{if(!w.dead){w.conn='ok';w.errAt=0;this.worldStalls=0;}};
-      // A dropped connection retries by itself; a refused one (401/403 signed out or banned, 429/503 too many streams)
-      // closes for good. Retrying that keeps failing for STALL_MS also ends the stream, so a stopped hub is told apart.
-      es.onerror=()=>{if(w.dead)return;
-        if(es.readyState===EventSource.CLOSED)return this.worldEnded(true);
-        const now=performance.now();if(!w.errAt)w.errAt=now;
-        if(now-w.errAt>=STALL_MS)this.worldEnded(false);else w.conn='error';};
-      es.addEventListener('world',e=>{const d=parse(e);if(d)this.worldMeta(d);});
-      es.addEventListener('island',e=>{const d=parse(e);if(!d||typeof d.id!=='string'||w.dead)return;
-        if(w.metaSeen&&!w.islands.some(i=>i.id===d.id))return;// not (or no longer) in the world list
-        let sc=w.scenes.get(d.id);if(!sc){sc=new IslandScene(this,d.id);w.scenes.set(d.id,sc);}
-        sc.sync(Array.isArray(d.sessions)?d.sessions.filter(s=>s&&typeof s.id==='string'):[]);});
-      es.addEventListener('remove',e=>{const d=parse(e);if(!d||typeof d.id!=='string'||w.dead)return;
-        const sc=w.scenes.get(d.id);if(sc)releaseCanvas(sc);
-        w.scenes.delete(d.id);w.islands=w.islands.filter(i=>i.id!==d.id);
-        this.dropGone();});
+      const w=this.world;
+      this.openWorldStream(w);
+      // Watchdog: a stream that stays silent PING_STALE_MS after the hub's first named ping froze (a proxy kept the
+      // socket open). Reopen it the way a drop does; the scene stays as it is.
+      w.watch=setInterval(()=>{if(this.world!==w||w.dead||!w.es)return;const now=performance.now();
+        if(!WorldLogic.streamStale({pingSeen:w.pingSeen,lastEventAt:w.lastEventAt,now}))return;
+        w.es.close();w.conn='error';w.errAt=now;this.openWorldStream(w);this.forceUpdate();},5000);
       // "Của tôi" polls only while the tab is visible, and refreshes once when it becomes visible again.
       const tick=()=>{if(this.world!==w)return;
         if(w.view==='mine'&&!w.dead&&document.visibilityState==='visible')this.loadMe();
@@ -6519,6 +6533,30 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
       const m=this.myIsland(),sig=m?JSON.stringify([m.name,m.color,m.online,m.private,m.share]):'';
       const changed=w.metaSeen&&sig!==w.mineSig;w.mineSig=sig;w.metaSeen=true;
       if(changed&&w.view==='mine'&&document.visibilityState==='visible')this.loadMe();
+    },
+    // Opens /api/world/stream for world w. Every event (and the open itself) counts as a sign of life for the watchdog.
+    openWorldStream(w){
+      const parse=e=>{try{const d=JSON.parse(e.data);return d&&typeof d==='object'?d:null;}catch(_){return null;}};
+      const alive=()=>{w.lastEventAt=performance.now();};
+      alive();
+      const es=new EventSource('/api/world/stream');w.es=es;
+      es.onopen=()=>{if(!w.dead){alive();w.conn='ok';w.errAt=0;this.worldStalls=0;}};
+      // A dropped connection retries by itself; a refused one (401/403 signed out or banned, 429/503 too many streams)
+      // closes for good. Retrying that keeps failing for STALL_MS also ends the stream, so a stopped hub is told apart.
+      es.onerror=()=>{if(w.dead||w.es!==es)return;
+        if(es.readyState===EventSource.CLOSED)return this.worldEnded(true);
+        const now=performance.now();if(!w.errAt)w.errAt=now;
+        if(now-w.errAt>=STALL_MS)this.worldEnded(false);else w.conn='error';};
+      es.addEventListener('ping',()=>{alive();w.pingSeen=true;});
+      es.addEventListener('world',e=>{alive();const d=parse(e);if(d)this.worldMeta(d);});
+      es.addEventListener('island',e=>{alive();const d=parse(e);if(!d||typeof d.id!=='string'||w.dead)return;
+        if(w.metaSeen&&!w.islands.some(i=>i.id===d.id))return;// not (or no longer) in the world list
+        let sc=w.scenes.get(d.id);if(!sc){sc=new IslandScene(this,d.id);w.scenes.set(d.id,sc);}
+        sc.sync(Array.isArray(d.sessions)?d.sessions.filter(s=>s&&typeof s.id==='string'):[]);});
+      es.addEventListener('remove',e=>{alive();const d=parse(e);if(!d||typeof d.id!=='string'||w.dead)return;
+        const sc=w.scenes.get(d.id);if(sc)releaseCanvas(sc);
+        w.scenes.delete(d.id);w.islands=w.islands.filter(i=>i.id!==d.id);
+        this.dropGone();});
     },
     // The stream is gone (refused: closed by the hub's answer; else it kept failing): drop everything shown and ask
     // /api/config why. Signed out → reload (the hub sends the login page); still world mode → the hub refused the

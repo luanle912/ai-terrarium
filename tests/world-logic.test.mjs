@@ -373,3 +373,33 @@ test('meProbeStep: a hidden tab waits and probes once when visible; having an is
   W.meProbeStep(st, ['a', 'b', 'c'], 7000, { ...o, hasMine: true })
   assert.deepEqual(W.meProbeStep(st, ['a', 'b', 'c'], 30000, o), { fire: false, retryIn: null })
 })
+
+// ---- connection hardening (Task 5): stream watchdog and agents coming back ----
+test('streamStale is never true before the first named ping', () => {
+  assert.equal(W.PING_STALE_MS, 40000)
+  assert.equal(W.streamStale({ pingSeen: false, lastEventAt: 0, now: 10 * 60 * 1000 }), false)
+  assert.equal(W.streamStale({ pingSeen: undefined, lastEventAt: 0, now: 10 * 60 * 1000 }), false)
+})
+
+test('streamStale after 40 s without any event', () => {
+  assert.equal(W.streamStale({ pingSeen: true, lastEventAt: 1000, now: 1000 + 39999 }), false)
+  assert.equal(W.streamStale({ pingSeen: true, lastEventAt: 1000, now: 1000 + 40000 }), true)
+})
+
+test('goneStep: an island that went offline and came back shows its agents again', () => {
+  const { skip, gone } = W.goneStep(new Map([['a', 'missing'], ['b', 'missing']]), new Set(['a', 'b']))
+  assert.equal(skip.size, 0)
+  assert.equal(gone.size, 0)
+})
+
+test('goneStep: a finished sub-agent stays gone while still listed', () => {
+  const { skip, gone } = W.goneStep(new Map([['s', 'done']]), new Set(['s']))
+  assert.deepEqual([...skip], ['s'])
+  assert.deepEqual([...gone], [['s', 'done']])
+})
+
+test('goneStep forgets done sids once they leave the list', () => {
+  const { skip, gone } = W.goneStep(new Map([['s', 'done'], ['t', 'done'], ['m', 'missing']]), new Set(['t']))
+  assert.deepEqual([...skip], ['t'])
+  assert.deepEqual([...gone], [['t', 'done']])
+})
