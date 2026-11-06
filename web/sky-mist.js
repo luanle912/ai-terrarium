@@ -161,26 +161,126 @@ export function mistRow(ctx, w, y, d, t, seed, cover, col, S, speedK, alpha, wit
     );
   }
 }
-export function farIsland(ctx, x, y, sc, col) {
-  const top = mix('#58a645', col.haze, 0.72),
-    under = mix('#6f707c', col.haze, 0.78);
-  ctx.fillStyle = under;
+// A small floating island in the style of the main one: diamond grass top with a dark outline, brown dirt lip,
+// one cone underneath, and a tree or rock on top. Smaller (farther) ones are hazier and fainter.
+function poly(ctx, pts, fill) {
+  ctx.fillStyle = fill;
   ctx.beginPath();
-  ctx.moveTo(x - 22 * sc, y);
-  ctx.lineTo(x + 22 * sc, y);
-  ctx.lineTo(x + 6 * sc, y + 20 * sc);
-  ctx.lineTo(x - 2 * sc, y + 30 * sc);
-  ctx.lineTo(x - 10 * sc, y + 16 * sc);
+  pts.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = top;
+}
+export function farIsland(ctx, x, y, sc, col, kind = 'plain') {
+  const far = Math.max(0, Math.min(1, 1.05 - sc)),
+    hz = c => mix(c, col.haze, 0.25 + 0.45 * far),
+    hw = 20 * sc,
+    hh = 10 * sc,
+    lip = 4 * sc,
+    out = hz('#2b2350'),
+    prevAlpha = ctx.globalAlpha;
+  ctx.globalAlpha = prevAlpha * (0.95 - 0.35 * far);
+  // the cone under the dirt lip, then the lip itself
+  poly(
+    ctx,
+    [
+      [x - hw * 0.7, y + hh * 0.3 + lip],
+      [x + hw * 0.7, y + hh * 0.3 + lip],
+      [x + 2 * sc, y + 34 * sc],
+    ],
+    hz('#7a5232'),
+  );
+  poly(
+    ctx,
+    [
+      [x, y + hh * 0.7 + lip],
+      [x + hw * 0.7, y + hh * 0.3 + lip],
+      [x + 2 * sc, y + 34 * sc],
+    ],
+    hz('#5e3d26'),
+  );
+  poly(
+    ctx,
+    [
+      [x - hw, y],
+      [x, y + hh],
+      [x + hw, y],
+      [x + hw, y + lip],
+      [x, y + hh + lip],
+      [x - hw, y + lip],
+    ],
+    hz('#9a6a3e'),
+  );
+  poly(
+    ctx,
+    [
+      [x, y + hh],
+      [x + hw, y],
+      [x + hw, y + lip],
+      [x, y + hh + lip],
+    ],
+    hz('#7d5332'),
+  );
+  poly(
+    ctx,
+    [
+      [x - hw, y],
+      [x, y - hh],
+      [x + hw, y],
+      [x, y + hh],
+    ],
+    hz('#4c9a52'),
+  );
+  ctx.strokeStyle = out;
+  ctx.lineWidth = Math.max(1, sc * 1.2);
   ctx.beginPath();
-  ctx.moveTo(x - 22 * sc, y);
-  ctx.lineTo(x, y - 7 * sc);
-  ctx.lineTo(x + 22 * sc, y);
-  ctx.lineTo(x, y + 7 * sc);
-  ctx.closePath();
-  ctx.fill();
+  ctx.moveTo(x - hw, y);
+  ctx.lineTo(x, y - hh);
+  ctx.lineTo(x + hw, y);
+  ctx.stroke();
+  if (kind === 'tree') {
+    ctx.fillStyle = hz('#6b4a2e');
+    ctx.fillRect(x - sc, y - 5 * sc, 2 * sc, 5 * sc);
+    poly(
+      ctx,
+      [
+        [x - 6 * sc, y - 4 * sc],
+        [x, y - 17 * sc],
+        [x + 6 * sc, y - 4 * sc],
+      ],
+      hz('#2f7a45'),
+    );
+    poly(
+      ctx,
+      [
+        [x, y - 17 * sc],
+        [x + 6 * sc, y - 4 * sc],
+        [x, y - 4 * sc],
+      ],
+      hz('#25663a'),
+    );
+  } else if (kind === 'rock') {
+    poly(
+      ctx,
+      [
+        [x - 6 * sc, y],
+        [x - 3 * sc, y - 7 * sc],
+        [x + 3 * sc, y - 8 * sc],
+        [x + 6 * sc, y],
+      ],
+      hz('#9aa0ad'),
+    );
+    poly(
+      ctx,
+      [
+        [x + sc, y - 7.5 * sc],
+        [x + 3 * sc, y - 8 * sc],
+        [x + 6 * sc, y],
+        [x + sc, y],
+      ],
+      hz('#767c8c'),
+    );
+  }
+  ctx.globalAlpha = prevAlpha;
 }
 // env: {df, hour, fx:{cloud,rain,snow,storm,fog}, col: SkyLogic.skyColors(...), reduced, view?: island camera view}
 // The gradient, sun, moon and stars stay put; clouds, far islands and birds follow the camera by depth.
