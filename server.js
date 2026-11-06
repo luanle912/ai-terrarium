@@ -159,10 +159,11 @@ function liveSessions() {
 }
 
 const MAX_ROOTS = 16, MAX_SUBS = 12, SUB_STALE_MS = 5 * 60e3;
-function snapshot() {
-  const now = Date.now(), out = [];
-  const live = liveSessions();
-  for (const st of files.values()) {
+// Uncapped session list with display statuses; `tx` maps each transcript-backed root id to its latest line time,
+// `fresh` maps each root id to its newest line or pending-call start across the root and all its sub-agent files.
+function computeSessions(fileStates, live, now, { keepUnlisted = false } = {}) {
+  const out = [], tx = new Map(), fresh = new Map();
+  for (const st of fileStates) {
     const aliveTs = Math.max(st.fileMtime || 0, st.lastTs || 0);
     if (!aliveTs || now - aliveTs > ACTIVE_MS) continue;
     const activityTs = st.lastTs || st.fileMtime || 0;
@@ -170,8 +171,11 @@ function snapshot() {
     const isSub = !!fromPath || !!st.sidechain;
     const id = isSub ? path.basename(st.file, '.jsonl') : (st.sessionId || path.basename(st.file, '.jsonl'));
     const parentId = isSub ? (fromPath || st.sessionId || null) : null;
-    // Session (hoặc session cha của sub-agent) đã đóng → bỏ.
-    if (live && !live.has(isSub ? parentId : id)) continue;
+    const rootId = isSub ? parentId : id;
+    // Recorded before the sub-agent cleanup below, so finished sub-agents still count toward freshness.
+    if (rootId) fresh.set(rootId, Math.max(fresh.get(rootId) || 0, st.lastTs || 0, ...[...st.pending.values()].map(p => p.t || 0)));
+    // Closed session (or closed parent of a sub-agent): hidden from the office, kept for spec 5.2 rule 3 when asked.
+    if (live && !keepUnlisted && !live.has(rootId)) continue;
     const reg = !isSub && live ? live.get(id) : null;
     const pend = [...st.pending.values()].sort((a, b) => b.t - a.t)[0];
     let status = 'working', tool = '', detail = '', talkingTo = '';
@@ -198,6 +202,7 @@ function snapshot() {
     const project = projectOf((reg && reg.cwd) || st.firstCwd || st.cwd);
     const _sendTo = st.lastSendTo && now - st.lastSendTo.ts < 600000 ? st.lastSendTo.name : null;
     out.push({ id, parentId, name: displayName, project, cwd: st.cwd, model: st.model, tokens: st.tokens, status, tool, detail, talkingTo, _sendTo, recent: st.recent, updatedAt: aliveTs });
+    if (!isSub) tx.set(id, Math.max(tx.get(id) || 0, st.lastTs || 0));
   }
   // Session đang mở nhưng chưa/không còn transcript gần đây (idle lâu) → vẫn có mặt ở bàn.
   if (live) for (const [sid, r] of live) {
@@ -228,6 +233,12 @@ function snapshot() {
       if (par && (par.status === 'idle' || par.status === 'done')) s.status = 'done';
     }
   }
+  return { out, tx, fresh };
+}
+
+function snapshot() {
+  const now = Date.now();
+  const { out } = computeSessions(files.values(), liveSessions(), now);
   // Ưu tiên session gốc (mỗi session một bàn), sub-agent đứng cạnh bàn cha nên giới hạn riêng.
   const byRecent = (a, b) => b.updatedAt - a.updatedAt;
   const roots = out.filter(s => !s.parentId).sort(byRecent).slice(0, MAX_ROOTS);
@@ -236,6 +247,21 @@ function snapshot() {
   for (const s of subs) s.project = roots.find(r => r.id === s.parentId).project;
   return { at: now, sessions: roots.concat(subs), usage: readUsage(), version: VERSION };
 }
+
+// isWorking input (spec 5.2): transcript-backed roots only; registry-only sessions can be faked with one file.
+const WORK_STATES = new Set(['working', 'thinking', 'talking']);
+const BUSY_FRESH_MS = 60 * 60e3;
+function animalRootsFrom(fileStates, live, now) {
+  const { out, tx, fresh } = computeSessions(fileStates, live, now, { keepUnlisted: true });
+  return out.filter(s => !s.parentId && tx.has(s.id)).map(s => {
+    const regBusy = live && live.has(s.id) ? live.get(s.id).status === 'busy' : null;
+    const anchor = fresh.get(s.id) || tx.get(s.id);
+    // lib/animals.js gates on 10 minutes; registry busy stretches that to 60 for long silent Bash/Agent calls.
+    const lastTs = regBusy === true && now - anchor <= BUSY_FRESH_MS ? now : anchor;
+    return { hasTranscript: true, lastTs, regBusy, status: s.status, kidsActive: out.some(k => k.parentId === s.id && WORK_STATES.has(k.status)) };
+  });
+}
+function animalRoots() { return animalRootsFrom(files.values(), liveSessions(), Date.now()); }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');
 const webAssets = require('./lib/web-assets.js');
@@ -295,10 +321,96 @@ function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date
   };
 }
 
-function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null } = {}) {
+const ANIMAL_BODY_MAX = 1024;
+const ANIMAL_ACTIONS = new Set(['catch', 'giveup', 'release', 'recall', 'free', 'resolve']);
+
+function sendJson(res, status, body, headers = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers });
+  res.end(JSON.stringify(body));
+}
+
+// Token bucket: up to `burst` requests at once, one token back every `everyMs`.
+function makeBucket({ burst, everyMs, now }) {
+  let tokens = burst, at = now();
+  return () => {
+    const t = now();
+    tokens = Math.min(burst, tokens + Math.max(0, t - at) / everyMs); at = t;
+    if (tokens < 1) return false;
+    tokens -= 1;
+    return true;
+  };
+}
+
+// Resolves { value } for a JSON object body, or { status, error }; never reads past `max` bytes.
+function readJsonBody(req, max) {
+  return new Promise(resolve => {
+    if (+req.headers['content-length'] > max) { resolve({ status: 413, error: 'too_large' }); return; }
+    const chunks = []; let size = 0, done = false;
+    const finish = r => { if (!done) { done = true; resolve(r); } };
+    req.on('data', c => {
+      if (done) return;
+      size += c.length;
+      if (size > max) finish({ status: 413, error: 'too_large' }); else chunks.push(c);
+    });
+    req.on('end', () => {
+      let value;
+      try { value = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { finish({ status: 400, error: 'bad_json' }); return; }
+      finish(value !== null && typeof value === 'object' && !Array.isArray(value) ? { value } : { status: 400, error: 'bad_json' });
+    });
+    req.on('error', () => finish({ status: 400, error: 'bad_body' }));
+  });
+}
+
+function animalStream(req, res, animals, streams) {
+  if (streams.size >= MAX_CLIENTS) { res.writeHead(429); res.end('Too many connections'); return; }
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+  const write = v => res.write('data: ' + JSON.stringify(v) + '\n\n');
+  write({ ...animals.view(), events: [] });
+  const off = animals.subscribe(write);
+  streams.add(res);
+  req.on('close', () => { off(); streams.delete(res); });
+}
+
+function animalPost(req, res, name, ctx) {
+  const { animals, port, allowedHosts, buckets } = ctx;
+  if (!joinRequestAllowed(req, port, allowedHosts, 'animals')) { sendJson(res, 403, { error: 'forbidden' }); return; }
+  readJsonBody(req, ANIMAL_BODY_MAX).then(b => {
+    if (b.status === 413) { req.resume(); sendJson(res, 413, { error: b.error }, { Connection: 'close' }); return; }
+    if (b.error) { sendJson(res, b.status, { error: b.error }); return; }
+    // Counted only here, so a foreign page that fails the guards cannot drain this page's budget.
+    if (!(name === 'env' ? buckets.env : buckets.act)()) { sendJson(res, 429, { error: 'rate_limited' }); return; }
+    const out = name === 'env' ? animals.report(b.value) : name === 'dev' ? animals.devAct(b.value) : animals.act({ ...b.value, type: name });
+    sendJson(res, out.status, out.body);
+  }).catch(() => { if (!res.headersSent) sendJson(res, 500, { error: 'internal' }); });
+}
+
+// Spec 8: GET view / SSE stream, POST actions. Runs before the generic 405 and before CORS headers are added.
+function animalRoute(req, res, route, ctx) {
+  const { animals, animalsDev, streams } = ctx;
+  if (!animals) { sendJson(res, 404, { error: 'not_found' }); return; }
+  if (route === '/api/animals' || route === '/api/animals/events') {
+    const isEvents = route === '/api/animals/events';
+    if (req.method !== 'GET' && (isEvents || req.method !== 'HEAD')) { res.writeHead(405, { Allow: isEvents ? 'GET' : 'GET, HEAD' }); res.end('Method Not Allowed'); return; }
+    let v;
+    try { v = animals.view(); } catch { sendJson(res, 500, { error: 'internal' }); return; }
+    if (v.disabled) sendJson(res, 503, v);
+    else if (isEvents) animalStream(req, res, animals, streams);
+    else sendJson(res, 200, v);
+    return;
+  }
+  const name = route.slice('/api/animals/'.length);
+  if (!(name === 'env' || ANIMAL_ACTIONS.has(name) || (name === 'dev' && animalsDev))) { sendJson(res, 404, { error: 'not_found' }); return; }
+  if (req.method !== 'POST') { res.writeHead(405, { Allow: 'POST' }); res.end('Method Not Allowed'); return; }
+  animalPost(req, res, name, ctx);
+}
+
+function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, animals = null, animalsDev = false, now = () => performance.now() } = {}) {
+  const animalCtx = { animals, animalsDev, port, allowedHosts, streams: new Set(),
+    buckets: { act: makeBucket({ burst: 5, everyMs: 200, now }), env: makeBucket({ burst: 2, everyMs: 10e3, now }) } };
   return (req, res) => {
     if (!hostAllowed(req.headers.host, port, allowedHosts)) { res.writeHead(403); res.end('Forbidden'); return; }
     const route = (req.url || '').split('?')[0];
+    if (route === '/api/animals' || route.startsWith('/api/animals/')) { animalRoute(req, res, route, animalCtx); return; }
     if ((route === '/api/join' || route === '/api/leave') && req.method === 'POST' && joinFlow) {
       const action = route === '/api/join' ? 'join' : 'leave';
       if (!joinRequestAllowed(req, port, allowedHosts, action)) { res.writeHead(403); res.end('Forbidden'); return; }
@@ -349,6 +461,22 @@ function listenWithRetry(server, port, host, { retryMs = 10000, log = console.lo
   });
 }
 
+// Only the process that holds the port publishes and runs the animal clock (spec 9.2).
+function holdPortThenStart({ server, port, host, listen = listenWithRetry, startPublisher, animals = null, log = console.log, proc = process }) {
+  return listen(server, port, host).then(() => {
+    log(`Claude Office → http://localhost:${port}  (UI + SSE, watching ${ROOT})`);
+    const publisher = startPublisher();
+    if (animals) {
+      animals.start();
+      proc.once('exit', () => { try { animals.flush(); } catch (e) { log('terrarium: animal flush failed: ' + e.message); } });
+      // Signals skip 'exit' handlers unless we exit ourselves.
+      proc.once('SIGTERM', () => proc.exit(143));
+      proc.once('SIGINT', () => proc.exit(130));
+    }
+    return publisher;
+  });
+}
+
 // Preview of what the hub would see. Before joining (or while the publisher has no view) it is a Kín view built with a
 // RAM-only salt; once the publisher has its own view, that one is used.
 function makePublicPreview({ publisher, getSnapshot, salt }) {
@@ -380,13 +508,20 @@ async function main() {
     leave: log => cfgLib.runCommand(['leave'], { log, revokeSelf: pub.revokeSelf }),
     hub: process.env.TERRARIUM_HUB || DEFAULT_HUB, name: os.hostname(),
   });
-  listenWithRetry(http.createServer(createHandler({ publicPreview, joinFlow })), PORT, '127.0.0.1')
-    .then(() => {
-      console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`);
-      // Only the process that holds the port publishes.
-      publisher = pub.startPublisher({ getSnapshot: snapshot, dir: cfgLib.configDir(), log: console.log });
-    });
+  const animals = makeAnimalEngine(cfgLib.configDir(), ANIMALS_DEV);
+  holdPortThenStart({
+    server: http.createServer(createHandler({ publicPreview, joinFlow, animals, animalsDev: ANIMALS_DEV })), port: PORT, host: '127.0.0.1', animals,
+    startPublisher: () => pub.startPublisher({ getSnapshot: snapshot, dir: cfgLib.configDir(), log: console.log }),
+  }).then(p => { publisher = p; });
 }
 
-module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage, makeJoinFlow, joinRequestAllowed };
+const ANIMALS_DEV = process.env.TERRARIUM_DEV === '1';
+// Dev mode uses its own key and data so forced spawns never touch the real collection.
+function makeAnimalEngine(dir, dev) {
+  const { createStore } = require('./lib/animal-store.js'), { createAnimalEngine } = require('./lib/animal-engine.js');
+  const store = createStore({ dir, log: console.log, ...(dev ? { name: 'animals-dev', aad: 'ai-terrarium/animals-dev' } : {}) });
+  return createAnimalEngine({ store, getRoots: animalRoots, log: console.log, dev });
+}
+
+module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage, makeJoinFlow, joinRequestAllowed, animalRootsFrom, holdPortThenStart };
 if (require.main === module) main();

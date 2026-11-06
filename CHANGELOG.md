@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Wild animals to catch** — Now and then a wild animal appears on the lawn: 14 original species in 4 rarities, each with its own effects. Catching one takes real Claude Code work time before a deadline (3 to 30 minutes by rarity), measured by the local server; the collection keeps up to 50 and up to 5 roam the island. The local server holds the rules and keeps the state AES-256-GCM encrypted and authenticated in `~/.claude-terrarium/animals.dat`; the page only sends actions. Translated into all 7 page languages
+
 ## [2.0.0] - 2026-11-06
 
 A major version because the source layout changes completely (the page moved from one HTML file into ES modules under `web/`); the page, the hub protocol, the CLI and the configuration work as before.
@@ -330,7 +336,7 @@ A major version because the source layout changes completely (the page moved fro
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
-[Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v2.0.0...HEAD
 [2.0.0]: https://github.com/luanle912/ai-terrarium/compare/v1.6.0...v2.0.0
 [1.6.0]: https://github.com/luanle912/ai-terrarium/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/luanle912/ai-terrarium/compare/v1.4.2...v1.5.0

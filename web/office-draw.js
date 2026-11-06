@@ -57,6 +57,8 @@ mixin(
         ctx.clearRect(0, 0, w, hh);
         fn(ctx, w, hh, t, skyEnv);
       }
+      if (this.frontCanvas && this.animalFx && this.animalFx.length && !(this.isLive && this.state.asOthers))
+        this.drawAnimalSky(this.frontCanvas.getContext('2d'), w, hh, b);
       // The island bobs a few pixels; moving the wrapper (not a transform) keeps bubbles, clicks and layering intact.
       if (this.wrapEl) {
         const top = env.reduced ? 0 : Math.round(Math.sin(t * 0.7) * 3);
@@ -549,6 +551,10 @@ mixin(
       });
 
       this.dogs.forEach(d => items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) }));
+      // World islands (IslandScene) have no animals; "view as others" hides them like the hub would.
+      const showAn = !(this.isLive && this.state.asOthers),
+        an = showAn ? this.animals || [] : [];
+      an.forEach(a => items.push({ z: a.x + a.y, f: () => this.drawAnimal(G, a, t, dfB, snB) }));
       this.agents.forEach(a => {
         if (a.sleeping) {
           const d = DESKS[a.desk];
@@ -584,6 +590,8 @@ mixin(
         ctx.fillRect(0, 0, LW, LH);
         ctx.restore();
       }
+      // One-off animal effects glow through the storm, so they go on after its tint.
+      if (showAn && this.animalFx && this.animalFx.length) this.drawAnimalFx(G, t, dfB, snB);
     }
   },
 );
