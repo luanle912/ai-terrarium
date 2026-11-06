@@ -56,11 +56,11 @@ Open your browser → **http://localhost:4317** — that's it.
 
 | | Feature | Description |
 |---|---------|-------------|
-| 🏝️ | **Sky island** | The office floats on an island with a grassy lawn, a pond with a waterfall that falls into the clouds, trees, rocks and flowers |
+| 🏝️ | **Sky island** | The office sits in the middle of a square island with a cone of earth underneath: a two-peak mountain behind it, falls into a river that runs past the office under a wooden bridge to a lake, a waterfall over the edge into the clouds, lamps, groves, a rest corner with a bench and a fishing spot, and small floating islands in the distance |
 | 🌅 | **Day/night cycle** | Smooth lighting with cosine interpolation based on your local clock — warm dawn and dusk, stars and moon at night, desk lamps glow after dark |
-| 🌦️ | **Weather** | Clear, cloudy, rain, storm, snow and fog — random every 20–40 min, or synced to the real weather of a city you choose via Open-Meteo. Rain runs down the windows, storms darken the office with lightning, snow whitens the lawn and ices the pond |
+| 🌦️ | **Weather** | Clear, cloudy, rain, storm, snow and fog — random every 20–40 min, or synced to the real weather of a city you choose via Open-Meteo. Rain runs down the windows, storms darken the office with lightning, snow whitens the lawn and the peaks, and a rainbow follows the rain |
 | 🎄 | **Seasonal events** | Vietnamese holidays and seasons get their own event tree on the lawn — Tết mai blossoms, Christmas tree with blinking lights, Halloween pumpkins, cherry blossoms in spring, and more |
-| 🐕 | **Office dogs** | A corgi, a husky and a dalmatian roam the lawn: they stroll, drink at the pond, chase each other, greet people who come outside and sleep together under a tree at night |
+| 🐕 | **Office dogs** | A corgi, a husky and a dalmatian roam the lawn: they stroll, drink at the lake, chase each other, greet people who come outside and sleep together under a tree at night |
 
 ### Sessions & Agents
 
@@ -90,8 +90,8 @@ Open your browser → **http://localhost:4317** — that's it.
 | 🍳 | **Modern kitchen** | A full pantry with fridge, espresso machine, grinder, sink, dishwasher, microwave, drinks cooler and sorted bins along the back wall |
 | 🪑 | **Break seating** | A wooden bench with tables, a sky-view bar with high stools, and a bar-height island — agents on a break heat food, snack, or watch the clouds |
 | 🚬 | **Smoking corner** | A paved corner on the east lawn with a bench under a vine-covered pergola, an ash bin, a planted screen toward the pantry, and a light at the entrance |
-| 🛤️ | **Lawn paths** | Stepping-stone paths run from both flights of stairs to the pond and the smoking corner; agents follow them instead of cutting across the grass |
-| 🏊 | **Pond bathing** | Idle agents can walk down to the pond and bathe — shown up to the shoulders with ripples around them |
+| 🛤️ | **Lawn paths** | Stepping-stone paths run from both flights of stairs to the lake, over the bridge to the rest corner, and to the smoking corner; agents follow them instead of cutting across the grass |
+| 🏊 | **Lake bathing, bench and fishing** | Idle agents can walk down to the lake and bathe — shown up to the shoulders with ripples around them — or cross the bridge to sit on the stone bench or fish |
 
 ### Interaction & Display
 
@@ -137,7 +137,7 @@ Still no build step and no dependencies: the browser runs the ES modules in `web
 | `web/*-logic.js` | DOM-free logic (sky, camera, dogs, people, restroom, bubbles, world layout); `tests/` imports each one |
 | `web/office.js`, `web/office-*.js` | The page component: `office.js` holds the class, each `office-*.js` adds its methods with `mixin(ClaudeOffice, class { ... })` (agents, drawing, header, panels, settings) |
 | `web/world-*.js` | World mode (several islands from a hub) and the World section of ⚙ Settings |
-| `web/sky-*.js`, `decor-*.js`, `pantry-*.js`, `season-*.js` | Drawing: sky and island, office decor, pantry pieces, event trees |
+| `web/island-*.js`, `sky-*.js`, `decor-*.js`, `pantry-*.js`, `season-*.js` | The island (its land as data, its still art, what moves on it) and drawing: sky, office decor, pantry pieces, event trees |
 | `web/i18n.js`, `web/i18n/<lang>.js` | `tr()` and one translation table per language; `tests/i18n.test.mjs` checks they match |
 
 Each module imports exactly what it uses. After editing `web/`, run `npx prettier@3.3.3 --write web` (settings in `.prettierrc.json`); `tests/web-style.test.mjs` keeps files under 700 lines and lines under 120 characters. After pulling a new version, restart `node server.js`: an older server does not know about `web/` and the page says so.
