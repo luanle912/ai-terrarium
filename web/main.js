@@ -10,6 +10,7 @@ import './camera-logic.js';
 import './bubble-logic.js';
 import './world-logic.js';
 import './sky-render.js';
+import './island-life.js';
 import './dog-logic.js';
 import './dog-sprites.js';
 import './smoke-logic.js';

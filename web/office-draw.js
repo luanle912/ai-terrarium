@@ -3,6 +3,7 @@ import { OfficeDecor } from './office-decor.js';
 import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { SkyRender } from './sky-render.js';
+import { IslandLife } from './island-life.js';
 import {
   DESKS,
   FH,
@@ -144,8 +145,8 @@ mixin(
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(this.islandCache.img, 0, 0);
       ctx.restore();
-      SkyRender.drawPond(ctx, ISLAND, PG, t, df);
-      SkyRender.drawWaterfall(ctx, ISLAND, PG, t, SkyLogic.WATERFALL_LEN, df);
+      // Water, falls, mist, lamp light, vines, birds, fireflies and the rainbow (web/island-life.js).
+      if (env) IslandLife.drawLife(ctx, ISLAND, PG, t, env);
       const poly = (pts, fill, stroke) => {
         ctx.beginPath();
         pts.forEach((p, i) =>
