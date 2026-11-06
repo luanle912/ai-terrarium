@@ -1,5 +1,18 @@
-// Drawing the island itself: the underside bands, the lawn, trees, the pond and the waterfall.
+// Drawing the island itself: the lawn, its underside and outline, the mountain, river and lake beds, trees, the pond
+// glints and the waterfall. The static pieces' drawing lives in web/island-art.js.
 import { rgba } from './sky-mist.js';
+import {
+  drawBench,
+  drawBridge,
+  drawBush,
+  drawLamp,
+  drawMountain,
+  drawMushroom,
+  drawRock,
+  drawUnderside,
+  painter,
+  shoreFace,
+} from './island-art.js';
 export const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 export const toHex = a =>
   '#' +
@@ -22,14 +35,7 @@ export const hash = (x, y, s) => {
 // Night pulls every island colour toward the same deep blue the office uses after dark.
 export const night = (c, df) => mix(c, '#0d1322', (1 - df) * 0.6);
 export const SNOW = '#eef3f7';
-// Depth bands of the underside: [from z, to z, colour], top to bottom.
-export const BANDS = [
-  [0, -6, '#8a5a36'],
-  [-6, -26, '#6f4a32'],
-  [-26, -60, '#7a7a84'],
-  [-60, -1e9, '#5f6070'],
-];
-// The pond's water surface sits this far below the grass.
+// The lake's and the river's water surface sits this far below the grass.
 export const WATER_Z = -3;
 
 export function drawTree(ctx, P, d, df, snow) {
@@ -50,87 +56,91 @@ export function drawTree(ctx, P, d, df, snow) {
   ctx.fillRect(x - 3, y - 22, 6, 3);
 }
 
-// The island as one image the size of the scene canvas; only trees behind the walls are baked in,
-// trees in front are drawn with the office so desks and walls overlap them correctly.
+// The island as one image the size of the scene canvas. The land (lawn, underside, river and lake beds, mountain) is
+// painted first on its own canvas so it can be ringed with the 1 px outline; the bridge, lamps and small decor go on
+// top. Only trees behind the walls are baked in; trees in front are drawn with the office so desks and walls overlap
+// them correctly. Moving water, falls and lamp light are drawn every frame over this image.
 export function renderIsland(island, frame, k, env) {
   const { LW, LH, OX, OY } = frame,
     TW = 16,
     TH = 8,
     df = env.df,
     snow = env.snow;
-  const cv = document.createElement('canvas');
-  cv.width = Math.round(LW * k);
-  cv.height = Math.round(LH * k);
-  const ctx = cv.getContext('2d');
-  ctx.setTransform(k, 0, 0, k, 0, 0);
-  const P = (x, y, z = 0) => [OX + (x - y) * TW, OY + (x + y) * TH - z];
-  const poly = (pts, c) => {
-    ctx.beginPath();
-    pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
-    ctx.closePath();
-    ctx.fillStyle = c;
-    ctx.fill();
+  const canvas = () => {
+    const c = document.createElement('canvas');
+    c.width = Math.round(LW * k);
+    c.height = Math.round(LH * k);
+    const g = c.getContext('2d');
+    g.setTransform(k, 0, 0, k, 0, 0);
+    return [c, g];
   };
-  const dep = (x, y) => island.depth.get(x + ',' + y) || 0,
-    has = (x, y) => island.cells.has(x + ',' + y),
-    inPond = (x, y) => island.pond.cells.has(x + ',' + y);
+  const [cv, ctx] = canvas(),
+    [land, lctx] = canvas();
+  const P = (x, y, z = 0) => [OX + (x - y) * TW, OY + (x + y) * TH - z];
+  // colours go through the island's light, and toward snow white by `s` of the current snow cover
+  const C = (c, s = 0) => night(s ? mix(c, SNOW, snow * s) : c, df);
+  const lp = painter(lctx, P),
+    pt = painter(ctx, P);
+  const key = (x, y) => x + ',' + y,
+    has = (x, y) => island.cells.has(key(x, y)),
+    inPond = (x, y) => island.pond.cells.has(key(x, y)),
+    wet = (x, y) => inPond(x, y) || island.river.cells.has(key(x, y));
+  drawUnderside(lp, P, C, island);
   for (const c of island.list) {
-    const { x, y, d } = c,
-      jit = (hash(x, y, 3) - 0.5) * 14;
-    // a side face shows wherever this column hangs lower than its front neighbour
-    const fromL = -dep(x, y + 1),
-      fromR = -dep(x + 1, y);
-    for (const [z0, z1, col] of BANDS) {
-      const top = Math.min(z0, 0),
-        bot = Math.max(z1, -d);
-      if (bot >= top) continue;
-      const base = night(mix(col, jit > 0 ? '#ffffff' : '#000000', Math.abs(jit) / 100), df);
-      const lt = Math.min(top, fromL),
-        rt = Math.min(top, fromR);
-      if (lt > bot)
-        poly(
-          [P(x, y + 1, lt), P(x + 1, y + 1, lt), P(x + 1, y + 1, bot), P(x, y + 1, bot)],
-          mix(base, '#000000', 0.12),
-        );
-      if (rt > bot)
-        poly([P(x + 1, y, rt), P(x + 1, y + 1, rt), P(x + 1, y + 1, bot), P(x + 1, y, bot)], mix(base, '#000000', 0.3));
-    }
-    if (inPond(x, y)) {
-      // The pond is sunk WATER_Z below the grass: the far banks show as earth walls, the water fills the hollow.
-      if (!inPond(x - 1, y))
-        poly([P(x, y, 0), P(x, y + 1, 0), P(x, y + 1, WATER_Z), P(x, y, WATER_Z)], night('#6f4a32', df));
-      if (!inPond(x, y - 1))
-        poly([P(x, y, 0), P(x + 1, y, 0), P(x + 1, y, WATER_Z), P(x, y, WATER_Z)], night('#5f3f2a', df));
-      poly(
+    const { x, y } = c;
+    // the top: a river or lake bed sunk WATER_Z below the grass (earth banks on its far sides), else checker grass
+    if (wet(x, y)) {
+      if (!wet(x - 1, y)) lp.poly([P(x, y, 0), P(x, y + 1, 0), P(x, y + 1, WATER_Z), P(x, y, WATER_Z)], C('#6f4a32'));
+      if (!wet(x, y - 1)) lp.poly([P(x, y, 0), P(x + 1, y, 0), P(x + 1, y, WATER_Z), P(x, y, WATER_Z)], C('#5f3f2a'));
+      const deep = wet(x - 1, y) && wet(x, y - 1) && wet(x + 1, y) && wet(x, y + 1);
+      lp.poly(
         [P(x, y, WATER_Z), P(x + 1, y, WATER_Z), P(x + 1, y + 1, WATER_Z), P(x, y + 1, WATER_Z)],
-        night(mix(inPond(x - 1, y) && inPond(x, y - 1) ? '#3f96d4' : '#4aa3df', SNOW, snow * 0.6), df),
+        C(deep ? '#3b8fcf' : '#4aa3df', 0.6),
       );
     } else {
-      const grass = (x + y) % 2 ? '#62b14e' : '#58a645';
-      poly([P(x, y, 0), P(x + 1, y, 0), P(x + 1, y + 1, 0), P(x, y + 1, 0)], night(mix(grass, SNOW, snow * 0.85), df));
+      const grass = (x + y) % 2 ? '#5eae4a' : '#5aa847';
+      lp.poly([P(x, y, 0), P(x + 1, y, 0), P(x + 1, y + 1, 0), P(x, y + 1, 0)], C(grass, 0.85));
     }
-    if (!has(x, y + 1))
-      poly(
-        [P(x, y + 1, 0), P(x + 1, y + 1, 0), P(x + 1, y + 1, -2), P(x, y + 1, -2)],
-        night(mix('#3f7f33', SNOW, snow * 0.7), df),
-      );
-    if (!has(x + 1, y))
-      poly(
-        [P(x + 1, y, 0), P(x + 1, y + 1, 0), P(x + 1, y + 1, -2), P(x + 1, y, -2)],
-        night(mix('#356c2b', SNOW, snow * 0.7), df),
-      );
+    // the soil layer and the grass lip along the shore
+    if (!has(x, y + 1)) shoreFace(lp, P, C, x, y, 'y');
+    if (!has(x + 1, y)) shoreFace(lp, P, C, x, y, 'x');
   }
-  // A ring of rim stones around the pond, open only where the water spills over the shore into the waterfall.
+  drawMountain(lp, P, C, island, snow);
+  // the 1 px outline: the land's silhouette pushed out a pixel each way, kept only where it falls outside the land
+  {
+    const [sil, sctx] = canvas(),
+      o = Math.max(1, Math.round(k));
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    for (const [dx, dy] of [
+      [o, 0],
+      [-o, 0],
+      [0, o],
+      [0, -o],
+    ])
+      sctx.drawImage(land, dx, dy);
+    sctx.globalCompositeOperation = 'source-in';
+    sctx.fillStyle = C('#2b2350');
+    sctx.fillRect(0, 0, sil.width, sil.height);
+    sctx.globalCompositeOperation = 'destination-out';
+    sctx.drawImage(land, 0, 0);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(sil, 0, 0);
+    ctx.drawImage(land, 0, 0);
+    ctx.restore();
+  }
+  // A ring of rim stones around the lake, open where the river runs in and where the water spills over the shore
+  // into the waterfall.
   {
     const f = island.waterfall,
       R = 0.13,
       stones = [];
     for (const k of island.pond.cells) {
       const [x, y] = k.split(',').map(Number);
-      if (!inPond(x - 1, y)) stones.push([x - R, y, R * 2, 1]);
-      if (!inPond(x, y - 1)) stones.push([x, y - R, 1, R * 2]);
-      if (!inPond(x + 1, y) && !(x === f.x && y === f.y)) stones.push([x + 1 - R, y, R * 2, 1]);
-      if (!inPond(x, y + 1)) stones.push([x, y + 1 - R, 1, R * 2]);
+      if (!wet(x - 1, y)) stones.push([x - R, y, R * 2, 1]);
+      if (!wet(x, y - 1)) stones.push([x, y - R, 1, R * 2]);
+      if (!wet(x + 1, y)) stones.push([x + 1 - R, y, R * 2, 1]);
+      if (!wet(x, y + 1) && !(x === f.x && y === f.y)) stones.push([x, y + 1 - R, 1, R * 2]);
     }
     stones.sort((a, b) => a[0] + a[2] / 2 + a[1] + a[3] / 2 - (b[0] + b[2] / 2 + b[1] + b[3] / 2));
     for (const [sx, sy, w, hh] of stones) {
@@ -144,11 +154,8 @@ export function renderIsland(island, frame, k, env) {
           x1 = along ? sx + w * b : sx + w,
           y0 = along ? sy : sy + hh * a,
           y1 = along ? sy + hh : sy + hh * b;
-        const top = night(mix(hash(x0 * 7, y0 * 7, 8) > 0.5 ? '#c9c3b8' : '#b8b1a5', SNOW, snow * 0.8), df),
-          zt = 2.5;
-        poly([P(x0, y1, 0), P(x1, y1, 0), P(x1, y1, zt), P(x0, y1, zt)], mix(top, '#000000', 0.22));
-        poly([P(x1, y0, 0), P(x1, y1, 0), P(x1, y1, zt), P(x1, y0, zt)], mix(top, '#000000', 0.38));
-        poly([P(x0, y0, zt), P(x1, y0, zt), P(x1, y1, zt), P(x0, y1, zt)], top);
+        const top = C(hash(x0 * 7, y0 * 7, 8) > 0.5 ? '#c9c3b8' : '#b8b1a5', 0.8);
+        pt.box(x0, x1, y0, y1, 0, 2.5, top, mix(top, '#000000', 0.22), mix(top, '#000000', 0.38));
       }
     }
   }
@@ -163,7 +170,7 @@ export function renderIsland(island, frame, k, env) {
     ctx.lineJoin = 'round';
     ctx.lineWidth = 0.62;
     ctx.globalAlpha = 0.3;
-    ctx.strokeStyle = night(mix('#a8955a', SNOW, snow * 0.6), df);
+    ctx.strokeStyle = C('#a8955a', 0.6);
     for (const l of island.paths.strips) {
       ctx.beginPath();
       l.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
@@ -171,38 +178,40 @@ export function renderIsland(island, frame, k, env) {
     }
     ctx.restore();
     for (const st of island.paths.stones) {
-      const top = night(mix(hash(st.x * 5, st.y * 5, 11) > 0.5 ? '#c9c3b8' : '#bdb6aa', SNOW, snow * 0.55), df);
-      poly(
+      const top = C(hash(st.x * 5, st.y * 5, 11) > 0.5 ? '#c9c3b8' : '#bdb6aa', 0.55);
+      pt.poly(
         st.outline.map(([x, y]) => P(x, y, 0)),
         mix(top, '#000000', 0.32),
       );
-      poly(
+      pt.poly(
         st.outline.map(([x, y]) => P(x, y, 1)),
         top,
       );
     }
   }
-  // vines hanging from the front shore
-  ctx.fillStyle = night('#3f7f33', df);
-  island.list.forEach((c, i) => {
-    if (has(c.x, c.y + 1) || hash(c.x, c.y, 4) > 0.35) return;
-    const [vx, vy] = P(c.x + 0.5, c.y + 1, -2);
-    ctx.fillRect(Math.round(vx), Math.round(vy), 1, Math.round(5 + hash(c.x, c.y, 5) * 12));
-  });
+  // Everything standing on the lawn, back to front: the bridge, the lamps, the bench and the decor (of the trees only
+  // those behind the walls).
+  const flower = d => () => {
+    const [px, py] = P(d.x + 0.5, d.y + 0.5, 0);
+    ctx.fillStyle = C(['#ffd166', '#ff8fab', '#ffffff'][(d.x + d.y + 99) % 3]);
+    ctx.fillRect(Math.round(px), Math.round(py) - 1, 1, 1);
+  };
+  const DECOR = {
+    rock: d => () => drawRock(pt, P, C, d),
+    bush: d => () => drawBush(pt, P, C, d),
+    mushroom: d => () => drawMushroom(pt, P, C, d),
+    flower,
+    tree: d => (d.x < 0 || d.y < 0 ? () => drawTree(ctx, P, d, df, snow) : null),
+  };
+  const { bridge, rest } = island,
+    items = [{ z: bridge.x + bridge.y + 1, f: () => drawBridge(pt, P, C, bridge) }];
+  for (const l of island.lamps) items.push({ z: l.x + l.y + 1, f: () => drawLamp(pt, P, C, island, l) });
+  items.push({ z: rest.bench.x + rest.bench.y + 1, f: () => drawBench(pt, P, C, rest.bench) });
   for (const d of island.decor) {
-    const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
-      x = Math.round(px),
-      y = Math.round(py);
-    if (d.kind === 'rock') {
-      ctx.fillStyle = night('#8f8f99', df);
-      ctx.fillRect(x - 3, y - 3, 6, 3);
-      ctx.fillStyle = night(mix('#a8a8b2', SNOW, snow), df);
-      ctx.fillRect(x - 2, y - 4, 3, 1);
-    } else if (d.kind === 'flower') {
-      ctx.fillStyle = night(['#ffd166', '#ff8fab', '#ffffff'][(d.x + d.y + 99) % 3], df);
-      ctx.fillRect(x, y - 1, 1, 1);
-    } else if (d.kind === 'tree' && (d.x < 0 || d.y < 0)) drawTree(ctx, P, d, df, snow);
+    const f = DECOR[d.kind] && DECOR[d.kind](d);
+    if (f) items.push({ z: d.x + d.y + 1, f });
   }
+  items.sort((a, b) => a.z - b.z).forEach(it => it.f());
   return cv;
 }
 

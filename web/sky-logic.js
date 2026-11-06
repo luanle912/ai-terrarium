@@ -81,9 +81,12 @@ function groundZ(x, y, W, H, st, floorZ) {
   return 0;
 }
 
-// Logical scene size and origin that fit the whole island: its top, underside, trees and waterfall.
+// Logical scene size and origin that fit the whole island: its top, underside, trees, waterfall and mountain.
 // FH is the height the view is fitted to: the island top plus a little underside; the rest may run off the bottom.
-const FOCUS_UNDER = 40;
+// The mountain's peaks may make the scene taller, but by at most a ninth of FH (so the office keeps at least 90 % of
+// its size whatever the stage's shape); a peak beyond that runs off the top.
+const FOCUS_UNDER = 40,
+  PEAK_ROOM = 12; // px of sky kept over a peak, so birds crossing the top corner fly clear of it
 function sceneFrame(island, { W, H, TW, TH, WALL, pad }) {
   let minX = Infinity,
     maxX = -Infinity,
@@ -112,10 +115,14 @@ function sceneFrame(island, { W, H, TW, TH, WALL, pad }) {
   take(0, 0, WALL + 3);
   take(W, 0, WALL + 3);
   take(0, H, WALL + 3);
+  // the main waterfall hangs off the front shore (the y + 1 face) of its lake tile
   const f = island.waterfall;
-  take(f.x + 1, f.y + 0.5, -1 - WATERFALL_LEN);
+  take(f.x + 0.5, f.y + 1, -1 - WATERFALL_LEN);
+  const flatTop = Math.floor(minY),
+    flatFH = Math.ceil(topY + FOCUS_UNDER) - flatTop + 2 * pad;
+  if (island.mountain) for (const p of island.mountain.peaks) take(p.x + 0.5, p.y + 0.5, p.h + PEAK_ROOM);
   minX = Math.floor(minX);
-  minY = Math.floor(minY);
+  minY = Math.max(Math.floor(minY), flatTop - Math.floor(flatFH / 9));
   maxX = Math.ceil(maxX);
   maxY = Math.ceil(maxY);
   return {

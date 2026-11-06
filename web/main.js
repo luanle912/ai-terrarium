@@ -9,6 +9,7 @@ import './sky-logic.js';
 import './camera-logic.js';
 import './bubble-logic.js';
 import './world-logic.js';
+import './island-art.js';
 import './sky-render.js';
 import './island-life.js';
 import './dog-logic.js';
