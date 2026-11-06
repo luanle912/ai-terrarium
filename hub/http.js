@@ -82,11 +82,12 @@ function clientIp(req, mode) {
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
-// routes: [{method, path: string | RegExp, handler(req, res, rc)}]; rc = {url, path, query, match}.
-// No match -> 404. A handler error with .status maps to that status, anything else is a bare 500
+// routes: [{method, path: string | RegExp, handler(req, res, rc), head?}]; rc = {url, path, query, match}.
+// HEAD with no route of its own uses the GET route of the same path (Node drops the body), unless that route has
+// head: false (405, Allow: GET). No match -> 404. A handler error with .status maps to that status, anything else is a bare 500
 // (details are never sent to the client or logged). htmlError(status, message) -> {body, headers} renders a page
 // for browsers that navigate into an error (Accept: text/html, outside /api/); everyone else keeps plain text.
-function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, htmlError = null } = {}) {
+function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, htmlError = null, onStatus = null } = {}) {
   return function handle(req, res) {
     const t0 = now();
     if (hsts && typeof res.setHeader === 'function') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
@@ -94,6 +95,7 @@ function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, ht
     let url = null;
     try { url = new URL(req.url, 'http://hub.invalid'); pathname = url.pathname; } catch { /* keep '/' */ }
     res.on('finish', () => {
+      if (onStatus) { try { onStatus(res.statusCode); } catch { /* ignore */ } }
       // S17: time, method, path WITHOUT query, status, duration. Never body/headers/cookies.
       try { log(`${new Date(t0).toISOString()} ${req.method} ${pathname} ${res.statusCode} ${now() - t0}ms`); } catch { /* ignore */ }
       if (req._tooLarge) req.destroy();
@@ -118,10 +120,17 @@ function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, ht
     if (!url) return fail(new HttpError(400, 'bad request'));
     let route = null;
     let match = null;
-    for (const r of routes) {
-      if (r.method !== req.method) continue;
-      if (typeof r.path === 'string') { if (r.path === pathname) { route = r; break; } }
-      else { const m = r.path.exec(pathname); if (m) { route = r; match = m; break; } }
+    const find = (method) => {
+      for (const r of routes) {
+        if (r.method !== method) continue;
+        if (typeof r.path === 'string') { if (r.path === pathname) { route = r; match = null; return; } }
+        else { const m = r.path.exec(pathname); if (m) { route = r; match = m; return; } }
+      }
+    };
+    find(req.method);
+    if (!route && req.method === 'HEAD') {
+      find('GET');
+      if (route && route.head === false) return sendError(405, 'method not allowed', { Allow: 'GET' });
     }
     if (!route) return sendError(404, 'not found');
     try {

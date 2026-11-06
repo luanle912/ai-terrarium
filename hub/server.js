@@ -5,7 +5,7 @@
 // array of {method, path (string | RegExp), handler(req, res, rc)}. Add the module to ROUTE_MODULES below;
 // createHub builds one shared ctx and concatenates all arrays into one router. Tests may also pass
 // `deps.routeModules` (array of such functions) which are appended after the built-in ones.
-//   ctx = { config, db, deps: {fetch, now, log, random}, limiters, world, helpers, jwks, accounts, googleCheck }
+//   ctx = { stats, config, db, deps: {fetch, now, log, random}, limiters, world, helpers, jwks, accounts, googleCheck }
 // Handlers may be async; throwing/rejecting with an error that has `.status` replies with that status.
 
 const http = require('node:http');
@@ -20,7 +20,7 @@ const { createGoogleCheck } = require('./google-check.js');
 const { sha256hex } = require('./auth.js');
 const { errorPage, PAGE_CSP } = require('./pages.js');
 
-const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes, require('./publish.js').routes, require('./me.js').routes];
+const ROUTE_MODULES = [require('./auth.js').routes, require('./pairing.js').routes, require('./publish.js').routes, require('./me.js').routes, require('./health.js').routes];
 
 const HOUR = 3600 * 1000;
 
@@ -33,7 +33,7 @@ function createHub(config, deps = {}) {
   };
   const db = openDb(config.dbPath);
   // In-memory world: island snapshots never touch disk or logs. publish.js listens through ctx.onWorldChange.
-  const ctx = { config, db, deps: d, streamLimits: { perUser: 5, total: 300, ...(deps.streamLimits || {}) }, limiters: null, world: null, closers: [], onWorldChange: null, helpers: null };
+  const ctx = { config, db, deps: d, streamLimits: { perUser: 5, total: 300, ...(deps.streamLimits || {}) }, limiters: null, world: null, closers: [], onWorldChange: null, helpers: null, stats: { http429: 0 } };
   const world = createWorld({ now: d.now, onChange: (e) => { if (ctx.onWorldChange) ctx.onWorldChange(e); } });
   // Token buckets per spec S14 (rate is tokens/second). Keys are chosen by the route that uses them.
   const limiters = {
@@ -91,7 +91,7 @@ function createHub(config, deps = {}) {
     body: errorPage(status, message),
     headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, 'Cache-Control': 'no-store' },
   });
-  const server = http.createServer(createRouter(routes, { log: d.log, now: d.now, hsts: config.secure, htmlError }));
+  const server = http.createServer(createRouter(routes, { log: d.log, now: d.now, hsts: config.secure, htmlError, onStatus: (st) => { if (st === 429) ctx.stats.http429++; } }));
 
   const setTimer = deps.setInterval || setInterval; // injectable so tests can check unref/clear
   const clearTimer = deps.clearInterval || clearInterval;

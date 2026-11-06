@@ -4,19 +4,21 @@
 //     Optional header X-Terrarium-Instance: 16 hex of the publishing process; missing or malformed = 'legacy' (never 400).
 //     Answers 200 {accepted: true} | {accepted: false, reason: 'stale_seq', seq} | {accepted: false, reason: 'other_instance'}.
 //   GET  /api/world/stream     SSE for signed-in viewers: `world`, `island`, `remove` events, and `ping` {t} every 25 s
-//     `world` = {islands: [{id, name, color, slot, online, private, share}], viewers, capacity}, ordered by slot. It lists
+//     `world` = {islands: [{id, name, color, slot, online, private, share, lastAt}], viewers, capacity, now}, ordered by slot
+//     (lastAt = when a machine of the island was last heard, null when none is in RAM; now = the hub clock). It lists
 //     every island that has a slot (from the DB), so an island with no device sending stays in its slot as online:false.
 //     Islands with slot NULL (hidden, over capacity) never appear in any event. `remove` is sent only when the island
 //     row is gone; revoking the last device or a ban sends `island {id, sessions: []}` + `world` instead.
 //     `world` to everyone goes through one valve (H3): at most one per WORLD_EVERY_MS, leading + trailing, computed and
-//     serialised once, and not sent at all when the frame equals the last one sent (H11). A new viewer gets its own
+//     serialised once, and not sent at all when the frame equals the last one sent, `now` aside (H11). A new viewer gets its own
 //     `world` and `island` events at once, alone; the new viewer count reaches the others by the trailing send.
 //     An island with a slot that has not been heard from since this hub started carries `waking: true` (still
 //     online: false) for OFFLINE_MS, while its machines come back after a restart (H2). Old pages ignore the key.
 //   GET  /                     welcome page with the sign-in button, or the claude-office.html page
 //   GET  /web/<file>.js|css    the page's scripts and stylesheet (lib/web-assets.js)
 // ctx.streams = {check(), count()} is exposed for tests and the periodic session check (B8).
-// ctx.stats = {worldBroadcasts, framesWritten} counts what the streams cost.
+// ctx.stats = {worldBroadcasts, framesWritten, publish: {accepted, ...}, streamRefused: {hub_cap, user_cap}, http429}
+// counts what the streams cost and what was refused (read by /metrics in health.js).
 
 const path = require('node:path');
 const { HttpError, send, sendJson, SECURITY_HEADERS } = require('./http.js');
@@ -58,7 +60,11 @@ function routes(ctx) {
   const slottedRows = () => setSlots(db.listSlottedIslands());
   slottedRows();
   let closing = false;
-  const stats = { worldBroadcasts: 0, framesWritten: 0 };
+  const stats = Object.assign(ctx.stats || {}, {
+    worldBroadcasts: 0, framesWritten: 0, http429: 0,
+    publish: { accepted: 0, stale_seq: 0, other_instance: 0, bad_packet: 0, too_large: 0, rate_limited: 0, unauthorized: 0 },
+    streamRefused: { hub_cap: 0, user_cap: 0 },
+  });
   ctx.stats = stats;
   // H2: islands not heard from since this start are `waking` until startedAt + OFFLINE_MS.
   const startedAt = deps.now();
@@ -87,12 +93,14 @@ function routes(ctx) {
         const i = {
           id: row.id, name: row.name, color: row.color, slot: row.slot,
           online: m ? m.online : false, private: m ? m.private : false, share: m ? m.share : 'kin',
+          lastAt: m ? m.lastAt : null,
         };
         if (!m && waking && !heard.has(row.id)) i.waking = true;
         return i;
       }),
       viewers: streams.size,
       capacity: MAX_ISLANDS,
+      now: deps.now(),
     };
   };
   const islandPayload = (id) => ({ id, sessions: world.snapshotFor(id) });
@@ -101,12 +109,15 @@ function routes(ctx) {
   // The `world` valve: leading + trailing, at most one broadcast per WORLD_EVERY_MS (real clock, throttle only).
   let worldAt = 0;
   let worldTimer = null;
-  let lastWorld = null; // the last `world` frame broadcast
+  let lastWorld = null; // the last `world` payload broadcast (without `now`)
   function sendWorld() {
     if (closing) return;
-    const f = frame('world', worldPayload());
-    if (f === lastWorld) return; // H11: nothing changed for the viewers
-    lastWorld = f;
+    const wp = worldPayload();
+    // H11: nothing changed for the viewers. `now` always moves, so it is left out of the comparison.
+    const key = JSON.stringify({ ...wp, now: 0 });
+    if (key === lastWorld) return;
+    lastWorld = key;
+    const f = frame('world', wp);
     worldAt = Date.now();
     stats.worldBroadcasts++;
     for (const s of streams) write(s, f);
@@ -247,41 +258,50 @@ function routes(ctx) {
   list.push({
     method: 'POST', path: '/api/publish', ownLimit: true,
     async handler(req, res) {
-      const auth = bearerDevice(req, res); // cookies are ignored on purpose
-      if (auth === false) return;
-      if (!auth) throw new HttpError(401, 'unauthorized');
-      const now = deps.now();
-      if (!limiters.publish.take(auth.device.id, now)) {
-        return send(res, 429, 'too many requests', { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '1' });
+      try { await publish(req, res); } catch (e) {
+        const k = e instanceof HttpError && { 400: 'bad_packet', 401: 'unauthorized', 413: 'too_large' }[e.status];
+        if (k) stats.publish[k]++;
+        throw e;
       }
-      const raw = await helpers.readBody(req, PUBLISH_LIMIT);
-      let body;
-      try { body = JSON.parse(raw.toString('utf8')); } catch { throw new HttpError(400, 'bad json'); }
-      const r = validatePublish(body);
-      if (!r.ok) throw new HttpError(400, 'bad packet: ' + r.error);
-      // The island and device come from the token only, never from the body.
-      const d = db.getDevice(auth.device.id);
-      if (!d || d.revoked_at != null) throw new HttpError(401, 'unauthorized'); // revoked while the body was in flight
-      if (d.last_used_at == null || now - d.last_used_at > TOUCH_EVERY_MS) db.touchDevice(d.id, now);
-      const h = req.headers['x-terrarium-instance'];
-      const instance = typeof h === 'string' && INSTANCE_RE.test(h) ? h : null;
-      const result = world.publish({ id: auth.island.id, name: auth.island.name, color: auth.island.color, slot: auth.island.slot }, d.id, r.value.share, r.value, { instance });
-      sendJson(res, 200, result);
     },
   });
+  async function publish(req, res) {
+    const auth = bearerDevice(req, res); // cookies are ignored on purpose
+    if (auth === false) return;
+    if (!auth) throw new HttpError(401, 'unauthorized');
+    const now = deps.now();
+    if (!limiters.publish.take(auth.device.id, now)) {
+      stats.publish.rate_limited++;
+      return send(res, 429, 'too many requests', { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': '1' });
+    }
+    const raw = await helpers.readBody(req, PUBLISH_LIMIT);
+    let body;
+    try { body = JSON.parse(raw.toString('utf8')); } catch { throw new HttpError(400, 'bad json'); }
+    const r = validatePublish(body);
+    if (!r.ok) throw new HttpError(400, 'bad packet: ' + r.error);
+    // The island and device come from the token only, never from the body.
+    const d = db.getDevice(auth.device.id);
+    if (!d || d.revoked_at != null) throw new HttpError(401, 'unauthorized'); // revoked while the body was in flight
+    if (d.last_used_at == null || now - d.last_used_at > TOUCH_EVERY_MS) db.touchDevice(d.id, now);
+    const h = req.headers['x-terrarium-instance'];
+    const instance = typeof h === 'string' && INSTANCE_RE.test(h) ? h : null;
+    const result = world.publish({ id: auth.island.id, name: auth.island.name, color: auth.island.color, slot: auth.island.slot }, d.id, r.value.share, r.value, { instance });
+    stats.publish[result.accepted ? 'accepted' : result.reason]++;
+    sendJson(res, 200, result);
+  }
 
   list.push({
-    method: 'GET', path: '/api/world/stream',
+    method: 'GET', path: '/api/world/stream', head: false,
     handler(req, res) {
       const s = helpers.requireSession(req);
       if (!s) throw new HttpError(401, 'not signed in');
       // Caps are answered before the SSE headers go out. The counts come from the live set, which every close
       // path (client abort, session end, server close) removes from, so a slot can never leak.
       const { perUser, total } = ctx.streamLimits;
-      if (streams.size >= total) throw new HttpError(503, 'too many viewers', { 'Retry-After': '30' });
+      if (streams.size >= total) { stats.streamRefused.hub_cap++; throw new HttpError(503, 'too many viewers', { 'Retry-After': '30' }); }
       let mine = 0;
       for (const x of streams) if (x.userId === s.user.id) mine++;
-      if (mine >= perUser) throw new HttpError(429, 'too many streams', { 'Retry-After': '10' });
+      if (mine >= perUser) { stats.streamRefused.user_cap++; throw new HttpError(429, 'too many streams', { 'Retry-After': '10' }); }
       res.writeHead(200, {
         ...SECURITY_HEADERS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store, no-transform',
         Connection: 'keep-alive', 'X-Accel-Buffering': 'no',

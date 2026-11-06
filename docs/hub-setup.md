@@ -38,6 +38,7 @@ Thiếu hoặc sai biến thì hub từ chối khởi động và in ra **mọi*
 | `HUB_HOST` | | `127.0.0.1` | Địa chỉ hub nghe. Chỉ đặt `0.0.0.0` khi thật sự cần. Khi bật `HUB_DEV_LOGIN` thì bắt buộc là địa chỉ loopback |
 | `HUB_DB` | | `./data/hub.sqlite` | Đường dẫn file SQLite |
 | `HUB_TRUST_PROXY` | | tắt | `1` khi đứng sau proxy: hub lấy IP người dùng từ mục cuối của `X-Forwarded-For` để giới hạn tần suất. `cloudflare` khi đứng sau Cloudflare Tunnel: hub lấy `CF-Connecting-IP` (nếu là IP hợp lệ, không thì như `1`). Không bật thì mọi người dùng chung IP của proxy và chung một hạn mức. Không bật khi hub lộ thẳng ra mạng, vì các header này giả được. Giá trị khác `1`/`cloudflare` là lỗi cấu hình |
+| `HUB_METRICS_TOKEN` | | tắt | Token Bearer cho `GET /metrics`, ít nhất 32 ký tự (ví dụ `openssl rand -hex 32`). Để trống thì `/metrics` trả 404. Ngắn hơn 32 ký tự là lỗi cấu hình |
 | `HUB_DEV_LOGIN` | | tắt | `1` bật đăng nhập giả, **chỉ để phát triển trên máy local** |
 
 `HUB_DEV_LOGIN=1` bỏ qua Google và cho đăng nhập bằng một đường dẫn tự gõ email. Hub chỉ cho bật khi `HUB_PUBLIC_URL`
@@ -203,6 +204,20 @@ Một hub chứa **tối đa 8 đảo**, mỗi đảo một **chỗ cố định
   nên đọc và làm theo.
 - **Máy ngủ/tỉnh.** Publisher thấy khoảng trống giữa hai nhịp quá 10 giây thì ghi `terrarium: woke up; resending` và gửi
   lại ngay; trang thế giới nối lại tức thì khi trình duyệt báo `online` hoặc tab hiện lại, và giữ cảnh tới 5 phút mất kết nối.
+
+## 3g. Theo dõi hub: `/healthz` và `/metrics`
+
+- **`GET /healthz`** (hoặc `HEAD`) dành cho uptime monitor: không cần đăng nhập, trả `200 {ok, uptimeS, db, streams, version}`,
+  hoặc `503 {ok: false, db: "error"}` khi không đọc được SQLite. Nó đi qua giới hạn tần suất chung như mọi route, nên
+  đừng thăm dò dày hơn vài giây một lần. `HEAD /` và `HEAD` các file `/web/*` cũng dùng được; `HEAD /api/world/stream` là 405.
+- **`GET /metrics`** (định dạng Prometheus) chỉ bật khi đặt `HUB_METRICS_TOKEN`; gọi với `Authorization: Bearer <token>`
+  (sai hoặc thiếu: 401). Không có token, email hay tên nào trong đó. Số liệu: `terrarium_uptime_seconds`,
+  `terrarium_streams`, `terrarium_islands_slotted`, `terrarium_islands_online`,
+  `terrarium_publish_total{result="accepted|stale_seq|other_instance|bad_packet|too_large|rate_limited|unauthorized"}`,
+  `terrarium_stream_refused_total{reason="hub_cap|user_cap"}`, `terrarium_http_429_total`,
+  `terrarium_world_broadcasts_total`, `terrarium_frames_written_total`. Bộ đếm về 0 khi hub khởi động lại.
+- Sự kiện `world` có thêm `now` (giờ của hub) và mỗi đảo có `lastAt` (lần cuối nghe được một máy của đảo, `null` nếu hub
+  chưa nghe từ khi khởi động); `/api/me` có `devices[].lastAt` tương tự.
 
 ## 4. Sao lưu
 
