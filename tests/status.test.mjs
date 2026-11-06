@@ -186,7 +186,7 @@ test('no registry directory falls back to time filtering', () => {
 
 test('a failed read keeps the last good list', () => {
   const prev = new Map([['a', { pid: 1, file: '1.json' }], ['b', { pid: 2, file: '2.json' }]]);
-  assert.equal(liveFromRegistry({ ok: false, code: 'EMFILE' }, { prev, alive: yes }), prev);
+  assert.deepEqual(liveFromRegistry({ ok: false, code: 'EMFILE' }, { prev, alive: yes }), prev);
   assert.equal(liveFromRegistry({ ok: false, code: 'EMFILE' }, { alive: yes }), null);
 });
 
@@ -309,4 +309,34 @@ test('snapshot keeps its shape', () => {
   const regOnly = byId(out, INT);
   assert.equal(regOnly.updatedAt, sec(85));
   assert.equal(regOnly.status, 'idle');
+});
+
+test('a registry file that cannot be read (not ENOENT) keeps its previous entry instead of dropping the session', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'reg-'));
+  fs.writeFileSync(path.join(dir, '5151.json'), JSON.stringify({ pid: 5151, sessionId: 's-a', status: 'busy' }));
+  const first = liveFromRegistry(readRegistryDir(dir), { alive: () => true });
+  assert.ok(first.has('s-a'));
+  fs.chmodSync(path.join(dir, '5151.json'), 0o000);
+  try {
+    const read = readRegistryDir(dir);
+    if (process.getuid && process.getuid() === 0) return; // root can read anything
+    assert.deepEqual(read.entries, [{ file: '5151.json', json: null }]);
+    assert.ok(liveFromRegistry(read, { prev: first, alive: () => true }).has('s-a'));
+  } finally { fs.chmodSync(path.join(dir, '5151.json'), 0o600); }
+});
+
+test('on a directory read error the previous list is kept only for processes still alive', () => {
+  const prev = new Map([['s-live', { pid: 1, file: '1.json' }], ['s-dead', { pid: 2, file: '2.json' }]]);
+  const m = liveFromRegistry({ ok: false, code: 'EACCES' }, { prev, alive: (pid) => pid === 1 });
+  assert.deepEqual([...m.keys()], ['s-live']);
+});
+
+test('two registry files for one session keep the most recently updated one', () => {
+  const read = { ok: true, entries: [
+    { file: '7.json', json: { pid: 7, sessionId: 'dup', status: 'idle', updatedAt: 200 } },
+    { file: '6.json', json: { pid: 6, sessionId: 'dup', status: 'busy', updatedAt: 100 } },
+  ] };
+  assert.equal(liveFromRegistry(read, { alive: () => true }).get('dup').pid, 7);
+  read.entries.reverse();
+  assert.equal(liveFromRegistry(read, { alive: () => true }).get('dup').pid, 7);
 });
