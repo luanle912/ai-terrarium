@@ -843,3 +843,23 @@ test('a failing publisher logs one summary a minute, not one line per try', asyn
   assert.equal(r.logs.filter((l) => /still offline/.test(l)).length, 2);
   r.pub.stop();
 });
+
+test('a 200 that is not the hub\'s answer (a login page behind a proxy) is a failure, not a send', async () => {
+  const dir = tmp(); mkCfg(dir);
+  const html = { status: 200, headers: { get: () => 'text/html' }, json: async () => { throw new SyntaxError('html') }, text: async () => '<html>login</html>' };
+  const r = rig(dir, () => html, { v: snap(1) });
+  await r.step();
+  const s = r.pub.state();
+  assert.notEqual(s.state, 'sending');
+  assert.equal(s.lastOkAt, null);
+  assert.equal(s.lastErr.code, 'http:200');
+  assert.equal(s.failures, 1);
+});
+
+test('publish requests never follow a redirect', async () => {
+  const dir = tmp(); mkCfg(dir);
+  let opts = null;
+  const r = rig(dir, (n, call) => { opts = call.opts; return ack({ accepted: true }); }, { v: snap(1) });
+  await r.step();
+  assert.equal(opts && opts.redirect, 'manual');
+});
