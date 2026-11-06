@@ -156,6 +156,23 @@ Một hub chứa **tối đa 8 đảo**, mỗi đảo một **chỗ cố định
 - **Tranh chỗ cuối.** Kiểm đủ chỗ và tạo đảo nằm trong một transaction, cộng chỉ mục `UNIQUE` trên `slot`: hai người cùng
   duyệt mã khi chỉ còn một chỗ thì đúng một người được, người kia thấy câu báo đủ chỗ.
 
+## 3e. Nâng cấp lên bản "connection hardening" (đợt 1)
+
+- **Câu trả lời của `POST /api/publish`.** Hub giờ trả `200 {"accepted": true}` khi nhận gói, hoặc `200 {"accepted": false,
+  "reason": "stale_seq", "seq": n}` (hub đang giữ seq mới hơn: publisher nhảy tới `n + 1` và gửi lại) hoặc
+  `{"accepted": false, "reason": "other_instance"}` (một publisher khác trên cùng máy đang gửi: publisher này chuyển sang
+  `standby` và thử lại sau 30 giây). Gói sai vẫn là `400`/`413`; publisher mới hiện `offline`, ghi lý do vào log và thử lại
+  mỗi 15 giây thay vì coi là đã gửi. Thân gói không đổi, không có khoá mới.
+- **Header `X-Terrarium-Instance`.** Mỗi publisher gửi một mã ngẫu nhiên 16 hex; hub chỉ cho instance mới nhất của một máy
+  gửi. Thiếu header = instance `legacy`.
+- **Luồng `GET /api/world/stream`.** Ngoài comment `: ping`, hub gửi sự kiện có tên `event: ping` mỗi 25 giây để trang phát
+  hiện luồng treo.
+- **Thứ tự deploy: hub trước, rồi tới plugin; không cần làm cùng lúc.** Hub mới chạy được với mọi publisher cũ (200 thay vì
+  204: publisher cũ coi 200 như 204 và bỏ qua thân, đúng như hôm nay). Publisher mới chạy được với hub cũ (204 được hiểu là
+  đã nhận; không gửi khoá nào hub cũ từ chối). Trang mới trên tiến trình hub cũ không bật canh gác vì thiếu `ping` có tên,
+  và cư xử như trước. Bảng đầy đủ nằm ở mục 9 của `docs/specs/2026-11-06-connection-hardening-design.md`; ma trận
+  cũ/mới được kiểm bằng `tests/compat-matrix.test.mjs` (lấy code cũ từ git `21e9bd8`).
+
 ## 4. Sao lưu
 
 Toàn bộ dữ liệu nằm trong một file SQLite (`HUB_DB`). Sao lưu file đó theo lịch rồi chép bản sao đi nơi khác, ví dụ

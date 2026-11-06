@@ -26,6 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Tool errors no longer turn an employee red** — A failing tool call (a non-zero Bash exit, a denied edit) is an ordinary step now; only a real API or session error shows as an error
+- **No false "waiting for approval" in auto mode** — A session in auto (or bypass) mode that runs a slow tool is `working`, not waiting for a permission nobody will be asked for
+- **Background sub-agents are not reported as finished** — A sub-agent still running after its parent ended the turn keeps showing `working`; each sub-agent is judged by its own transcript
+- **An empty registry no longer makes ghosts** — A registry file that is empty or cannot be read keeps its session, and a stale `prev` only counts for a live process; of duplicate registry files the newest wins
+- **A packet the hub refuses is reported and resent** — The publisher reads the hub's publish reply: a rejected packet (400/413, `stale_seq`, `other_instance`) is never counted as sent; it shows `offline` or `standby` and is retried instead of silently dropped
+- **The hub tells the truth about dropped packets** — `POST /api/publish` answers `200 {accepted, reason?}` instead of an empty 204 (`reason`: `stale_seq` with the hub's `seq`, or `other_instance`)
+- **Two Claude Offices on one machine no longer fight** — Each publisher sends an `x-terrarium-instance` header; the hub lets only the newest instance of a device publish and the other one stands by (and takes over again 90 s after the sender goes quiet)
+- **Employees come back when an island returns** — When an island goes offline and online again, its agents reappear without a reload
+- **A frozen stream is noticed** — The hub sends a named `event: ping` every 25 s, so the page can tell a silent, stuck stream from a quiet one and reconnects
 - **Checking a code on a full hub** — Looking up a pairing code while the hub already has 8 islands now only shows "Hub đã đủ 8 đảo"; the code stays valid, so it can still be approved if a place frees up before it expires
 - **Smoother sky of islands** — The simple islands are kept as GPU-friendly images with a least-recently-used cache (no burst of redraws at dusk), the 8 name plates are measured once instead of every frame, and the hub no longer reads its database for every island update or re-sends every island after a removal
 
