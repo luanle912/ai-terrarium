@@ -562,3 +562,60 @@ test('leaveGone: a hidden tab frees the desk at once, a visible one lets the per
   assert.equal(W.leaveGone('hidden'), true)
   assert.equal(W.leaveGone('visible'), false)
 })
+
+// ---- "Máy này": what this machine sends (Task 16) ----
+const NOW = 1_800_000_000_000
+
+test('pillView: a healthy publisher is ok with its age', () => {
+  const v = W.pillView({ state: 'sending', lastOkAt: NOW - 4000, lastErr: null, failures: 0, nextRetryAt: null }, NOW)
+  assert.deepEqual(v, { state: 'sending', tone: 'ok', ageMs: 4000, retryInMs: null, err: null, failures: 0 })
+})
+
+test('pillView: an old server without the new fields still shows its state', () => {
+  assert.deepEqual(W.pillView({ state: 'offline' }, NOW),
+    { state: 'offline', tone: 'bad', ageMs: null, retryInMs: null, err: null, failures: 0 })
+  assert.equal(W.pillView({ state: 'sending', lastOkAt: 'x', failures: -2, lastErr: 'boom' }, NOW).ageMs, null)
+  assert.equal(W.pillView({ state: 'sending', failures: -2, lastErr: 'boom' }, NOW).err, null)
+  assert.equal(W.pillView({ state: 'sending', failures: -2 }, NOW).failures, 0)
+  assert.equal(W.pillView(null, NOW), null)
+  assert.equal(W.pillView({}, NOW), null)
+  assert.equal(W.pillView({ state: 'weird' }, NOW).tone, 'muted')
+})
+
+test('pillView: rejected is bad and carries the reason', () => {
+  const v = W.pillView({ state: 'rejected', lastOkAt: NOW - 90_000, failures: 3, nextRetryAt: NOW + 25_000,
+    lastErr: { code: 'rejected:too_many_sessions', at: NOW - 1000, reason: 'too many sessions' } }, NOW)
+  assert.equal(v.tone, 'bad')
+  assert.deepEqual(v.err, { code: 'rejected:too_many_sessions', reason: 'too many sessions' })
+  assert.equal(v.failures, 3)
+  assert.equal(v.retryInMs, 25_000)
+  assert.equal(v.ageMs, 90_000)
+})
+
+test('pillView: a nextRetryAt in the past reads as retrying now', () => {
+  const v = W.pillView({ state: 'offline', nextRetryAt: NOW - 5000, failures: 2,
+    lastErr: { code: 'network:ECONNREFUSED', at: NOW - 6000 } }, NOW)
+  assert.equal(v.retryInMs, 0)
+  assert.deepEqual(v.err, { code: 'network:ECONNREFUSED', reason: null })
+})
+
+test('pillView: the tone of every publisher state', () => {
+  const tone = s => W.pillView({ state: s }, NOW).tone
+  assert.deepEqual(['sending', 'connecting', 'paused', 'standby', 'private', 'off', 'offline', 'rejected', 'revoked']
+    .map(tone), ['ok', 'warn', 'warn', 'muted', 'muted', 'muted', 'bad', 'bad', 'bad'])
+})
+
+test('agoParts picks seconds, minutes or hours', () => {
+  assert.deepEqual(W.agoParts(0), { unit: 's', n: 0 })
+  assert.deepEqual(W.agoParts(59_400), { unit: 's', n: 59 })
+  assert.deepEqual(W.agoParts(60_000), { unit: 'm', n: 1 })
+  assert.deepEqual(W.agoParts(3_599_000), { unit: 'm', n: 59 })
+  assert.deepEqual(W.agoParts(7_300_000), { unit: 'h', n: 2 })
+  assert.deepEqual(W.agoParts(-500), { unit: 's', n: 0 }, 'a clock a little ahead never shows a negative age')
+})
+
+test('deviceLink: the chip opens the hub on this device only for a 16-hex device id', () => {
+  assert.equal(W.deviceLink('https://hub.x/', '0123456789abcdef'), 'https://hub.x/#this-device=0123456789abcdef')
+  assert.equal(W.deviceLink('https://hub.x/', 'nothex'), 'https://hub.x/')
+  assert.equal(W.deviceLink('https://hub.x/', null), 'https://hub.x/')
+})

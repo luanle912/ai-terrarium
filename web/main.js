@@ -31,6 +31,7 @@ import './office-render-settings.js';
 import './island-scene.js';
 import './world-ui.js';
 import './world-local.js';
+import './world-machine.js';
 import './world-state.js';
 import './world-link-ui.js';
 import './world-draw.js';
