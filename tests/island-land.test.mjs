@@ -264,7 +264,7 @@ test('the office dogs keep off the water and the mountain, drink at the lake and
   const { DOG_PLACES, ISLAND } = loadWeb('office-scene')
   const { roam, den, drink, clear } = DOG_PLACES
   for (const k of roam) {
-    assert.ok(!ISLAND.pond.cells.has(k) && !ISLAND.river.cells.has(k), `dogs roam the water at ${k}`)
+    assert.ok(!ISLAND.pond.cells.has(k) && !(ISLAND.river.cells.has(k) && !ISLAND.bridge.cells.has(k)), `dogs roam the water at ${k}`)
     assert.ok(!ISLAND.mountain.cells.has(k), `dogs roam the mountain at ${k}`)
   }
   assert.ok(drink.length >= 2, 'nowhere to drink')

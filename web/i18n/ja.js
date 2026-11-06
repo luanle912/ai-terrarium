@@ -50,6 +50,8 @@ export default {
 "office.act.phone":"スマホいじり中",
 "office.act.stretch":"ストレッチ中",
 "office.act.bath":"池で水浴び中",
+"office.act.bench":"湖畔のベンチでひと休み",
+"office.act.fish":"釣り中",
 "office.sim.talkTopics":["APIスキーマの相談","型を共有","命名のすり合わせ","diffのレビュー依頼","ビルドエラーの報告"],
 "office.status.working":"タイピング中",
 "office.status.thinking":"思考中",

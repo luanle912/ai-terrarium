@@ -70,9 +70,17 @@ mixin(
           return a.parent ? tr('bubble.subEntering') : tr('bubble.newSession');
         case 'idle':
           return (
-            ({ bath: '💦 ', smoke: '🚬 ', wc: '🚻 ', sky: '☁️ ', microwave: '🍱 ', meal: '🍪 ', snack: '🍪 ' }[
-              a.actNow
-            ] || '☕ ') + (ACT_TXT[a.actNow] || tr('bubble.pantryBreak'))
+            ({
+              bath: '💦 ',
+              bench: '🪑 ',
+              fish: '🎣 ',
+              smoke: '🚬 ',
+              wc: '🚻 ',
+              sky: '☁️ ',
+              microwave: '🍱 ',
+              meal: '🍪 ',
+              snack: '🍪 ',
+            }[a.actNow] || '☕ ') + (ACT_TXT[a.actNow] || tr('bubble.pantryBreak'))
           );
         case 'leaving':
           return tr('bubble.leaving');

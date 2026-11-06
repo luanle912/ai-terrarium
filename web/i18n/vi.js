@@ -50,6 +50,8 @@ export default {
 "office.act.phone":"lướt điện thoại",
 "office.act.stretch":"vươn vai",
 "office.act.bath":"tắm hồ",
+"office.act.bench":"ngồi ghế đá bên hồ",
+"office.act.fish":"câu cá",
 "office.sim.talkTopics":["hỏi schema API","chia sẻ types","thống nhất naming","nhờ review diff","báo lỗi build"],
 "office.status.working":"Đang gõ phím",
 "office.status.thinking":"Suy nghĩ",

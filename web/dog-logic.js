@@ -24,13 +24,23 @@ const isNight = h => h >= 22 || h < 6;
 // night while still looking lit by the same moon.
 const nightMix = df => (1 - df) * 0.3;
 
-// Lawn cells a dog may stand on: the walkable lawn minus water and reserved areas, and only in front of or beside
-// the office. Behind the walls (x<0 or y<0) a dog would be drawn over the wall, since it sorts with the office items.
-function roamCells(walk, { W, H, pond, avoid = [] }) {
+// Whether a dog on (x, y) would be drawn over something that should hide it. The office walls go down before the
+// sorted sprites, so a dog in the strip right behind them, within `reach` tiles (its feet climb 16 px up the screen
+// per tile, the walls rise reach × 16 px) and in a screen column the walls cover, would show through them. `tall`
+// lists things baked into the island picture as [x, y, reach]: a dog up to `reach` tiles behind one, in its screen
+// column (x − y within a tile), would be drawn over it.
+function hidden(x, y, W, H, reach, tall) {
+  if (x < 0 && x >= -reach && y - x >= -1 && y - x <= H + 1) return true;
+  if (y < 0 && y >= -reach && x - y >= -1 && x - y <= W + 1) return true;
+  return tall.some(([tx, ty, r]) => Math.abs(tx - ty - (x - y)) <= 1 && tx + ty > x + y && tx + ty - (x + y) <= r);
+}
+// Lawn cells a dog may stand on: the walkable lawn minus the office, water, reserved areas and the cells where it
+// would be drawn over the walls or something tall (hidden).
+function roamCells(walk, { W, H, pond, avoid = [], wallReach = 4, tall = [] }) {
   const out = new Set();
   for (const k of walk) {
     const [x, y] = k.split(',').map(Number);
-    if (x < 0 || y < 0 || (x < W && y < H) || pond.has(k)) continue;
+    if ((x >= 0 && y >= 0 && x < W && y < H) || pond.has(k) || hidden(x, y, W, H, wallReach, tall)) continue;
     if (avoid.some(r => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)) continue;
     out.add(k);
   }
@@ -124,6 +134,22 @@ function denCells(roam, tree, clear = new Set()) {
     den.push(next);
   }
   return den;
+}
+// The quiet cell right beside a seat (the bench at the rest corner) where a dog lies while someone sits there: off the
+// paths, on the viewer's side first so the seat and the person never hide it, and never in the screen column (x − y
+// within a tile) right behind where someone else stands (`people`, [x, y] points, e.g. the angler). Null when there is
+// none.
+function besideCell(roam, at, clear = new Set(), people = []) {
+  const out = [];
+  for (const [dx, dy] of N8) {
+    const c = [at[0] + dx, at[1] + dy],
+      cx = c[0] + 0.5,
+      cy = c[1] + 0.5;
+    if (!roam.has(key(c[0], c[1])) || clear.has(key(c[0], c[1]))) continue;
+    if (people.some(([x, y]) => Math.abs(x - y - (cx - cy)) < 1 && x + y > cx + cy)) continue;
+    out.push(c);
+  }
+  return out.sort((p, q) => q[0] + q[1] - (p[0] + p[1]) || Math.abs(p[0] - at[0]) - Math.abs(q[0] - at[0]))[0] || null;
 }
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -307,7 +333,7 @@ const GREET_AGAIN = 90;
 const greetable = w => (w.agents || []).filter(a => a.act !== 'smoke');
 function greet(dogs, w) {
   for (const a of greetable(w)) {
-    if (dogs.some(d => d.greet === a.id && (d.act === 'greet' || d.act === 'sit'))) continue;
+    if (dogs.some(d => d.greet === a.id && (d.act === 'greet' || d.act === 'sit' || d.act === 'company'))) continue;
     if (dogs.some(d => (d.greeted || {})[a.id] > w.now - GREET_AGAIN)) continue;
     const cand = dogs
       .filter(d => isFree(d) || (d.act === 'rest' && !d.path.length))
@@ -321,6 +347,26 @@ function greet(dogs, w) {
     cand.until = w.now + 25;
     cand.repath = 0;
   }
+}
+// Someone sitting on the bench at the rest corner (act 'bench', arrived: `at`) gets one dog lying on the cell beside it
+// (w.rest) for as long as they sit, used like the den: it stays there into the night. A free or resting dog comes, or
+// the one already greeting them.
+const benchSitter = w => (w.agents || []).find(a => a.act === 'bench' && a.at);
+function company(dogs, w) {
+  const a = w.rest && benchSitter(w);
+  if (!a || dogs.some(d => d.act === 'company')) return;
+  const [rx, ry] = w.rest,
+    cand = dogs
+      .filter(
+        d =>
+          isFree(d) ||
+          (d.act === 'rest' && !d.path.length) ||
+          ((d.act === 'greet' || d.act === 'sit') && d.greet === a.id),
+      )
+      .sort((p, q) => Math.hypot(p.x - rx, p.y - ry) - Math.hypot(q.x - rx, q.y - ry))[0];
+  if (!cand) return;
+  Object.assign(cand, { act: 'company', greet: a.id, partner: null, lead: false, wag: false, until: Infinity });
+  if (!goTo(cand, w, w.rest, STROLL * LEGS[cand.breed])) idle(cand, w, 1);
 }
 // The cell a greeting dog sits on: right beside the person, or on the nearest bank when they bathe out in the pond
 // with water all round; off the path if any such cell is free, else on it anyway.
@@ -498,6 +544,14 @@ function tick(d, dogs, w) {
       }
       break;
     }
+    case 'company': {
+      const a = benchSitter(w);
+      if (!a || a.id !== d.greet) {
+        d.greet = null;
+        idle(d, w, 1.5, true);
+      } else if (still) d.face = faceToward(d, a.x, a.y);
+      break;
+    }
   }
 }
 
@@ -525,7 +579,7 @@ function create(w) {
 function step(dogs, w, dt) {
   const night = isNight(w.hour);
   for (const d of dogs) {
-    if (night && d.act !== 'sleep' && d.act !== 'den') {
+    if (night && d.act !== 'sleep' && d.act !== 'den' && d.act !== 'company') {
       // Everyone heads for their own cell of the den; games and greetings simply stop.
       const c = (w.den || [])[d.id != null ? d.id : dogs.indexOf(d)];
       d.partner = null;
@@ -546,6 +600,7 @@ function step(dogs, w, dt) {
       }
     } else if (!night && (d.act === 'sleep' || d.act === 'den')) idle(d, w, 1 + w.rand() * 3, true);
   }
+  company(dogs, w);
   if (!night) greet(dogs, w);
   for (const d of dogs) {
     const had = d.path.length > 0;
@@ -569,6 +624,7 @@ function pose(d, t) {
     dy = 0;
   switch (d.act) {
     case 'rest':
+    case 'company':
       frame = 'lie';
       break;
     case 'sleep':
@@ -612,6 +668,7 @@ export const DogLogic = {
   path,
   drinkSpots,
   denCells,
+  besideCell,
   faceToward,
   create,
   step,

@@ -50,6 +50,8 @@ export default {
 "office.act.phone":"mirando el móvil",
 "office.act.stretch":"estirándose",
 "office.act.bath":"dándose un chapuzón",
+"office.act.bench":"descansando en el banco",
+"office.act.fish":"pescando",
 "office.sim.talkTopics":["duda sobre el schema API","compartiendo types","acordando nombres","pide revisar un diff","error de build"],
 "office.status.working":"Tecleando",
 "office.status.thinking":"Pensando",

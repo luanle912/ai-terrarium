@@ -49,6 +49,8 @@ export default {
 "office.act.phone":"ไถมือถือ",
 "office.act.stretch":"บิดขี้เกียจ",
 "office.act.bath":"แช่น้ำในบ่อ",
+"office.act.bench":"นั่งพักที่ม้านั่งริมทะเลสาบ",
+"office.act.fish":"ตกปลา",
 "office.sim.talkTopics":["ถามเรื่อง schema API","แชร์ types","ตกลงเรื่อง naming","ขอให้รีวิว diff","แจ้ง build พัง"],
 "office.status.working":"กำลังพิมพ์",
 "office.status.thinking":"กำลังคิด",
