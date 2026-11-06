@@ -31,6 +31,7 @@ export const WorldLink = (() => {
   const DOWN_CAP_MS = 60000,
     REFUSED_AFTER = 5,
     WAKE_JUMP_MS = 15000,
+    WAKE_QUIET_MS = 30000,
     KEEP_STALE_MS = 300000;
   const reconnectDelay = (attempt, rand) =>
     RECONNECT_STEPS_MS[Math.min(Math.max(0, attempt | 0), RECONNECT_STEPS_MS.length - 1)] * (0.8 + 0.4 * rand);
@@ -94,8 +95,9 @@ export const WorldLink = (() => {
           plan(0);
         }
         // A stream that died while the machine slept can still look open; only a visible tab acts on it, since a
-        // background tab throttled to one tick a minute looks like a wake on every tick.
-        else if (ev.type === 'wake' && ev.visible) {
+        // background tab throttled to one tick a minute looks like a wake on every tick, and only when nothing has
+        // arrived for WAKE_QUIET_MS on the wall clock (quietMs): a tab shown after a long hide has a healthy stream.
+        else if (ev.type === 'wake' && ev.visible && !(ev.quietMs <= WAKE_QUIET_MS)) {
           l.phase = 'reconnecting';
           if (l.staleSince == null) l.staleSince = now;
           act.close = true;
@@ -121,6 +123,7 @@ export const WorldLink = (() => {
     DOWN_CAP_MS,
     REFUSED_AFTER,
     WAKE_JUMP_MS,
+    WAKE_QUIET_MS,
     KEEP_STALE_MS,
     reconnectDelay,
     linkStart,

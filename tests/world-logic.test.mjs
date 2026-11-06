@@ -708,3 +708,12 @@ test('chipTone agrees with the lit legend row for every link phase', () => {
   assert.equal(W.chipTone('connecting', 'live'), 'warn', 'the first connect is on the way')
   assert.equal(W.chipTone('ended', undefined), 'bad')
 })
+
+test('waking in a visible tab keeps a live stream that has spoken lately (a long-hidden tab, not a sleep)', () => {
+  // Chrome ticks a long-hidden tab about once a minute, so showing it again looks like a wake: keep the stream when an
+  // event arrived within WAKE_QUIET_MS on the wall clock.
+  const keep = step(W.linkStart(), { type: 'wake', visible: true, quietMs: 12000 }, 5000)
+  assert.equal(keep.act.close, false); assert.equal(keep.act.connectIn, null); assert.equal(keep.link.phase, 'live')
+  const slept = step(W.linkStart(), { type: 'wake', visible: true, quietMs: W.WAKE_QUIET_MS + 1 }, 5000)
+  assert.equal(slept.act.close, true); assert.equal(slept.act.connectIn, 0)
+})

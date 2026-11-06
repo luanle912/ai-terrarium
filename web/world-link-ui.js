@@ -22,6 +22,7 @@ Object.assign(ClaudeOffice.prototype, {
   openWorldStream(w) {
     const alive = () => {
         w.lastEventAt = performance.now();
+        w.lastEventWall = Date.now(); // the wall clock keeps running through a sleep
       },
       heard = () => {
         alive();
