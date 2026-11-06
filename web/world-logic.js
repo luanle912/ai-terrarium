@@ -5,6 +5,7 @@
 // Moving between views is covered by two cloud bands: close in 350 ms, hold 100 ms, open in 400 ms. With reduced
 // motion it is a 200 ms cross-fade instead. All rects are in stage px, h = w * ISLAND_ASPECT.
 import { WorldLink } from './world-link.js';
+import { WorldPill } from './world-pill.js';
 
 export const WorldLogic = (() => {
   const SLOTS = 8,
@@ -235,5 +236,6 @@ export const WorldLogic = (() => {
     ISLAND_ASPECT,
     clientSessions,
     ...WorldLink,
+    ...WorldPill,
   };
 })();
