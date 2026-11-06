@@ -201,7 +201,7 @@ export function renderIsland(island, frame, k, env) {
     } else if (d.kind === 'flower') {
       ctx.fillStyle = night(['#ffd166', '#ff8fab', '#ffffff'][(d.x + d.y + 99) % 3], df);
       ctx.fillRect(x, y - 1, 1, 1);
-    } else if (d.x < 0 || d.y < 0) drawTree(ctx, P, d, df, snow);
+    } else if (d.kind === 'tree' && (d.x < 0 || d.y < 0)) drawTree(ctx, P, d, df, snow);
   }
   return cv;
 }

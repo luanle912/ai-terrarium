@@ -8,7 +8,8 @@ const WATERFALL_LEN = 140,
 
 // Cheapest route between two tiles (Dijkstra). `canStep(a,b)` says whether one step from a to b is allowed and
 // `cost(b)` what it costs; with every cost 1 this is a plain shortest route. The frontier is a sorted array: the grid
-// is about a thousand cells and routes are only planned when an agent picks a new goal.
+// is about two thousand cells (the longest walk, office to the rest corner or the back lawn, plans in ~1.5 ms) and
+// routes are only planned when an agent picks a new goal.
 const GRASS_COST = 2;
 function cheapestPath(from, to, canStep, cost) {
   const goal = key(to[0], to[1]),
@@ -53,14 +54,17 @@ function canCross(a, b, W, H, st) {
       : o[1] === H - 1 && l[1] === H && o[0] === l[0] && l[0] >= s.x && l[0] < s.x + s.len,
   );
 }
-// Lawn cells agents can stand on: not water (except the bathing spots), not under a tree or rock.
+// Lawn cells agents can stand on: not the mountain, not the river (except across the bridge), not the lake (except
+// the bathing spots), not under a tree, bush, mushroom, rock or lamp post. Flowers are stepped over.
 function lawnWalk(island, W, H) {
   const out = new Set(),
     blocked = new Set(island.decor.filter(d => d.kind !== 'flower').map(d => key(d.x, d.y))),
     bath = new Set(island.pond.spots.map(s => key(s.x, s.y)));
+  for (const l of island.lamps) blocked.add(key(l.x, l.y));
   for (const c of island.list) {
     const k = key(c.x, c.y);
-    if (inRect(c.x, c.y, W, H) || blocked.has(k)) continue;
+    if (inRect(c.x, c.y, W, H) || blocked.has(k) || island.mountain.cells.has(k)) continue;
+    if (island.river.cells.has(k) && !island.bridge.cells.has(k)) continue;
     if (island.pond.cells.has(k) && !bath.has(k)) continue;
     out.add(k);
   }
