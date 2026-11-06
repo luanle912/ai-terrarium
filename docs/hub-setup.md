@@ -119,8 +119,8 @@ trong `world` (vẫn `online: false`) tối đa 90 giây, và trang vẽ nó là
 của các máy đang chạy gửi lại trong chưa tới 30 giây (nhịp tim) nên đảo đó sáng lại trước hạn; đảo của máy đã tắt hết
 cửa sổ 90 giây thì chuyển thành offline.
 
-Luồng SSE (`/api/world/stream`) cần proxy không đệm và không cắt kết nối rảnh quá sớm. Hub gửi dòng `: ping` mỗi
-25 giây nên cấu hình mặc định của hai bên đều chạy được.
+Luồng SSE (`/api/world/stream`) cần proxy không đệm và không cắt kết nối rảnh quá sớm. Hub gửi sự kiện `event: ping`
+mỗi 25 giây nên cấu hình mặc định của hai bên đều chạy được.
 
 ## 3b. Owner và nhật ký
 
@@ -182,11 +182,11 @@ Một hub chứa **tối đa 8 đảo**, mỗi đảo một **chỗ cố định
 - **Câu trả lời của `POST /api/publish`.** Hub giờ trả `200 {"accepted": true}` khi nhận gói, hoặc `200 {"accepted": false,
   "reason": "stale_seq", "seq": n}` (hub đang giữ seq mới hơn: publisher nhảy tới `n + 1` và gửi lại) hoặc
   `{"accepted": false, "reason": "other_instance"}` (một publisher khác trên cùng máy đang gửi: publisher này chuyển sang
-  `standby` và thử lại sau 30 giây). Gói sai vẫn là `400`/`413`; publisher mới hiện `offline`, ghi lý do vào log và thử lại
+  `standby` và thử lại sau 30 giây). Gói sai vẫn là `400`/`413`; publisher mới hiện `rejected`, ghi lý do vào log và thử lại
   mỗi 15 giây thay vì coi là đã gửi. Thân gói không đổi, không có khoá mới.
 - **Header `X-Terrarium-Instance`.** Mỗi publisher gửi một mã ngẫu nhiên 16 hex; hub chỉ cho instance mới nhất của một máy
   gửi. Thiếu header = instance `legacy`.
-- **Luồng `GET /api/world/stream`.** Ngoài comment `: ping`, hub gửi sự kiện có tên `event: ping` mỗi 25 giây để trang phát
+- **Luồng `GET /api/world/stream`.** Hub gửi sự kiện có tên `event: ping` mỗi 25 giây (thay cho comment `: ping` cũ) để trang phát
   hiện luồng treo.
 - **Thứ tự deploy: hub trước, rồi tới plugin; không cần làm cùng lúc.** Hub mới chạy được với mọi publisher cũ (200 thay vì
   204: publisher cũ coi 200 như 204 và bỏ qua thân, đúng như hôm nay). Publisher mới chạy được với hub cũ (204 được hiểu là
@@ -196,7 +196,7 @@ Một hub chứa **tối đa 8 đảo**, mỗi đảo một **chỗ cố định
 
 ## 3f. Triển khai đợt 2 (khởi động lại êm, ngủ/tỉnh)
 
-- **Kiểm `HUB_TRUST_PROXY` của môi trường thật trước khi deploy.** Chỉ nhận `''`, `1` hoặc `cloudflare`; mọi giá trị khác
+- **Kiểm `HUB_TRUST_PROXY` của môi trường thật trước khi deploy.** Chỉ nhận `''` (hoặc `0`), `1` hoặc `cloudflare`; mọi giá trị khác
   làm hub không khởi động (lỗi `HUB_TRUST_PROXY must be 1 or cloudflare`). Bản cũ lặng lẽ bỏ qua giá trị lạ.
 - **Thứ tự: hub trước, rồi tới plugin** (xem mục 3e). Trang cũ vẫn chạy với hub mới: `retry:` được trình duyệt tôn trọng.
 - **`Retry-After`** của giới hạn luồng (429 mỗi người, 503 toàn hub) dành cho client: `EventSource` của trình duyệt bỏ qua
