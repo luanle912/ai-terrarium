@@ -182,10 +182,13 @@ function idle(d, w, s, happy) {
   d.partner = null;
   d.lead = false;
 }
+// Mostly a stroll of a few tiles; now and then (FAR_WALK) a long walk to anywhere on the lawn, so the dogs get round
+// to the back lawn and the far bank too.
+const FAR_WALK = 0.2;
 function wander(d, w) {
   d.act = 'wander';
   d.wag = false;
-  const c = near(d, w, 6);
+  const c = near(d, w, w.rand() < FAR_WALK ? 99 : 6);
   if (!c || !goTo(d, w, c, STROLL * LEGS[d.breed])) idle(d, w, 1 + w.rand() * 2);
 }
 function rest(d, dogs, w) {

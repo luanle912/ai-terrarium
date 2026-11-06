@@ -170,8 +170,8 @@ function poly(ctx, pts, fill) {
 }
 // A small floating island in the style of the main one: diamond grass top with a dark outline, brown dirt lip,
 // one cone underneath, and a tree or rock on top. Smaller (farther) ones are hazier and fainter. Each kind is painted
-// once into its own sprite (again only when its size, the haze colour or the screen density changes) and stamped
-// every frame, so the bobbing islands cost one drawImage each and allocate nothing.
+// once into its own sprite (again only when its size, the haze colour or the screen density changes: the haze only
+// moves at dawn and dusk) and stamped every frame, so the bobbing islands cost one drawImage each.
 const farSprites = new Map();
 const farness = sc => Math.max(0, Math.min(1, 1.05 - sc));
 export function farIsland(ctx, x, y, sc, col, kind = 'plain') {
@@ -185,9 +185,16 @@ export function farIsland(ctx, x, y, sc, col, kind = 'plain') {
     s.sc = sc;
     s.haze = col.haze;
     s.res = res;
-    s.c.width = Math.ceil(2 * L * res);
-    s.c.height = Math.ceil((T + B) * res);
-    const g = s.c.getContext('2d');
+    const w = Math.ceil(2 * L * res),
+      h = Math.ceil((T + B) * res),
+      g = s.c.getContext('2d');
+    if (s.c.width !== w || s.c.height !== h) {
+      s.c.width = w;
+      s.c.height = h;
+    } else {
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, w, h);
+    }
     g.setTransform(res, 0, 0, res, L * res, T * res);
     paintFarIsland(g, sc, col.haze, kind);
   }

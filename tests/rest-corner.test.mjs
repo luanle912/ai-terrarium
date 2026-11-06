@@ -183,3 +183,24 @@ test('a dog that cannot reach the bench is not sent again every step', () => {
   assert.equal(tried(), after10, 'a dog was sent to the bench again within the back-off')
   assert.ok(!dogs.some(d => d.act === 'company'))
 })
+
+test('dogs that start on the front lawn reach the back lawn within ten minutes', () => {
+  // Strolls stay within a few tiles; now and then a dog sets off on a long walk, so the back lawn (reached round the
+  // east side) sees dogs too. Over several seeds, so one lucky walk does not decide it.
+  let reached = 0
+  for (let s = 1; s <= 6; s++) {
+    let seed = s * 7919
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    const w = { ...DOG_PLACES, agents: [], hour: 11, snow: 0, now: 0, rand }
+    const dogs = Dog.create(w)
+    dogs.forEach((d, i) => Object.assign(d, { x: 18.5 + i, y: H + 5.5, path: [] }))
+    let back = false
+    for (let i = 0; i < 600 * 10 && !back; i++) {
+      w.now += 1 / 10
+      Dog.step(dogs, w, 1 / 10)
+      back = dogs.some(d => d.y < -4)
+    }
+    if (back) reached++
+  }
+  assert.ok(reached >= 5, `a dog reached the back lawn in only ${reached} of 6 runs`)
+})
