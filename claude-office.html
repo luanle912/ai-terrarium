@@ -208,6 +208,10 @@ vi:{
 "settings.agentCount":"Số agent: {n}",
 "settings.speed":"Tốc độ: {speed}x",
 "settings.bubbleText":"Bubble text",
+"settings.bubbles.speech":"Gọn",
+"settings.bubbles.always":"Luôn hiện",
+"settings.bubbles.off":"Tắt",
+"settings.bubbles.title":"Gọn: người đang làm việc luôn có bong bóng; người đang nghỉ chỉ hiện vài giây khi đổi việc. Cần duyệt, lỗi, người đang chọn hoặc đang rê chuột vào luôn hiện.",
 "settings.weather":"Thời tiết",
 "settings.weather.mode":"Chế độ thời tiết",
 "settings.weather.random":"Ngẫu nhiên",
@@ -534,6 +538,10 @@ en:{
 "settings.agentCount":"Agents: {n}",
 "settings.speed":"Speed: {speed}x",
 "settings.bubbleText":"Bubble text",
+"settings.bubbles.speech":"Compact",
+"settings.bubbles.always":"Always",
+"settings.bubbles.off":"Off",
+"settings.bubbles.title":"Compact: agents at work always show their bubble; agents on a break show one for a few seconds when they change what they do. Approvals, errors and the selected or hovered agent always show.",
 "settings.weather":"Weather",
 "settings.weather.mode":"Weather mode",
 "settings.weather.random":"Random",
@@ -860,6 +868,10 @@ ja:{
 "settings.agentCount":"エージェント数：{n}",
 "settings.speed":"速度：{speed}x",
 "settings.bubbleText":"吹き出しテキスト",
+"settings.bubbles.speech":"コンパクト",
+"settings.bubbles.always":"常に表示",
+"settings.bubbles.off":"オフ",
+"settings.bubbles.title":"コンパクト：作業中のエージェントは常に吹き出しを表示し、休憩中のエージェントは行動が変わったときだけ数秒表示します。承認待ち・エラー・選択中やホバー中のエージェントは常に表示します。",
 "settings.weather":"天気",
 "settings.weather.mode":"天気モード",
 "settings.weather.random":"ランダム",
@@ -1186,6 +1198,10 @@ ko:{
 "settings.agentCount":"에이전트 수: {n}",
 "settings.speed":"속도: {speed}x",
 "settings.bubbleText":"말풍선",
+"settings.bubbles.speech":"간결하게",
+"settings.bubbles.always":"항상",
+"settings.bubbles.off":"끄기",
+"settings.bubbles.title":"간결하게: 일하는 에이전트는 항상 말풍선이 보이고, 쉬는 에이전트는 하는 일이 바뀔 때만 몇 초간 보입니다. 승인 대기·오류·선택하거나 마우스를 올린 에이전트는 항상 보입니다.",
 "settings.weather":"날씨",
 "settings.weather.mode":"날씨 모드",
 "settings.weather.random":"무작위",
@@ -1512,6 +1528,10 @@ zh:{
 "settings.agentCount":"代理数量：{n}",
 "settings.speed":"速度：{speed}x",
 "settings.bubbleText":"气泡文字",
+"settings.bubbles.speech":"精简",
+"settings.bubbles.always":"始终显示",
+"settings.bubbles.off":"关闭",
+"settings.bubbles.title":"精简：工作中的代理始终显示气泡；休息中的代理只在换事情时显示几秒。待批准、错误以及选中或悬停的代理始终显示。",
 "settings.weather":"天气",
 "settings.weather.mode":"天气模式",
 "settings.weather.random":"随机",
@@ -1838,6 +1858,10 @@ es:{
 "settings.agentCount":"Agentes: {n}",
 "settings.speed":"Velocidad: {speed}x",
 "settings.bubbleText":"Texto de burbujas",
+"settings.bubbles.speech":"Compacto",
+"settings.bubbles.always":"Siempre",
+"settings.bubbles.off":"Desactivado",
+"settings.bubbles.title":"Compacto: los agentes que trabajan siempre muestran su burbuja; los que descansan la muestran unos segundos al cambiar de actividad. Las aprobaciones, los errores y el agente seleccionado o señalado se ven siempre.",
 "settings.weather":"Clima",
 "settings.weather.mode":"Modo del clima",
 "settings.weather.random":"Aleatorio",
@@ -2163,6 +2187,10 @@ th:{
 "settings.agentCount":"จำนวน agent: {n}",
 "settings.speed":"ความเร็ว: {speed}x",
 "settings.bubbleText":"ข้อความในบับเบิล",
+"settings.bubbles.speech":"กระชับ",
+"settings.bubbles.always":"แสดงตลอด",
+"settings.bubbles.off":"ปิด",
+"settings.bubbles.title":"กระชับ: เอเจนต์ที่กำลังทำงานจะแสดงบับเบิลเสมอ ส่วนเอเจนต์ที่พักจะแสดงไม่กี่วินาทีเมื่อเปลี่ยนกิจกรรม คำขออนุมัติ ข้อผิดพลาด และเอเจนต์ที่เลือกหรือชี้อยู่จะแสดงเสมอ",
 "settings.weather":"สภาพอากาศ",
 "settings.weather.mode":"โหมดสภาพอากาศ",
 "settings.weather.random":"สุ่ม",
@@ -3342,6 +3370,52 @@ globalThis.SkyLogic={annexLand,stepSnow,stairs,canCross,lawnWalk,lawnPaths,cheap
   // pan scale with k around the same fixed point, so far layers drift less than near ones (parallax).
   function parallax(v,k){return{z:1+(v.z-1)*k,ax:v.ax*k,ay:v.ay*k};}
   globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,PAN_MARGIN_X,wheelFactor,clamp,zoomAt,panBy,pinch,isDrag,dragOffset,renderScale,skyView,parallax};
+})();
+</script>
+<script id="bubble-logic">
+// Speech bubbles: an agent "says" a line when its activity changes, then the bubble fades, so a crowded office is
+// not buried under labels. Kept DOM-free so tests/bubble-logic.test.mjs can run it.
+(function(){
+  'use strict';
+  const SHOW_MS=6000,FADE_MS=600,COOL_MS=15000,MAX_TALKING=4;
+  // What counts as a new line: the status, plus the tool for work and the activity for a break. A tool change while
+  // still working is a minor change and waits out COOL_MS; any status change speaks at once.
+  function topic(a){
+    if(a.status==='working')return 'working:'+(a.tool&&a.tool[0]||'');
+    if(a.status==='idle')return 'idle:'+(a.actNow||'');
+    if(a.status==='talking'||a.status==='waiting')return a.status+':'+(a.target||'');
+    return a.status;
+  }
+  // mem: Map kept between calls. agents: [{id, status, tool, actNow, target, pinned}], pinned = always shown
+  // (needs approval, error, selected, hovered). Returns Map id -> 'show' | 'fade'; agents not in it have no bubble.
+  function step(mem,agents,now){
+    const ids=new Set();
+    for(const a of agents){
+      ids.add(a.id);
+      const key=topic(a);let m=mem.get(a.id);
+      // On first sight only a session that is just clocking in speaks; the rest of an already busy office stays quiet.
+      if(!m){m={key,status:a.status,until:-Infinity,cool:-Infinity,at:-Infinity};mem.set(a.id,m);if(a.status==='entering'){m.until=now+SHOW_MS;m.cool=now+COOL_MS;m.at=now;}continue;}
+      if(key!==m.key){
+        if(a.status!==m.status||now>=m.cool){m.until=now+SHOW_MS;m.cool=now+COOL_MS;m.at=now;}
+        m.key=key;m.status=a.status;
+      }
+    }
+    for(const id of [...mem.keys()])if(!ids.has(id))mem.delete(id);
+    const talking=agents.filter(a=>!a.pinned&&now<mem.get(a.id).until).sort((x,y)=>mem.get(y.id).at-mem.get(x.id).at);
+    for(const a of talking.slice(MAX_TALKING))mem.get(a.id).until=now;
+    const out=new Map();
+    for(const a of agents){
+      if(a.pinned){out.set(a.id,'show');continue;}
+      const left=mem.get(a.id).until-now;
+      if(left>0)out.set(a.id,'show');else if(left>-FADE_MS)out.set(a.id,'fade');
+    }
+    return out;
+  }
+  // Settings choice, remembered under STORAGE_KEY: 'speech' (compact: agents at work keep their bubble, a break speaks
+  // a line and fades), 'always', 'off' (only approvals, errors, the selected and the hovered agent).
+  const MODES=['speech','always','off'],STORAGE_KEY='terrarium-bubbles';
+  const BUSY=new Set(['working','thinking','talking','waiting']);
+  globalThis.BubbleLogic={SHOW_MS,FADE_MS,COOL_MS,MAX_TALKING,MODES,STORAGE_KEY,BUSY,topic,step};
 })();
 </script>
 <script id="world-logic">
@@ -4884,7 +4958,7 @@ class ClaudeOffice extends React.Component{
     try{this.storage=window.localStorage;}catch(e){this.storage=null;}
     const ws=SkyLogic.loadWeatherSettings(this.storage);
     this.state={sel:null,paused:false,tick:0,live:'off',
-      dataSource:'live',endpoint:ep,asOthers:false,agentCount:6,speed:1,showBubbles:true,autoApprove:false,showSettings:false,
+      dataSource:'live',endpoint:ep,asOthers:false,agentCount:6,speed:1,bubbleMode:this.loadBubbleMode(),autoApprove:false,showSettings:false,
       weatherMode:ws.mode,city:ws.city,cityDraft:ws.city,realStatus:{state:'idle',text:''}};
     this.dogWorld={...DOG_PLACES,agents:[],hour:12,snow:0,calm:false,now:0,rand:Math.random};this.dogs=DogLogic.create(this.dogWorld);this.dogSprites=new Map();
     this.agents=[];this.seq=0;this.bubbleEls={};this.usedLooks=0;this.last=0;this.seasonKey='default';this.goneSids=new Set();this.depts=new Map();
@@ -4902,7 +4976,9 @@ class ClaudeOffice extends React.Component{
     // follows; it catches up 150 ms after the last wheel tick so the island bitmap is not re-baked on every tick.
     this.cam={z:1,tx:0,ty:0};this.kZoom=1;this.drag=null;this.dragged=false;
     this.onClick=e=>{if(this.dragged){this.dragged=false;return;}const a=this.hit(e);this.setState({sel:a?a.id:null});};
-    this.onMove=e=>{if(!this.drag)e.currentTarget.style.cursor=this.hit(e)?'pointer':'grab';};
+    this.onMove=e=>{if(this.drag)return;const a=this.hit(e);e.currentTarget.style.cursor=a?'pointer':'grab';this.hoverId=a?a.id:null;};
+    this.onLeave=()=>{this.hoverId=null;};
+    this.bubbleMem=new Map();
     // Only the island and the open sky react; panels, buttons and the settings form keep their own wheel and clicks.
     this.onScene=e=>e.target===this.stageEl||e.target===this.backCanvas||(this.wrapEl&&this.wrapEl.contains(e.target));
     this.onWheel=e=>{if(!this.onScene(e)||!e.deltaY)return;e.preventDefault();
@@ -4952,7 +5028,7 @@ class ClaudeOffice extends React.Component{
   }
   componentWillUnmount(){const st=this.stageEl;if(st){st.removeEventListener('wheel',this.onWheel);st.removeEventListener('pointerdown',this.onDown);st.removeEventListener('pointermove',this.onDrag);st.removeEventListener('pointerup',this.onUp);st.removeEventListener('pointercancel',this.onUp);}
     this.ro&&this.ro.disconnect();clearTimeout(this.kTimer);clearInterval(this.simTimer);clearInterval(this.uiTimer);clearInterval(this.realTimer);cancelAnimationFrame(this.raf);this.es&&this.es.close();
-    clearInterval(this.previewTimer);clearTimeout(this.joinTimer);clearTimeout(this.armTimer);this.world&&this.world.es&&this.world.es.close();if(this.onWorldKey)window.removeEventListener('keydown',this.onWorldKey);
+    clearInterval(this.previewTimer);clearTimeout(this.joinTimer);clearTimeout(this.armTimer);clearTimeout(this.wcTimer);this.world&&this.world.es&&this.world.es.close();if(this.onWorldKey)window.removeEventListener('keydown',this.onWorldKey);
     if(this.world){clearTimeout(this.world.probeTimer);clearTimeout(this.world.meTimer);clearTimeout(this.world.waitTimer);}
     if(this.onWorldVisible)document.removeEventListener('visibilitychange',this.onWorldVisible);}
   // ---- weather settings ----
@@ -5251,7 +5327,10 @@ class ClaudeOffice extends React.Component{
   camBox(){const st=this.stageEl,w=this.wrapEl;if(!st||!w)return null;
     return{stageW:st.clientWidth,stageH:st.clientHeight,ox:w.offsetLeft,oy:w.offsetTop-(this.wrapTop||0),cw:w.offsetWidth,ch:w.offsetHeight*FH/LH};}
   setCam(cam){if(cam.z===this.cam.z&&cam.tx===this.cam.tx&&cam.ty===this.cam.ty)return;this.cam=cam;const w=this.wrapEl;
-    if(w){w.style.transform=cam.z===1&&!cam.tx&&!cam.ty?'':'translate('+cam.tx+'px,'+cam.ty+'px) scale('+cam.z+')';w.style.setProperty('--cam-inv',String(1/cam.z));}
+    if(w){w.style.transform=cam.z===1&&!cam.tx&&!cam.ty?'':'translate('+cam.tx+'px,'+cam.ty+'px) scale('+cam.z+')';w.style.setProperty('--cam-inv',String(1/cam.z));
+      // will-change only while the camera moves: Chrome keeps a will-change layer at the scale it was first painted
+      // at, so left on it upscales the bubbles' text into a blur once zoomed. At rest the layer is re-painted sharp.
+      w.style.willChange='transform';clearTimeout(this.wcTimer);this.wcTimer=setTimeout(()=>{if(this.wrapEl)this.wrapEl.style.willChange='';},200);}
     if(cam.z!==this.kZoom){clearTimeout(this.kTimer);this.kTimer=setTimeout(()=>{this.kZoom=this.cam.z;},150);}}
   headPos(a){if(a.stool&&!a.moving){const[sx,sy]=PA(a.x,a.y);return[sx,sy-(a.stool===2?30:25)];}if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=PA(a.x,a.y);if(a.actNow==="bath"&&!a.moving)return[sx,sy-11];return[sx,sy-(a.seated?23:21)];}
 
@@ -5887,6 +5966,8 @@ class ClaudeOffice extends React.Component{
     for(const a of this.agents){const[sx,sy]=a.sleeping?P(a.x,a.y,-4):a.seated?P(a.x,a.y,11.5):PA(a.x,a.y);const hw=a.sleeping?14:7;if(lx>sx-hw&&lx<sx+hw&&ly>sy-(a.sleeping?10:a.seated?30:24)&&ly<sy+(a.sleeping?8:3)){const d=Math.abs(lx-sx)+Math.abs(ly-sy+10);if(d<bd){bd=d;best=a;}}}
     return best;
   }
+  loadBubbleMode(){try{const v=this.storage&&this.storage.getItem(BubbleLogic.STORAGE_KEY);return BubbleLogic.MODES.includes(v)?v:'speech';}catch(e){return 'speech';}}
+  setBubbleMode(m){if(!BubbleLogic.MODES.includes(m))return;this.setState({bubbleMode:m});try{this.storage&&this.storage.setItem(BubbleLogic.STORAGE_KEY,m);}catch(e){}}
   bubbleText(a){
     const t=a.target&&this.byId(a.target);
     switch(a.status){
@@ -5906,7 +5987,7 @@ class ClaudeOffice extends React.Component{
 
   render(){
     if(this.world)return this.renderWorld();
-    const{sel,paused,live,dataSource,endpoint,showBubbles,autoApprove,agentCount,speed,showSettings}=this.state;
+    const{sel,paused,live,dataSource,endpoint,bubbleMode,autoApprove,agentCount,speed,showSettings}=this.state;
     const isLive=dataSource==='live',isSim=!isLive,ls=live,others=isLive&&this.state.asOthers;
     const cnt=k=>this.agents.filter(a=>!a.leaving&&k.includes(a.status)).length;
     const seasonInfo=window.SeasonTree&&this.treeOn?window.SeasonTree.SEASONS[this.seasonKey]:null;
@@ -5922,12 +6003,19 @@ class ClaudeOffice extends React.Component{
       canApprove:!isLive&&s.status==='permission',hist:(s.liveHist||s.hist).slice(0,7)}:null;
     const srcLabel=isLive?(ls==='ok'?'LIVE · ~/.claude':ls==='error'?tr('source.live.lost'):tr('source.live.connecting')):tr('source.sim');
     const srcColor=isLive?(ls==='ok'?'#46a758':ls==='error'?'#e5484d':'#f5a524'):'#ffd166';
-    const bubbles=others?[]:this.agents.filter(a=>!a.gone).map(a=>{
-      const txt=(showBubbles||sel===a.id||['permission','error'].includes(a.status))?this.bubbleText(a):null;
+    // Approval, errors, the selected and the hovered agent always show their bubble. "Gọn" (compact) also keeps the
+    // bubbles of agents at work, while agents on a break speak a line when they change activity and fade (BubbleLogic).
+    const shown=this.agents.filter(a=>!a.gone);
+    const pinnedOf=a=>sel===a.id||this.hoverId===a.id||a.status==='permission'||a.status==='error';
+    const busy=a=>BubbleLogic.BUSY.has(a.status);
+    const talk=BubbleLogic.step(this.bubbleMem,shown.map(a=>({id:a.id,status:a.status,tool:a.tool,actNow:a.actNow,target:a.target,pinned:pinnedOf(a)||busy(a)})),performance.now());
+    const bubbles=others?[]:shown.map(a=>{
+      const v=pinnedOf(a)||bubbleMode==='always'||(bubbleMode==='speech'&&busy(a))?'show':bubbleMode==='speech'?talk.get(a.id):null;
+      const txt=v?this.bubbleText(a):null;
       if(!txt)return null;
       const[sx,sy]=this.headPos(a),c=(ST[a.status]||ST.working)[1];
       return h('div',{key:a.id,ref:el=>{if(el)this.bubbleEls[a.id]=el;else delete this.bubbleEls[a.id];},
-        style:{position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%) scale(calc(var(--cam-inv,1) * var(--bubble-k,1)))',transformOrigin:'50% 100%',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:'var(--bubble-w,240px)',overflow:'hidden',textOverflow:'ellipsis'}},
+        style:{opacity:v==='fade'?0:1,transition:'opacity '+BubbleLogic.FADE_MS+'ms',position:'absolute',left:Math.min(92,Math.max(8,sx/LW*100))+'%',top:((sy-12)/LH*100)+'%',transform:'translate(-50%,-100%) scale(calc(var(--cam-inv,1) * var(--bubble-k,1)))',transformOrigin:'50% 100%',display:'flex',alignItems:'center',gap:5,padding:'3px 6px',background:'#ffffff',color:'#14161c',border:'2px solid '+c,boxShadow:'2px 2px 0 rgba(0,0,0,0.35)',font:"500 10px/1.2 'JetBrains Mono',monospace",whiteSpace:'nowrap',maxWidth:'var(--bubble-w,240px)',overflow:'hidden',textOverflow:'ellipsis'}},
         h('b',{style:{color:c,fontFamily:"'Pixelify Sans',monospace",fontSize:11}},a.name),
         h('span',{style:{overflow:'hidden',textOverflow:'ellipsis'}},txt));
     });
@@ -6013,8 +6101,8 @@ class ClaudeOffice extends React.Component{
       h('div',{ref:this.setStage,style:{position:'relative',flex:'1 1 0',minHeight:0,border:'3px solid #232a39',overflow:'hidden',containerType:'size',display:'flex',alignItems:'center',justifyContent:'center'}},
         h('canvas',{ref:this.setBack,style:{position:'absolute',inset:0,cursor:'grab',touchAction:'none',width:'100%',height:'100%',zIndex:0,display:'block'}}),
         // The view is fitted to the island top (FH tall), not the whole scene: the deep underside may run off the bottom.
-        h('div',{ref:this.setWrap,style:{position:'relative',alignSelf:'flex-start',transformOrigin:'0 0',willChange:'transform',touchAction:'none',userSelect:'none',width:'min(100cqw, calc(100cqh * '+LW+' / '+FH+'))',aspectRatio:LW+' / '+LH,marginTop:'calc((100cqh - min(100cqw * '+FH+' / '+LW+', 100cqh)) / 2)'}},
-          h('canvas',{ref:this.setCanvas,width:LW,height:LH,onClick:this.onClick,onMouseMove:this.onMove,style:{position:'relative',zIndex:1,width:'100%',height:'auto',display:'block',imageRendering:'pixelated',touchAction:'none'}}),
+        h('div',{ref:this.setWrap,style:{position:'relative',alignSelf:'flex-start',transformOrigin:'0 0',touchAction:'none',userSelect:'none',width:'min(100cqw, calc(100cqh * '+LW+' / '+FH+'))',aspectRatio:LW+' / '+LH,marginTop:'calc((100cqh - min(100cqw * '+FH+' / '+LW+', 100cqh)) / 2)'}},
+          h('canvas',{ref:this.setCanvas,width:LW,height:LH,onClick:this.onClick,onMouseMove:this.onMove,onMouseLeave:this.onLeave,style:{position:'relative',zIndex:1,width:'100%',height:'auto',display:'block',imageRendering:'pixelated',touchAction:'none'}}),
           h('div',{style:{position:'absolute',inset:0,pointerEvents:'none',zIndex:3}},bubbles)
         ),
         h('canvas',{ref:this.setFront,style:{position:'absolute',inset:0,width:'100%',height:'100%',zIndex:2,pointerEvents:'none',display:'block'}}),
@@ -6101,8 +6189,9 @@ class ClaudeOffice extends React.Component{
           h('label',null,tr('settings.speed',{speed:speed.toFixed(2)}),
             h('input',{type:'range',min:0.5,max:3,step:0.25,value:speed,onChange:e=>this.setState({speed:+e.target.value})})
           ),
-          h('label',null,tr('settings.bubbleText'),
-            h('input',{type:'checkbox',checked:showBubbles,onChange:e=>this.setState({showBubbles:e.target.checked})})
+          h('label',{title:tr('settings.bubbles.title')},tr('settings.bubbleText'),
+            h('select',{value:bubbleMode,onChange:e=>this.setBubbleMode(e.target.value)},
+              BubbleLogic.MODES.map(m=>h('option',{key:m,value:m},{speech:tr('settings.bubbles.speech'),always:tr('settings.bubbles.always'),off:tr('settings.bubbles.off')}[m])))
           ),
           h('div',{style:{borderTop:'1px solid var(--border)',margin:'2px 0'}}),
           h('label',null,tr('settings.weather'),

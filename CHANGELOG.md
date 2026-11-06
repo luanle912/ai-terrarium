@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **How bubbles show** — With many people in the office the scene was mostly name tags. ⚙ Settings → *Bubble text* now picks how bubbles show: *Compact* (the default) keeps the bubble of everyone at work (typing, thinking, talking, waiting), while someone on a break says a line for about six seconds when they start something new and then it fades, at most four at a time; *Always* shows every bubble as before; *Off* shows none. Approvals, errors, the selected agent and the one under the mouse always show theirs, and the choice is remembered in the browser
+
+### Fixed
+
+- **Blurry bubbles when zoomed** — Zoomed in, the name tags turned blurry because the browser kept the island layer at the size it was first drawn and stretched it; the layer is now redrawn sharp as soon as the zoom or pan stops
+
 ## [1.6.0] - 2026-11-05
 
 ### Added
