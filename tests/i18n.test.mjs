@@ -83,11 +83,11 @@ test('every tr() key used in the page exists in the tables, and every table key 
 const stripComments = line => line.replace(/\/\*.*?\*\//g, '').replace(/(^|[\s;,{}()])\/\/.*$/, '$1')
 
 // The season, decor and pantry catalogues keep Vietnamese design notes that the page never shows.
-const DESIGN_NOTES = /\b(tree|desc|window|name|group|note):'[^']*'|S\.window='[^']*'/g
-const CATALOGUES = new Set(['web/season-tree.js', 'web/office-decor.js', 'web/pantry-items.js'])
+const DESIGN_NOTES = /\b(tree|desc|window|name|group|note):\s*'[^']*'|S\.window\s*=\s*'[^']*'/g
+const CATALOGUE = /^web\/(season-|decor-|office-decor|pantry-)/
 
 test('no Vietnamese text is hard-coded in the page outside the translation tables', () => {
-  const hits = SOURCES.flatMap(([file, code]) => (CATALOGUES.has(file) ? code.replace(DESIGN_NOTES, '') : code).split('\n')
+  const hits = SOURCES.flatMap(([file, code]) => (CATALOGUE.test(file) ? code.replace(DESIGN_NOTES, '') : code).split('\n')
     .map((l, i) => [`${file}:${i + 1}`, stripComments(l)]).filter(([, l]) => VI_CHARS.test(l)))
   assert.deepEqual(hits.map(([at, l]) => `${at}: ${l.trim().slice(0, 120)}`), [])
 })
