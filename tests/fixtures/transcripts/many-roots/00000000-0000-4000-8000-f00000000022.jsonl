@@ -1,0 +1,2 @@
+{"type":"user","sessionId":"00000000-0000-4000-8000-f00000000022","cwd":"/tmp/demo-project","timestamp":"2026-11-06T00:00:30.000Z","message":{"role":"user","content":"Fix the bug 22"},"permissionMode":"auto"}
+{"type":"assistant","sessionId":"00000000-0000-4000-8000-f00000000022","cwd":"/tmp/demo-project","timestamp":"2026-11-06T00:00:40.000Z","message":{"model":"claude-test","role":"assistant","stop_reason":"tool_use","usage":{"input_tokens":10,"output_tokens":5},"content":[{"type":"tool_use","id":"tu_g22","name":"Grep","input":{"pattern":"bug"}}]}}

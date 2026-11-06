@@ -256,8 +256,13 @@ test('subOutcome: a quiet sub-agent with no pending tool is dropped after SUB_ST
   const sub = load(`bg-sub/${BG}/subagents/agent-bg1.jsonl`);
   assert.equal(subOutcome(sub, { now: sec(80) + SUB_STALE_MS + 1000 }), 'keep', 'a pending tool keeps it');
   ingest(sub, ev('user', 81, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_read', content: 'ok' }] }), true, sec(81));
-  assert.equal(subOutcome(sub, { now: sec(81) + SUB_STALE_MS - 1000 }), 'keep');
-  assert.equal(subOutcome(sub, { now: sec(81) + SUB_STALE_MS + 1000 }), 'drop');
+  // After a tool_result the model is writing: THINK_STALE_MS, not SUB_STALE_MS.
+  assert.equal(subOutcome(sub, { now: sec(81) + SUB_STALE_MS + 1000 }), 'keep');
+  assert.equal(subOutcome(sub, { now: sec(81) + THINK_STALE_MS + 1000 }), 'drop');
+  // Silent after its own assistant entry (not end_turn, no tool): SUB_STALE_MS.
+  ingest(sub, ev('assistant', 85, { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'text', text: 'hmm' }] }), true, sec(85));
+  assert.equal(subOutcome(sub, { now: sec(85) + SUB_STALE_MS - 1000 }), 'keep');
+  assert.equal(subOutcome(sub, { now: sec(85) + SUB_STALE_MS + 1000 }), 'drop');
   ingest(sub, ev('assistant', 90, { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'all done' }] }), true, sec(90));
   assert.equal(subOutcome(sub, { now: sec(100) }), 'done');
   assert.equal(subOutcome(sub, { now: sec(121) }), 'drop');
@@ -307,7 +312,7 @@ test('snapshot keeps its shape', () => {
   assert.equal(out.length, 5);
   for (const s of out) assert.deepEqual(Object.keys(s).filter(k => k !== 'waitingOn').sort(), [...KEYS].sort(), s.id);
   const regOnly = byId(out, INT);
-  assert.equal(regOnly.updatedAt, sec(85));
+  assert.equal(regOnly.updatedAt, sec(60), 'the registry\'s own updatedAt, not now');
   assert.equal(regOnly.status, 'idle');
 });
 
@@ -339,4 +344,143 @@ test('two registry files for one session keep the most recently updated one', ()
   assert.equal(liveFromRegistry(read, { alive: () => true }).get('dup').pid, 7);
   read.entries.reverse();
   assert.equal(liveFromRegistry(read, { alive: () => true }).get('dup').pid, 7);
+});
+
+// ---- Task 9: procStart liveness (L4), hung tools (L5a), long messages (L5b), registry-only roots (L6) ----
+const { normStart, makeProcStartOf, makeAlive, pendingLive, PENDING_STALE_MS, THINK_STALE_MS } = S;
+const okKill = () => true;
+const epermKill = () => { const e = new Error('EPERM'); e.code = 'EPERM'; throw e; };
+const deadKill = () => { const e = new Error('ESRCH'); e.code = 'ESRCH'; throw e; };
+
+test('normStart collapses whitespace and maps empty to null', () => {
+  assert.equal(normStart('  Fri Nov  6 02:55:21 2026\n'), 'Fri Nov 6 02:55:21 2026');
+  assert.equal(normStart('   '), null);
+  assert.equal(normStart(undefined), null);
+  assert.equal(normStart(null), null);
+});
+
+test('a reused pid with another start time is not a live session', () => {
+  const alive = makeAlive({ kill: okKill, procStartOf: () => 'Fri Nov 6 09:00:00 2026' });
+  assert.equal(alive(4242, 'Fri Nov  6 02:55:21 2026'), false);
+  const live = liveFromRegistry({ ok: true, entries: [{ file: '4242.json', json: { pid: 4242, sessionId: 's', procStart: 'Fri Nov  6 02:55:21 2026' } }] }, { alive });
+  assert.equal(live.size, 0);
+});
+
+test('EPERM with a matching start time is alive', () => {
+  const alive = makeAlive({ kill: epermKill, procStartOf: () => 'Fri Nov  6 02:55:21 2026' });
+  assert.equal(alive(4242, 'Fri Nov 6   02:55:21 2026'), true);
+  assert.equal(makeAlive({ kill: deadKill, procStartOf: () => 'x' })(4242, 'x'), false);
+});
+
+test('no ps (win32 or error): kill(0) alone decides', () => {
+  let calls = 0;
+  const win = makeProcStartOf({ platform: 'win32', execFileSync: () => { calls++; return 'Fri Nov 6 09:00:00 2026'; } });
+  assert.equal(win(4242), null);
+  assert.equal(calls, 0);
+  const broken = makeProcStartOf({ platform: 'darwin', execFileSync: () => { throw new Error('ENOENT ps'); } });
+  assert.equal(broken(4242), null);
+  for (const procStartOf of [win, broken]) {
+    assert.equal(makeAlive({ kill: okKill, procStartOf })(4242, 'Fri Nov  6 02:55:21 2026'), true);
+    assert.equal(makeAlive({ kill: deadKill, procStartOf })(4242, 'Fri Nov  6 02:55:21 2026'), false);
+  }
+  // No procStart in the registry: kill(0) decides and ps is not even asked.
+  let asked = 0;
+  assert.equal(makeAlive({ kill: okKill, procStartOf: () => { asked++; return 'other'; } })(4242, undefined), true);
+  assert.equal(asked, 0);
+});
+
+test('procStartOf runs ps once per pid', () => {
+  const seen = [];
+  const procStartOf = makeProcStartOf({ platform: 'darwin', execFileSync: (cmd, args, opts) => { seen.push([cmd, args, opts.env.LC_ALL, opts.timeout, opts.encoding, opts.shell]); return 'Fri Nov  6 02:55:21 2026\n'; } });
+  assert.equal(procStartOf(4242), 'Fri Nov 6 02:55:21 2026');
+  assert.equal(procStartOf(4242), 'Fri Nov 6 02:55:21 2026');
+  assert.equal(procStartOf(4343), 'Fri Nov 6 02:55:21 2026');
+  assert.deepEqual(seen, [['ps', ['-o', 'lstart=', '-p', '4242'], 'C', 1000, 'utf8', undefined], ['ps', ['-o', 'lstart=', '-p', '4343'], 'C', 1000, 'utf8', undefined]]);
+  // A pid that left the registry is forgotten, so a new process on that pid is looked up again.
+  const alive = makeAlive({ kill: okKill, procStartOf });
+  liveFromRegistry({ ok: true, entries: [{ file: '4343.json', json: { pid: 4343, sessionId: 's', procStart: 'Fri Nov 6 02:55:21 2026' } }] }, { alive });
+  procStartOf(4343); assert.equal(seen.length, 2, 'still in the registry: cached');
+  procStartOf(4242); assert.equal(seen.length, 3, 'left the registry: asked again');
+  // A dead pid is forgotten too.
+  makeAlive({ kill: deadKill, procStartOf })(4343, 'x');
+  procStartOf(4343); assert.equal(seen.length, 4);
+});
+
+const HB = '00000000-0000-4000-8000-0000000000e1', LM = '00000000-0000-4000-8000-0000000000f1';
+
+test('pendingLive: Bash 11 min, other tools 15 min, Agent/Task never; file growth resets the clock', () => {
+  assert.deepEqual(PENDING_STALE_MS, { Bash: 11 * 60e3, other: 15 * 60e3 });
+  const at = (name) => ({ name, t: T0 });
+  assert.equal(pendingLive(at('Bash'), { now: min(11), fileMtime: 0 }), true);
+  assert.equal(pendingLive(at('Bash'), { now: min(11) + 1, fileMtime: 0 }), false);
+  assert.equal(pendingLive(at('Bash'), { now: min(12), fileMtime: min(5) }), true);
+  assert.equal(pendingLive(at('Read'), { now: min(15), fileMtime: 0 }), true);
+  assert.equal(pendingLive(at('Read'), { now: min(15) + 1, fileMtime: 0 }), false);
+  for (const n of ['Agent', 'Task']) assert.equal(pendingLive(at(n), { now: min(600), fileMtime: 0 }), true);
+});
+
+test('a Bash pending for 12 min without file growth no longer counts', () => {
+  const root = load(`hung-bash/${HB}.jsonl`), sub = load(`hung-bash/${HB}/subagents/agent-hb1.jsonl`);
+  assert.equal(modeOf(root), 'default');
+  // The Bash tool_use lands at T0+1s in both files.
+  const r = statusAt(root, sec(1) + 12 * 60e3);
+  assert.notEqual(r.status, 'permission');
+  assert.notEqual(r.status, 'working');
+  assert.notEqual(r.tool, 'Bash');
+  assert.equal(root.pending.size, 0, 'the expired tool is removed');
+  const busy = statusAt(load(`hung-bash/${HB}.jsonl`), sec(1) + 12 * 60e3, { regStatus: 'busy' });
+  assert.notEqual(busy.tool, 'Bash');
+  assert.equal(subOutcome(sub, { now: sec(1) + 9 * 60e3 }), 'keep');
+  assert.equal(subOutcome(sub, { now: sec(1) + 11 * 60e3 + 1000 }), 'drop', 'silent for longer than SUB_STALE_MS once the Bash expired');
+  assert.equal(sub.pending.size, 0);
+  const live = new Map([[HB, { pid: 1, status: 'busy', cwd: '/tmp/demo-project', name: '', updatedAt: sec(1) }]]);
+  const out = build([load(`hung-bash/${HB}.jsonl`), load(`hung-bash/${HB}/subagents/agent-hb1.jsonl`)], live, sec(1) + 12 * 60e3);
+  assert.equal(byId(out, 'agent-hb1'), undefined);
+  assert.notEqual(byId(out, HB).tool, 'Bash');
+});
+
+test('a Bash pending for 9 min is still working', () => {
+  const st = load(`hung-bash/${HB}.jsonl`);
+  const r = statusAt(st, sec(1) + 9 * 60e3, { mode: 'auto' });
+  assert.equal(r.status, 'working');
+  assert.equal(r.tool, 'Bash');
+  assert.equal(statusAt(st, sec(1) + 9 * 60e3).status, 'permission', 'default mode still guesses permission');
+  assert.equal(st.pending.size, 1);
+});
+
+test('an Agent call never expires while its child works', () => {
+  const root = load(`long-message-sub/${LM}.jsonl`);
+  const r = statusAt(root, sec(1) + 120 * 60e3);
+  assert.equal(r.status, 'waiting');
+  assert.equal(r.tool, 'Agent');
+  assert.equal(root.pending.size, 1);
+});
+
+test('a sub-agent writing one long message for 8 min stays', () => {
+  assert.equal(THINK_STALE_MS, 15 * 60e3);
+  const live = new Map([[LM, { pid: 1, status: 'busy', cwd: '/tmp/demo-project', name: '', updatedAt: sec(1) }]]);
+  const files = () => [load(`long-message-sub/${LM}.jsonl`), load(`long-message-sub/${LM}/subagents/agent-lm1.jsonl`)];
+  // The sub's last entry is a tool_result at T0+3s.
+  const sub = files()[1];
+  assert.equal(sub.last, 'tool_result');
+  assert.equal(subOutcome(sub, { now: sec(3) + 8 * 60e3 }), 'keep');
+  assert.equal(subOutcome(sub, { now: sec(3) + 14 * 60e3 }), 'keep');
+  assert.equal(subOutcome(sub, { now: sec(3) + 16 * 60e3 }), 'drop');
+  const at8 = build(files(), live, sec(3) + 8 * 60e3);
+  assert.equal(byId(at8, 'agent-lm1').status, 'thinking');
+  assert.equal(byId(at8, LM).status, 'waiting');
+  assert.equal(byId(build(files(), live, sec(3) + 16 * 60e3), 'agent-lm1'), undefined);
+});
+
+test('registry-only roots keep their real updatedAt and do not push active sessions out of the 16', () => {
+  const MR = path.join(DIR, 'many-roots');
+  const live = liveFromRegistry(readRegistryDir(path.join(MR, 'registry')), { alive: yes });
+  assert.equal(live.size, 23);
+  const states = fs.readdirSync(MR).filter(f => f.endsWith('.jsonl')).map(f => load(`many-roots/${f}`, sec(40)));
+  assert.equal(states.length, 3);
+  const out = build(states, live, sec(60));
+  assert.equal(out.length, 16);
+  for (const st of states) assert.ok(byId(out, st.sessionId), st.sessionId);
+  const regOnly = out.find(s => !states.some(st => st.sessionId === s.id));
+  assert.equal(regOnly.updatedAt, T0 - 3600e3);
 });
