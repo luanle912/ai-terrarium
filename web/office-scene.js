@@ -37,7 +37,7 @@ export const W = 27,
   TH = 8,
   WALL = 56;
 // The scene is framed by the island around the office (6 tiles of lawn), not by the office alone.
-export const ISLAND = SkyLogic.buildIsland({ W, H, lawn: SkyLogic.LAWN, back: SkyLogic.LAWN_BACK });
+export const ISLAND = SkyLogic.buildIsland({ W, H });
 // The office stands on a plinth FLOOR_Z above the lawn, so P (everything in the office: floor, walls, people, bubbles,
 // clicks) is lifted by it, while PG is the bare lawn level used for trees, the waterfall and the plinth itself.
 export const FLOOR_Z = 8;
