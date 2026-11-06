@@ -122,6 +122,22 @@ The plugin hooks into `session.start` and spawns a lightweight Node.js server:
 3. **Streams** state via Server-Sent Events to the browser
 4. **Renders** each session as an animated character at an isometric desk
 
+### Project layout
+
+Still no build step and no dependencies: the browser runs the files as they are.
+
+| Path | What it is |
+|------|------------|
+| `server.js`, `lib/` | The local server (transcripts → SSE) and the publisher that sends your island to a hub |
+| `hub/` | The optional multi-island hub |
+| `claude-office.html` | A short shell page that loads `web/` in order |
+| `web/*-logic.js` | DOM-free logic (sky, camera, dogs, people, restroom, bubbles, world layout); `tests/` runs each one |
+| `web/office*.js` | The page component: `office.js` holds the class, the other `office-*.js` files add their methods with `mixin(ClaudeOffice, class{...})` |
+| `web/world-*.js` | World mode (several islands from a hub) and the World section of ⚙ Settings |
+| `web/i18n/<lang>.js` | One translation table per language; `tests/i18n.test.mjs` checks they match |
+
+`web/` files are plain scripts that share globals, loaded in the order `claude-office.html` lists them. After pulling a new version, restart `node server.js`: an older server does not know about `web/` and the page says so.
+
 ---
 
 ## 🖥️ Alternative: Run Without Plugin
