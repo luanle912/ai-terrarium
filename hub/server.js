@@ -45,6 +45,7 @@ function createHub(config, deps = {}) {
   ctx.limiters = limiters;
   ctx.jwks = createJwks({ fetch: d.fetch, now: d.now });
   ctx.world = world;
+  ctx.pingMs = deps.pingMs; // undefined = PING_MS (25 s); tests pass a short one
   ctx.helpers = { readBody, send, sendJson, parseCookies, clientIp: (req) => clientIp(req, config.trustProxy), HttpError };
 
   ctx.accounts = createAccounts(ctx);

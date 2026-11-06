@@ -1,7 +1,9 @@
 'use strict';
 // Publish, live world and viewer pages (spec 9.3-9.5).
 //   POST /api/publish          Bearer device token, JSON <= 16KB. Cookies are never read here (S11).
-//   GET  /api/world/stream     SSE for signed-in viewers: `world`, `island`, `remove` events, `: ping` every 25 s
+//     Optional header X-Terrarium-Instance: 16 hex of the publishing process; missing or malformed = 'legacy' (never 400).
+//     Answers 200 {accepted: true} | {accepted: false, reason: 'stale_seq', seq} | {accepted: false, reason: 'other_instance'}.
+//   GET  /api/world/stream     SSE for signed-in viewers: `world`, `island`, `remove` events, and `ping` {t} every 25 s
 //     `world` = {islands: [{id, name, color, slot, online, private, share}], viewers, capacity}, ordered by slot. It lists
 //     every island that has a slot (from the DB), so an island with no device sending stays in its slot as online:false.
 //     Islands with slot NULL (hidden, over capacity) never appear in any event. `remove` is sent only when the island
@@ -18,6 +20,7 @@ const { welcomePage, PAGE_CSP } = require('./pages.js');
 
 const PUBLISH_LIMIT = 16 * 1024;
 const PING_MS = 25 * 1000;
+const INSTANCE_RE = /^[0-9a-f]{16}$/;
 const CHECK_MS = 60 * 1000;
 const TICK_MS = 5 * 1000;
 const ISLAND_EVERY_MS = 500; // at most 2 island events per second per island
@@ -134,7 +137,8 @@ function routes(ctx) {
   ctx.streams = { check, count: () => streams.size };
 
   const timers = [
-    setInterval(() => { for (const s of streams) write(s, ': ping\n\n'); }, PING_MS),
+    // A named event (not an SSE comment) so the page can see it and watch the stream.
+    setInterval(() => { const f = frame('ping', { t: deps.now() }); for (const s of streams) write(s, f); }, ctx.pingMs || PING_MS),
     setInterval(() => { try { check(); } catch { /* ignore */ } }, CHECK_MS),
     setInterval(() => { try { world.tick(); } catch { /* ignore */ } }, TICK_MS),
   ];
@@ -187,8 +191,10 @@ function routes(ctx) {
       const d = db.getDevice(auth.device.id);
       if (!d || d.revoked_at != null) throw new HttpError(401, 'unauthorized'); // revoked while the body was in flight
       if (d.last_used_at == null || now - d.last_used_at > TOUCH_EVERY_MS) db.touchDevice(d.id, now);
-      world.publish({ id: auth.island.id, name: auth.island.name, color: auth.island.color, slot: auth.island.slot }, d.id, r.value.share, r.value);
-      send(res, 204, '');
+      const h = req.headers['x-terrarium-instance'];
+      const instance = typeof h === 'string' && INSTANCE_RE.test(h) ? h : null;
+      const result = world.publish({ id: auth.island.id, name: auth.island.name, color: auth.island.color, slot: auth.island.slot }, d.id, r.value.share, r.value, { instance });
+      sendJson(res, 200, result);
     },
   });
 

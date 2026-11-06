@@ -93,7 +93,7 @@ test('other routes are limited to 120 a minute per ip', async () => {
       method: 'POST', headers: { authorization: 'Bearer ' + paired.token, 'content-type': 'application/json' },
       body: JSON.stringify({ v: 1, seq: 1, sessions: [] }),
     });
-    assert.equal(r.status, 204);
+    assert.equal(r.status, 200);
   } finally { await h.close(); }
 });
 
