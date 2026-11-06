@@ -16,7 +16,9 @@ Object.assign(ClaudeOffice.prototype, {
       paddingRight: 'max(16px, env(safe-area-inset-right, 0px))',
     };
     const hdrCtl = { padding: '4px 10px', fontSize: 11 };
-    const connCol = w.conn === 'ok' ? '#46a758' : w.conn === 'connecting' || w.conn === 'busy' ? '#f5a524' : '#e5484d';
+    const connCol = { ok: '#46a758', warn: '#f5a524', bad: '#e5484d' }[
+      WorldLogic.chipTone(w.conn, w.link && w.link.phase)
+    ];
     const connText =
       {
         ok: tr('world.conn.ok'),
