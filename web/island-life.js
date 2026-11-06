@@ -24,11 +24,13 @@ const fallFlow = fx => Math.min(2, 1 + fx.rain);
 // A rainbow by day once the rain has stopped (lastRainAt: the last time fx.rain was above 0.3), fading out linearly
 // over three minutes. It eases in as the rain thins below 0.1 and as the day brightens past 0.6, so it never pops.
 const RAINBOW_MS = 180000;
+// Only in the sun after the rain: not while it rains, snows, storms or is foggy.
 function rainbowLevel({ fx, df, lastRainAt, now }) {
-  if (!(df > 0.6) || !(fx.rain < 0.1)) return 0;
+  const wet = Math.max(fx.rain, fx.snow || 0, fx.storm || 0, fx.fog || 0);
+  if (!(df > 0.6) || !(wet < 0.1)) return 0;
   const left = 1 - (now - lastRainAt) / RAINBOW_MS;
   if (!(left > 0)) return 0;
-  return Math.min(1, left) * clamp01((df - 0.6) / 0.15) * clamp01((0.1 - fx.rain) / 0.05);
+  return Math.min(1, left) * clamp01((df - 0.6) / 0.15) * clamp01((0.1 - wet) / 0.05);
 }
 // Flocks: start i is due at i * FLOCK_EVERY seconds, give or take FLOCK_JITTER / 2, so two flocks are 40-90 s apart;
 // each takes FLOCK_FOR seconds to cross the scene.
@@ -622,7 +624,8 @@ function drawLife(ctx, island, PG, t, env) {
   drawPools(ctx, g, t, lampGlow(df), still);
   drawFlies(ctx, g, life, clamp01((0.3 - df) / 0.1), still);
   ctx.imageSmoothingEnabled = smooth;
-  if (!still) drawBirds(ctx, g, P, life);
+  // the birds sit out heavy rain and storms
+  if (!still && fx.rain < 0.5 && fx.storm < 0.3) drawBirds(ctx, g, P, life);
 }
 
 export const IslandLife = { lampGlow, fallFlow, rainbowLevel, creatures, motionPhases, drawLife, drawLampLight };

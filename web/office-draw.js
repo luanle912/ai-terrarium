@@ -29,6 +29,8 @@ import {
 import { shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Drawing the office: sky, camera, the floor, walls, planters, pantry and desks.
+// The night tint over event trees, in 1/50 steps of its strength (built once, no string per frame).
+const NIGHT_TINT = Array.from({ length: 31 }, (_, i) => 'rgba(13,19,34,' + i / 50 + ')');
 mixin(
   ClaudeOffice,
   class {
@@ -112,6 +114,45 @@ mixin(
       }
     }
 
+    // One event tree at its tile, tinted for the night by `dusk` (0 = full day). Every event tree of a season looks
+    // the same at a given moment, so after dark the tinted tree is painted once a frame into a scratch canvas (at the
+    // scene's resolution) and stamped at each tile.
+    drawEventTree(ctx, d, season, t, k, dusk) {
+      const [px, py] = PG(d.x + 0.5, d.y + 0.5, 0),
+        X = Math.round(px),
+        Y = Math.round(py);
+      if (dusk < 0.02) {
+        ctx.save();
+        ctx.translate(X, Y);
+        SeasonTree.drawSeasonTree(ctx, 0, 0, season, t);
+        ctx.restore();
+        return;
+      }
+      const sc = this.treeScratch || (this.treeScratch = document.createElement('canvas')),
+        m = this.treeMemo || (this.treeMemo = { t: null, k: 0, dusk: 0, season: '' });
+      if (m.t !== t || m.k !== k || m.dusk !== dusk || m.season !== season) {
+        Object.assign(m, { t, k, dusk, season });
+        const w = Math.ceil(48 * k),
+          h = Math.ceil(58 * k);
+        if (sc.width !== w || sc.height !== h) {
+          sc.width = w;
+          sc.height = h;
+        }
+        const g = sc.getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalCompositeOperation = 'source-over';
+        g.clearRect(0, 0, w, h);
+        g.setTransform(k, 0, 0, k, 24 * k, 48 * k);
+        SeasonTree.drawSeasonTree(g, 0, 0, season, t);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalCompositeOperation = 'source-atop';
+        g.fillStyle = NIGHT_TINT[Math.min(NIGHT_TINT.length - 1, Math.round(dusk * 50))];
+        g.fillRect(0, 0, w, h);
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(sc, Math.round((X - 24) * k), Math.round((Y - 48) * k));
+      ctx.setTransform(k, 0, 0, k, 0, 0);
+    }
     renderK() {
       return CameraLogic.renderScale(this.canvas.clientWidth, window.devicePixelRatio || 1, this.kZoom, LW);
     }
@@ -171,6 +212,18 @@ mixin(
         backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y)),
         walker = a => !a.sleeping && !a.seated && !a.wcIn;
       for (const p of this.islandCache.props) (backOf(p) ? behind : items).push({ z: p.z, f: stamp(p) });
+      // The island's trees, all round the office: event trees while a season or holiday is on, else plain ones.
+      // Event trees are drawn in their own colours; after dark each goes through a scratch canvas and takes the same
+      // night tint as the lawn (SkyRender.night: toward #0d1322 by (1 - light) x 0.6), so it does not glow.
+      const season = SeasonTree && this.treeOn ? this.season : null,
+        dusk = (1 - dfB / 10) * 0.6;
+      for (const d of ISLAND.decor) {
+        if (d.kind !== 'tree') continue;
+        const f = season
+          ? () => this.drawEventTree(ctx, d, season, t, k, dusk)
+          : () => SkyRender.drawTree(ctx, PG, d, dfB / 10, snB / 10);
+        (backOf(d) ? behind : items).push({ z: d.x + d.y + 0.5, f });
+      }
       const poly = (pts, fill, stroke) => {
         ctx.beginPath();
         pts.forEach((p, i) =>
@@ -520,27 +573,6 @@ mixin(
       this.pantryItems(G, items);
       this.smokingItems(G, items, snow);
       this.restroomItems(G, items, snow);
-      // All front-facing island trees become event trees when treeOn is active
-      {
-        const frontTrees = ISLAND.decor.filter(d => d.kind === 'tree' && d.x >= 0 && d.y >= 0);
-        const ST_ = SeasonTree;
-        frontTrees.forEach(d => {
-          if (this.treeOn && ST_) {
-            items.push({
-              z: d.x + d.y + 0.5,
-              f: () => {
-                const [px, py] = PG(d.x + 0.5, d.y + 0.5, 0);
-                ctx.save();
-                ctx.translate(Math.round(px), Math.round(py));
-                ST_.drawSeasonTree(ctx, 0, 0, this.season, t);
-                ctx.restore();
-              },
-            });
-          } else {
-            items.push({ z: d.x + d.y + 0.5, f: () => SkyRender.drawTree(ctx, PG, d, dfB / 10, snB / 10) });
-          }
-        });
-      }
       [
         [8.5, 13.5],
         [19.5, 13.5],
