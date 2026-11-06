@@ -1,8 +1,6 @@
 // The restroom block against the pantry's east side: an open-top (cutaway) annex on the office floor with the men's
 // room, the women's room and a shared lobby, plus the rhythm of one visit. No DOM, no canvas;
 // tests/restroom-logic.test.mjs runs this block.
-(function(){
-'use strict';
 const k=(x,y)=>x+','+y;
 // Laid out from the corner of the outdoor spot 'east-back' (SkyLogic.outdoorSpots, 6×7 tiles from x = W, y = 0). One
 // tile is about 0.7 m (a desk is 2×1 tiles) and `wall` is the office's full wall height (3 tiles). The back wall runs on
@@ -84,5 +82,5 @@ function pickIdle(spots,free,room,rand,share=SHARE){
 // a while inside with the door shut, a moment coming back out, washing hands at the vanity, then on to somewhere else.
 const DOOR=0.8,INSIDE=6,OUT=0.6,WASH=2.5,VISIT=DOOR+INSIDE+OUT+WASH;
 const visit=t=>t<DOOR?'door':t<DOOR+INSIDE?'inside':t<DOOR+INSIDE+OUT?'out':t<VISIT?'wash':'done';
-globalThis.RestroomLogic={layout,onFloor,step,doorSwing,DOORWAY,roomOf,pickIdle,SHARE,visit,VISIT,DOOR,INSIDE,OUT,WASH};
-})();
+export const RestroomLogic = {layout,onFloor,step,doorSwing,DOORWAY,roomOf,pickIdle,SHARE,visit,VISIT,DOOR,INSIDE,OUT,WASH};
+

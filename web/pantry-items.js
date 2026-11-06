@@ -1,4 +1,4 @@
-(function(){
+
 const shade=(h,p)=>{const n=parseInt(h.slice(1),16),c=v=>Math.max(0,Math.min(255,v));return'#'+((1<<24)+(c((n>>16)+p)<<16)+(c(((n>>8)&255)+p)<<8)+c((n&255)+p)).toString(16).slice(1);};
 const mix=(a,b,p)=>{const A=parseInt(a.slice(1),16),B=parseInt(b.slice(1),16),f=s=>Math.round(((A>>s)&255)*(1-p)+((B>>s)&255)*p);return'#'+((1<<24)+(f(16)<<16)+(f(8)<<8)+f(0)).toString(16).slice(1);};
 const FONT={A:'010101111101101',C:'011100100100011',E:'111100110100111',F:'111100110100100',N:'110101101101101',P:'110101110100100',R:'110101110101101',T:'111010010010010',Y:'101101010010010','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110',':':'000010000010000'};
@@ -208,5 +208,5 @@ function depths(layout){
       if(rx<bx+bw&&bx<rx+w&&ry<by+bh&&by<ry+h)z=Math.max(z,base[j]+0.01);});
     return z;});
 }
-window.PantryItems={I,kit,PLANT,LAYOUT,ORDER,depths};
-})();
+export const PantryItems = {I,kit,PLANT,LAYOUT,ORDER,depths};
+

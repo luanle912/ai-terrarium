@@ -1,14 +1,22 @@
 // One island of the world view (several islands in one sky). Its simulation and drawing are the component's own
 // methods, borrowed rather than copied, so every island in the world looks and moves exactly like the local page.
 // What belongs to one island lives here; the sky, light, speed and selection come from the host component.
-const SCENE_METHODS=['syncLive','addAgent','dept','colOwners','freeDeskFor','freeDesk','log','byId','leave','goalFor','updateAgent',
+import './office-agents.js';
+import './office-draw.js';
+import './office-draw-annex.js';
+import './office-draw-people.js';
+import './office-render.js';
+import { DogLogic } from './dog-logic.js';
+import { DOG_PLACES } from './office-scene.js';
+import { ClaudeOffice } from './office.js';
+export const SCENE_METHODS=['syncLive','addAgent','dept','colOwners','freeDeskFor','freeDesk','log','byId','leave','goalFor','updateAgent',
   'draw','drawSeg','drawPlanter','pantryItems','drawDesk','actArms','drawPerson','drawSleeper','headPos','hit',
   'smokingItems','restroomItems','restroomPaint','stepDogs','dogSprite','drawDog'];
 // Every island bakes the same ground for a given resolution, light and snow, so one bake per k serves them all.
-const SCENE_ISLAND_CACHE=new Map();
+export const SCENE_ISLAND_CACHE=new Map();
 // Dog sprites depend only on breed, frame and light, so all islands share one cache.
-const SCENE_DOG_SPRITES=new Map();
-class IslandScene{
+export const SCENE_DOG_SPRITES=new Map();
+export class IslandScene{
   constructor(host,id){
     this.host=host;this.id=id;
     this.agents=[];this.seq=0;this.usedLooks=0;this.goneSids=new Set();this.depts=new Map();this.firstSnap=true;this.seasonKey='default';

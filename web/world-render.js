@@ -1,4 +1,10 @@
 // World mode React tree: header, the island panel or phone sheet, and the world settings panel.
+import { tr } from './i18n.js';
+import { WorldLogic } from './world-logic.js';
+import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker } from './office-scene.js';
+import { ST } from './office-util.js';
+import { ClaudeOffice } from './office.js';
+import { ERR, GOLD, INPUT, KIND_LABEL, LINK, MUTED, PANEL, SEND_LABEL, SHARE_LABEL, SMALL_BTN, TITLE, clip, confirmRow, field, okColor, swatch, tally, when } from './world-ui.js';
 Object.assign(ClaudeOffice.prototype,{
 
     // ---- world page ----

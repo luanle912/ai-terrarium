@@ -1,8 +1,6 @@
-// Runs web/camera-logic.js the way the browser does (as a plain script that sets
-// globalThis.CameraLogic), so the pan/zoom maths can be tested without a DOM.
-import { runWeb } from './web.mjs'
+// Imports web/camera-logic.js, the module the page uses, so the pan/zoom maths can be tested without a DOM.
+import { loadWeb } from './web.mjs'
 
 export function loadCameraLogic() {
-  runWeb('camera-logic')
-  return globalThis.CameraLogic
+  return loadWeb('camera-logic').CameraLogic
 }

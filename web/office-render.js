@@ -1,4 +1,9 @@
-"use strict";
+import { tr } from './i18n.js';
+import { SeasonTree } from './season-tree.js';
+import { BubbleLogic } from './bubble-logic.js';
+import { ACT_TXT, FH, LH, LW, P, PA, WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker } from './office-scene.js';
+import { ST, fmtK } from './office-util.js';
+import { ClaudeOffice, mixin } from './office.js';
 // The React tree of the local page: header, scene, bubbles, panels and settings; plus hit testing.
 mixin(ClaudeOffice,class{
 
@@ -32,7 +37,7 @@ mixin(ClaudeOffice,class{
     const{sel,paused,live,dataSource,endpoint,bubbleMode,autoApprove,agentCount,speed,showSettings}=this.state;
     const isLive=dataSource==='live',isSim=!isLive,ls=live,others=isLive&&this.state.asOthers;
     const cnt=k=>this.agents.filter(a=>!a.leaving&&k.includes(a.status)).length;
-    const seasonInfo=window.SeasonTree&&this.treeOn?window.SeasonTree.SEASONS[this.seasonKey]:null;
+    const seasonInfo=SeasonTree&&this.treeOn?SeasonTree.SEASONS[this.seasonKey]:null;
     const summary=[[tr('summary.working'),['working'],'#3e8ed0'],[tr('summary.thinking'),['thinking'],'#5b8def'],[tr('summary.talking'),['talking','waiting'],'#12a594'],[tr('summary.permission'),['permission'],'#f5a524'],[tr('summary.error'),['error'],'#e5484d'],[tr('summary.idle'),['idle','done'],'#8b8fa3'],[tr('summary.subagent'),null,'#ffd166']]
       .map(([label,ks,color])=>({label,color,n:ks?cnt(ks):this.agents.filter(a=>a.parent&&!a.leaving).length}));
     const deptList=[...this.depts.values()].map(Dp=>({label:Dp.key,short:Dp.label,color:Dp.color,n:this.agents.filter(a=>a.dept===Dp.key&&!a.leaving).length})).filter(d=>d.n>0);

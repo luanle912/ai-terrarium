@@ -1,7 +1,5 @@
 // The smoking corner down the east lawn: where things stand and the rhythm of a cigarette. No DOM, no canvas;
 // tests/smoke-logic.test.mjs runs this block.
-(function(){
-'use strict';
 const k=(x,y)=>x+','+y;
 // Laid out from the corner of the 4×4 outdoor spot (SkyLogic.outdoorSpots 'east-front'). The entrance is the first two
 // tiles of the front row, beside the garden path that runs down from the east stairs; the planted trough takes the
@@ -29,5 +27,5 @@ function cycle(t){
   if(c<DRAG)return{drag:true,exhale:null};
   return{drag:false,exhale:c<PUFF_END?(c-DRAG)/(PUFF_END-DRAG):null};
 }
-globalThis.SmokeLogic={layout,cycle,PERIOD};
-})();
+export const SmokeLogic = {layout,cycle,PERIOD};
+

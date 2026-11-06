@@ -1,4 +1,11 @@
-"use strict";
+import { tr } from './i18n.js';
+import { PantryItems } from './pantry-items.js';
+import { SkyLogic } from './sky-logic.js';
+import { SkyRender } from './sky-render.js';
+import { RestroomLogic } from './restroom-logic.js';
+import { FLOOR_Z, IDLE_SPOTS, P, PG, SMOKE, STAIRS, W, WALL, WC, lerpHex, mix } from './office-scene.js';
+import { RESTROOM_GLYPH, shade } from './office-util.js';
+import { ClaudeOffice, mixin } from './office.js';
 // Drawing the smoking corner and the restroom block.
 mixin(ClaudeOffice,class{
   // Smoking corner beside the restroom block (SmokeLogic.layout): a stone pad, a planted trough screening it from the
@@ -74,7 +81,7 @@ mixin(ClaudeOffice,class{
   // (nothing on the block stands behind them); everything else goes into `items` by depth, walls one tile at a time so
   // people sort in front of and behind them.
   restroomItems(G,items,snow){
-    const{ctx,poly,th,t,df}=G,L=WC,X=L.x0,Y=L.y0,X1=L.x1,Y1=L.y1,F=L.front,HT=L.heights,PI=window.PantryItems;
+    const{ctx,poly,th,t,df}=G,L=WC,X=L.x0,Y=L.y0,X1=L.x1,Y1=L.y1,F=L.front,HT=L.heights,PI=PantryItems;
     if(!PI)return;
     const K=PI.kit(ctx,...P(0,0)),{box,fL,fR,top,R}=K,night=df<0.5;
     const ACC={m:L.rooms.m.accent,f:L.rooms.f.accent},WHITE='#f6f4ee',STEEL='#c9d3e3',WOOD='#a8763e',WORK='#efe9dc';

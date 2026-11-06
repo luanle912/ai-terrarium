@@ -6,6 +6,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { startDevHub, devLogin, pairDevice } from './hub-helpers.mjs';
+import { moduleGraph } from './web.mjs';
 
 const require = createRequire(import.meta.url);
 const { createOfficePage, inlineScriptHashes } = require('../hub/csp.js');
@@ -30,9 +31,9 @@ test('the page runs only its own web/ files and the pinned CDN scripts', async (
   } finally { await h.close(); }
 });
 
-test('the hub serves every web/ file the page loads, without the general limit, and nothing outside web/', async () => {
-  const assets = [...html.matchAll(/(?:src|href)="(web\/[^"]+)"/g)].map((m) => '/' + m[1]);
-  assert.ok(assets.length > 20);
+test('the hub serves every web/ module and the stylesheet the page loads, without the general limit, and nothing outside web/', async () => {
+  const assets = ['/web/styles.css', ...moduleGraph().map((n) => `/web/${n}.js`)];
+  assert.ok(assets.length > 30);
   const h = await startDevHub();
   try {
     for (let round = 0; round < 5; round++) {

@@ -1,5 +1,5 @@
 // vi strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
-(globalThis.I18N_STRINGS=globalThis.I18N_STRINGS||{}).vi={
+export default {
 "seasonTree.newyear.label":"Tết Dương lịch",
 "seasonTree.tet.label":"Tết Nguyên Đán",
 "seasonTree.valentine.label":"Valentine",

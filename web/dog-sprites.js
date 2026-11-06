@@ -1,8 +1,6 @@
 // Pixel sprites for the three office dogs, all drawn facing right; the page mirrors them to face left.
 // Each letter is a palette colour ('.' is empty). The bottom row is where the paws touch the lawn and `ax` is the
 // column under the dog's middle. A frame may also be {from, set} to patch a few pixels of another frame.
-(function(){
-'use strict';
 const BREEDS={
   corgi:{name:'Corgi',ax:7,pal:{o:'#d9822b',O:'#b2621c',w:'#f6f1e7',s:'#d8cfbf',k:'#1d1a18',p:'#e7a3a0',g:'#c3b8a6',c:'#3e8ed0',t:'#e0606a'},
     frames:{
@@ -300,5 +298,5 @@ function frame(b,name){
   cache.set(id,f);return f;
 }
 const frameNames=b=>Object.keys(BREEDS[b].frames);
-globalThis.DogSprites={BREEDS,frame,frameNames};
-})();
+export const DogSprites = {BREEDS,frame,frameNames};
+

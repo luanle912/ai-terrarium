@@ -1,4 +1,9 @@
 // World mode state: the hub stream, my island and devices, removals, navigation between the sky and one island.
+import { tr } from './i18n.js';
+import { WorldLogic } from './world-logic.js';
+import { ClaudeOffice } from './office.js';
+import { IslandScene } from './island-scene.js';
+import { HEX_ID, MAX_STALLS, ME_EVERY_MS, ME_JITTER, ME_PROBE_MS, NAME_ERR, REMOVE_WAIT_MS, STALL_MS, VIEW_KEY, isJson, okColor, probeConfig, releaseCanvas, validSlot } from './world-ui.js';
 Object.assign(ClaudeOffice.prototype,{
 
     startWorld(cfg){

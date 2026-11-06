@@ -1,13 +1,15 @@
-"use strict";
+import { PeopleLogic } from './people-logic.js';
+import { mix } from './office-scene.js';
+import { shade } from './office-util.js';
 // ---- People: the parts that differ from one look to the next (PeopleLogic.look) ----
 // Every function takes the scene's 1px rect R and the agent's look L. Men and women are told apart by silhouette
 // (hair past the shoulders, a bun or a ponytail, an A-line skirt; short hair, a beard, a collar and tie), not by
 // single pixels, so they still read at the world view's level of detail.
-const LOOK_TIE='#e8d27a',LOOK_CLIP='#e93d82',LOOK_LIPS='#c0405a',LOOK_BLUSH='#e0707a',LOOK_GOLD='#ffd166';
-const LOOK=a=>a.look||(a.look=PeopleLogic.look(a.sid||a.id));
-const hairTones=L=>[L.hair,shade(L.hair,-26),shade(L.hair,28)];
-const capOf=sh=>shade(sh,-45);
-const PERSON={
+export const LOOK_TIE='#e8d27a',LOOK_CLIP='#e93d82',LOOK_LIPS='#c0405a',LOOK_BLUSH='#e0707a',LOOK_GOLD='#ffd166';
+export const LOOK=a=>a.look||(a.look=PeopleLogic.look(a.sid||a.id));
+export const hairTones=L=>[L.hair,shade(L.hair,-26),shade(L.hair,28)];
+export const capOf=sh=>shade(sh,-45);
+export const PERSON={
   // Standing, facing front. The face spans sx-3..sx+2, rows hy..hy+5.
   hairFront(R,L,sx,hy,sh){const[hr,hrD,hrL]=hairTones(L);
     switch(L.hairStyle){

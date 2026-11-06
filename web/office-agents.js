@@ -1,4 +1,11 @@
-"use strict";
+import { tr } from './i18n.js';
+import { WorldLogic } from './world-logic.js';
+import { DogLogic } from './dog-logic.js';
+import { PeopleLogic } from './people-logic.js';
+import { RestroomLogic } from './restroom-logic.js';
+import { DEPT_PAL, DESKS, DOOR, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, WC, colOf } from './office-scene.js';
+import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf } from './office-util.js';
+import { ClaudeOffice, mixin } from './office.js';
 // Agents: the simulated office and the live feed, desks and departments, where each agent goes next.
 mixin(ClaudeOffice,class{
 

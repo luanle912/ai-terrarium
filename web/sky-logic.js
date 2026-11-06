@@ -1,6 +1,5 @@
 // Pure logic for the sky island (no DOM, no canvas). The page and tests/sky-logic.test.mjs both run this block.
-(function(){
-'use strict';
+import { tr } from './i18n.js';
 const key=(x,y)=>x+','+y;
 const N4=[[1,0],[-1,0],[0,1],[0,-1]];
 // Per-cell noise from the cell position alone, so the island looks the same on every machine.
@@ -323,6 +322,6 @@ function skyColors(df,hour,fx){
   return out;
 }
 
-globalThis.SkyLogic={annexLand,stepSnow,stairs,canCross,lawnWalk,lawnPaths,cheapestPath,GRASS_COST,groundZ,STAIR_RUN,flashLevel,PREVIEW_MS,startPreview,stepPreview,LAWN_BACK,mixHex,skyColors,WEATHER_KEY,loadWeatherSettings,saveWeatherSettings,geocodeUrl,forecastUrl,fetchRealWeather,LAWN,WATERFALL_LEN,DECOR_TOP,outdoorSpots,buildIsland,sceneFrame,
+export const SkyLogic = {annexLand,stepSnow,stairs,canCross,lawnWalk,lawnPaths,cheapestPath,GRASS_COST,groundZ,STAIR_RUN,flashLevel,PREVIEW_MS,startPreview,stepPreview,LAWN_BACK,mixHex,skyColors,WEATHER_KEY,loadWeatherSettings,saveWeatherSettings,geocodeUrl,forecastUrl,fetchRealWeather,LAWN,WATERFALL_LEN,DECOR_TOP,outdoorSpots,buildIsland,sceneFrame,
   WEATHERS,WEIGHTS,FX,pickNextWeather,changeDelayMs,transitionMs,wmoToWeather,initialWeather,weatherFx,startTransition,stepRandom,snowCover,lightningDelayMs,lightningFlashMs};
-})();
+

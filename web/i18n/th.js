@@ -1,5 +1,5 @@
 // th strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
-(globalThis.I18N_STRINGS=globalThis.I18N_STRINGS||{}).th={
+export default {
 "seasonTree.newyear.label":"วันขึ้นปีใหม่",
 "seasonTree.tet.label":"ตรุษเวียดนาม",
 "seasonTree.valentine.label":"วาเลนไทน์",

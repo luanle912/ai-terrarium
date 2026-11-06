@@ -1,4 +1,5 @@
-(function(){
+import { tr } from './i18n.js';
+
 const R=(ctx,x,y,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,h);};
 const tri=(ctx,cx,by,w,h,c,cd)=>{for(let r=0;r<h;r++){const rw=Math.max(1,Math.round(w*(1-r/h)));const hl=Math.ceil(rw/2);R(ctx,cx-hl,by-r,hl,1,c);R(ctx,cx,by-r,hl,1,cd);}};
 const blob=(ctx,cx,cy,r,c)=>{for(let dy=-r;dy<=r;dy++){const w=Math.round(Math.sqrt(r*r-dy*dy))*2;R(ctx,cx-w/2,cy+dy,w,1,c);}};
@@ -61,5 +62,5 @@ D.halloween=(ctx,bx,by,t)=>{R(ctx,bx-2,by-22,4,22,'#3a2b3f');R(ctx,bx-8,by-28,2,
 D.teachers=(ctx,bx,by,t)=>{[['#3e8ed0',-9,18],['#e5484d',-8,16],['#46a758',-9,17]].forEach(([c,x,w],i)=>{const y=by-4-i*4;R(ctx,bx+x,y,w,4,c);R(ctx,bx+x+1,y+1,w-2,2,'#f6f4ee');R(ctx,bx+x,y+1,1,2,c);R(ctx,bx+x+w-3,y,2,4,'rgba(0,0,0,0.18)');});R(ctx,bx-4,by-18,8,6,'#a5573b');R(ctx,bx-5,by-19,10,2,'#c46a48');R(ctx,bx-1,by-24,1,5,'#3f9a5a');R(ctx,bx+2,by-26,1,7,'#3f9a5a');R(ctx,bx-4,by-22,1,3,'#3f9a5a');const s=Math.round(Math.sin(t*1.5)*0.6);[[-1,-26],[2,-29],[-4,-24],[5,-24]].forEach(([x,y])=>{blob(ctx,bx+x+s,by+y,2.5,'#ffd23f');R(ctx,bx+x+s,by+y,1,1,'#f29e0b');});blob(ctx,bx+12,by-3,3,'#e5484d');R(ctx,bx+12,by-7,1,2,'#6b3e24');R(ctx,bx+13,by-7,2,1,'#3f9a5a');R(ctx,bx+10,by-5,1,1,'#ff9a9a');};
 D.default=(ctx,bx,by,t)=>{pot(ctx,bx,by,'#a5573b','#c46a48');R(ctx,bx-1,by-12,2,6,'#5a3a22');blob(ctx,bx-4,by-16,6,'#2e8556');blob(ctx,bx+4,by-18,6,'#3fa36b');blob(ctx,bx,by-24,6,'#45b072');R(ctx,bx+2,by-24,2,2,'#6fcf97');};
 function drawSeasonTree(ctx,bx,by,s,t){bx=Math.round(bx);by=Math.round(by);ctx.fillStyle='rgba(0,0,0,0.3)';ctx.beginPath();ctx.ellipse(bx,by,12,5,0,0,Math.PI*2);ctx.fill();(D[s]||D.default)(ctx,bx,by,t);ctx.globalAlpha=1;}
-window.SeasonTree={seasonFor,drawSeasonTree,SEASONS,ORDER};
-})();
+export const SeasonTree = {seasonFor,drawSeasonTree,SEASONS,ORDER};
+

@@ -1,5 +1,5 @@
 // ko strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
-(globalThis.I18N_STRINGS=globalThis.I18N_STRINGS||{}).ko={
+export default {
 "seasonTree.newyear.label":"신정",
 "seasonTree.tet.label":"설날 (뗏)",
 "seasonTree.valentine.label":"밸런타인데이",
