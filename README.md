@@ -7,7 +7,7 @@
     <a href="#-quick-start">Quick Start</a> ·
     <a href="#-features">Features</a> ·
     <a href="#%EF%B8%8F-configuration">Configuration</a> ·
-    <a href="https://claude.ai/artifact/7rKQWsQxG8WttUXiWqEUt6?server=localhost:4317">Live Demo</a>
+    <a href="https://github.com/luanle912/ai-terrarium/releases">Releases</a>
   </p>
   <p align="center">
     <a href="https://github.com/luanle912/ai-terrarium/stargazers"><img src="https://img.shields.io/github/stars/luanle912/ai-terrarium?style=flat&color=f4b400" alt="Stars"></a>
@@ -21,7 +21,9 @@
 <br>
 
 <p align="center">
-  <img src="assets/demo.jpg" alt="ai-terrarium — pixel-art isometric office with Claude Code sessions as animated characters" width="720">
+  <img src="assets/demo.gif" alt="ai-terrarium — a busy pixel-art office on a sky island: agents at their desks, zooming in, then rain and snow" width="720">
+  <br>
+  <sub>Simulation mode (⚙ → Data source) — the departments and sessions are made up</sub>
 </p>
 
 <br>
@@ -122,6 +124,24 @@ The plugin hooks into `session.start` and spawns a lightweight Node.js server:
 3. **Streams** state via Server-Sent Events to the browser
 4. **Renders** each session as an animated character at an isometric desk
 
+### Project layout
+
+Still no build step and no dependencies: the browser runs the ES modules in `web/` as they are.
+
+| Path | What it is |
+|------|------------|
+| `server.js`, `lib/` | The local server (transcripts → SSE) and the publisher that sends your island to a hub |
+| `hub/` | The optional multi-island hub |
+| `claude-office.html` | A short shell page that loads `web/main.js` |
+| `web/main.js` | Entry point: imports every module in a fixed order, then mounts the page |
+| `web/*-logic.js` | DOM-free logic (sky, camera, dogs, people, restroom, bubbles, world layout); `tests/` imports each one |
+| `web/office.js`, `web/office-*.js` | The page component: `office.js` holds the class, each `office-*.js` adds its methods with `mixin(ClaudeOffice, class { ... })` (agents, drawing, header, panels, settings) |
+| `web/world-*.js` | World mode (several islands from a hub) and the World section of ⚙ Settings |
+| `web/sky-*.js`, `decor-*.js`, `pantry-*.js`, `season-*.js` | Drawing: sky and island, office decor, pantry pieces, event trees |
+| `web/i18n.js`, `web/i18n/<lang>.js` | `tr()` and one translation table per language; `tests/i18n.test.mjs` checks they match |
+
+Each module imports exactly what it uses. After editing `web/`, run `npx prettier@3.3.3 --write web` (settings in `.prettierrc.json`); `tests/web-style.test.mjs` keeps files under 700 lines and lines under 120 characters. After pulling a new version, restart `node server.js`: an older server does not know about `web/` and the page says so.
+
 ---
 
 ## 🖥️ Alternative: Run Without Plugin
@@ -134,11 +154,7 @@ node ai-terrarium/server.js
 # → http://localhost:4317
 ```
 
-Or use the **hosted UI** pointed at your local server:
-
-```
-https://claude.ai/artifact/7rKQWsQxG8WttUXiWqEUt6?server=localhost:4317
-```
+After a `git pull`, restart `node server.js` so it serves the new page.
 
 ---
 

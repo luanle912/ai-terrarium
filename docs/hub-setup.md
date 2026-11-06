@@ -145,13 +145,16 @@ sqlite3 hub.sqlite "SELECT datetime(at/1000,'unixepoch') AS time, actor_id, acti
 
 ## 3c. Bảo vệ trình duyệt và giới hạn tốc độ
 
-- Trang thế giới (`claude-office.html`) được phục vụ với CSP theo hash: hub tính hash của từng `<script>` nội tuyến khi
-  phục vụ, nên không cần `'unsafe-inline'` cho script. React tải từ `cdnjs.cloudflare.com` với SRI. Kèm theo là
-  `frame-ancestors 'none'`, `Cross-Origin-Opener-Policy: same-origin` và HSTS khi dùng `https://`.
+- Trang thế giới (`claude-office.html`) không còn script nội tuyến: mã của trang là các file trong `web/`, hub phục vụ
+  chúng ở `/web/...` (chỉ tên `[a-z0-9-]`, đuôi `.js`/`.css`, `Cache-Control: no-cache`). CSP là `script-src 'self'`
+  cộng `cdnjs.cloudflare.com` (React, có SRI); script nội tuyến nào còn sót sẽ được hash lúc phục vụ, nên không bao giờ
+  cần `'unsafe-inline'` cho script. Kèm theo là `frame-ancestors 'none'`, `Cross-Origin-Opener-Policy: same-origin` và
+  HSTS khi dùng `https://`.
 - Giới hạn tốc độ (token bucket, trả 429): đăng nhập 30 lần/giờ mỗi IP; bắt đầu ghép thiết bị 10 lần/giờ mỗi IP; gói
-  `publish` 4 gói/giây (burst 8) mỗi máy; các route còn lại 120 yêu cầu/phút mỗi IP. Luồng SSE: 5 luồng đồng thời mỗi
-  người (429 kèm `Retry-After: 10`), 300 luồng toàn hub (503 kèm `Retry-After: 30`). Sau proxy nhớ bật
-  `HUB_TRUST_PROXY=1` (hoặc `cloudflare`), nếu không mọi người dùng chung một hạn mức.
+  `publish` 4 gói/giây (burst 8) mỗi máy; các route còn lại 120 yêu cầu/phút mỗi IP, trừ file tĩnh `/web/...` (mỗi lần
+  mở trang tải khoảng 40 file). Luồng SSE: 5 luồng đồng thời mỗi người (429 kèm `Retry-After: 10`), 300 luồng toàn hub
+  (503 kèm `Retry-After: 30`). Sau proxy nhớ bật `HUB_TRUST_PROXY=1` (hoặc `cloudflare`), nếu không mọi người dùng chung
+  một hạn mức.
 
 ## 3d. Sức chứa: tối đa 8 đảo
 

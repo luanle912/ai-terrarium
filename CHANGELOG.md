@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - 2026-11-06
+
+A major version because the source layout changes completely (the page moved from one HTML file into ES modules under `web/`); the page, the hub protocol, the CLI and the configuration work as before.
+
+### Added
+
+- **How bubbles show** — With many people in the office the scene was mostly name tags. ⚙ Settings → *Bubble text* now picks how bubbles show: *Compact* (the default) keeps the bubble of everyone at work (typing, thinking, talking, waiting), while someone on a break says a line for about six seconds when they start something new and then it fades, at most four at a time; *Always* shows every bubble as before; *Off* shows none. Approvals, errors, the selected agent and the one under the mouse always show theirs, and the choice is remembered in the browser
+
+### Changed
+
+- **The page is split into modules** — `claude-office.html` was one 7,150-line file that every change touched, so pull requests kept colliding, parts were hard to find and many lines held several statements (the longest ran to 1,032 characters). It is now a short shell that loads `web/main.js`, and the code lives in about 50 ES modules under `web/`, grouped by concern (office, world, sky, decor, pantry, event trees, logic, translations), each importing exactly what it uses; the page component is spread over `office-*.js` and `world-*.js`, and `render()` is cut into header, panels and settings. Everything is formatted with Prettier (one statement per line, 120 columns, settings in `.prettierrc.json`), no file is over 700 lines, and a test keeps it that way. The page looks and behaves exactly as before: every step was checked against screenshots of the old page taken with a fixed random seed and clock, pixel for pixel. There is still no build step and no runtime dependency. Both the local server and the hub serve `web/` (only plain `[a-z0-9-]` names, never cached stale), the hub's page policy now allows its own scripts instead of hashing inline ones, and the tests import the same modules the page runs (Node 22.12+ for the tests). **After updating, restart `node server.js`** if you run it yourself: an older server cannot serve `web/`, and the page says so instead of staying blank. Plugin users get the new server with the update
+- **README demo** — The hero image is now a short animation of the office in simulation mode (zoom, rain, snow), and the links to the hosted page are gone
+
+### Fixed
+
+- **Blurry bubbles when zoomed** — Zoomed in, the name tags turned blurry because the browser kept the island layer at the size it was first drawn and stretched it; the layer is now redrawn sharp as soon as the zoom or pan stops
+
+## [1.6.0] - 2026-11-05
 
 ### Added
 
@@ -333,6 +350,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Claude Code plugin integration with auto-start on `session.start`
 
 [Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v1.5.0...HEAD
+[2.0.0]: https://github.com/luanle912/ai-terrarium/compare/v1.6.0...v2.0.0
+[1.6.0]: https://github.com/luanle912/ai-terrarium/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/luanle912/ai-terrarium/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/luanle912/ai-terrarium/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/luanle912/ai-terrarium/compare/v1.4.0...v1.4.1

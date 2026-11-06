@@ -1,0 +1,42 @@
+// Entry point. Imports every module in the order the page used to load them, so start-up side effects (the
+// mixins that complete ClaudeOffice, IslandScene borrowing its methods) happen in the same order, then mounts.
+import './i18n.js';
+import './season-tree.js';
+import './office-decor.js';
+import './pantry-items.js';
+import './sky-logic.js';
+import './camera-logic.js';
+import './bubble-logic.js';
+import './world-logic.js';
+import './sky-render.js';
+import './dog-logic.js';
+import './dog-sprites.js';
+import './smoke-logic.js';
+import './people-logic.js';
+import './restroom-logic.js';
+import './office-scene.js';
+import './office-people.js';
+import './office-util.js';
+import './office.js';
+import './office-agents.js';
+import './office-draw.js';
+import './office-draw-furniture.js';
+import './office-draw-restroom.js';
+import './office-draw-smoking.js';
+import './office-draw-people.js';
+import './office-render.js';
+import './office-render-header.js';
+import './office-render-panels.js';
+import './office-render-settings.js';
+import './island-scene.js';
+import './world-ui.js';
+import './world-local.js';
+import './world-state.js';
+import './world-link-ui.js';
+import './world-draw.js';
+import './world-render.js';
+import './world-panel.js';
+import { h } from './office-scene.js';
+import { ClaudeOffice } from './office.js';
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(ClaudeOffice));
