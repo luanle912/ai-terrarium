@@ -176,10 +176,9 @@ function geometry(island, PG) {
     grad: null,
   };
   g.fallStreaks = Array.from({ length: FALL_STREAKS }, (_, i) => ({ u: 0.08 + 0.84 * ((i * 0.37) % 1), ph: i * 0.11 }));
-  // mountain falls: over the notch in the rock ledge at the back of the river's head row (island.mountain.fall), down
-  // into the river
-  const mf = island.mountain.fall;
-  g.mfall = { Y: mf.y, xa: mf.x0, xb: mf.x1, top: mf.top, bot: WATER_Z, q: -1, grad: null };
+  // mountain falls: out of the gap between the peaks (island.mountain.gap), down the rock into the river's head
+  const gap = island.mountain.gap;
+  g.mfall = { Y: gap.y, xa: gap.x - gap.w, xb: gap.x + gap.w, top: gap.z, bot: WATER_Z, q: -1, grad: null };
   // cone tip: the deepest column
   const tip = island.list.reduce((a, c) => (c.d > a.d ? c : a));
   g.tip = { x: o[0] + (tip.x - tip.y) * TW, y: o[1] + (tip.x + tip.y + 1) * TH + tip.d };
