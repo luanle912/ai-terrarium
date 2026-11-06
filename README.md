@@ -191,6 +191,18 @@ tên project chỉ gửi khi bạn chọn.
 Trang hub mở ra với mã đã điền sẵn: đăng nhập Google (lần đầu) rồi bấm **Cho phép**. Vài giây sau đảo của bạn xuất hiện
 và chip "Thế giới" trên header chuyển xanh; bấm chip để mở thế giới. Muốn rút ra thì bấm **Thoát thế giới** trong cùng mục.
 
+**Máy này đang gửi thế nào?** Dưới dòng "đã tham gia" trong mục **Thế giới** có ô **Máy này**: trạng thái (đang gửi,
+đang kết nối, riêng tư, mất kết nối, hub từ chối, máy khác đang gửi, chờ đăng nhập lại hub, bị thu hồi), "gửi lúc …"
+của lần gửi cuối, lỗi cuối (mã lỗi như `network:ECONNREFUSED` hay `timeout`, số lần thất bại; thời gian chờ chỉ hiện khi
+đã hẹn thử lại, "đang thử lại" khi đến lúc, và không hiện gì khi đang chờ bạn đăng nhập lại) và nút **Nhật ký** mở 50
+dòng gần nhất của publisher. Gói bị hub từ chối hiện đỏ "hub từ chối" kèm lý do (ví dụ `duplicate id`). Nếu server
+local không trả lời, chip "Thế giới" chuyển xám thay vì biến mất. Server cũ không có nhật ký thì ô chỉ có trạng thái.
+
+Trang thế giới có chip kết nối với nút **?** giải thích ba trạng thái: xám **Đảo offline** (máy của một đảo ngừng
+gửi: đảo mờ dần từ 45 giây, ghi "gửi lúc …", offline sau 90 giây), vàng **Đang kết nối lại** (trang mất luồng từ hub
+và tự nối lại, mọi đảo tạm mờ), đỏ **Hub không phản hồi** (hub không trả lời, từ chối hoặc đang bận; trang tự thử
+lại). Trong **Của tôi**, máy bạn đang dùng có nhãn "Máy này" và giờ gửi cuối.
+
 Trang local có công tắc **Xem như người khác** trong Cài đặt để xem đúng phần người khác thấy, kể cả khi chưa tham gia.
 Trên hub, ở chế độ **Của tôi** và trang `/me`, bạn đổi tên và màu đảo, xem và thu hồi từng máy, hoặc rời hub.
 

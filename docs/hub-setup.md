@@ -217,7 +217,9 @@ Một hub chứa **tối đa 8 đảo**, mỗi đảo một **chỗ cố định
   `terrarium_stream_refused_total{reason="hub_cap|user_cap"}`, `terrarium_http_429_total`,
   `terrarium_world_broadcasts_total`, `terrarium_frames_written_total`. Bộ đếm về 0 khi hub khởi động lại.
 - Sự kiện `world` có thêm `now` (giờ của hub) và mỗi đảo có `lastAt` (lần cuối nghe được một máy của đảo, `null` nếu hub
-  chưa nghe từ khi khởi động); `/api/me` có `devices[].lastAt` tương tự.
+  chưa nghe từ khi khởi động); `/api/me` có `devices[].lastAt` tương tự. Để mỗi lần máy gửi không kéo theo một sự kiện
+  `world`, hub chỉ phát lại `world` vì `lastAt` khi nó sang một nấc 15 giây mới; mỗi khung vẫn mang `lastAt` chính xác,
+  nên người xem thấy `lastAt` của đảo đang online cũ nhất khoảng 16 giây.
 
 ## 4. Sao lưu
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **"Máy này" and a log on the local page** — In ⚙ Settings → *World* a box under the joined line shows what this machine's publisher is doing: its state (sending, connecting, private, offline, rejected, standby, waiting for sign-in, revoked), when it last sent, its last error (the code, how many failures in a row, and the wait before the next try only when a retry is planned; "retrying" once it is due; nothing while paused for sign-in) and a *Log* button with the last 50 lines (`GET /api/log`, kept in memory only). The error code carries the system reason from Node (`network:ECONNREFUSED`, `network:ENOTFOUND`), `timeout` or `network`. An older server has no log, so the box shows the state only
+- **`/healthz`, `/metrics` and HEAD on the hub** — `GET /healthz` (200 `{ok, uptimeS, db, streams, version}`, 503 when the database does not answer) for uptime monitors; `GET /metrics` in Prometheus format (publish results, streams, islands, 429s) only when `HUB_METRICS_TOKEN` (at least 32 characters) is set, 404 otherwise and 401 without `Authorization: Bearer <token>`. Both go through the general rate limit (120 per minute per IP) and the counters reset when the hub restarts. `HEAD` works on the page and `/web/*`; `HEAD /api/world/stream` is 405. See `docs/hub-setup.md` 3g
+- **"Sent at …" and islands that fade with age** — The hub sends each island's last-heard time (`lastAt`) and its own clock (`now`). An island whose machine went quiet fades from 45 s, shows "gửi lúc HH:MM · N phút trước" and is offline after 90 s. To keep the stream calm the hub only emits a world change for `lastAt` when it crosses a 15 s step, while every frame carries the exact value, so a live island's `lastAt` is at most about 16 s old. An older hub sends neither, and the page then behaves as before
+- **A legend for the three connection states** — The connection chip in the world header has a "?" that explains grey *Island offline*, yellow *Reconnecting* and red *Hub not responding*, and lights the one the page is in (Esc closes it)
+- **"Máy này" in "Của tôi"** — The device the page was opened from (the local page's link carries `#this-device=<id>`) is listed first with a tag and its last-sent time
+
 ### Changed
 
 - **Hub deploys no longer send viewers to "Thử lại"** — On SIGTERM the hub tells every stream when to come back (`event: restarting` plus `retry:`, 5-20 s, spread per viewer) and the page reconnects by itself at that time, keeping the scene (dimmed while the link is down, wiped only after 5 minutes without a connection); older pages wait out the same `retry:`. Measured with 300 streams: all 300 were back within 20 s and none got more than 18 `world` events in the next 30 s. For 90 s after a start, islands whose machines have not sent again carry `waking: true` and are drawn as waiting for their machine rather than offline
@@ -31,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A reused pid is not a ghost** — A session whose pid was taken by another process is no longer shown as running
 - **A hidden tab does not hold the desk of someone who left** — A browser tab in the background removes an agent that left at once, so its desk is free when the tab is shown again
 - **Finished sub-agents leave on time** — A sub-agent marked done walks out about 3 s later even when nothing else arrives from the hub, on the local page and on every island, and a background tab no longer creates it again on the next update
+- **Pairing errors of the local server are visible** — When the local server answers a join or leave with an error, or does not answer, the page says so (with the status) and stops asking after three failed checks, instead of waiting for ever
+- **The chip does not vanish when the local server dies** — After two failed polls the "World" chip turns grey "server local không phản hồi" instead of disappearing
 
 
 ## [2.0.0] - 2026-11-06
