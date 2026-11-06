@@ -1,6 +1,6 @@
 'use strict';
-// Hash-based CSP for claude-office.html (spec S13). The hub hashes every inline <script> at serve time, so the
-// policy needs no 'unsafe-inline' for scripts and follows later edits of the file without touching this module.
+// CSP for claude-office.html (spec S13). The page's own scripts are files under /web/ ('self'); any inline <script>
+// left in the page is hashed at serve time, so the policy never needs 'unsafe-inline' for scripts.
 
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -20,7 +20,7 @@ function inlineScriptHashes(html) {
 function officeCsp(hashes) {
   return [
     "default-src 'none'",
-    `script-src ${[...hashes, 'https://cdnjs.cloudflare.com'].join(' ')}`,
+    `script-src ${["'self'", ...hashes, 'https://cdnjs.cloudflare.com'].join(' ')}`,
     // Inline <style> and style="" attributes are used by the page; the Google Fonts stylesheet is external.
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     'font-src https://fonts.gstatic.com',

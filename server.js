@@ -238,6 +238,7 @@ function snapshot() {
 }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');
+const webAssets = require('./lib/web-assets.js');
 const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || '').split(',').map(h => h.trim()).filter(Boolean);
 const clients = new Set();
 
@@ -294,7 +295,7 @@ function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date
   };
 }
 
-function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null } = {}) {
+function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null } = {}) {
   return (req, res) => {
     if (!hostAllowed(req.headers.host, port, allowedHosts)) { res.writeHead(403); res.end('Forbidden'); return; }
     const route = (req.url || '').split('?')[0];
@@ -320,8 +321,13 @@ function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFil
         .catch(() => { res.writeHead(500); res.end('error'); });
     }
     else if (route === '/' || route === '/index.html') {
-      try { const html = fs.readFileSync(htmlFile, 'utf8'); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(html); }
+      try { const html = fs.readFileSync(htmlFile, 'utf8'); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }); res.end(html); }
       catch { res.writeHead(404); res.end('claude-office.html not found — place it next to this script'); }
+    }
+    else if (route.startsWith('/web/')) {
+      const a = webAssets.readAsset(route, webDir);
+      if (a) { res.writeHead(200, { 'Content-Type': a.type, ...webAssets.HEADERS }); res.end(a.body); }
+      else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); }
     }
     else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); }
   };

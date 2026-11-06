@@ -2,9 +2,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-import { loadI18n, readBlock } from './load-i18n.mjs'
+import { loadI18n } from './load-i18n.mjs'
+import { PAGE, readWeb, pageScripts } from './web.mjs'
 
-const HTML = readFileSync(new URL('../claude-office.html', import.meta.url), 'utf8')
+// The page's own code: the shell plus every web/ script except the translation tables and the lookup itself.
+const SOURCES = [['claude-office.html', readFileSync(PAGE, 'utf8')],
+  ...pageScripts().filter(n => n !== 'i18n' && !n.startsWith('i18n/')).map(n => [`web/${n}.js`, readWeb(n)])]
 const I18n = loadI18n('vi')
 const STRINGS = globalThis.I18N_STRINGS
 const LANGS = I18n.CODES
@@ -68,8 +71,7 @@ test('every language has exactly the Vietnamese keys, with the same params and s
 })
 
 test('every tr() key used in the page exists in the tables, and every table key is used', () => {
-  const code = HTML.replace(readBlock(HTML, 'i18n-strings'), '')
-  const used = new Set([...code.matchAll(/\btr\(\s*'([^']+)'/g)].map(m => m[1]))
+  const used = new Set(SOURCES.flatMap(([, code]) => [...code.matchAll(/\btr\(\s*'([^']+)'/g)].map(m => m[1])))
   const known = new Set(Object.keys(STRINGS.vi))
   assert.deepEqual([...used].filter(k => !known.has(k)), [], 'keys used but not defined')
   assert.deepEqual([...known].filter(k => !used.has(k)), [], 'keys defined but never used')
@@ -80,13 +82,19 @@ test('every tr() key used in the page exists in the tables, and every table key 
 // Strips // and /* */ comments well enough for this check (it ignores comment markers inside strings).
 const stripComments = line => line.replace(/\/\*.*?\*\//g, '').replace(/(^|[\s;,{}()])\/\/.*$/, '$1')
 
-// The season, decor and pantry catalogues (before sky-logic) keep Vietnamese design notes that the page never shows.
+// The season, decor and pantry catalogues keep Vietnamese design notes that the page never shows.
 const DESIGN_NOTES = /\b(tree|desc|window|name|group|note):'[^']*'|S\.window='[^']*'/g
+const CATALOGUES = new Set(['web/season-tree.js', 'web/office-decor.js', 'web/pantry-items.js'])
 
 test('no Vietnamese text is hard-coded in the page outside the translation tables', () => {
-  let rest = HTML.replace(readBlock(HTML, 'i18n-strings'), '').replace(readBlock(HTML, 'i18n'), '')
-  const cut = rest.indexOf('<script id="sky-logic">')
-  rest = rest.slice(0, cut).replace(DESIGN_NOTES, '') + rest.slice(cut)
-  const hits = rest.split('\n').map((l, i) => [i + 1, stripComments(l)]).filter(([, l]) => VI_CHARS.test(l))
-  assert.deepEqual(hits.map(([n, l]) => `${n}: ${l.trim().slice(0, 120)}`), [])
+  const hits = SOURCES.flatMap(([file, code]) => (CATALOGUES.has(file) ? code.replace(DESIGN_NOTES, '') : code).split('\n')
+    .map((l, i) => [`${file}:${i + 1}`, stripComments(l)]).filter(([, l]) => VI_CHARS.test(l)))
+  assert.deepEqual(hits.map(([at, l]) => `${at}: ${l.trim().slice(0, 120)}`), [])
+})
+
+test('the page loads every web/ script exactly once, translation tables before the lookup', () => {
+  const names = pageScripts()
+  assert.equal(new Set(names).size, names.length)
+  assert.ok(names.indexOf('i18n') > Math.max(...names.filter(n => n.startsWith('i18n/')).map(n => names.indexOf(n))))
+  assert.deepEqual(names.filter(n => n.startsWith('i18n/')).map(n => n.slice(5)).sort(), [...LANGS].sort(), 'one table per language')
 })
