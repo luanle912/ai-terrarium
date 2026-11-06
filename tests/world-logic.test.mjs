@@ -547,3 +547,18 @@ test('waking up in a visible tab reopens a stream that still looks live; a hidde
   const h = step(W.linkStart(), { type: 'wake', visible: false }, 5000)
   assert.equal(h.act.connectIn, null); assert.ok(!h.act.close); assert.equal(h.link.phase, 'live')
 })
+
+test('doneDue: only a sub-agent done for more than 3 s is due to leave', () => {
+  const a = { parent: 1, status: 'done', doneAt: 1000 }
+  assert.equal(W.DONE_LEAVE_MS, 3000)
+  assert.equal(W.doneDue(a, 4000), false)
+  assert.equal(W.doneDue(a, 4001), true)
+  assert.equal(W.doneDue({ ...a, parent: null }, 9000), false)
+  assert.equal(W.doneDue({ ...a, status: 'working' }, 9000), false)
+  assert.equal(W.doneDue({ ...a, doneAt: 0 }, 9000), false)
+})
+
+test('leaveGone: a hidden tab frees the desk at once, a visible one lets the person walk out', () => {
+  assert.equal(W.leaveGone('hidden'), true)
+  assert.equal(W.leaveGone('visible'), false)
+})

@@ -3567,10 +3567,16 @@ globalThis.WorldLogic = (() => {
     }
     return out
   }
+  // A finished sub-agent leaves once it has been 'done' for more than DONE_LEAVE_MS.
+  const DONE_LEAVE_MS = 3000
+  const doneDue = (a, now) => !!(a && a.parent && a.status === 'done' && a.doneAt && now - a.doneAt > DONE_LEAVE_MS)
+  // A hidden tab runs no walking animation, so whoever leaves is gone at once (their desk is free for the next session).
+  const leaveGone = (visibility) => visibility === 'hidden'
   return { SLOTS, PHONE_MAX_W, CENTRE_SCALE, HOVER_LIFT, GUTTER, CLOUD_IN_MS, CLOUD_HOLD_MS, CLOUD_OUT_MS, CLOUD_MS, FADE_MS, skyLayout, skyHit, easeInOut, cloudPhase, cloudBands, canNavigate,
     beginTrans, oneArea, fitOne, transStep, landingView, viewGone, escAction, meProbeState, meProbeStep, ISLAND_ASPECT, clientSessions,
     PING_STALE_MS, streamStale, goneStep,
-    RECONNECT_STEPS_MS, DOWN_CAP_MS, REFUSED_AFTER, WAKE_JUMP_MS, KEEP_STALE_MS, reconnectDelay, linkStart, linkStep }
+    RECONNECT_STEPS_MS, DOWN_CAP_MS, REFUSED_AFTER, WAKE_JUMP_MS, KEEP_STALE_MS, reconnectDelay, linkStart, linkStep,
+    DONE_LEAVE_MS, doneDue, leaveGone }
 })()
 </script>
 <script id="sky-render">
@@ -5014,7 +5020,12 @@ class ClaudeOffice extends React.Component{
     // In world mode a wall-clock jump between two ticks (WAKE_JUMP_MS) means the machine slept: reconnect at once.
     this.uiTimer=setInterval(()=>{const wall=Date.now();
       if(this.world&&this.tickWall&&wall-this.tickWall>WorldLogic.WAKE_JUMP_MS)this.relink({type:'wake',visible:document.visibilityState==='visible'});this.tickWall=wall;
+      // Hidden tab: no render and no setState; only finished sub-agents still leave on time.
+      if(document.visibilityState==='hidden'){const n=Date.now();this.doneSweep(n);if(this.world)for(const sc of this.world.scenes.values())sc.doneSweep(n);return;}
       if(performance.now()-(this.lastFrame||0)>200)this.frame(performance.now());this.setState(s=>({tick:s.tick+1}));},300);
+    // Back from hidden: one frame and one render at once.
+    this.onShown=()=>{if(document.visibilityState!=='visible')return;this.frame(performance.now());this.setState(s=>({tick:s.tick+1}));};
+    document.addEventListener('visibilitychange',this.onShown);
     this.last=performance.now();
     setTimeout(()=>this.frame(performance.now()),0);
     const loop=t=>{this.lastFrame=performance.now();this.frame(t);this.raf=requestAnimationFrame(loop);};
@@ -5028,7 +5039,7 @@ class ClaudeOffice extends React.Component{
     this.ro&&this.ro.disconnect();clearTimeout(this.kTimer);clearInterval(this.simTimer);clearInterval(this.uiTimer);clearInterval(this.realTimer);cancelAnimationFrame(this.raf);this.es&&this.es.close();
     clearInterval(this.previewTimer);clearTimeout(this.joinTimer);clearTimeout(this.armTimer);this.world&&this.world.es&&this.world.es.close();if(this.onWorldKey)window.removeEventListener('keydown',this.onWorldKey);
     if(this.world)this.stopWorld(this.world);
-    if(this.onWorldVisible)document.removeEventListener('visibilitychange',this.onWorldVisible);if(this.onWorldOnline)window.removeEventListener('online',this.onWorldOnline);}
+    if(this.onWorldVisible)document.removeEventListener('visibilitychange',this.onWorldVisible);if(this.onShown)document.removeEventListener('visibilitychange',this.onShown);if(this.onPreviewVis)document.removeEventListener('visibilitychange',this.onPreviewVis);if(this.onWorldOnline)window.removeEventListener('online',this.onWorldOnline);}
   // ---- weather settings ----
   setWeather(patch){
     this.setState(patch,()=>{
@@ -5112,11 +5123,11 @@ class ClaudeOffice extends React.Component{
     return cnt.map(o=>{let best=null,b=0;for(const k in o)if(o[k]>b){b=o[k];best=k;}return best;});
   }
   freeDeskFor(dk){
-    const used=new Set(this.agents.map(a=>a.desk)), own=this.colOwners();
+    const used=new Set(this.agents.filter(a=>!a.gone).map(a=>a.desk)), own=this.colOwners();
     const free=DESKS.map((_,i)=>i).filter(i=>!used.has(i));
     return free.find(i=>own[colOf(i)]===dk) ?? free.find(i=>own[colOf(i)]==null) ?? free[0] ?? -1;
   }
-  freeDesk(){const used=new Set(this.agents.map(a=>a.desk));for(let i=0;i<DESKS.length;i++)if(!used.has(i))return i;return -1;}
+  freeDesk(){const used=new Set(this.agents.filter(a=>!a.gone).map(a=>a.desk));for(let i=0;i<DESKS.length;i++)if(!used.has(i))return i;return -1;}
 
   addAgent({seated,parent,live,deptKey}){
     let dk;
@@ -5147,7 +5158,10 @@ class ClaudeOffice extends React.Component{
   }
   log(a,text){a.hist.unshift({t:clock(),text});if(a.hist.length>7)a.hist.pop();}
   byId(id){return this.agents.find(a=>a.id===id);}
-  leave(a,why='missing'){if(a.leaving)return;a.leaving=true;a.leftWhy=why;a.status='leaving';this.log(a,tr('office.log.sessionEnded'));}
+  leave(a,why='missing'){if(a.leaving)return;a.leaving=true;a.leftWhy=why;a.status='leaving';this.log(a,tr('office.log.sessionEnded'));
+    if(WorldLogic.leaveGone(document.visibilityState))a.gone=true;}
+  // Finished sub-agents walk out 3 s after their 'done' (called from frame and from the hidden-tab timer).
+  doneSweep(now){for(const a of this.agents)if(WorldLogic.doneDue(a,now))this.leave(a,'done');}
   setWork(a){a.status='working';a.target=null;a.tool=pick(TOOLS);a.until=Date.now()+rnd(2500,6500)/this.speed;this.log(a,a.tool[0]+' · '+a.tool[1]);}
 
   simTick(){
@@ -5198,7 +5212,7 @@ class ClaudeOffice extends React.Component{
       seen.add(s.id);
       if(skip.has(s.id))continue;
       let a=this.agents.find(x=>x.sid===s.id&&!x.leaving);
-      const back=!a&&this.agents.find(x=>x.sid===s.id&&x.leaving);
+      const back=!a&&this.agents.find(x=>x.sid===s.id&&x.leaving&&!x.gone);
       if(back){if(back.leftWhy!=='missing')continue;back.leaving=false;back.goalKey=null;a=back;}// still on the way out: back to the desk
       if(!a){
         let par=null;if(s.parentId){par=this.agents.find(x=>x.sid===s.parentId&&!x.leaving);}
@@ -5213,7 +5227,7 @@ class ClaudeOffice extends React.Component{
       a.target=t?t.id:null;
       if(a.status==='talking'&&s.talkingTo){const tgt=this.agents.find(x=>!x.leaving&&(x.name===s.talkingTo||x.short===s.talkingTo||x.sid===s.talkingTo));if(tgt)a.target=tgt.id;}
       if(a.status==='waiting'&&!a.target)a.status='working';
-      if(a.parent&&s.status==='done'){if(!a.doneAt)a.doneAt=Date.now();else if(Date.now()-a.doneAt>3000)this.leave(a,'done');}else a.doneAt=0;
+      if(a.parent&&s.status==='done'){if(!a.doneAt)a.doneAt=Date.now();}else a.doneAt=0;
     }
     this.agents.forEach(a=>{if(!seen.has(a.sid))this.leave(a);});
     this.goneSids=gone;
@@ -5289,6 +5303,7 @@ class ClaudeOffice extends React.Component{
     const dt=Math.min(0.05,(ts-this.last)/1000);this.last=ts;
     if(!this.state.paused){this.agents.forEach(a=>this.updateAgent(a,dt));this.stepDogs(dt);
       if(this.agents.some(a=>a.gone)){const goneA=this.agents.filter(a=>a.gone);goneA.forEach(a=>this.goneSids.set(a.sid,a.leftWhy||'missing'));const goneIds=goneA.map(a=>a.id);this.agents=this.agents.filter(a=>!a.gone);if(goneIds.includes(this.state.sel))this.setState({sel:null});}}
+    this.doneSweep(Date.now());
     this.env=this.envNow();
     this.draw(ts/1000);
     this.drawSky(ts/1000);
@@ -6220,7 +6235,7 @@ class ClaudeOffice extends React.Component{
 // One island of the world view (several islands in one sky). Its simulation and drawing are the component's own
 // methods, borrowed rather than copied, so every island in the world looks and moves exactly like the local page.
 // What belongs to one island lives here; the sky, light, speed and selection come from the host component.
-const SCENE_METHODS=['syncLive','addAgent','dept','colOwners','freeDeskFor','freeDesk','log','byId','leave','goalFor','updateAgent',
+const SCENE_METHODS=['syncLive','addAgent','dept','colOwners','freeDeskFor','freeDesk','log','byId','leave','doneSweep','goalFor','updateAgent',
   'draw','drawSeg','drawPlanter','pantryItems','drawDesk','actArms','drawPerson','drawSleeper','headPos','hit',
   'smokingItems','restroomItems','restroomPaint','stepDogs','dogSprite','drawDog'];
 // Every island bakes the same ground for a given resolution, light and snow, so one bake per k serves them all.
@@ -6246,6 +6261,7 @@ class IslandScene{
   renderK(){return this.lodK;}// canvas px per scene px, chosen by the world view from the island's level of detail
   sync(sessions){this.raw=new Map(sessions.map(s=>[s.id,s]));this.syncLive({sessions});}
   frame(dt){
+    this.doneSweep(Date.now());
     this.agents.forEach(a=>this.updateAgent(a,dt));this.stepDogs(dt);
     if(this.agents.some(a=>a.gone)){const gone=this.agents.filter(a=>a.gone);gone.forEach(a=>this.goneSids.set(a.sid,a.leftWhy||'missing'));this.agents=this.agents.filter(a=>!a.gone);
       const h_=this.host;if(h_.state.selIsland===this.id&&gone.some(a=>a.id===h_.state.sel))h_.setState({sel:null});}
@@ -6425,7 +6441,11 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
         if(!v!==!c||(v&&(v.state!==c.state||v.share!==c.share||v.hub!==c.hub)))this.setState({worldChip:v});
         const jp=this.state.join&&this.state.join.phase;
         if(v&&v.state!=='revoked'&&jp&&jp!=='leaving')this.setState({join:null});});
-      this.previewTick=tick;tick();this.previewTimer=setInterval(tick,5000);
+      // No polling while the tab is hidden; on return, one poll at once and the 5 s interval starts over.
+      const start=()=>{clearInterval(this.previewTimer);this.previewTimer=null;
+        if(document.visibilityState==='hidden')return;tick();this.previewTimer=setInterval(tick,5000);};
+      this.previewTick=tick;start();
+      this.onPreviewVis=start;document.addEventListener('visibilitychange',start);
     },
     // "Tham gia thế giới": the local server pairs with the hub and opens its approval page in the browser.
     joinWorld(){
