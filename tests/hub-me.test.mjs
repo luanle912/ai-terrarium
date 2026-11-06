@@ -296,3 +296,16 @@ test('pairing writes device_paired to the audit log', async () => {
     assert.notEqual(rows[0].actor_id, null);
   } finally { await h.close(); }
 });
+
+test('/api/me devices carry lastAt', async () => {
+  const h = await startDevHub();
+  try {
+    const login = await devLogin(h.url, 'an@newera.inc', 'An');
+    const a = await pairDevice(h.url, login, 'May A');
+    const b = await pairDevice(h.url, login, 'May B');
+    assert.equal((await postJson(h.url, '/api/publish', pkt(), bearer(a.token))).status, 200);
+    const by = Object.fromEntries((await getMe(h, login)).devices.map((d) => [d.id, d]));
+    assert.equal(by[a.device_id].lastAt, h.clock.t);
+    assert.equal(by[b.device_id].lastAt, null);
+  } finally { await h.close(); }
+});

@@ -6,7 +6,7 @@
 //     One publishing instance holds each device (`instance || 'legacy'`). Another instance takes over only with seq 0
 //     (a process that just started: the newest one wins) or once the holder has been silent OFFLINE_MS.
 //   removeDevice(deviceId), removeIsland(id) (always emits remove + world, even when the island is not in RAM), snapshotFor(id) -> ClientSession[], islands() -> IslandMeta[], tick()
-//   devicesOf(islandId) -> [{deviceId, online, share, private}]   setIslandMeta(id, {name, color})
+//   devicesOf(islandId) -> [{deviceId, online, share, private, lastAt}]   setIslandMeta(id, {name, color})
 
 const OFFLINE_MS = 90 * 1000;
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -27,6 +27,8 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
       id: isl.id, name: isl.name, color: isl.color, slot: isl.slot, online: on.length > 0,
       private: on.length > 0 && on.every((d) => d.private),
       share: anyKin || !on.length ? 'kin' : 'co-ban', // strictest of the online machines
+      // When a machine of this island was last heard (ms), online or not; null with no machine in RAM.
+      lastAt: isl.devices.size ? Math.max(...[...isl.devices.values()].map((d) => d.lastAt)) : null,
     };
   }
 
@@ -107,7 +109,7 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
     },
     devicesOf(id) {
       const isl = islands.get(id);
-      return isl ? [...isl.devices.entries()].map(([deviceId, d]) => ({ deviceId, online: online(d), share: d.share, private: d.private })) : [];
+      return isl ? [...isl.devices.entries()].map(([deviceId, d]) => ({ deviceId, online: online(d), share: d.share, private: d.private, lastAt: d.lastAt })) : [];
     },
     setIslandMeta(id, { name, color }) {
       const isl = islands.get(id);

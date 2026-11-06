@@ -295,3 +295,10 @@ test('dev login refuses a non-loopback HUB_HOST', () => {
   // non-dev hubs may bind anywhere
   assert.equal(loadConfig({ ...OK, HUB_HOST: '0.0.0.0' }).host, '0.0.0.0');
 });
+
+test('HUB_METRICS_TOKEN shorter than 32 characters is a config error', () => {
+  assert.throws(() => loadConfig({ ...OK, HUB_METRICS_TOKEN: 'short' }), /HUB_METRICS_TOKEN/);
+  assert.equal(loadConfig({ ...OK }).metricsToken, null);
+  assert.equal(loadConfig({ ...OK, HUB_METRICS_TOKEN: '' }).metricsToken, null);
+  assert.equal(loadConfig({ ...OK, HUB_METRICS_TOKEN: 'x'.repeat(32) }).metricsToken, 'x'.repeat(32));
+});

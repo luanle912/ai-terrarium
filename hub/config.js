@@ -80,13 +80,18 @@ function loadConfig(env = process.env) {
     if (!Number.isInteger(port) || port < 0 || port > 65535) need('HUB_PORT', 'must be an integer 0-65535');
   }
 
+  // Bearer token for GET /metrics; empty = the endpoint is off (404).
+  const rawMetrics = String(env.HUB_METRICS_TOKEN || '').trim();
+  const metricsToken = rawMetrics || null;
+  if (metricsToken && metricsToken.length < 32) need('HUB_METRICS_TOKEN', 'must be at least 32 characters (e.g. openssl rand -hex 32)');
+
   if (problems.length) throw new Error('Invalid hub configuration:\n  - ' + problems.join('\n  - '));
 
   return {
     publicUrl, origin, secure, allowedDomains, ownerEmails,
     googleClientId, googleClientSecret, secretKey,
     port, host: env.HUB_HOST || '127.0.0.1', dbPath: env.HUB_DB || './data/hub.sqlite',
-    trustProxy, devLogin,
+    trustProxy, devLogin, metricsToken,
   };
 }
 

@@ -390,7 +390,7 @@ test('stream needs a session and sends world then island events', async () => {
     const w = await st.until((e) => e.event === 'world');
     assert.ok(w);
     assert.equal(w.data.islands.length, 1);
-    assert.deepEqual(Object.keys(w.data.islands[0]).sort(), ['color', 'id', 'name', 'online', 'private', 'share', 'slot']);
+    assert.deepEqual(Object.keys(w.data.islands[0]).sort(), ['color', 'id', 'lastAt', 'name', 'online', 'private', 'share', 'slot']);
     assert.equal(w.data.islands[0].id, dev.island_id);
     assert.equal(w.data.viewers, 1);
     const isl = await st.until((e) => e.event === 'island');
@@ -417,7 +417,7 @@ test('revoking the last device leaves the island offline in its slot', async () 
     const r = await fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: login.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: login.csrf, device_id: dev.device_id }) });
     assert.equal(r.status, 302);
     const w = await st.until((e) => e.event === 'world' && e.data.islands[0] && e.data.islands[0].online === false);
-    assert.deepEqual(w.data.islands, [{ id: dev.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin' }]);
+    assert.deepEqual(w.data.islands, [{ id: dev.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin', lastAt: null }]);
     assert.ok(await st.until((e) => e.event === 'island' && e.data.id === dev.island_id && e.data.sessions.length === 0));
     assert.equal(st.events.some((e) => e.event === 'remove'), false);
     assert.equal(h.hub.world.islands().length, 0);
@@ -459,7 +459,7 @@ test('an island with no device sending shows offline in its slot', async () => {
     const w = await st.until((e) => e.event === 'world');
     assert.equal(w.data.islands.length, 1);
     // a fresh hub has not heard from it yet: offline, and waking for the first 90 s (Task 8, H2)
-    assert.deepEqual(w.data.islands[0], { id: a.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin', waking: true });
+    assert.deepEqual(w.data.islands[0], { id: a.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin', lastAt: null, waking: true });
     const isl = await st.until((e) => e.event === 'island' && e.data.id === a.island_id);
     assert.deepEqual(isl.data.sessions, []);
   } finally { st && st.close(); if (h2) await h2.close(); await h.close(); }
@@ -911,4 +911,46 @@ test('a newcomer whose private world differs from the last broadcast still gets 
     a.close(); // back to 1 viewer: the same frame as the last broadcast, but not what B has
     assert.ok(await b.until((e) => e.event === 'world' && e.data.viewers === 1, 1500), 'B learns A left');
   } finally { a && a.close(); b && b.close(); await h.close(); }
+});
+
+test('world items carry lastAt and the payload carries now', async () => {
+  const { h, login, dev } = await setup();
+  try {
+    const other = await devLogin(h.url, 'bo@newera.inc', 'Bo'); // an island with no machine in RAM
+    await pairDevice(h.url, other, 'May B');
+    await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
+    const t = h.clock.t;
+    h.clock.advance(5000);
+    const st = await openStream(h.url, login.cookie);
+    const w = await st.until((e) => e.event === 'world');
+    assert.equal(w.data.now, h.clock.t);
+    assert.equal(w.data.islands.find((i) => i.id === dev.island_id).lastAt, t);
+    assert.ok(w.data.islands.some((i) => i.lastAt === null));
+    st.close();
+  } finally { await h.close(); }
+});
+
+test('the world payload keeps every field it had', async () => {
+  const { h, login, dev } = await setup();
+  try {
+    await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
+    const st = await openStream(h.url, login.cookie);
+    const w = await st.until((e) => e.event === 'world');
+    for (const k of ['islands', 'viewers', 'capacity']) assert.ok(k in w.data, k);
+    for (const k of ['id', 'name', 'color', 'slot', 'online', 'private', 'share']) assert.ok(k in w.data.islands[0], k);
+    st.close();
+  } finally { await h.close(); }
+});
+
+test('lastAt moving does not make the valve send more than once per window', async () => {
+  const { h, login, dev } = await setup();
+  try {
+    const st = await openStream(h.url, login.cookie);
+    await st.until((e) => e.event === 'world');
+    const before = h.hub.ctx.stats.worldBroadcasts;
+    for (let i = 0; i < 6; i++) { h.clock.advance(100); await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: i }), bearer(dev.token)); }
+    await new Promise((r) => setTimeout(r, 1300));
+    assert.ok(h.hub.ctx.stats.worldBroadcasts - before <= 2);
+    st.close();
+  } finally { await h.close(); }
 });
