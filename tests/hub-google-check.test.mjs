@@ -48,7 +48,7 @@ async function setup(email = 'an@newera.inc') {
   h = await startDevHub({ google });
   const login = await googleLogin(h.url, google, email);
   const dev = await pairDevice(h.url, login, 'Laptop');
-  assert.equal((await postJson(h.url, '/api/publish', pkt(), bearer(dev.token))).status, 204);
+  assert.equal((await postJson(h.url, '/api/publish', pkt(), bearer(dev.token))).status, 200);
   const user = h.hub.db.getUserBySub('g:' + email);
   return { h, google, login, dev, user, db: h.hub.db, check: h.hub.ctx.googleCheck };
 }

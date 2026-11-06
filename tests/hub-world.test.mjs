@@ -142,12 +142,35 @@ test('offline after 90 s without a packet', () => {
 
 test('seq 0 after a higher seq is accepted as a restart; other lower seqs are dropped', () => {
   const { world } = mkWorld();
-  assert.equal(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 10 })).accepted, true);
-  assert.equal(world.publish(ISL, 'd1', 'kin', val([sess(2)], { seq: 5 })).accepted, false);
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 10 })), { accepted: true });
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(2)], { seq: 5 })), { accepted: false, reason: 'stale_seq', seq: 10 });
   assert.equal(world.snapshotFor('i1')[0].id, sid(1));
-  assert.equal(world.publish(ISL, 'd1', 'kin', val([sess(3)], { seq: 0 })).accepted, true);
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(3)], { seq: 0 })), { accepted: true });
   assert.equal(world.snapshotFor('i1')[0].id, sid(3));
-  assert.equal(world.publish(ISL, 'd1', 'kin', val([sess(3)], { seq: 0 })).accepted, true);
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(3)], { seq: 0 })), { accepted: true });
+});
+
+test('a second instance is refused while the first one is fresh, and takes over with seq 0 or after 90 s of silence', () => {
+  const { world, clock } = mkWorld();
+  const A = { instance: 'aaaaaaaaaaaaaaaa' };
+  const B = { instance: 'bbbbbbbbbbbbbbbb' };
+  for (let seq = 0; seq <= 3; seq++) assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq }), A), { accepted: true });
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(2)], { seq: 7 }), B), { accepted: false, reason: 'other_instance' });
+  assert.equal(world.snapshotFor('i1')[0].id, sid(1));
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(2)], { seq: 0 }), B), { accepted: true });
+  assert.equal(world.snapshotFor('i1')[0].id, sid(2));
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 4 }), A), { accepted: false, reason: 'other_instance' });
+  assert.equal(world.snapshotFor('i1')[0].id, sid(2));
+  clock.t += 90_000;
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 5 }), A), { accepted: true });
+  assert.equal(world.snapshotFor('i1')[0].id, sid(1));
+});
+
+test('a publisher without the instance header is one legacy instance', () => {
+  const { world } = mkWorld();
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 1 })), { accepted: true });
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 2 }), {}), { accepted: true });
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 9 }), { instance: 'cccccccccccccccc' }), { accepted: false, reason: 'other_instance' });
 });
 
 test('removeDevice and removeIsland emit', () => {
@@ -237,10 +260,12 @@ test('publish without token is 401, bad token too', async () => {
   } finally { await h.close(); }
 });
 
-test('publish 204, 400 on bad schema, island id in the body is ignored (400)', async () => {
+test('publish 200 {accepted:true}, 400 on bad schema, island id in the body is ignored (400)', async () => {
   const { h, dev } = await setup();
   try {
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    const ok = await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
+    assert.equal(ok.status, 200);
+    assert.deepEqual(await ok.json(), { accepted: true });
     assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)], { island: 'abc' }), bearer(dev.token))).status, 400);
     assert.equal((await postJson(h.url, '/api/publish', { v: 1 }, bearer(dev.token))).status, 400);
     const bad = await fetch(h.url + '/api/publish', { method: 'POST', headers: bearer(dev.token), body: '{nope' });
@@ -252,12 +277,88 @@ test('publish 204, 400 on bad schema, island id in the body is ignored (400)', a
   } finally { await h.close(); }
 });
 
+test('a stale seq is answered accepted:false with the hub\'s seq', async () => {
+  const { h, login, dev } = await setup();
+  let st;
+  try {
+    const a = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 5 }), bearer(dev.token));
+    assert.equal(a.status, 200);
+    assert.deepEqual(await a.json(), { accepted: true });
+    st = await openStream(h.url, login.cookie);
+    assert.ok(await st.until((e) => e.event === 'island' && e.data.sessions.length === 1));
+    const n = st.events.filter((e) => e.event === 'island').length;
+    const b = await postJson(h.url, '/api/publish', pkt([sess(1), sess(2)], { seq: 3 }), bearer(dev.token));
+    assert.equal(b.status, 200);
+    assert.deepEqual(await b.json(), { accepted: false, reason: 'stale_seq', seq: 5 });
+    assert.equal(await st.until((e) => e.event === 'island' && e.data.sessions.length === 2, 700), null);
+    assert.equal(st.events.filter((e) => e.event === 'island').length, n);
+  } finally { if (st) st.close(); await h.close(); }
+});
+
+test('the instance header picks the publishing instance over HTTP', async () => {
+  const { h, dev } = await setup();
+  try {
+    const pub = async (seq, instance) => {
+      const r = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq }), { ...bearer(dev.token), ...(instance ? { 'x-terrarium-instance': instance } : {}) });
+      assert.equal(r.status, 200);
+      return r.json();
+    };
+    assert.deepEqual(await pub(0, '0123456789abcdef'), { accepted: true });
+    assert.deepEqual(await pub(1, 'fedcba9876543210'), { accepted: false, reason: 'other_instance' });
+    assert.deepEqual(await pub(2), { accepted: false, reason: 'other_instance' }); // no header = legacy, another instance
+    assert.deepEqual(await pub(2, '0123456789abcdef'), { accepted: true });
+  } finally { await h.close(); }
+});
+
+test('a malformed instance header is ignored, not rejected', async () => {
+  const { h, dev } = await setup();
+  try {
+    const r = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 1 }), { ...bearer(dev.token), 'x-terrarium-instance': 'ZZZ' });
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), { accepted: true });
+    // it counts as legacy, so a header-less publisher is the same instance
+    const r2 = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 2 }), bearer(dev.token));
+    assert.deepEqual(await r2.json(), { accepted: true });
+  } finally { await h.close(); }
+});
+
+test('the stream sends a named ping event', async () => {
+  const h = await startDevHub({ deps: { pingMs: 50 } });
+  const ac = new AbortController();
+  try {
+    const login = await devLogin(h.url, 'an@newera.inc', 'An');
+    const r = await fetch(h.url + '/api/world/stream', { headers: { cookie: login.cookie }, signal: ac.signal });
+    assert.equal(r.status, 200);
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    const t0 = Date.now();
+    const timer = setTimeout(() => ac.abort(), 250);
+    try {
+      while (Date.now() - t0 < 200) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+      }
+    } catch { /* aborted */ }
+    clearTimeout(timer);
+    const pings = buf.split('\n\n').filter((b) => /^event: ping$/m.test(b));
+    assert.ok(pings.length >= 2, `got ${pings.length} pings`);
+    for (const b of pings) {
+      const data = /^data: (.+)$/m.exec(b);
+      assert.ok(data);
+      assert.equal(typeof JSON.parse(data[1]).t, 'number');
+    }
+    assert.equal(/^: ping$/m.test(buf), false);
+  } finally { ac.abort(); await h.close(); }
+});
+
 test('publish is rate limited per device (429 with Retry-After)', async () => {
   const { h, dev } = await setup();
   try {
     const codes = [];
     for (let i = 0; i < 12; i++) { const r = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: i }), bearer(dev.token)); codes.push(r.status); if (r.status === 429) assert.ok(r.headers.get('retry-after')); }
-    assert.equal(codes.filter((c) => c === 204).length, 8);
+    assert.equal(codes.filter((c) => c === 200).length, 8);
     assert.ok(codes.includes(429));
   } finally { await h.close(); }
 });
@@ -265,7 +366,7 @@ test('publish is rate limited per device (429 with Retry-After)', async () => {
 test('revoked token is 401', async () => {
   const { h, login, dev } = await setup();
   try {
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
     h.clock.advance(1000);
     const r = await fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: login.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: login.csrf, device_id: dev.device_id }) });
     assert.equal(r.status, 302);
@@ -375,7 +476,7 @@ test('a hidden island publishes but is never sent to viewers', async () => {
     raw.prepare('UPDATE islands SET slot=NULL WHERE id=?').run(b.island_id);
     raw.close();
     st = await openStream(h.url, an.cookie);
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(2)]), bearer(b.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(2)]), bearer(b.token))).status, 200);
     await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(a.token));
     assert.ok(await st.until((e) => e.event === 'island' && e.data.id === a.island_id && e.data.sessions.length === 1));
     await new Promise((res) => setTimeout(res, 700)); // past the island throttle
@@ -422,7 +523,7 @@ test('a promoted hidden island that was already publishing sends its sessions on
     const raw = new DatabaseSync(h.config.dbPath);
     raw.prepare('UPDATE islands SET slot=NULL WHERE id=?').run(ids[7]);
     raw.close();
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(9), sess(10)]), bearer(hiddenTok))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(9), sess(10)]), bearer(hiddenTok))).status, 200);
     st = await openStream(h.url, boss.cookie);
     assert.ok(await st.until((e) => e.event === 'world'));
     const r = await postJson(h.url, `/api/owner/islands/${ids[4]}/remove`, {}, { cookie: boss.cookie, origin: h.url, 'x-csrf-token': boss.csrf });
@@ -441,7 +542,7 @@ test('removing an island does not re-send the other live islands', async () => {
     const boss = await devLogin(h.url, 'boss@newera.inc', 'Boss');
     const devs = [];
     for (let i = 0; i < 3; i++) devs.push(await pairDevice(h.url, await devLogin(h.url, `u${i}@newera.inc`, 'U' + i), 'M' + i));
-    for (const [i, d] of devs.slice(0, 2).entries()) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i + 1)]), bearer(d.token))).status, 204);
+    for (const [i, d] of devs.slice(0, 2).entries()) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i + 1)]), bearer(d.token))).status, 200);
     st = await openStream(h.url, boss.cookie);
     for (const d of devs.slice(0, 2)) assert.ok(await st.until((e) => e.event === 'island' && e.data.id === d.island_id && e.data.sessions.length === 1));
     const count = (id) => st.events.filter((e) => e.event === 'island' && e.data.id === id).length;
@@ -461,7 +562,7 @@ test('island events do not read the island row from the DB', async () => {
     const orig = h.hub.db.getIsland;
     h.hub.db.getIsland = (...a) => { reads++; return orig(...a); };
     try {
-      for (let i = 1; i <= 3; i++) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i)], { seq: i }), bearer(dev.token))).status, 204);
+      for (let i = 1; i <= 3; i++) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i)], { seq: i }), bearer(dev.token))).status, 200);
       await new Promise((res) => setTimeout(res, 600)); // let a trailing send run
     } finally { h.hub.db.getIsland = orig; }
     assert.equal(reads, 0);
@@ -490,7 +591,7 @@ test('one user cannot revoke another user\'s device', async () => {
     const other = await devLogin(h.url, 'bo@newera.inc', 'Bo');
     await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
     await fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: other.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: other.csrf, device_id: dev.device_id }) });
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 2 }), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 2 }), bearer(dev.token))).status, 200);
   } finally { await h.close(); }
 });
 
@@ -546,7 +647,7 @@ test('world state rebuilds from the next publish after a restart', async () => {
   const { loadConfig } = require('../hub/config.js');
   let st, hub2;
   try {
-    assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 40 }), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 40 }), bearer(dev.token))).status, 200);
     const cfg = h1.config;
     await h1.hub.close(); // keep the temp dir until the end
     hub2 = createHub(loadConfig({ HUB_PUBLIC_URL: cfg.publicUrl, HUB_ALLOWED_DOMAINS: 'newera.inc', HUB_OWNER_EMAILS: 'boss@newera.inc', HUB_SECRET_KEY: cfg.secretKey.toString('base64'), HUB_DEV_LOGIN: '1', HUB_DB: dbPath, HUB_PORT: String(port) }), { now: () => h1.clock.t, log: () => {} });
@@ -557,7 +658,7 @@ test('world state rebuilds from the next publish after a restart', async () => {
     const w = await st.until((e) => e.event === 'world');
     assert.deepEqual(w.data.islands.map((i) => [i.id, i.online]), [[dev.island_id, false]]); // still in its slot, offline
     // the restarted publisher begins again at seq 0, the hub never saw its old seq
-    assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 3 }), { ...bearer(dev.token), connection: 'close' })).status, 204);
+    assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 3 }), { ...bearer(dev.token), connection: 'close' })).status, 200);
     const isl = await st.until((e) => e.event === 'island' && e.data.sessions.length === 1);
     assert.equal(isl.data.id, dev.island_id);
     const w2 = await st.until((e) => e.event === 'world' && e.data.islands.length === 1 && e.data.islands[0].online);
@@ -609,16 +710,16 @@ test('device of a user without refresh token gets 403 login_required after 24 h'
   try {
     const login = await devLogin(h.url, 'an@newera.inc', 'An');
     const dev = await pairDevice(h.url, login, 'Laptop');
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
     h.clock.advance(24 * 3600 * 1000);
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204); // exactly 24 h is still fine
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200); // exactly 24 h is still fine
     h.clock.advance(1);
     const late = await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
     assert.equal(late.status, 403);
     assert.deepEqual(await late.json(), { error: 'login_required' });
     // a fresh login brings it back
     await devLogin(h.url, 'an@newera.inc', 'An');
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
     // a revoked device is still a plain 401, even when stale
     h.clock.advance(25 * 3600 * 1000);
     h.hub.db.revokeDevicesForUser(h.hub.db.getUserBySub('dev:an@newera.inc').id, h.clock.t);
@@ -633,7 +734,7 @@ test('a user with a refresh token never gets login_required', async () => {
     const login = await googleLogin(h.url, google, 'an@newera.inc', { name: 'An' });
     const dev = await pairDevice(h.url, login, 'Laptop');
     h.clock.advance(30 * 24 * 3600 * 1000);
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
   } finally { await h.close(); }
 });
 

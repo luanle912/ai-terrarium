@@ -1,7 +1,10 @@
 'use strict';
 // The world, in RAM only: islands -> devices -> last filtered snapshot. Never written to disk or logs.
 // createWorld({now, onChange}); onChange gets {type:'world'} | {type:'island', id} | {type:'remove', id}.
-//   publish(island{id,name,color,slot}, deviceId, share, value) -> {accepted}
+//   publish(island{id,name,color,slot}, deviceId, share, value, {instance = null} = {})
+//     -> {accepted: true} | {accepted: false, reason: 'stale_seq', seq} | {accepted: false, reason: 'other_instance'}
+//     One publishing instance holds each device (`instance || 'legacy'`). Another instance takes over only with seq 0
+//     (a process that just started: the newest one wins) or once the holder has been silent OFFLINE_MS.
 //   removeDevice(deviceId), removeIsland(id) (always emits remove + world, even when the island is not in RAM), snapshotFor(id) -> ClientSession[], islands() -> IslandMeta[], tick()
 //   devicesOf(islandId) -> [{deviceId, online, share, private}]   setIslandMeta(id, {name, color})
 
@@ -66,17 +69,22 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
   }
 
   return {
-    publish(island, deviceId, share, value) {
+    publish(island, deviceId, share, value, { instance = null } = {}) {
+      const key = instance || 'legacy';
       let isl = islands.get(island.id);
-      const known = isl && isl.devices.get(deviceId);
-      if (known && value.seq < known.seq && value.seq !== 0) return { accepted: false };
+      const dev = isl && isl.devices.get(deviceId);
+      if (dev && dev.instance !== key) {
+        if (value.seq !== 0 && now() - dev.lastAt < OFFLINE_MS) return { accepted: false, reason: 'other_instance' };
+      } else if (dev && value.seq < dev.seq && value.seq !== 0) {
+        return { accepted: false, reason: 'stale_seq', seq: dev.seq };
+      }
       const moved = deviceIsland.get(deviceId);
       if (moved && moved !== island.id) this.removeDevice(deviceId);
       isl = islands.get(island.id);
       if (!isl) { isl = { id: island.id, name: island.name, color: island.color, slot: island.slot, devices: new Map(), last: null }; islands.set(isl.id, isl); }
       isl.name = island.name; isl.color = island.color; isl.slot = island.slot;
       isl.devices.set(deviceId, {
-        share: share === 'co-ban' ? 'co-ban' : 'kin', private: !!value.private, seq: value.seq, lastAt: now(),
+        share: share === 'co-ban' ? 'co-ban' : 'kin', private: !!value.private, seq: value.seq, lastAt: now(), instance: key,
         sessions: value.private ? [] : value.sessions,
       });
       deviceIsland.set(deviceId, isl.id);

@@ -57,7 +57,7 @@ test('api me lists devices with their send state', async () => {
     const a = await pairDevice(h.url, login, 'May A');
     const b = await pairDevice(h.url, login, 'May B');
     const c = await pairDevice(h.url, login, 'May C');
-    assert.equal((await postJson(h.url, '/api/publish', pkt({ private: true }), bearer(a.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt({ private: true }), bearer(a.token))).status, 200);
     assert.equal((await api(h, login, `/api/me/devices/${c.device_id}/revoke`, {})).status, 200);
     const me = await getMe(h, login);
     assert.equal(me.island.id, a.island_id);
