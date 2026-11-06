@@ -519,7 +519,7 @@ test('open resets everything', () => {
   link = step(link, { type: 'probe', kind: 'down' }, 9).link
   const r = step(link, { type: 'open' }, 10)
   assert.deepEqual(r.link, { phase: 'live', attempt: 0, closes: 0, staleSince: null, dueAt: null, stale: 0 })
-  assert.deepEqual(r.act, { connectIn: null, probe: false, reload: false, wipe: false })
+  assert.deepEqual(r.act, { connectIn: null, probe: false, reload: false, wipe: false, close: false })
 })
 
 test('a stream that opens but stays silent is reopened later each time until it is heard', () => {
@@ -535,4 +535,15 @@ test('a stream that opens but stays silent is reopened later each time until it 
   link = step(link, { type: 'heard' }, now).link
   assert.equal(link.stale, 0)
   assert.equal(step(link, { type: 'error', stale: true }, now).act.connectIn, 2000)
+})
+
+test('waking up in a visible tab reopens a stream that still looks live; a hidden tab does not', () => {
+  const r = step(W.linkStart(), { type: 'wake', visible: true }, 5000)
+  assert.equal(r.act.connectIn, 0)
+  assert.equal(r.act.close, true)
+  assert.equal(r.link.phase, 'reconnecting')
+  assert.equal(r.link.staleSince, 5000)
+  // background tabs throttled to one tick a minute look like a wake: never tear down a healthy stream for that
+  const h = step(W.linkStart(), { type: 'wake', visible: false }, 5000)
+  assert.equal(h.act.connectIn, null); assert.ok(!h.act.close); assert.equal(h.link.phase, 'live')
 })
