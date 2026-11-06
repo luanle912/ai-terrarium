@@ -43,7 +43,7 @@ function readUsage(opts) {
 }
 const files = new Map();
 // Transcript parsing and the status decision live in lib/status.js (pure functions, tested with fixture transcripts).
-const { TRANSCRIPT_RE, newState, ingest, projectOf, parentFromPath, modeOf, sessionStatus } = require('./lib/status.js');
+const { TRANSCRIPT_RE, newState, ingest, readRegistryDir, liveFromRegistry, defaultAlive, buildSessions } = require('./lib/status.js');
 
 function walk(dir, out = []) {
   let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
@@ -73,95 +73,20 @@ function scan() {
   }
 }
 
-// Session đang chạy thật: Claude Code ghi ~/.claude/sessions/<pid>.json cho mỗi tiến trình (sessionId, cwd, name, status).
-// Có danh sách này thì chỉ hiện session còn sống; không có (bản Claude Code cũ) thì quay về lọc theo thời gian.
+// Live sessions: Claude Code writes ~/.claude/sessions/<pid>.json per process. With that directory only live sessions
+// show (an empty one means none); without it (an older Claude Code) we fall back to time filtering. See lib/status.js.
 const SESSIONS_DIR = path.join(os.homedir(), '.claude', 'sessions');
 let liveCache = null, liveTs = 0;
 function liveSessions() {
   const now = Date.now();
   if (now - liveTs < 2000) return liveCache;
   liveTs = now;
-  const m = new Map();
-  let names = []; try { names = fs.readdirSync(SESSIONS_DIR).filter(f => /^\d+\.json$/.test(f)); } catch {}
-  for (const f of names) {
-    try {
-      const j = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf8'));
-      const pid = +j.pid || parseInt(f, 10);
-      try { process.kill(pid, 0); } catch (err) { if (err.code !== 'EPERM') continue; }
-      if (j.sessionId) m.set(j.sessionId, { pid, name: j.name || '', status: j.status || '', cwd: j.cwd || '' });
-    } catch {}
-  }
-  return (liveCache = m.size ? m : null);
+  return (liveCache = liveFromRegistry(readRegistryDir(SESSIONS_DIR), { prev: liveCache, alive: defaultAlive }));
 }
 
-const MAX_ROOTS = 16, MAX_SUBS = 12, SUB_STALE_MS = 5 * 60e3;
 function snapshot() {
-  const now = Date.now(), out = [];
-  const live = liveSessions();
-  // Root session state by sessionId, so a sub-agent without its own permissionMode can use its parent's.
-  const parentStOf = new Map();
-  for (const st of files.values()) if (st.sessionId && !parentFromPath(st.file) && !st.sidechain) parentStOf.set(st.sessionId, st);
-  for (const st of files.values()) {
-    const aliveTs = Math.max(st.fileMtime || 0, st.lastTs || 0);
-    if (!aliveTs || now - aliveTs > ACTIVE_MS) continue;
-    const activityTs = st.lastTs || st.fileMtime || 0;
-    const fromPath = parentFromPath(st.file);
-    const isSub = !!fromPath || !!st.sidechain;
-    const id = isSub ? path.basename(st.file, '.jsonl') : (st.sessionId || path.basename(st.file, '.jsonl'));
-    const parentId = isSub ? (fromPath || st.sessionId || null) : null;
-    // Session (hoặc session cha của sub-agent) đã đóng → bỏ.
-    if (live && !live.has(isSub ? parentId : id)) continue;
-    const reg = !isSub && live ? live.get(id) : null;
-    const pend = st.pending.size > 0;
-    const parentSt = isSub ? parentStOf.get(parentId) : null;
-    let { status, tool, detail, talkingTo } = sessionStatus(st, { now, permMs: PERM_MS, mode: modeOf(st, parentSt), regStatus: reg ? reg.status : undefined });
-    if (isSub) {
-      // Sub-agent đã nộp kết quả (StructuredOutput/SubagentHandback) hoặc hết việc → báo done 30s rồi loại.
-      if (!pend && (st.finished || status === 'idle' || status === 'done')) { if (now - activityTs > 30000) continue; status = 'done'; }
-      // Không tool nào đang chạy mà im lặng quá lâu → agent đã chết/bị huỷ.
-      else if (!pend && now - activityTs > SUB_STALE_MS) continue;
-    }
-    const displayName = (reg && reg.name) || st.name || st.title || (isSub ? 'sub-agent' : path.basename(st.cwd || id));
-    const project = projectOf((reg && reg.cwd) || st.firstCwd || st.cwd);
-    const _sendTo = st.lastSendTo && now - st.lastSendTo.ts < 600000 ? st.lastSendTo.name : null;
-    out.push({ id, parentId, name: displayName, project, cwd: st.cwd, model: st.model, tokens: st.tokens, status, tool, detail, talkingTo, _sendTo, recent: st.recent, updatedAt: aliveTs });
-  }
-  // Session đang mở nhưng chưa/không còn transcript gần đây (idle lâu) → vẫn có mặt ở bàn.
-  if (live) for (const [sid, r] of live) {
-    if (out.some(s => s.id === sid)) continue;
-    out.push({ id: sid, parentId: null, name: r.name || path.basename(r.cwd || '') || 'session', project: projectOf(r.cwd), cwd: r.cwd, model: '', tokens: 0, status: r.status === 'busy' ? 'working' : 'idle', tool: '', detail: '', talkingTo: '', recent: [], updatedAt: now });
-  }
-  // Sub-agent mà session cha không có mặt → bỏ (tránh nhân vật mồ côi tạo phòng "sub-agent").
-  const ids = new Set(out.filter(s => !s.parentId).map(s => s.id));
-  for (let i = out.length - 1; i >= 0; i--) if (out[i].parentId && !ids.has(out[i].parentId)) out.splice(i, 1);
-  const ACTIVE = new Set(['working', 'thinking', 'talking', 'permission']);
-  for (const s of out) {
-    if (s.status !== 'waiting' && !(s.status === 'working' && !s.tool && !s.parentId)) continue;
-    const kids = out.filter(k => k.parentId === s.id && (ACTIVE.has(k.status) || k.status === 'waiting')).sort((a, b) => b.updatedAt - a.updatedAt);
-    if (kids[0]) { s.status = 'waiting'; s.waitingOn = kids[0].id; }
-    else if (s.status === 'waiting') { const any = out.find(k => k.parentId === s.id); if (any) s.waitingOn = any.id; }
-  }
-  for (const s of out) {
-    if ((s.status === 'idle' || s.status === 'done') && s._sendTo) {
-      const tgt = out.find(t => t.name === s._sendTo && ACTIVE.has(t.status));
-      if (tgt) { s.status = 'waiting'; s.waitingOn = tgt.id; s.detail = 'đợi ' + tgt.name; }
-    }
-    delete s._sendTo;
-  }
-  // Sub-agent: nếu parent idle/done → sub cũng done
-  for (const s of out) {
-    if (s.parentId) {
-      const par = out.find(p => p.id === s.parentId);
-      if (par && (par.status === 'idle' || par.status === 'done')) s.status = 'done';
-    }
-  }
-  // Ưu tiên session gốc (mỗi session một bàn), sub-agent đứng cạnh bàn cha nên giới hạn riêng.
-  const byRecent = (a, b) => b.updatedAt - a.updatedAt;
-  const roots = out.filter(s => !s.parentId).sort(byRecent).slice(0, MAX_ROOTS);
-  const keep = new Set(roots.map(s => s.id));
-  const subs = out.filter(s => s.parentId && keep.has(s.parentId)).sort(byRecent).slice(0, MAX_SUBS);
-  for (const s of subs) s.project = roots.find(r => r.id === s.parentId).project;
-  return { at: now, sessions: roots.concat(subs), usage: readUsage(), version: VERSION };
+  const now = Date.now();
+  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage: readUsage(), version: VERSION };
 }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');
