@@ -41,12 +41,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A frozen stream is noticed** — The hub sends a named `event: ping` every 25 s, so the page can tell a silent, stuck stream from a quiet one and reconnects
 - **Checking a code on a full hub** — Looking up a pairing code while the hub already has 8 islands now only shows "Hub đã đủ 8 đảo"; the code stays valid, so it can still be approved if a place frees up before it expires
 - **Smoother sky of islands** — The simple islands are kept as GPU-friendly images with a least-recently-used cache (no burst of redraws at dusk), the 8 name plates are measured once instead of every frame, and the hub no longer reads its database for every island update or re-sends every island after a removal
-
 - **Rooms keep their letter** — A project's room no longer changes letter when one machine goes off or the local server restarts: letters are kept in `rooms.json` next to the config (keys only, never a project name)
 - **"Thoát" while pairing is not overwritten** — Leaving the world during a join in progress cancels it, and the late join result can no longer write a config or a status over it
 - **Pairing does not hang on a silent hub** — Every step of a join has a time limit; a hub that never answers ends in an error instead of a wait that never finishes
 - **A reused pid is not a ghost** — A session whose pid was taken by another process is no longer shown as running
 - **A hidden tab does not hold the desk of someone who left** — A browser tab in the background removes an agent that left at once, so its desk is free when the tab is shown again
+- **Finished sub-agents leave on time** — A sub-agent marked done walks out about 3 s later even when nothing else arrives from the hub, on the local page and on every island, and a background tab no longer creates it again on the next update
 
 ### Removed
 
