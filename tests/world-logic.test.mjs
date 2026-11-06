@@ -403,3 +403,136 @@ test('goneStep forgets done sids once they leave the list', () => {
   assert.deepEqual([...skip], ['t'])
   assert.deepEqual([...gone], [['t', 'done']])
 })
+
+// ---- the viewer's link to the hub (Task 11): reconnect by itself, keep the scene, wipe only after 5 min ----
+const step = (link, ev, now, rand = 0.5) => W.linkStep(link, ev, now, rand)
+
+test('link constants and reconnectDelay', () => {
+  assert.deepEqual(W.RECONNECT_STEPS_MS, [1000, 2000, 4000, 8000, 16000, 30000])
+  assert.equal(W.DOWN_CAP_MS, 60000); assert.equal(W.REFUSED_AFTER, 5)
+  assert.equal(W.WAKE_JUMP_MS, 15000); assert.equal(W.KEEP_STALE_MS, 300000)
+  assert.equal(W.reconnectDelay(0, 0.5), 1000)
+  close(W.reconnectDelay(0, 0), 800); close(W.reconnectDelay(0, 1), 1200)
+  assert.equal(W.reconnectDelay(9, 0.5), 30000)
+  assert.deepEqual(W.linkStart(), { phase: 'live', attempt: 0, closes: 0, staleSince: null, dueAt: null, stale: 0 })
+})
+
+test('a dropped stream reconnects after 1, 2, 4 … 30 s and never wipes before 5 min', () => {
+  let link = W.linkStart(), now = 0
+  const waits = []
+  for (let i = 0; i < 8; i++) {
+    const r = step(link, { type: 'error' }, now)
+    assert.equal(r.link.phase, 'reconnecting'); assert.equal(r.act.probe, true); assert.equal(r.act.wipe, false)
+    assert.equal(r.act.reload, false)
+    waits.push(r.act.connectIn); link = r.link; now += r.act.connectIn
+  }
+  assert.deepEqual(waits, [1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000])
+  assert.equal(link.staleSince, 0)
+  assert.ok(now < W.KEEP_STALE_MS)
+})
+
+test('a restart event waits exactly the hub\'s retryMs', () => {
+  const r = step(W.linkStart(), { type: 'restarting', retryMs: 6000 }, 100)
+  assert.equal(r.link.phase, 'reconnecting'); assert.equal(r.act.connectIn, 6000); assert.equal(r.act.probe, false)
+  assert.equal(step(W.linkStart(), { type: 'restarting', retryMs: 200 }, 0).act.connectIn, 1000)
+  assert.equal(step(W.linkStart(), { type: 'restarting', retryMs: 999999 }, 0).act.connectIn, 60000)
+  assert.equal(step(W.linkStart(), { type: 'restarting', retryMs: 'x' }, 0).act.connectIn, 1000)
+})
+
+test('a 502 during a restart is not refused: the probe says world, so connect again', () => {
+  let r = step(W.linkStart(), { type: 'closed' }, 0)
+  assert.equal(r.link.closes, 1); assert.equal(r.act.probe, true)
+  r = step(r.link, { type: 'probe', kind: 'world' }, 300)
+  assert.equal(r.link.phase, 'reconnecting')
+  assert.equal(r.act.connectIn, 700)  // the connect already planned stays where it was
+  assert.equal(r.act.probe, false)
+})
+
+test('five closes in a row with the hub answering show refused but keep retrying every 60 s', () => {
+  let link = W.linkStart(), now = 0
+  for (let i = 1; i <= 5; i++) {
+    let r = step(link, { type: 'closed' }, now)
+    r = step(r.link, { type: 'probe', kind: 'world' }, now + 10)
+    link = r.link
+    if (i < 5) { assert.equal(link.phase, 'reconnecting', 'close ' + i); assert.ok(r.act.connectIn < W.DOWN_CAP_MS) }
+    else { assert.equal(link.phase, 'refused'); assert.equal(r.act.connectIn, W.DOWN_CAP_MS) }
+    now += 20000
+  }
+  // still refused: the next close probes again and keeps the 60 s rhythm
+  let r = step(link, { type: 'closed' }, now)
+  r = step(r.link, { type: 'probe', kind: 'world' }, now + 10)
+  assert.equal(r.link.phase, 'refused'); assert.equal(r.act.connectIn, W.DOWN_CAP_MS)
+  r = step(r.link, { type: 'open' }, now + 70000)
+  assert.equal(r.link.phase, 'live'); assert.equal(r.link.closes, 0)
+})
+
+test('hub down: retries back off to 60 s at most; online or wake connects at once', () => {
+  let link = W.linkStart(), now = 0, last = 0
+  for (let i = 0; i < 10; i++) {
+    let r = step(link, { type: 'error' }, now)
+    r = step(r.link, { type: 'probe', kind: 'down' }, now + 5)
+    assert.equal(r.link.phase, 'down')
+    assert.ok(r.act.connectIn >= last && r.act.connectIn <= W.DOWN_CAP_MS, String(r.act.connectIn))
+    last = r.act.connectIn; link = r.link; now += r.act.connectIn
+  }
+  assert.equal(last, 30000)
+  for (const type of ['online', 'wake', 'visible']) {
+    const r = step(link, { type }, now)
+    assert.equal(r.act.connectIn, 0, type); assert.equal(r.link.attempt, 0, type); assert.equal(r.link.phase, 'down')
+  }
+  // while live they do nothing
+  for (const type of ['online', 'wake', 'visible']) assert.equal(step(W.linkStart(), { type }, 5).act.connectIn, null, type)
+})
+
+test('scenes are wiped only after 5 min without a connection', () => {
+  let r = step(W.linkStart(), { type: 'error' }, 1000)
+  r = step(r.link, { type: 'probe', kind: 'down' }, 1000 + W.KEEP_STALE_MS - 1)
+  assert.equal(r.act.wipe, false)
+  r = step(r.link, { type: 'error' }, 1000 + W.KEEP_STALE_MS)
+  assert.equal(r.act.wipe, true)
+  assert.equal(r.link.staleSince, 1000)  // the first loss counts, not the latest
+  r = step(r.link, { type: 'open' }, 1000 + W.KEEP_STALE_MS + 5)
+  assert.equal(r.act.wipe, false); assert.equal(r.link.staleSince, null)
+})
+
+test('signed out reloads; a hub no longer in world mode reloads', () => {
+  const r0 = step(W.linkStart(), { type: 'error' }, 0)
+  assert.equal(step(r0.link, { type: 'probe', kind: 'signedout' }, 5).act.reload, true)
+  assert.equal(step(r0.link, { type: 'probe', kind: 'other' }, 5).act.reload, true)
+  // a late probe answer after the stream came back changes nothing
+  const live = step(r0.link, { type: 'open' }, 6).link
+  const r = step(live, { type: 'probe', kind: 'signedout' }, 7)
+  assert.equal(r.act.reload, false); assert.equal(r.link.phase, 'live')
+})
+
+test('busy waits for Retry-After', () => {
+  const r0 = step(W.linkStart(), { type: 'closed' }, 0)
+  const r = step(r0.link, { type: 'probe', kind: 'busy', retryS: 12 }, 5)
+  assert.equal(r.link.phase, 'busy'); assert.equal(r.act.connectIn, 12000)
+  // no Retry-After: back off as for a drop rather than hammer the hub
+  assert.equal(step(r0.link, { type: 'probe', kind: 'busy', retryS: 0 }, 5).act.connectIn, 2000)
+})
+
+test('open resets everything', () => {
+  let link = W.linkStart()
+  for (let i = 0; i < 4; i++) link = step(link, { type: 'closed' }, i).link
+  link = step(link, { type: 'probe', kind: 'down' }, 9).link
+  const r = step(link, { type: 'open' }, 10)
+  assert.deepEqual(r.link, { phase: 'live', attempt: 0, closes: 0, staleSince: null, dueAt: null, stale: 0 })
+  assert.deepEqual(r.act, { connectIn: null, probe: false, reload: false, wipe: false })
+})
+
+test('a stream that opens but stays silent is reopened later each time until it is heard', () => {
+  let link = W.linkStart(), now = 0
+  const waits = []
+  for (let i = 0; i < 7; i++) {
+    const r = step(link, { type: 'error', stale: true }, now)
+    waits.push(r.act.connectIn); now += r.act.connectIn
+    link = step(r.link, { type: 'open' }, now).link  // the hub accepts the stream, then says nothing for 40 s
+    now += 40000
+  }
+  assert.deepEqual(waits, [2000, 4000, 8000, 16000, 30000, 30000, 30000])
+  link = step(link, { type: 'heard' }, now).link
+  assert.equal(link.stale, 0)
+  assert.equal(step(link, { type: 'error', stale: true }, now).act.connectIn, 2000)
+})
