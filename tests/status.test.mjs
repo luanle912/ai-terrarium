@@ -484,3 +484,28 @@ test('registry-only roots keep their real updatedAt and do not push active sessi
   const regOnly = out.find(s => !states.some(st => st.sessionId === s.id));
   assert.equal(regOnly.updatedAt, T0 - 3600e3);
 });
+
+test('procStartOf asks ps for UTC, the time zone Claude Code writes procStart in', () => {
+  let env;
+  const procStartOf = makeProcStartOf({ platform: 'darwin', execFileSync: (cmd, args, opts) => { env = opts.env; return 'Fri Nov  6 02:55:21 2026'; } });
+  procStartOf(5555);
+  assert.equal(env.TZ, 'UTC');
+  assert.equal(env.LC_ALL, 'C');
+});
+
+test('procStartOf looks up at most a few new pids per scan, failing open for the rest until the next scan', () => {
+  let calls = 0;
+  const procStartOf = makeProcStartOf({ platform: 'darwin', execFileSync: () => { calls++; return 'Fri Nov  6 02:55:21 2026'; } });
+  procStartOf.retain(new Set());
+  const got = [1, 2, 3, 4, 5, 6, 7].map((p) => procStartOf(p));
+  assert.equal(calls, 4);
+  assert.deepEqual(got.slice(4), [null, null, null]);
+  procStartOf.retain(new Set([1, 2, 3, 4, 5, 6, 7]));
+  assert.equal(procStartOf(5), 'Fri Nov 6 02:55:21 2026');
+});
+
+test('start times in different shapes never drop a live process', () => {
+  const alive = makeAlive({ kill: () => true, procStartOf: () => 'Fri Nov 6 09:55:21 2026' });
+  assert.equal(alive(1, '2026-11-06T02:55:21Z'), true);
+  assert.equal(alive(1, 'Fri Nov 6 02:55:21 2026'), false);
+});
