@@ -109,14 +109,13 @@ function routes(ctx) {
     stats.worldBroadcasts++;
     for (const s of streams) write(s, f);
   }
-  // lead = false (a new viewer, who already has its own world): never send at once, only on the trailing edge.
+  // lead = false (a new viewer, who already has its own world): never send at once, only a full window later.
   function scheduleWorld(lead = true) {
     if (closing || worldTimer) return; // a pending trailing send computes the newest state
-    let wait = WORLD_EVERY_MS - (Date.now() - worldAt);
-    if (wait <= 0) {
-      if (lead) return sendWorld();
-      wait = WORLD_EVERY_MS;
-    }
+    // A newcomer already has its world, so the others hear of it a full WORLD_EVERY_MS later: a reconnect storm
+    // folds into one send instead of riding whatever is left of the last window.
+    let wait = lead ? WORLD_EVERY_MS - (Date.now() - worldAt) : WORLD_EVERY_MS;
+    if (wait <= 0) return sendWorld();
     worldTimer = setTimeout(() => { worldTimer = null; sendWorld(); }, wait);
     worldTimer.unref();
   }

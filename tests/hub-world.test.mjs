@@ -802,7 +802,7 @@ test('a newcomer gets its first world at once, alone', async () => {
   try {
     a = await openStream(h.url, login.cookie);
     assert.ok(await a.until((e) => e.event === 'world'));
-    await sleep(1100); // A's own trailing send is over
+    await sleep(1600); // A's own trailing send (due ~1 s after it joined) is over, with slack for a loaded machine
     const n = worlds(a).length;
     const t0 = Date.now();
     b = await openStream(h.url, login.cookie);
