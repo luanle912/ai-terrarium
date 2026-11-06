@@ -103,6 +103,40 @@ test('makeJoinFlow.leave cancels a pending join and the old attempt cannot write
   assert.deepEqual(await flow2.leave(), { phase: 'left', warn: 'hub_unreachable' });
 });
 
+test('makeJoinFlow: a start that never reaches pending turns into an error after 60 s', async () => {
+  const { makeJoinFlow } = require('../server.js');
+  let t = 1000, stop, finish, starts = 0;
+  const join = (hub, o) => new Promise((res) => { starts++; stop = o.shouldStop; finish = () => { o.onStart({ userCode: 'AAAA-BBBB', url: null, expiresIn: 600 }); res({}); }; });
+  const flow = makeJoinFlow({ join, readCfg: () => null, openBrowser() {}, hub: 'https://hub.example', name: 'Mac', now: () => t });
+  flow.start();
+  assert.deepEqual(flow.status(), { phase: 'starting', startedAt: 1000 });
+  t += 60000;
+  assert.equal(flow.status().phase, 'starting', 'not yet: exactly 60 s');
+  t += 1;
+  assert.deepEqual(flow.status(), { phase: 'error', error: 'hub_timeout' });
+  assert.equal(stop(), true, 'the hung join is told to stop');
+  finish(); await new Promise(r => setImmediate(r));
+  assert.deepEqual(flow.status(), { phase: 'error', error: 'hub_timeout' }, 'a late answer cannot overwrite the error');
+  flow.start();
+  assert.equal(starts, 2, 'a new click starts again');
+});
+
+test('makeJoinFlow.leave while starting: the attempt is stopped before leave awaits anything', async () => {
+  const { makeJoinFlow } = require('../server.js');
+  let stop, finish, seenByLeave;
+  const join = (hub, o) => new Promise((res) => { stop = o.shouldStop; finish = res; });
+  const flow = makeJoinFlow({ join, leave: async () => { seenByLeave = stop(); return 0; }, readCfg: () => null, openBrowser() {}, hub: 'https://hub.example', name: 'Mac' });
+  flow.start();
+  assert.equal(flow.status().phase, 'starting');
+  const p = flow.leave();
+  assert.equal(stop(), true, 'stopped synchronously');
+  assert.deepEqual(flow.status(), { phase: 'idle' });
+  assert.deepEqual(await p, { phase: 'left' });
+  assert.equal(seenByLeave, true);
+  finish({}); await new Promise(r => setImmediate(r));
+  assert.deepEqual(flow.status(), { phase: 'idle' });
+});
+
 test('POST /api/leave needs X-Terrarium: leave from this page', async () => {
   const server = http.createServer();
   const port = await listen(server);
