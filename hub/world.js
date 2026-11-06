@@ -14,6 +14,8 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const roomLabel = (n) => LETTERS[n % 26] + (n >= 26 ? String(Math.floor(n / 26) + 1) : '');
 const LETTER_RE = /^[A-P]$/;
 
+const LAST_AT_STEP_MS = 15000;
+
 function createWorld({ now = Date.now, onChange = () => {} } = {}) {
   const islands = new Map(); // id -> {id, name, color, slot, devices: Map(deviceId -> dev), labels, nextLabel, last}
   const deviceIsland = new Map(); // deviceId -> island id
@@ -60,9 +62,12 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
     return out;
   }
 
-  // Compares with what viewers last heard and emits only what changed.
+  // Compares with what viewers last heard and emits only what changed. lastAt is compared in LAST_AT_STEP_MS steps:
+  // a publish that only moves it is not a world change (no world event, so no slot read from the database), yet a
+  // live island's lastAt still reaches viewers every step; the payload itself always reads the exact value from RAM.
   function refresh(isl) {
-    const meta = JSON.stringify(metaOf(isl));
+    const m = metaOf(isl);
+    const meta = JSON.stringify({ ...m, lastAt: m.lastAt == null ? null : Math.floor(m.lastAt / LAST_AT_STEP_MS) });
     const snap = JSON.stringify(sessionsOf(isl));
     const prev = isl.last;
     isl.last = { meta, snap };

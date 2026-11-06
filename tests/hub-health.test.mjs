@@ -27,8 +27,10 @@ test('HEAD works for /healthz and the page assets, and an unknown path stays 404
     const r = await fetch(h.url + '/healthz', { method: 'HEAD' });
     assert.equal(r.status, 200);
     assert.equal((await r.text()).length, 0);
-    const css = await fetch(h.url + '/web/terrarium.css', { method: 'HEAD' });
-    assert.ok([200, 404].includes(css.status));
+    const css = await fetch(h.url + '/web/styles.css', { method: 'HEAD' });
+    assert.equal(css.status, 200);
+    assert.match(css.headers.get('content-type') || '', /text\/css/);
+    assert.equal((await css.text()).length, 0);
     assert.equal((await fetch(h.url + '/nope', { method: 'HEAD' })).status, 404);
   } finally { await h.close(); }
 });
