@@ -210,3 +210,51 @@ test('preview works before joining', () => {
   const p3 = makePublicPreview({ publisher: { state: () => ({ state: 'sending', share: 'kin' }), view: () => mine }, getSnapshot: () => snapshot, salt })();
   assert.equal(p3.view, mine); assert.equal(p3.share, 'kin');
 });
+
+test('GET /api/log returns the ring buffer and never a token', async () => {
+  const { createLogBuffer } = require('../lib/logbuf.js');
+  const buf = createLogBuffer({ sink: () => {} });
+  buf.log('terrarium: hub said Bearer trd_leaky999');
+  const server = http.createServer();
+  const port = await listen(server);
+  server.on('request', createHandler({ snapshot: () => ({ sessions: [] }), scan: () => {}, port, allowedHosts: [], allowedOrigin: '', logLines: buf.lines }));
+  try {
+    const r = await request(port, { path: '/api/log' });
+    assert.equal(r.status, 200);
+    assert.match(r.headers['content-type'], /^application\/json/);
+    assert.equal(r.headers['cache-control'], 'no-store');
+    const j = JSON.parse(r.body);
+    assert.equal(j.lines.length, 1);
+    assert.equal(j.lines[0].line, 'terrarium: hub said Bearer ***');
+    assert.ok(!r.body.includes('trd_leaky999'));
+    assert.equal(r.headers['access-control-allow-origin'], undefined);
+  } finally { await close(server); }
+});
+
+test('/api/log refuses foreign hosts and POST', async () => {
+  const server = http.createServer();
+  const port = await listen(server);
+  server.on('request', createHandler({ snapshot: () => ({ sessions: [] }), scan: () => {}, port, allowedHosts: [], allowedOrigin: '', logLines: () => [] }));
+  try {
+    assert.equal((await request(port, { path: '/api/log', headers: { Host: 'evil.example' } })).status, 403);
+    assert.equal((await request(port, { method: 'POST', path: '/api/log' })).status, 405);
+  } finally { await close(server); }
+});
+
+test('public-preview carries the publisher fields and marks a stale view', () => {
+  const { makePublicPreview } = require('../server.js');
+  const snapshot = { at: 1, usage: {}, version: 'x', sessions: [] };
+  const salt = 'cd'.repeat(32);
+  const fields = { share: 'kin', private: false, hub: 'https://h', deviceId: 'ab12cd34ef567890', instance: 'f'.repeat(16), lastOkAt: 5, lastAttemptAt: 6, lastErr: { code: 'http:503', at: 6 }, failures: 2, nextRetryAt: 9, hubAck: 'json' };
+  for (const st of ['offline', 'rejected', 'standby', 'paused']) {
+    const p = makePublicPreview({ publisher: { state: () => ({ state: st, ...fields }), view: () => ({ sessions: [] }) }, getSnapshot: () => snapshot, salt })();
+    assert.equal(p.view.stale, true, st);
+    for (const k of Object.keys(fields)) assert.deepEqual(p[k], fields[k], k);
+  }
+  for (const st of ['sending', 'connecting', 'private', 'off', 'revoked']) {
+    const p = makePublicPreview({ publisher: { state: () => ({ state: st, ...fields }), view: () => ({ sessions: [] }) }, getSnapshot: () => snapshot, salt })();
+    assert.ok(!p.view.stale, st);
+  }
+  const fb = makePublicPreview({ publisher: { state: () => ({ state: 'offline', ...fields }), view: () => null }, getSnapshot: () => snapshot, salt })();
+  assert.equal(fb.view.stale, true); assert.equal(fb.failures, 2);
+});
