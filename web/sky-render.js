@@ -100,11 +100,12 @@ function drawBack(ctx, w, h, t, env) {
   }
   inView(ctx, layerView(view, 0.2), () => {
     [
-      [0.07, 0.97, 0.8],
-      [0.24, 1.01, 0.55],
-      [0.78, 0.98, 0.7],
-      [0.93, 1.02, 0.45],
-    ].forEach(([fx_, fy, sc], i) => farIsland(ctx, w * fx_, hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S, sc * S, col));
+      [0.07, 0.84, 0.8, 'tree'],
+      [0.2, 0.7, 0.5, 'plain'],
+      [0.93, 0.78, 0.7, 'rock'],
+    ].forEach(([fx_, fy, sc, kind], i) =>
+      farIsland(ctx, w * fx_, hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S, sc * S, col, kind),
+    );
     // Wider than the stage so a pan never shows where the horizon haze ends.
     const hb = ctx.createLinearGradient(0, hy - 18 * S, 0, hy + 18 * S);
     hb.addColorStop(0, rgba(col.haze, 0));
