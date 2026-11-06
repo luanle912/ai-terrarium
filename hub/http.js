@@ -1,4 +1,5 @@
 'use strict';
+const net = require('node:net');
 // HTTP helpers for the hub: body reader with a hard limit (S15), cookie parser, response sender with
 // baseline security headers, client IP (S16), router + one-line request log (S17).
 
@@ -9,8 +10,9 @@ const SECURITY_HEADERS = {
   'Content-Security-Policy': "frame-ancestors 'none'",
 };
 
+// headers: extra response headers the router sends with the error (e.g. Retry-After).
 class HttpError extends Error {
-  constructor(status, message) { super(message || String(status)); this.status = status; }
+  constructor(status, message, headers = {}) { super(message || String(status)); this.status = status; this.headers = headers; }
 }
 
 // Reads the body but never more than `limit` bytes. Rejects with a 413 HttpError the moment the limit is
@@ -63,9 +65,14 @@ function send(res, status, body, headers = {}) {
 const sendJson = (res, status, obj, headers = {}) =>
   send(res, status, JSON.stringify(obj), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
 
-// Only the LAST X-Forwarded-For entry (the one our own proxy appended) is trusted, and only with trustProxy.
-function clientIp(req, trustProxy) {
-  if (trustProxy) {
+// mode: false = socket address only; true | 'xff' = the LAST X-Forwarded-For entry (the one our own proxy
+// appended); 'cloudflare' = CF-Connecting-IP when it is a valid IP, otherwise as 'xff'.
+function clientIp(req, mode) {
+  if (mode === 'cloudflare') {
+    const cf = String(req.headers['cf-connecting-ip'] || '').trim();
+    if (net.isIP(cf) !== 0) return cf;
+  }
+  if (mode) {
     const xff = req.headers['x-forwarded-for'];
     if (xff) {
       const parts = String(xff).split(',').map((s) => s.trim()).filter(Boolean);
@@ -104,7 +111,7 @@ function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, ht
         const ok = e instanceof HttpError && Number.isInteger(e.status) && e.status >= 400 && e.status <= 599;
         const status = ok ? e.status : 500;
         if (status === 500) { try { log(`handler error ${(e && e.name) || 'Error'} ${pathname}`); } catch { /* ignore */ } }
-        const headers = status === 413 ? { Connection: 'close' } : {};
+        const headers = { ...(ok && e.headers ? e.headers : {}), ...(status === 413 ? { Connection: 'close' } : {}) };
         sendError(status, status === 500 ? 'internal error' : (e.message || ''), headers);
       } catch { try { res.destroy(); } catch { /* ignore */ } }
     };

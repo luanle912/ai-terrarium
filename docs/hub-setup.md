@@ -37,7 +37,7 @@ Thiếu hoặc sai biến thì hub từ chối khởi động và in ra **mọi*
 | `HUB_PORT` | | `4318` | Cổng hub nghe |
 | `HUB_HOST` | | `127.0.0.1` | Địa chỉ hub nghe. Chỉ đặt `0.0.0.0` khi thật sự cần. Khi bật `HUB_DEV_LOGIN` thì bắt buộc là địa chỉ loopback |
 | `HUB_DB` | | `./data/hub.sqlite` | Đường dẫn file SQLite |
-| `HUB_TRUST_PROXY` | | tắt | `1` khi đứng sau proxy: hub lấy IP người dùng từ mục cuối của `X-Forwarded-For` để giới hạn tần suất. Không bật thì mọi người dùng chung IP của proxy và chung một hạn mức. Không bật khi hub lộ thẳng ra mạng, vì header này giả được |
+| `HUB_TRUST_PROXY` | | tắt | `1` khi đứng sau proxy: hub lấy IP người dùng từ mục cuối của `X-Forwarded-For` để giới hạn tần suất. `cloudflare` khi đứng sau Cloudflare Tunnel: hub lấy `CF-Connecting-IP` (nếu là IP hợp lệ, không thì như `1`). Không bật thì mọi người dùng chung IP của proxy và chung một hạn mức. Không bật khi hub lộ thẳng ra mạng, vì các header này giả được. Giá trị khác `1`/`cloudflare` là lỗi cấu hình |
 | `HUB_DEV_LOGIN` | | tắt | `1` bật đăng nhập giả, **chỉ để phát triển trên máy local** |
 
 `HUB_DEV_LOGIN=1` bỏ qua Google và cho đăng nhập bằng một đường dẫn tự gõ email. Hub chỉ cho bật khi `HUB_PUBLIC_URL`
@@ -100,7 +100,13 @@ terrarium.example.com {
 }
 ```
 
-Cloudflare Tunnel: trỏ hostname công khai tới `http://127.0.0.1:4318`.
+Cloudflare Tunnel: trỏ hostname công khai tới `http://127.0.0.1:4318` và đặt `HUB_TRUST_PROXY=cloudflare` để hub lấy IP
+người dùng từ `CF-Connecting-IP`. **Chỉ** dùng `cloudflare` khi origin chỉ đi tới được qua Cloudflare Tunnel (hub nghe ở
+`127.0.0.1`, không mở cổng ra ngoài): nếu origin lộ ra mạng, ai cũng giả được header này.
+
+**Khởi động lại êm.** Khi nhận SIGTERM (hoặc SIGINT), hub báo cho từng luồng SSE `event: restarting` kèm `retry:` ngẫu
+nhiên 5–20 giây rồi mới đóng, nên trang người xem quay lại sau khi hub lên lại thay vì gặp 502 của proxy và dừng hẳn.
+Cứ dừng hub bằng `systemctl stop`/`kill` (SIGTERM) như thường; đừng dùng `kill -9`.
 
 Luồng SSE (`/api/world/stream`) cần proxy không đệm và không cắt kết nối rảnh quá sớm. Hub gửi dòng `: ping` mỗi
 25 giây nên cấu hình mặc định của hai bên đều chạy được.
@@ -134,7 +140,8 @@ sqlite3 hub.sqlite "SELECT datetime(at/1000,'unixepoch') AS time, actor_id, acti
   `frame-ancestors 'none'`, `Cross-Origin-Opener-Policy: same-origin` và HSTS khi dùng `https://`.
 - Giới hạn tốc độ (token bucket, trả 429): đăng nhập 30 lần/giờ mỗi IP; bắt đầu ghép thiết bị 10 lần/giờ mỗi IP; gói
   `publish` 4 gói/giây (burst 8) mỗi máy; các route còn lại 120 yêu cầu/phút mỗi IP. Luồng SSE: 5 luồng đồng thời mỗi
-  người, 300 luồng toàn hub. Sau proxy nhớ bật `HUB_TRUST_PROXY=1`, nếu không mọi người dùng chung một hạn mức.
+  người (429 kèm `Retry-After: 10`), 300 luồng toàn hub (503 kèm `Retry-After: 30`). Sau proxy nhớ bật
+  `HUB_TRUST_PROXY=1` (hoặc `cloudflare`), nếu không mọi người dùng chung một hạn mức.
 
 ## 3d. Sức chứa: tối đa 8 đảo
 
