@@ -3,7 +3,9 @@
 // What belongs to one island lives here; the sky, light, speed and selection come from the host component.
 import './office-agents.js';
 import './office-draw.js';
-import './office-draw-annex.js';
+import './office-draw-furniture.js';
+import './office-draw-restroom.js';
+import './office-draw-smoking.js';
 import './office-draw-people.js';
 import './office-render.js';
 import { DogLogic } from './dog-logic.js';
