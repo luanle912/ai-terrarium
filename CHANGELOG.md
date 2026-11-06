@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Hub deploys no longer send viewers to "Thử lại"** — On SIGTERM the hub tells every stream when to come back (`event: restarting` plus `retry:`, 5-20 s, spread per viewer) and the page reconnects by itself at that time, keeping the scene (dimmed while the link is down, wiped only after 5 minutes without a connection); older pages wait out the same `retry:`. Measured with 300 streams: all 300 were back within 20 s and none got more than 18 `world` events in the next 30 s. For 90 s after a start, islands whose machines have not sent again carry `waking: true` and are drawn as waiting for their machine rather than offline
+- **Publisher backs off at most 15 s and resends when the machine wakes** — A failing hub is retried after 2 s growing to 15 s, and a gap of 10 s or more between ticks (sleep) logs `terrarium: woke up; resending` and sends at once
+- **`HUB_TRUST_PROXY` is strict** — Only `''`, `1` or `cloudflare` start the hub; any other value now fails at startup, so check the production environment before deploying
+- **Rollout** — Deploy the hub first, then the plugin (either order works with the old side, see `docs/hub-setup.md` 3e and 3f). `Retry-After` on the 429/503 stream caps is for clients: a browser's `EventSource` ignores it. The `restarting` frame is written just before the connections close, so a proxy may drop it; viewers then fall back to their own backoff
+
+### Fixed
+
+- **Tool errors no longer turn an employee red** — A failing tool call (a non-zero Bash exit, a denied edit) is an ordinary step now; only a real API or session error shows as an error
+- **No false "waiting for approval" in auto mode** — A session in auto (or bypass) mode that runs a slow tool is `working`, not waiting for a permission nobody will be asked for
+- **Background sub-agents are not reported as finished** — A sub-agent still running after its parent ended the turn keeps showing `working`; each sub-agent is judged by its own transcript
+- **An empty registry no longer makes ghosts** — A registry file that is empty or cannot be read keeps its session, and a stale `prev` only counts for a live process; of duplicate registry files the newest wins
+- **A packet the hub refuses is reported and resent** — The publisher reads the hub's publish reply: a rejected packet (400/413, `stale_seq`, `other_instance`) is never counted as sent; it shows `offline` or `standby` and is retried instead of silently dropped
+- **The hub tells the truth about dropped packets** — `POST /api/publish` answers `200 {accepted, reason?}` instead of an empty 204 (`reason`: `stale_seq` with the hub's `seq`, or `other_instance`)
+- **Two Claude Offices on one machine no longer fight** — Each publisher sends an `x-terrarium-instance` header; the hub lets only the newest instance of a device publish and the other one stands by (and takes over again 90 s after the sender goes quiet)
+- **Employees come back when an island returns** — When an island goes offline and online again, its agents reappear without a reload
+- **A frozen stream is noticed** — The hub sends a named `event: ping` every 25 s, so the page can tell a silent, stuck stream from a quiet one and reconnects
+- **Rooms keep their letter** — A project's room no longer changes letter when one machine goes off or the local server restarts: letters are kept in `rooms.json` next to the config (keys only, never a project name)
+- **"Thoát" while pairing is not overwritten** — Leaving the world during a join in progress cancels it, and the late join result can no longer write a config or a status over it
+- **Pairing does not hang on a silent hub** — Every step of a join has a time limit; a hub that never answers ends in an error instead of a wait that never finishes
+- **A reused pid is not a ghost** — A session whose pid was taken by another process is no longer shown as running
+- **A hidden tab does not hold the desk of someone who left** — A browser tab in the background removes an agent that left at once, so its desk is free when the tab is shown again
+- **Finished sub-agents leave on time** — A sub-agent marked done walks out about 3 s later even when nothing else arrives from the hub, on the local page and on every island, and a background tab no longer creates it again on the next update
+
+
 ## [2.0.0] - 2026-11-06
 
 A major version because the source layout changes completely (the page moved from one HTML file into ES modules under `web/`); the page, the hub protocol, the CLI and the configuration work as before.
@@ -40,30 +68,11 @@ A major version because the source layout changes completely (the page moved fro
 - **Restroom rebuilt** — An open-top restroom block now continues the office past the pantry's east side, on the same floor and along the same back wall, drawn the way the office is drawn: a full office back wall, lower front and east walls with two doorways and swing doors that open as people pass, solid room walls inside for privacy, the pantry's floor tiles and planks, its cabinets, worktops, steel sinks, white pot plants and bar stool, the smoking corner's bench, small pictogram plaques beside each door and on a lobby sign post, and SẢNH CHUNG painted on the lobby floor like PANTRY. The men's room has two dusty-blue stalls and two urinals with solid screens, the women's room three dusty-pink stalls and a makeup corner, both with a double vanity under a mirror; a little land was added at the north-east corner so the block fits. Now and then an idle agent walks in from the pantry to their own room, disappears behind a stall door for a few seconds, washes their hands and moves on; the dogs stay out
 - **Smoking corner moved beside the restroom** — The whole corner (pad, pergola, bench, ash bin, planted screen, light, extinguisher and sign) now stands right against the restroom block's east side on a new strip of land, its planted screen facing the block; a stepping-stone path runs from the east stairs along the front of the block to its entrance, smokers come in only through that entrance, never over the bench back, and the dogs still keep out
 - **Restroom use** — Men now go to WC NAM and women to WC NỮ (it used to go by odd and even numbers), and idle agents pick the restroom about one time in four instead of rarely; a room never holds more people than it has stalls, so when they are all taken the others go for a coffee or a stretch instead of queueing
-- **Hub deploys no longer send viewers to "Thử lại"** — On SIGTERM the hub tells every stream when to come back (`event: restarting` plus `retry:`, 5-20 s, spread per viewer) and the page reconnects by itself at that time, keeping the scene (dimmed while the link is down, wiped only after 5 minutes without a connection); older pages wait out the same `retry:`. Measured with 300 streams: all 300 were back within 20 s and none got more than 18 `world` events in the next 30 s. For 90 s after a start, islands whose machines have not sent again carry `waking: true` and are drawn as waiting for their machine rather than offline
-- **Publisher backs off at most 15 s and resends when the machine wakes** — A failing hub is retried after 2 s growing to 15 s, and a gap of 10 s or more between ticks (sleep) logs `terrarium: woke up; resending` and sends at once
-- **`HUB_TRUST_PROXY` is strict** — Only `''`, `1` or `cloudflare` start the hub; any other value now fails at startup, so check the production environment before deploying
-- **Rollout** — Deploy the hub first, then the plugin (either order works with the old side, see `docs/hub-setup.md` 3e and 3f). `Retry-After` on the 429/503 stream caps is for clients: a browser's `EventSource` ignores it. The `restarting` frame is written just before the connections close, so a proxy may drop it; viewers then fall back to their own backoff
 
 ### Fixed
 
-- **Tool errors no longer turn an employee red** — A failing tool call (a non-zero Bash exit, a denied edit) is an ordinary step now; only a real API or session error shows as an error
-- **No false "waiting for approval" in auto mode** — A session in auto (or bypass) mode that runs a slow tool is `working`, not waiting for a permission nobody will be asked for
-- **Background sub-agents are not reported as finished** — A sub-agent still running after its parent ended the turn keeps showing `working`; each sub-agent is judged by its own transcript
-- **An empty registry no longer makes ghosts** — A registry file that is empty or cannot be read keeps its session, and a stale `prev` only counts for a live process; of duplicate registry files the newest wins
-- **A packet the hub refuses is reported and resent** — The publisher reads the hub's publish reply: a rejected packet (400/413, `stale_seq`, `other_instance`) is never counted as sent; it shows `offline` or `standby` and is retried instead of silently dropped
-- **The hub tells the truth about dropped packets** — `POST /api/publish` answers `200 {accepted, reason?}` instead of an empty 204 (`reason`: `stale_seq` with the hub's `seq`, or `other_instance`)
-- **Two Claude Offices on one machine no longer fight** — Each publisher sends an `x-terrarium-instance` header; the hub lets only the newest instance of a device publish and the other one stands by (and takes over again 90 s after the sender goes quiet)
-- **Employees come back when an island returns** — When an island goes offline and online again, its agents reappear without a reload
-- **A frozen stream is noticed** — The hub sends a named `event: ping` every 25 s, so the page can tell a silent, stuck stream from a quiet one and reconnects
 - **Checking a code on a full hub** — Looking up a pairing code while the hub already has 8 islands now only shows "Hub đã đủ 8 đảo"; the code stays valid, so it can still be approved if a place frees up before it expires
 - **Smoother sky of islands** — The simple islands are kept as GPU-friendly images with a least-recently-used cache (no burst of redraws at dusk), the 8 name plates are measured once instead of every frame, and the hub no longer reads its database for every island update or re-sends every island after a removal
-- **Rooms keep their letter** — A project's room no longer changes letter when one machine goes off or the local server restarts: letters are kept in `rooms.json` next to the config (keys only, never a project name)
-- **"Thoát" while pairing is not overwritten** — Leaving the world during a join in progress cancels it, and the late join result can no longer write a config or a status over it
-- **Pairing does not hang on a silent hub** — Every step of a join has a time limit; a hub that never answers ends in an error instead of a wait that never finishes
-- **A reused pid is not a ghost** — A session whose pid was taken by another process is no longer shown as running
-- **A hidden tab does not hold the desk of someone who left** — A browser tab in the background removes an agent that left at once, so its desk is free when the tab is shown again
-- **Finished sub-agents leave on time** — A sub-agent marked done walks out about 3 s later even when nothing else arrives from the hub, on the local page and on every island, and a background tab no longer creates it again on the next update
 
 ### Removed
 
