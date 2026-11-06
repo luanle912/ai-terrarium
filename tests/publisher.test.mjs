@@ -419,3 +419,123 @@ test('revokeSelf says ok (2xx), gone (401) or failed (anything else), and never 
   assert.equal(await revokeSelf('http://hub.example', 'trd_x', { fetch: answer(200) }), 'failed', 'invalid hub url')
   assert.equal(await revokeSelf('https://hub.example', '', { fetch: answer(200) }), 'failed', 'no token')
 })
+
+// --- publish reply contract (H4, L2, L12) ---
+const ack = (body) => ({ status: 200, headers: { get: () => null }, json: async () => body, text: async () => JSON.stringify(body) });
+const reject = (status, text) => ({ status, headers: { get: () => null }, text: async () => text, json: async () => { throw new Error('not json'); } });
+
+test('every publish carries the instance header; the body keys are unchanged', async () => {
+  const dir = tmp(); mkCfg(dir);
+  const ref = { v: snap(1) };
+  const a = rig(dir, ok, ref), b = rig(dir, ok, ref);
+  await a.step(); await b.step();
+  ref.v = snap(2);
+  await a.run(500);
+  assert.equal(a.calls.length, 2);
+  const ha = a.calls.map((c) => c.opts.headers['x-terrarium-instance']);
+  const hb = b.calls[0].opts.headers['x-terrarium-instance'];
+  assert.match(ha[0], /^[0-9a-f]{16}$/);
+  assert.equal(ha[1], ha[0], 'same instance for every send of one publisher');
+  assert.match(hb, /^[0-9a-f]{16}$/);
+  assert.notEqual(hb, ha[0], 'two publishers have two instances');
+  for (const c of [...a.calls, ...b.calls]) for (const k of Object.keys(c.body)) assert.ok(['v', 'seq', 'share', 'private', 'sessions'].includes(k), k);
+  a.pub.stop(); b.pub.stop();
+});
+
+test('204 from an older hub counts as accepted', async () => {
+  const dir = tmp(); mkCfg(dir);
+  const ref = { v: snap(1) };
+  const r = rig(dir, ok, ref);
+  await r.step();
+  assert.equal(r.pub.state().state, 'sending');
+  await r.run(5000);
+  assert.equal(r.calls.length, 1);
+  ref.v = snap(2); await r.run(500);
+  assert.equal(r.calls[1].body.seq, 1);
+  r.pub.stop();
+});
+
+test('200 {accepted:true} counts as accepted; seq goes up', async () => {
+  const dir = tmp(); mkCfg(dir);
+  const ref = { v: snap(1) };
+  const r = rig(dir, () => ack({ accepted: true }), ref);
+  await r.step();
+  assert.equal(r.pub.state().state, 'sending');
+  await r.run(5000);
+  assert.equal(r.calls.length, 1, 'accepted view is not resent');
+  ref.v = snap(2); await r.run(500);
+  assert.equal(r.calls.length, 2);
+  assert.equal(r.calls[1].body.seq, 1);
+  r.pub.stop();
+});
+
+test("200 {accepted:false, reason:'stale_seq', seq:41} resumes at 42", async () => {
+  const dir = tmp(); mkCfg(dir);
+  const r = rig(dir, (n) => n <= 2 ? ack({ accepted: false, reason: 'stale_seq', seq: 41 }) : ack({ accepted: true }), { v: snap(1) });
+  await r.step();
+  assert.equal(r.calls[0].body.seq, 0);
+  await r.run(500);
+  assert.equal(r.calls.length, 2, 'resent at the next tick');
+  assert.equal(r.calls[1].body.seq, 42);
+  await r.run(9500);
+  assert.equal(r.calls.length, 2, 'a second stale_seq within 10 s does not resend at once');
+  await r.run(500);
+  assert.equal(r.calls.length, 3);
+  assert.equal(r.calls[2].body.seq, 42);
+  assert.equal(r.pub.state().state, 'sending');
+  r.pub.stop();
+});
+
+test("200 {accepted:false, reason:'other_instance'} stands by and retries after 30 s", async () => {
+  const dir = tmp(); mkCfg(dir);
+  let owner = false;
+  const r = rig(dir, () => owner ? ack({ accepted: true }) : ack({ accepted: false, reason: 'other_instance' }), { v: snap(1) });
+  await r.step();
+  assert.equal(r.pub.state().state, 'standby');
+  assert.ok(r.logs.some((l) => /another Claude Office on this machine/.test(l)));
+  const seq0 = r.calls[0].body.seq;
+  await r.run(29500);
+  assert.equal(r.calls.length, 1, 'nothing sent before 30 s');
+  owner = true;
+  await r.run(500);
+  assert.equal(r.calls.length, 2, 'retried at 30 s');
+  assert.equal(r.calls[1].t - r.calls[0].t, 30000);
+  assert.equal(r.calls[1].body.seq, seq0, 'seq kept while standing by');
+  assert.equal(r.pub.state().state, 'sending');
+  r.pub.stop();
+});
+
+test('a 400 is not a success: offline, logged with the reason, retried after 15 s, seq unchanged', async () => {
+  const dir = tmp(); mkCfg(dir);
+  let bad = true;
+  const r = rig(dir, () => bad ? reject(400, 'bad packet: duplicate id') : ok(), { v: snap(1) });
+  await r.step();
+  assert.equal(r.pub.state().state, 'offline');
+  assert.ok(r.logs.some((l) => l.includes('terrarium: hub rejected the packet (400: duplicate id)')), r.logs.join('\n'));
+  await r.run(14500);
+  assert.equal(r.calls.length, 1, 'not resent before 15 s');
+  await r.run(500);
+  assert.equal(r.calls.length, 2, 'unchanged view is resent after 15 s');
+  assert.equal(r.calls[1].body.seq, r.calls[0].body.seq);
+  assert.equal(r.logs.filter((l) => /hub rejected the packet/.test(l)).length, 2, 'logged every time');
+  bad = false;
+  await r.run(15000);
+  assert.equal(r.calls.length, 3);
+  assert.equal(r.calls[2].body.seq, r.calls[0].body.seq);
+  assert.equal(r.pub.state().state, 'sending');
+  r.pub.stop();
+});
+
+test('a 413 is handled like a 400', async () => {
+  const dir = tmp(); mkCfg(dir);
+  const r = rig(dir, () => reject(413, 'payload too large'), { v: snap(1) });
+  await r.step();
+  assert.equal(r.pub.state().state, 'offline');
+  assert.ok(r.logs.some((l) => l.includes('terrarium: hub rejected the packet (413: payload too large)')), r.logs.join('\n'));
+  await r.run(14500);
+  assert.equal(r.calls.length, 1);
+  await r.run(500);
+  assert.equal(r.calls.length, 2);
+  assert.equal(r.calls[1].body.seq, r.calls[0].body.seq);
+  r.pub.stop();
+});

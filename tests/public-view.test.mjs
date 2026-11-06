@@ -168,3 +168,18 @@ test('the 17th project shares the last room instead of wrapping to A', () => {
   for (const d of depts.slice(16)) assert.equal(d, 'P')
   assert.equal(depts.filter((d) => d === 'A').length, 1)
 })
+
+test('duplicate session ids leave the machine once', () => {
+  const s = snap([
+    mk({ id: 'dup', status: 'idle', updatedAt: 1000 }),
+    mk({ id: 'other', parentId: 'dup', status: 'working', updatedAt: 3000 }),
+    mk({ id: 'dup', status: 'thinking', updatedAt: 2000 }),
+  ])
+  const out = createPublicView(SALT)(s, opts()).sessions
+  assert.equal(out.length, 2)
+  const child = out.find((x) => x.parent)
+  const dups = out.filter((x) => !x.parent)
+  assert.equal(dups.length, 1, 'one element per id')
+  assert.equal(dups[0].status, 'thinking', 'the newer root is kept')
+  assert.equal(child.parent, dups[0].id, 'a parent pointing at the dropped twin still resolves')
+})
