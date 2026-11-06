@@ -3,8 +3,8 @@ import { WorldLogic } from './world-logic.js';
 import { DogLogic } from './dog-logic.js';
 import { PeopleLogic } from './people-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
-import { DEPT_PAL, DESKS, DOOR, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, WC, colOf } from './office-scene.js';
-import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf } from './office-util.js';
+import { DEPT_PAL, DESKS, DOOR, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
+import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Agents: the simulated office and the live feed, desks and departments, where each agent goes next.
 mixin(
@@ -523,16 +523,9 @@ mixin(
         a.actNow = null;
         a.wcIn = false;
         if (!g.keepWc) a.wcT = 0;
-        // Out on the lawn or in the restroom block an agent paths from where it stands; anywhere else (e.g. just in
-        // through the door) it starts inside.
-        const fx = Math.floor(a.x),
-          fy = Math.floor(a.y),
-          fk = fx + ',' + fy;
-        const cur =
-          (LAWN_WALK.has(fk) || WC.floorSet.has(fk)) && fx >= 0 && fy >= 0
-            ? [fx, fy]
-            : [Math.min(W - 1, Math.max(0, fx)), Math.min(H - 1, Math.max(0, fy))];
-        a.path = bfs(cur, g.tile)
+        // Out on the lawn (the rest corner too) or in the restroom block an agent paths from where it stands;
+        // anywhere else (e.g. just in through the door) it starts inside.
+        a.path = bfs(startCell(a.x, a.y), g.tile)
           .map(p => [p[0] + 0.5, p[1] + 0.5])
           .concat([g.pt]);
         if (g.key === 'seat' && a.path.length > 1) a.path.splice(a.path.length - 2, 1);
@@ -594,6 +587,8 @@ mixin(
           act:
             a.actNow ||
             (a.status === 'idle' && a.idleSpot != null && IDLE_SPOTS[a.idleSpot] ? IDLE_SPOTS[a.idleSpot].act : null),
+          // arrived and doing it (the bench sitter gets a dog lying beside the bench, DogLogic 'company')
+          at: !!a.actNow,
         }))
         .filter(a => a.act !== 'wc');
       DogLogic.step(this.dogs, w, dt);

@@ -67,18 +67,37 @@ export const WC = RestroomLogic.layout(
 WC.floor.forEach(k => LAWN_WALK.delete(k));
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
-// The office dogs live on the lawn in front of and beside the office, never in the lake, the river, on the mountain
-// (LAWN_WALK already leaves those out), the smoking corner or the restroom. They drink at the lake.
+// The office dogs live on the lawn all round the office and, over the bridge, on the far bank and the back lawn;
+// never in the lake, the river (the bridge deck is fine), on the mountain, the bench, the smoking corner or the
+// restroom. They drink at the lake. The walls go down before the sorted sprites, so the strip right behind them
+// (as many tiles as the wall rises, 16 px up the screen per tile) is left out, and so is any cell right behind
+// something tall baked into the island picture: the mountain (its peaks hide more), back-lawn trees, lamp posts and
+// the bench.
+const REST = ISLAND.rest,
+  FISH_PT = [REST.fish.x + 0.6, REST.fish.y + 0.5];
 export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   W,
   H,
-  pond: new Set([...ISLAND.pond.cells, ...ISLAND.river.cells]),
-  avoid: ISLAND.spots.filter(s => s.id === 'east-back' || s.id === 'east-front'),
+  pond: new Set([...ISLAND.pond.cells, ...[...ISLAND.river.cells].filter(k => !ISLAND.bridge.cells.has(k))]),
+  avoid: [
+    ...ISLAND.spots.filter(s => s.id === 'east-back' || s.id === 'east-front'),
+    { x: REST.bench.x, y: REST.bench.y, w: 1, h: 1 },
+  ],
+  wallReach: Math.floor((WALL + 3 + FLOOR_Z) / (2 * TH)),
+  tall: [
+    ...[...ISLAND.mountain.cells].map(k => [...k.split(',').map(Number), 2]),
+    ...ISLAND.mountain.peaks.map(p => [p.x, p.y, Math.ceil(p.h / (2 * TH))]),
+    ...ISLAND.decor.filter(d => d.kind === 'tree' && (d.x < 0 || d.y < 0)).map(d => [d.x, d.y, 4]),
+    ...ISLAND.lamps.map(l => [l.x, l.y, 3]),
+    [REST.bench.x, REST.bench.y, 1],
+  ],
 });
 // They run across the stone paths and past the stairs but never lie, sit, sniff or sleep on them (the stairs' foot and
-// the tile beyond it stay free). At night they curl up at (33,8), by the grove on the east lawn: a quiet corner away
-// from the paths and still in view at 1×.
+// the tile beyond it stay free), nor on the fishing spot. At night they curl up at (33,8), by the grove on the east
+// lawn: a quiet corner away from the paths and still in view at 1×. While someone sits on the bench, one dog lies on
+// the cell beside it (DOG_PLACES.rest, DogLogic 'company').
 export const DOG_CLEAR = new Set(ISLAND.paths.cells);
+DOG_CLEAR.add(REST.fish.x + ',' + REST.fish.y);
 STAIRS.forEach(s => {
   for (let i = 0; i < s.len; i++)
     for (let o = 0; o < 2; o++)
@@ -92,6 +111,7 @@ export const DOG_PLACES = {
   clear: DOG_CLEAR,
   den: DogLogic.denCells(DOG_ROAM, [33, 8], DOG_CLEAR),
   drink: DogLogic.drinkSpots(DOG_ROAM, ISLAND.pond.cells, DOG_CLEAR),
+  rest: DogLogic.besideCell(DOG_ROAM, [REST.bench.x, REST.bench.y], DOG_CLEAR, [FISH_PT]),
 };
 export const REAL_WEATHER_EVERY_MS = 15 * 60_000;
 export const WEATHER_LABEL = {
@@ -171,6 +191,16 @@ export const IDLE_SPOTS = [
   ...WC.spots,
   // bathing in the pond out on the lawn, reached down the pantry stairs
   ...ISLAND.pond.spots.map(s => ({ act: 'bath', tile: [s.x, s.y], pt: [s.x + 0.5, s.y + 0.5], front: true })),
+  // the rest corner on the far bank by the lake, over the bridge: sitting on the stone bench (drawn with the island)
+  // and fishing at the water's edge, the lake on the +x side; both face the viewer
+  {
+    act: 'bench',
+    tile: [REST.bench.x, REST.bench.y],
+    pt: [REST.bench.x + 0.5, REST.bench.y + 0.55],
+    stool: 1,
+    front: true,
+  },
+  { act: 'fish', tile: [REST.fish.x, REST.fish.y], pt: FISH_PT, front: true },
 ];
 export const ACT_TXT = {
   table: tr('office.act.table'),
@@ -186,6 +216,8 @@ export const ACT_TXT = {
   phone: tr('office.act.phone'),
   stretch: tr('office.act.stretch'),
   bath: tr('office.act.bath'),
+  bench: tr('office.act.bench'),
+  fish: tr('office.act.fish'),
 };
 export const SEGS = [],
   EDGE = new Set();

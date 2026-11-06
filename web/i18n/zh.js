@@ -50,6 +50,8 @@ export default {
 "office.act.phone":"刷手机",
 "office.act.stretch":"伸懒腰",
 "office.act.bath":"去池塘泡澡",
+"office.act.bench":"在湖边长椅上歇息",
+"office.act.fish":"钓鱼",
 "office.sim.talkTopics":["问 API schema","共享 types","统一命名","请人 review diff","报 build 错误"],
 "office.status.working":"敲键盘中",
 "office.status.thinking":"思考中",

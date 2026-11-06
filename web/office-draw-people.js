@@ -69,6 +69,11 @@ mixin(
           R(sx + 4, by - 7, 1, 1, sk);
           R(sx + 5, by - 8, 2, 1, '#f3efe2');
         }
+      } else if (act === 'fish') {
+        // the near hand rests at the waist, the far one holds the rod butt out toward the lake
+        L();
+        R(sx + 4, by - 11, 1, 3, shD);
+        R(sx + 4, by - 8, 2, 1, sk);
       } else if (act === 'stretch') {
         const p = Math.floor(t * 1.5) % 2;
         R(sx - 6, by - 17 + p * 2, 2, 7, sh);
@@ -76,6 +81,42 @@ mixin(
         R(sx - 6, by - 18 + p * 2, 2, 1, sk);
         R(sx + 4, by - 18 + (1 - p) * 2, 2, 1, sk);
       } else L();
+    }
+
+    // Fishing at the rest corner: a rod from the hand up and out over the lake, a thin line down to a tiny bob on the
+    // water a tile and a half out. The bob rides the water and now and then dips (a nibble) with a ring spreading
+    // round it; with reduced motion it lies still.
+    drawRod(G, a, sx, by, t) {
+      const { ctx, rect: R } = G,
+        calm = this.env && this.env.reduced,
+        nib = !calm && t % 7 < 0.6,
+        tip = [sx + 16, by - 24 + (nib ? 2 : 0)],
+        [bx0, by0] = PG(a.x + 1.5, a.y + 0.2),
+        bx = Math.round(bx0),
+        bob = Math.round(by0) + (calm ? 0 : nib ? 1 : Math.round(Math.sin(t * 2.2) * 0.6));
+      for (let k = 0; k <= 12; k++)
+        R(
+          sx + 5 + Math.round(((tip[0] - sx - 5) * k) / 12),
+          by - 8 + Math.round(((tip[1] - by + 8) * k) / 12),
+          1,
+          1,
+          '#6b4a2b',
+        );
+      ctx.strokeStyle = 'rgba(232,238,245,0.7)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(tip[0] + 0.5, tip[1] + 0.5);
+      ctx.quadraticCurveTo(bx + 1.5, tip[1] + 6, bx + 0.5, bob - 1);
+      ctx.stroke();
+      if (!calm) {
+        const p = (t * 0.45) % 1;
+        ctx.strokeStyle = 'rgba(255,255,255,' + 0.45 * (1 - p) + ')';
+        ctx.beginPath();
+        ctx.ellipse(bx + 0.5, bob + 1, 2 + p * 5, 1 + p * 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      R(bx - 1, bob - 1, 2, 1, '#e5484d');
+      R(bx - 1, bob, 2, 1, '#ffffff');
     }
 
     drawPerson(G, a) {
@@ -382,6 +423,7 @@ mixin(
             ctx.globalAlpha = 1;
           }
         }
+        if (act === 'fish') this.drawRod(G, a, sx, by, tp);
         if (st === 'idle' && !a.moving && a.actNow === 'table') {
           R(sx + 4, by - 9, 2, 3, '#ffffff');
           R(sx + 6, by - 8, 1, 1, '#ffffff');

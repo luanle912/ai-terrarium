@@ -50,6 +50,8 @@ export default {
 "office.act.phone":"폰 보는 중",
 "office.act.stretch":"기지개 켜는 중",
 "office.act.bath":"연못에서 물놀이",
+"office.act.bench":"호숫가 벤치에서 휴식",
+"office.act.fish":"낚시 중",
 "office.sim.talkTopics":["API 스키마 문의","types 공유","네이밍 맞추기","diff 리뷰 부탁","빌드 오류 보고"],
 "office.status.working":"타이핑 중",
 "office.status.thinking":"생각 중",
