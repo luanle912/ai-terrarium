@@ -183,3 +183,25 @@ test('duplicate session ids leave the machine once', () => {
   assert.equal(dups[0].status, 'thinking', 'the newer root is kept')
   assert.equal(child.parent, dups[0].id, 'a parent pointing at the dropped twin still resolves')
 })
+
+test('room letters come from the letter store', () => {
+  const crypto = require('crypto')
+  const asked = []
+  const store = { get: () => undefined, assign: (k) => { asked.push(k); return 'K' } }
+  const view = createPublicView(SALT, { letters: store })
+  const out = view(snap([mk({ project: 'alpha' }), mk({ id: 'real-id-2', project: 'beta' })]), opts()).sessions
+  assert.deepEqual(out.map((s) => s.dept), ['K', 'K'])
+  const key = (p) => crypto.createHmac('sha256', Buffer.from(SALT, 'hex')).update('dept:' + p).digest('hex').slice(0, 12)
+  assert.deepEqual(asked, [key('alpha'), key('beta')], 'keys are HMAC(salt, dept:project), 12 hex')
+  // a letter the store already knows is used as is
+  const view2 = createPublicView(SALT, { letters: { get: () => 'C', assign: () => { throw new Error('not called') } } })
+  assert.equal(view2(snap([mk()]), opts()).sessions[0].dept, 'C')
+})
+
+test("the default store keeps today's order", () => {
+  const view = createPublicView(SALT)
+  const v1 = view(snap([mk({ project: 'p1' }), mk({ id: 'real-id-2', project: 'p2' })]), opts()).sessions
+  assert.deepEqual(v1.map((s) => s.dept), ['A', 'B'])
+  const v2 = view(snap([mk({ project: 'p3' }), mk({ id: 'real-id-2', project: 'p1' })]), opts()).sessions
+  assert.deepEqual(v2.map((s) => s.dept), ['C', 'A'])
+})

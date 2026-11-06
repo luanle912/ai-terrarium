@@ -115,9 +115,15 @@ function joinRequestAllowed(req, port, extra = [], action = 'join') {
 // `gen` retires an older join attempt, so a cancelled one can neither write a config nor overwrite the status.
 function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date.now }) {
   let cur = { phase: 'idle' }, gen = 0;
+  // A start that has not reached 'pending' within 60 s (hub hung) becomes an error; bumping gen stops that join and
+  // keeps its late answer from overwriting the error.
+  const expire = () => {
+    if (cur.phase === 'starting' && now() - cur.startedAt > 60000) { gen++; cur = { phase: 'error', error: 'hub_timeout' }; }
+  };
   return {
-    status() { return { ...cur }; },
+    status() { expire(); return { ...cur }; },
     start() {
+      expire();
       const c = readCfg();
       if (c && typeof c.token === 'string' && c.token && !c.revoked) {
         try { openBrowser(c.hub); } catch {}
@@ -125,7 +131,7 @@ function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date
       }
       if ((cur.phase === 'pending' && now() < cur.expiresAt) || cur.phase === 'starting') return Promise.resolve({ ...cur });
       const my = ++gen;
-      cur = { phase: 'starting' };
+      cur = { phase: 'starting', startedAt: now() };
       return new Promise(resolve => {
         const set = v => { if (gen === my) cur = v; resolve({ ...v }); };
         join(hub, { name, openBrowser, log: () => {}, shouldStop: () => gen !== my,
@@ -136,7 +142,7 @@ function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date
     },
     // Cancels a pending join, then revokes this device on the hub and removes the local config.
     async leave() {
-      gen++;
+      gen++;   // before any await: the running join must see shouldStop() === true at once
       cur = { phase: 'idle' };
       const lines = [];
       const code = await leave(l => lines.push(String(l)));
