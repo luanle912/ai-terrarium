@@ -619,3 +619,14 @@ test('deviceLink: the chip opens the hub on this device only for a 16-hex device
   assert.equal(W.deviceLink('https://hub.x/', 'nothex'), 'https://hub.x/')
   assert.equal(W.deviceLink('https://hub.x/', null), 'https://hub.x/')
 })
+
+test('failParts: the retry wait shows only when one is planned and still ahead', () => {
+  const err = { code: 'network:ECONNREFUSED' }
+  assert.deepEqual(W.failParts({ err, retryInMs: 9200, failures: 3 }),
+    [['error', { code: 'network:ECONNREFUSED' }], ['retryIn', { s: '10' }], ['times', { n: '3' }]])
+  assert.deepEqual(W.failParts({ err, retryInMs: 0, failures: 1 }),
+    [['error', { code: 'network:ECONNREFUSED' }], ['retrying', {}], ['times', { n: '1' }]])
+  // paused waits for a sign-in, not a timer: no retry part at all
+  assert.deepEqual(W.failParts({ err, retryInMs: null, failures: 0 }), [['error', { code: 'network:ECONNREFUSED' }]])
+  assert.deepEqual(W.failParts({ err: null, retryInMs: 5000, failures: 2 }), [])
+})
