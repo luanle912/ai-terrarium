@@ -12,15 +12,16 @@ import {
   LABEL_H,
   LABEL_H2,
   LINK_DIM,
-  OFFLINE_ALPHA,
   OFF_MS,
   ONE_BOTTOM,
   ONE_TOP,
   PANEL_COL,
+  agoText,
   art,
   clip,
   measured,
   dimmed,
+  hhmm,
   okColor,
   paintIsland,
   paintTile,
@@ -55,6 +56,13 @@ Object.assign(ClaudeOffice.prototype, {
       lw,
       sh: w.sh,
     });
+  },
+  // How old what an island shows is (WorldLogic.freshness, on the hub's clock) and the alpha to draw it with: a waking
+  // island (the hub restarted, its machine not heard yet) looks offline whatever its age says.
+  islandLook(meta) {
+    const w = this.world,
+      f = WorldLogic.freshness(meta.lastAt, w.hubNow, w.recvAt, performance.now(), meta.online);
+    return { f, alpha: meta.waking === true ? WorldLogic.OFFLINE_ALPHA : f.alpha };
   },
   skyNow() {
     return this.sky().L;
@@ -203,7 +211,7 @@ Object.assign(ClaudeOffice.prototype, {
     sc.draw(t);
     sc.drawnAt = now;
     const bob = this.env && this.env.reduced ? 0 : Math.round(Math.sin(t * 0.7) * 3);
-    ctx.globalAlpha = (dimmed(meta) ? OFFLINE_ALPHA : 1) * this.linkDim;
+    ctx.globalAlpha = this.islandLook(meta).alpha * this.linkDim;
     ctx.imageSmoothingEnabled = r.w < sc.canvas.width / dpr;
     ctx.drawImage(sc.canvas, r.x, r.y + bob, r.w, r.h);
     ctx.globalAlpha = 1;
@@ -324,14 +332,15 @@ Object.assign(ClaudeOffice.prototype, {
     const img = art('i' + color + df + lit + (mine ? 'm' : ''), g => paintIsland(g, color, df, lit, !!mine));
     const p = this.artPlace(rect, labelH),
       dy = this.artShift(p, hover, t, meta.slot, reduced),
-      lh = labelH || LABEL_H;
-    this.stampArt(ctx, img, p, dy, dimmed(meta) ? OFFLINE_ALPHA : 1);
+      lh = labelH || LABEL_H,
+      look = this.islandLook(meta);
+    this.stampArt(ctx, img, p, dy, look.alpha);
     // the name plate hangs from its top edge just under the art (one or two lines), or over the underside when the
     // cell has no room for it
     const top = p.under
       ? (p.ay + p.ah + dy) / p.dpr + 4
       : Math.min(rect.y + rect.h - lh, (p.ay + p.ah + dy) / p.dpr - lh);
-    this.drawIslandLabel(ctx, meta, busy, alert, rect.x + rect.w / 2, top, hover, rect.w + 8, true, !!mine);
+    this.drawIslandLabel(ctx, meta, busy, alert, rect.x + rect.w / 2, top, hover, rect.w + 8, true, !!mine, look.f);
   },
   drawSlotTile(ctx, rect, kind, o) {
     o = o || {};
@@ -370,29 +379,41 @@ Object.assign(ClaudeOffice.prototype, {
       );
   },
   // Name, how many are working (muted when offline), a yellow dot when someone waits for approval or another session.
+  // An island not heard for FRESH_MS (fresh.bucket aging or offline) says when it last sent instead of the count.
   // Mine (the caller says) has a gold edge; a hovered one a light edge and a darker plate. Wider than maxW (a narrow
   // phone cell), the count goes on a second line and the name is shortened to fit. y is the plate's bottom (6 px
   // above), or with fromTop its top edge, so a two-line plate grows downwards and never climbs over the island.
   // The fit (shortened name, widths) is measured once per name, count text, dot and maxW.
-  drawIslandLabel(ctx, m, busy, alert, x, y, hover, maxW, fromTop, mine) {
+  drawIslandLabel(ctx, m, busy, alert, x, y, hover, maxW, fromTop, mine, fresh) {
     const NF = "600 12px 'JetBrains Mono',monospace",
       SF = "500 11px 'JetBrains Mono',monospace";
+    const old = !!fresh && (fresh.bucket === 'aging' || fresh.bucket === 'offline'),
+      sentAt = old ? hhmm(Date.now() - fresh.ageMs) : '';
+    // too long for a narrow (phone) cell, "gửi lúc 14:03 · 2 phút trước" keeps only "gửi lúc 14:03"
+    const short = old && !m.private && m.waking !== true ? tr('world.mine.lastSent', { time: sentAt }) : '';
     const full = clip(m.name || tr('world.island.defaultName'), 24),
-      sub = m.private
+      long = m.private
         ? tr('world.label.private')
         : m.waking === true
           ? tr('world.label.waking')
-          : m.online === false
-            ? tr('world.label.busyOffline', { n: busy })
-            : tr('world.label.busy', { n: busy });
+          : old
+            ? tr('world.label.sentAt', { time: sentAt, ago: agoText(fresh.ageMs) })
+            : m.online === false
+              ? tr('world.label.busyOffline', { n: busy })
+              : tr('world.label.busy', { n: busy });
     const dot = alert ? 14 : 0;
     ctx.save();
-    const { name, nw, pw, two } = measured('l\n' + full + '\n' + sub + '\n' + dot + '\n' + maxW, () => {
-      let name = full;
+    const { name, nw, pw, two, sub } = measured('l\n' + full + '\n' + long + '\n' + dot + '\n' + maxW, () => {
+      let name = full,
+        sub = long;
       ctx.font = NF;
       let nw = ctx.measureText(name).width;
       ctx.font = SF;
-      const sw_ = ctx.measureText(sub).width;
+      let sw_ = ctx.measureText(sub).width;
+      if (maxW && short && 24 + sw_ > maxW) {
+        sub = short;
+        sw_ = ctx.measureText(sub).width;
+      }
       let pw = Math.ceil(14 + nw + 10 + sw_ + dot + 10),
         two = false;
       if (maxW && pw > maxW) {
@@ -404,7 +425,7 @@ Object.assign(ClaudeOffice.prototype, {
         }
         pw = Math.ceil(14 + Math.max(nw + dot, sw_) + 10);
       }
-      return { name, nw, pw, two };
+      return { name, nw, pw, two, sub };
     });
     const ph = two ? 36 : 22,
       px = Math.round(x - pw / 2),
@@ -424,7 +445,7 @@ Object.assign(ClaudeOffice.prototype, {
     ctx.fillStyle = '#ffffff';
     ctx.fillText(name, px + 12, l1 + 1);
     ctx.font = SF;
-    ctx.fillStyle = m.private ? '#c9cfdc' : dimmed(m) ? '#7d8599' : '#aab2c5';
+    ctx.fillStyle = m.private ? '#c9cfdc' : dimmed(m) || old ? '#7d8599' : '#aab2c5';
     ctx.fillText(sub, two ? px + 12 : px + 12 + nw + 10, two ? py + 26 : l1 + 1);
     if (alert) {
       ctx.fillStyle = GOLD;

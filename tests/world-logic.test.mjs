@@ -630,3 +630,72 @@ test('failParts: the retry wait shows only when one is planned and still ahead',
   assert.deepEqual(W.failParts({ err, retryInMs: null, failures: 0 }), [['error', { code: 'network:ECONNREFUSED' }]])
   assert.deepEqual(W.failParts({ err: null, retryInMs: 5000, failures: 2 }), [])
 })
+
+// ---- island freshness and the connection legend (Task 17) ----
+
+test('freshness: live under 45 s, fades to the offline alpha at 90 s', () => {
+  assert.equal(W.FRESH_MS, 45000)
+  assert.equal(W.OFFLINE_AFTER_MS, 90000)
+  assert.equal(W.OFFLINE_ALPHA, 0.65)
+  const hubNow = 1_800_000_000_000, recvAt = 5000
+  const at = age => W.freshness(hubNow - age, hubNow, recvAt, recvAt, true)
+  assert.deepEqual(at(0), { ageMs: 0, alpha: 1, bucket: 'live' })
+  assert.deepEqual(at(44_999), { ageMs: 44_999, alpha: 1, bucket: 'live' })
+  const a45 = at(45_000)
+  assert.equal(a45.bucket, 'aging')
+  close(a45.alpha, 1)
+  const mid = at(67_500)
+  assert.equal(mid.bucket, 'aging')
+  close(mid.alpha, 1 - (1 - 0.65) / 2)
+  const a90 = at(90_000)
+  close(a90.alpha, 0.65)
+  assert.equal(a90.bucket, 'aging', 'offline only after 90 s')
+  assert.deepEqual(at(200_000), { ageMs: 200_000, alpha: 0.65, bucket: 'offline' })
+  // the time since the frame arrived counts too
+  assert.equal(W.freshness(hubNow - 30_000, hubNow, recvAt, recvAt + 70_000, true).bucket, 'offline')
+  // the alpha only falls with age and never below the offline alpha
+  let last = 1
+  for (let ms = 0; ms <= 120_000; ms += 1500) {
+    const f = at(ms)
+    assert.ok(f.alpha <= last + 1e-12 && f.alpha >= 0.65, `alpha at ${ms}`)
+    last = f.alpha
+  }
+})
+
+test("freshness uses the hub clock, not the viewer's", () => {
+  const hubNow = 1_800_000_000_000, lastAt = hubNow - 60_000
+  const viewer = Date.UTC(2026, 10, 6, 3, 0, 0)
+  const a = W.freshness(lastAt, hubNow, viewer, viewer + 2000, true)
+  const skew = 10 * 60_000
+  assert.deepEqual(W.freshness(lastAt, hubNow, viewer + skew, viewer + skew + 2000, true), a)
+  assert.deepEqual(W.freshness(lastAt, hubNow, viewer - skew, viewer - skew + 2000, true), a)
+  assert.equal(a.ageMs, 62_000)
+  assert.equal(a.bucket, 'aging')
+})
+
+test('freshness without lastAt (old hub) is unknown and follows online', () => {
+  assert.deepEqual(W.freshness(undefined, undefined, 0, 0, true), { ageMs: null, alpha: 1, bucket: 'unknown' })
+  assert.deepEqual(W.freshness(null, 1000, 0, 0, undefined), { ageMs: null, alpha: 1, bucket: 'unknown' })
+  assert.deepEqual(W.freshness(null, 1000, 0, 0, false), { ageMs: null, alpha: 0.65, bucket: 'unknown' })
+  assert.deepEqual(W.freshness(900, undefined, 0, 0, false), { ageMs: null, alpha: 0.65, bucket: 'unknown' })
+  assert.deepEqual(W.freshness('900', 1000, 0, 0, true), { ageMs: null, alpha: 1, bucket: 'unknown' })
+})
+
+test('legendRow maps link phases', () => {
+  assert.equal(W.legendRow('live'), null)
+  assert.equal(W.legendRow('reconnecting'), 'reconnecting')
+  assert.equal(W.legendRow('down'), 'down')
+  assert.equal(W.legendRow('refused'), 'down')
+  assert.equal(W.legendRow('busy'), 'down')
+  assert.equal(W.legendRow(undefined), null)
+})
+
+test('escAction closes the legend first', () => {
+  const base = { view: 'one', typing: false, settings: false, confirm: true, legend: true }
+  assert.equal(W.escAction(base), 'legend')
+  assert.equal(W.escAction({ ...base, view: 'all', confirm: false }), 'legend', 'on "Toàn cảnh" too')
+  assert.equal(W.escAction({ ...base, settings: true }), 'legend')
+  assert.equal(W.escAction({ ...base, legend: false }), 'confirm')
+  assert.equal(W.escAction({ ...base, typing: true }), 'none')
+  assert.equal(W.escAction({ ...base, mod: true }), 'none')
+})

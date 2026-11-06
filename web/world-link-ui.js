@@ -89,6 +89,7 @@ Object.assign(ClaudeOffice.prototype, {
     clearInterval(w.watch);
     clearTimeout(w.probeTimer);
     clearTimeout(w.linkTimer);
+    this.legendListen(false);
   },
   // One step of the link to the hub (WorldLogic.linkStep), then what it asks for: close the stream that failed, one
   // planned connect (w.linkTimer), ask /api/config why (probe), reload, or wipe a scene kept too long. A probe saying

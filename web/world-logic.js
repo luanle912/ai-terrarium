@@ -6,6 +6,7 @@
 // motion it is a 200 ms cross-fade instead. All rects are in stage px, h = w * ISLAND_ASPECT.
 import { WorldLink } from './world-link.js';
 import { WorldPill } from './world-pill.js';
+import { WorldFresh } from './world-fresh.js';
 
 export const WorldLogic = (() => {
   const SLOTS = 8,
@@ -162,10 +163,10 @@ export const WorldLogic = (() => {
   }
   // The island on screen (one island, or mine in "Của tôi") was removed from the world.
   const viewGone = (view, shownId, has) => (view === 'one' || view === 'mine') && shownId != null && !has(shownId);
-  // Esc: nothing on "Toàn cảnh", while typing, with the settings open or with Ctrl, Meta or Alt held (mod); else close
-  // an open confirm, else go back.
-  const escAction = ({ view, typing, settings, confirm, mod }) =>
-    view === 'all' || typing || settings || mod ? 'none' : confirm ? 'confirm' : 'back';
+  // Esc: nothing while typing or with Ctrl, Meta or Alt held (mod); else close the connection legend when open (on any
+  // view); else nothing on "Toàn cảnh" or with the settings open; else close an open confirm, else go back.
+  const escAction = ({ view, typing, settings, confirm, mod, legend }) =>
+    typing || mod ? 'none' : legend ? 'legend' : view === 'all' || settings ? 'none' : confirm ? 'confirm' : 'back';
   // Without an island of my own, an island never seen before may be mine (paired on another tab), so /api/me is asked
   // again: at most once per `every` ms, only while the tab is visible. A new island inside the window is not lost: the
   // probe stays pending and retryIn says when to call again. The first world list is only remembered.
@@ -237,5 +238,6 @@ export const WorldLogic = (() => {
     clientSessions,
     ...WorldLink,
     ...WorldPill,
+    ...WorldFresh,
   };
 })();

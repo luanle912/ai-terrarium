@@ -37,6 +37,7 @@ import './world-link-ui.js';
 import './world-draw.js';
 import './world-render.js';
 import './world-panel.js';
+import './world-legend.js';
 import { h } from './office-scene.js';
 import { ClaudeOffice } from './office.js';
 
