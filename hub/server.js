@@ -5,7 +5,7 @@
 // array of {method, path (string | RegExp), handler(req, res, rc)}. Add the module to ROUTE_MODULES below;
 // createHub builds one shared ctx and concatenates all arrays into one router. Tests may also pass
 // `deps.routeModules` (array of such functions) which are appended after the built-in ones.
-//   ctx = { config, db, deps: {fetch, now, log}, limiters, world, helpers, jwks, accounts, googleCheck }
+//   ctx = { config, db, deps: {fetch, now, log, random}, limiters, world, helpers, jwks, accounts, googleCheck }
 // Handlers may be async; throwing/rejecting with an error that has `.status` replies with that status.
 
 const http = require('node:http');
@@ -29,6 +29,7 @@ function createHub(config, deps = {}) {
     fetch: deps.fetch || globalThis.fetch,
     now: deps.now || Date.now,
     log: deps.log || ((line) => console.log(line)),
+    random: deps.random || Math.random,
   };
   const db = openDb(config.dbPath);
   // In-memory world: island snapshots never touch disk or logs. publish.js listens through ctx.onWorldChange.

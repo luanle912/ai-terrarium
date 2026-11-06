@@ -27,6 +27,10 @@ const ISLAND_EVERY_MS = 500; // at most 2 island events per second per island
 const MAX_BUFFERED = 1024 * 1024;
 const TOUCH_EVERY_MS = 30 * 1000;
 const NO_STORE = { 'Cache-Control': 'no-store' };
+// On close every stream is told to come back after RESTART_MIN_MS + [0, RESTART_SPREAD_MS), so 300 viewers do
+// not reconnect in the same second and an old page's EventSource waits out a short restart instead of 3 s.
+const RESTART_MIN_MS = 5000;
+const RESTART_SPREAD_MS = 15000;
 const OFFICE_FILE = path.join(__dirname, '..', 'claude-office.html');
 const officePage = createOfficePage(OFFICE_FILE);
 
@@ -143,12 +147,18 @@ function routes(ctx) {
     setInterval(() => { try { world.tick(); } catch { /* ignore */ } }, TICK_MS),
   ];
   timers.forEach((t) => t.unref());
+  const random = deps.random || Math.random;
   ctx.closers.push(() => {
-    closing = true;
+    closing = true; // no `world` (or `island`) is sent from here on
     timers.forEach(clearInterval);
     for (const t of pending.values()) clearTimeout(t);
     pending.clear();
-    for (const s of [...streams]) { streams.delete(s); try { s.res.end(); } catch { /* ignore */ } }
+    for (const s of [...streams]) {
+      streams.delete(s);
+      const r = RESTART_MIN_MS + Math.floor(random() * RESTART_SPREAD_MS);
+      write(s, `event: restarting\ndata: ${JSON.stringify({ retryMs: r })}\nretry: ${r}\n\n`);
+      try { s.res.end(); } catch { /* ignore */ }
+    }
   });
 
   // Returns {device, island}, null (401), or false when it already replied 403 login_required.
@@ -206,10 +216,10 @@ function routes(ctx) {
       // Caps are answered before the SSE headers go out. The counts come from the live set, which every close
       // path (client abort, session end, server close) removes from, so a slot can never leak.
       const { perUser, total } = ctx.streamLimits;
-      if (streams.size >= total) throw new HttpError(503, 'too many viewers');
+      if (streams.size >= total) throw new HttpError(503, 'too many viewers', { 'Retry-After': '30' });
       let mine = 0;
       for (const x of streams) if (x.userId === s.user.id) mine++;
-      if (mine >= perUser) throw new HttpError(429, 'too many streams');
+      if (mine >= perUser) throw new HttpError(429, 'too many streams', { 'Retry-After': '10' });
       res.writeHead(200, {
         ...SECURITY_HEADERS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store, no-transform',
         Connection: 'keep-alive', 'X-Accel-Buffering': 'no',
@@ -238,4 +248,4 @@ function routes(ctx) {
   return list;
 }
 
-module.exports = { routes };
+module.exports = { routes, RESTART_MIN_MS, RESTART_SPREAD_MS };

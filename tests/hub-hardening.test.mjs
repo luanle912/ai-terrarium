@@ -140,6 +140,7 @@ test('a sixth stream of one user is 429', async () => {
     for (let i = 0; i < 5; i++) { const s = await openRaw(h.url, login.cookie); assert.equal(s.status, 200); open.push(s); }
     const sixth = await openRaw(h.url, login.cookie);
     assert.equal(sixth.status, 429);
+    assert.equal(sixth.r.headers.get('retry-after'), '10');
     assert.equal(sixth.r.headers.get('content-type').startsWith('text/event-stream'), false);
     // another user is unaffected
     const other = await devLogin(h.url, 'b@newera.inc');
@@ -175,7 +176,9 @@ test('the hub-wide stream cap is 503', async () => {
     const open = [];
     for (const e of ['a', 'b', 'c']) { const l = await devLogin(h.url, `${e}@newera.inc`); const s = await openRaw(h.url, l.cookie); assert.equal(s.status, 200); open.push(s); }
     const d = await devLogin(h.url, 'd@newera.inc');
-    assert.equal((await openRaw(h.url, d.cookie)).status, 503);
+    const full = await openRaw(h.url, d.cookie);
+    assert.equal(full.status, 503);
+    assert.equal(full.r.headers.get('retry-after'), '30');
     open[0].close();
     await settle();
     assert.equal((await openRaw(h.url, d.cookie)).status, 200);

@@ -12,7 +12,10 @@ function loadConfig(env = process.env) {
   const need = (name, why) => problems.push(`${name}: ${why}`);
 
   const devLogin = env.HUB_DEV_LOGIN === '1';
-  const trustProxy = env.HUB_TRUST_PROXY === '1';
+  // '' = trust no forwarded header; '1' = last X-Forwarded-For entry; 'cloudflare' = CF-Connecting-IP first.
+  const rawTrust = String(env.HUB_TRUST_PROXY || '').trim();
+  const trustProxy = rawTrust === '' ? false : rawTrust === '1' ? 'xff' : rawTrust === 'cloudflare' ? 'cloudflare' : null;
+  if (trustProxy === null) need('HUB_TRUST_PROXY', 'HUB_TRUST_PROXY must be 1 or cloudflare');
 
   let publicUrl = String(env.HUB_PUBLIC_URL || '').trim();
   let origin = '';
