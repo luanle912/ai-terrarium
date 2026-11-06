@@ -240,7 +240,11 @@ export class ClaudeOffice extends React.Component {
     this.uiTimer = setInterval(() => {
       const wall = Date.now();
       if (this.world && this.tickWall && wall - this.tickWall > WorldLogic.WAKE_JUMP_MS)
-        this.relink({ type: 'wake', visible: document.visibilityState === 'visible' });
+        this.relink({
+          type: 'wake',
+          visible: document.visibilityState === 'visible',
+          quietMs: wall - (this.world.lastEventWall || 0),
+        });
       this.tickWall = wall;
       // Hidden tab: no render and no setState; only finished sub-agents still leave on time.
       if (document.visibilityState === 'hidden') {
