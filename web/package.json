@@ -1,0 +1,5 @@
+{
+  "type": "module",
+  "private": true,
+  "description": "Marks web/ as ES modules for Node (tests); the browser loads them from claude-office.html."
+}

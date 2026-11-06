@@ -14,6 +14,7 @@
 //     An island with a slot that has not been heard from since this hub started carries `waking: true` (still
 //     online: false) for OFFLINE_MS, while its machines come back after a restart (H2). Old pages ignore the key.
 //   GET  /                     welcome page with the sign-in button, or the claude-office.html page
+//   GET  /web/<file>.js|css    the page's scripts and stylesheet (lib/web-assets.js)
 // ctx.streams = {check(), count()} is exposed for tests and the periodic session check (B8).
 // ctx.stats = {worldBroadcasts, framesWritten} counts what the streams cost.
 
@@ -24,6 +25,7 @@ const { validatePublish } = require('./validate.js');
 const { createOfficePage } = require('./csp.js');
 const { welcomePage, PAGE_CSP } = require('./pages.js');
 const { OFFLINE_MS } = require('./world.js');
+const webAssets = require('../lib/web-assets.js');
 
 const PUBLISH_LIMIT = 16 * 1024;
 const PING_MS = 25 * 1000;
@@ -306,6 +308,17 @@ function routes(ctx) {
       let page;
       try { page = officePage.get(); } catch { throw new HttpError(500, 'page missing'); }
       send(res, 200, page.body, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': page.csp, ...NO_STORE });
+    },
+  });
+
+  // The page's scripts and stylesheet (public, the same for everyone). Not under the general limiter: one page load
+  // fetches about 30 of them, which would use up a quarter of a viewer's per-minute budget.
+  list.push({
+    method: 'GET', path: webAssets.ASSET_RE, ownLimit: true,
+    handler(req, res, rc) {
+      const a = webAssets.readAsset(rc.path);
+      if (!a) throw new HttpError(404, 'not found');
+      send(res, 200, a.body, { 'Content-Type': a.type, ...webAssets.HEADERS });
     },
   });
 
