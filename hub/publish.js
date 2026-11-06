@@ -294,6 +294,7 @@ function routes(ctx) {
       const wp = worldPayload();
       write(stream, frame('world', wp));
       for (const i of wp.islands) write(stream, frame('island', islandPayload(i.id)));
+      lastWorld = null; // viewers no longer all hold the same frame: the next send must go out even if it matches
       scheduleWorld(false);
     },
   });
