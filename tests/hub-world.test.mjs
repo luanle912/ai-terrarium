@@ -898,3 +898,17 @@ test('room labels survive a device reconnecting', () => {
   world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' }), sess(4, { dept: 'B' })], { seq: 1 }));
   assert.equal(world.snapshotFor('i1').find((x) => x.id === sid(4)).project, 'D');
 });
+
+test('a newcomer whose private world differs from the last broadcast still gets the trailing change', async () => {
+  const { h, login } = await setup();
+  let a, b;
+  try {
+    a = await openStream(h.url, login.cookie);
+    assert.ok(await a.until((e) => e.event === 'world'));
+    await sleep(1100); // the last broadcast says 1 viewer
+    b = await openStream(h.url, login.cookie);
+    assert.ok(await b.until((e) => e.event === 'world' && e.data.viewers === 2, 500));
+    a.close(); // back to 1 viewer: the same frame as the last broadcast, but not what B has
+    assert.ok(await b.until((e) => e.event === 'world' && e.data.viewers === 1, 1500), 'B learns A left');
+  } finally { a && a.close(); b && b.close(); await h.close(); }
+});
