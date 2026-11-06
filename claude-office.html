@@ -6992,7 +6992,8 @@ for(const g of['season','treeOn'])Object.defineProperty(IslandScene.prototype,g,
     worldLinkBand(){
       const w=this.world,p=w.link.phase;if(w.dead||(p!=='reconnecting'&&p!=='down'))return null;
       const down=p==='down',col=down?'#e5484d':'#f5a524';
-      return h('div',{role:'status',style:{position:'absolute',zIndex:9,top:0,left:0,right:0,display:'flex',flexWrap:'wrap',alignItems:'center',justifyContent:'center',gap:'4px 10px',
+      // Below the "← Toàn cảnh" plaque when it is shown, so a two-line strip on a phone is never covered by it.
+      return h('div',{role:'status',style:{position:'absolute',zIndex:9,top:w.view!=='all'?ONE_TOP:0,left:0,right:0,display:'flex',flexWrap:'wrap',alignItems:'center',justifyContent:'center',gap:'4px 10px',
           padding:'5px 12px',background:down?'rgba(64,16,20,0.92)':'rgba(56,42,8,0.92)',borderBottom:'2px solid '+col,color:'#ffffff',fontSize:12,lineHeight:1.4,textAlign:'center',pointerEvents:'none'}},
         h('span',{style:{width:8,height:8,background:col,display:'inline-block',flex:'none'}}),
         h('span',null,down?tr('world.link.down',{s:this.linkWaitS()}):tr('world.link.reconnecting')),
