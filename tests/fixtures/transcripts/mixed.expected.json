@@ -1,0 +1,40 @@
+{
+  "sessions": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "parentId": null,
+      "name": "demo-project",
+      "project": "demo-project",
+      "cwd": "/tmp/demo-project",
+      "model": "claude-test",
+      "tokens": 745,
+      "status": "talking",
+      "tool": "SendMessage",
+      "detail": "reviewer",
+      "talkingTo": "reviewer",
+      "recent": [
+        {
+          "t": "00:00:11",
+          "text": "SendMessage · reviewer"
+        },
+        {
+          "t": "00:00:10",
+          "text": "Prompt mới từ user"
+        },
+        {
+          "t": "00:00:03",
+          "text": "Edit · app.js"
+        },
+        {
+          "t": "00:00:01",
+          "text": "Read · app.js"
+        },
+        {
+          "t": "00:00:00",
+          "text": "Prompt mới từ user"
+        }
+      ],
+      "updatedAt": 1793923211000
+    }
+  ]
+}
