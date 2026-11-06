@@ -954,3 +954,16 @@ test('lastAt moving does not make the valve send more than once per window', asy
     st.close();
   } finally { await h.close(); }
 });
+
+test('publishes that only move lastAt emit at most one world change per 15 s step', () => {
+  const { clock, events, world } = mkWorld();
+  clock.t = 30000; // the start of a 15 s step
+  world.publish(ISL, 'd1', 'kin', val([sess(1)]));
+  const after = events.filter((e) => e.type === 'world').length;
+  for (let i = 0; i < 6; i++) { clock.t += 250; world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: i + 2 })); }
+  assert.equal(events.filter((e) => e.type === 'world').length, after, 'no world change inside the step');
+  clock.t = 45000;
+  world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 20 }));
+  assert.equal(events.filter((e) => e.type === 'world').length, after + 1, 'one when the step turns');
+  assert.equal(world.islands().find((i) => i.id === 'i1').lastAt, 45000, 'the payload still reads the exact lastAt');
+});

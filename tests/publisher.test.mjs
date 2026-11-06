@@ -35,6 +35,9 @@ function rig(dir, handler, snapshotRef) {
 }
 const ok = () => ({ status: 204, headers: { get: () => null } });
 
+// Node's fetch throws TypeError('fetch failed') with the system code on cause, not on the error itself.
+const refused = () => new TypeError('fetch failed', { cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }) });
+
 test('sends only when the view changes, at most twice a second', async () => {
   const dir = tmp(); mkCfg(dir);
   const ref = { v: snap(1) };
@@ -769,7 +772,7 @@ test('a 400 is rejected, with the reason, and kept apart from offline', async ()
 test('lastOkAt, failures, lastErr and nextRetryAt follow the sends', async () => {
   const dir = tmp(); mkCfg(dir, { deviceId: 'ab12cd34ef567890' });
   let up = false;
-  const r = rig(dir, () => { if (!up) { const e = new Error('x'); e.code = 'ECONNREFUSED'; throw e; } return ok(); }, { v: snap(1) });
+  const r = rig(dir, () => { if (!up) { throw refused(); } return ok(); }, { v: snap(1) });
   let s = r.pub.state();
   assert.equal(s.lastOkAt, null); assert.equal(s.lastAttemptAt, null); assert.equal(s.lastErr, null); assert.equal(s.nextRetryAt, null);
   assert.equal(s.hubAck, null); assert.equal(s.failures, 0);
@@ -827,7 +830,7 @@ test('hubAck is legacy against a 204 hub and json against a 200 hub', async () =
 
 test('a failing publisher logs one summary a minute, not one line per try', async () => {
   const dir = tmp(); mkCfg(dir);
-  const r = rig(dir, () => { const e = new Error('x'); e.code = 'ECONNREFUSED'; throw e; }, { v: snap(1) });
+  const r = rig(dir, () => { throw refused(); }, { v: snap(1) });
   await r.step();
   const before = r.logs.length;
   await r.run(59000);
