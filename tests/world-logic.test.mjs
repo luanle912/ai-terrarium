@@ -699,3 +699,12 @@ test('escAction closes the legend first', () => {
   assert.equal(W.escAction({ ...base, typing: true }), 'none')
   assert.equal(W.escAction({ ...base, mod: true }), 'none')
 })
+
+test('chipTone agrees with the lit legend row for every link phase', () => {
+  const ROW_TONE = { reconnecting: 'warn', down: 'bad' }
+  for (const phase of ['reconnecting', 'down', 'refused', 'busy'])
+    assert.equal(W.chipTone('error', phase), ROW_TONE[W.legendRow(phase)], phase)
+  assert.equal(W.chipTone('ok', 'live'), 'ok')
+  assert.equal(W.chipTone('connecting', 'live'), 'warn', 'the first connect is on the way')
+  assert.equal(W.chipTone('ended', undefined), 'bad')
+})

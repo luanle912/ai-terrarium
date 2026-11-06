@@ -29,5 +29,12 @@ export const WorldFresh = (() => {
       : phase === 'down' || phase === 'refused' || phase === 'busy'
         ? 'down'
         : null;
-  return { FRESH_MS, OFFLINE_AFTER_MS, OFFLINE_ALPHA, freshness, legendRow };
+  // The connection chip's dot: the same colour as the legend row that is lit (yellow reconnecting, red down), green
+  // when live, yellow while the first connect is on the way.
+  const chipTone = (conn, phase) => {
+    const row = phase ? legendRow(phase) : null;
+    if (row) return row === 'reconnecting' ? 'warn' : 'bad';
+    return conn === 'ok' ? 'ok' : conn === 'connecting' ? 'warn' : 'bad';
+  };
+  return { FRESH_MS, OFFLINE_AFTER_MS, OFFLINE_ALPHA, freshness, legendRow, chipTone };
 })();
