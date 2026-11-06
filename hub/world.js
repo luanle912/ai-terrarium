@@ -15,7 +15,7 @@ const roomLabel = (n) => LETTERS[n % 26] + (n >= 26 ? String(Math.floor(n / 26) 
 const LETTER_RE = /^[A-P]$/;
 
 function createWorld({ now = Date.now, onChange = () => {} } = {}) {
-  const islands = new Map(); // id -> {id, name, color, devices: Map(deviceId -> dev), last}
+  const islands = new Map(); // id -> {id, name, color, slot, devices: Map(deviceId -> dev), labels, nextLabel, last}
   const deviceIsland = new Map(); // deviceId -> island id
   const emit = (e) => { try { onChange(e); } catch { /* a listener must not break the world */ } };
   const online = (d) => now() - d.lastAt <= OFFLINE_MS;
@@ -30,15 +30,15 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
     };
   }
 
-  // B5: rooms are per machine. Letter labels (kin, or co-ban without a project name) are re-assigned over the
-  // whole island by (machine, letter) in a fixed order; project names stay as they are.
+  // B5: rooms are per machine. Letter labels (kin, or co-ban without a project name) are given per island to each
+  // (machine, letter) pair the first time it is seen, in machine then letter order; project names stay as they are.
+  // H5: a label is never given again or renumbered, so a machine going offline (or coming back) does not move the
+  // other machine's rooms. The labels live as long as the island stays in RAM.
   function sessionsOf(isl) {
     const devs = [...isl.devices.entries()].filter(([, d]) => online(d));
-    const label = new Map();
-    let n = 0;
     for (const [id, d] of devs) {
       const used = [...new Set(d.sessions.filter((s) => LETTER_RE.test(s.dept)).map((s) => s.dept))].sort();
-      for (const l of used) label.set(id + '|' + l, roomLabel(n++));
+      for (const l of used) if (!isl.labels.has(id + '|' + l)) isl.labels.set(id + '|' + l, isl.nextLabel++);
     }
     const seen = new Set();
     const out = [];
@@ -48,7 +48,7 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
         seen.add(s.id);
         const c = {
           id: s.id, parentId: s.parent, status: s.status, waitingOn: s.waitingOn, talkingTo: s.talkingTo,
-          project: LETTER_RE.test(s.dept) ? label.get(id + '|' + s.dept) : s.dept, kind: s.kind,
+          project: LETTER_RE.test(s.dept) ? roomLabel(isl.labels.get(id + '|' + s.dept)) : s.dept, kind: s.kind,
         };
         if (s.tool !== undefined) c.tool = s.tool;
         if (s.model !== undefined) c.model = s.model;
@@ -81,7 +81,7 @@ function createWorld({ now = Date.now, onChange = () => {} } = {}) {
       const moved = deviceIsland.get(deviceId);
       if (moved && moved !== island.id) this.removeDevice(deviceId);
       isl = islands.get(island.id);
-      if (!isl) { isl = { id: island.id, name: island.name, color: island.color, slot: island.slot, devices: new Map(), last: null }; islands.set(isl.id, isl); }
+      if (!isl) { isl = { id: island.id, name: island.name, color: island.color, slot: island.slot, devices: new Map(), labels: new Map(), nextLabel: 0, last: null }; islands.set(isl.id, isl); }
       isl.name = island.name; isl.color = island.color; isl.slot = island.slot;
       isl.devices.set(deviceId, {
         share: share === 'co-ban' ? 'co-ban' : 'kin', private: !!value.private, seq: value.seq, lastAt: now(), instance: key,

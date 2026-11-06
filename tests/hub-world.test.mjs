@@ -458,7 +458,8 @@ test('an island with no device sending shows offline in its slot', async () => {
     st = await openStream(h2.url, login.cookie);
     const w = await st.until((e) => e.event === 'world');
     assert.equal(w.data.islands.length, 1);
-    assert.deepEqual(w.data.islands[0], { id: a.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin' });
+    // a fresh hub has not heard from it yet: offline, and waking for the first 90 s (Task 8, H2)
+    assert.deepEqual(w.data.islands[0], { id: a.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin', waking: true });
     const isl = await st.until((e) => e.event === 'island' && e.data.id === a.island_id);
     assert.deepEqual(isl.data.sessions, []);
   } finally { st && st.close(); if (h2) await h2.close(); await h.close(); }
@@ -763,4 +764,137 @@ test('more than 16 letter rooms over two machines keep distinct labels', () => {
   const labels = w.snapshotFor('isl1').map((s) => s.project);
   assert.equal(labels.length, 24);
   assert.equal(new Set(labels).size, 24);
+});
+
+// ---- Task 8: batched world events, waking islands, stable room labels ----
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+const worlds = (st) => st.events.filter((e) => e.event === 'world');
+const revoke = (h, login, deviceId) => fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: login.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: login.csrf, device_id: deviceId }) });
+
+test('viewers reconnecting cause at most one world broadcast per second', async () => {
+  const h = await startDevHub();
+  const streams = [];
+  try {
+    const dev = await pairDevice(h.url, await devLogin(h.url, 'an@newera.inc', 'An'), 'Laptop');
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
+    const logins = [];
+    for (let p = 0; p < 20; p++) logins.push(await devLogin(h.url, `v${p}@newera.inc`, 'V' + p));
+    await sleep(1100); // past any broadcast from the publish
+    const before = h.hub.ctx.stats.worldBroadcasts;
+    const t0 = Date.now();
+    // 20 people x 5 tabs, spread over ~2 s
+    for (let round = 0; round < 5; round++) {
+      streams.push(...await Promise.all(logins.map((l) => openStream(h.url, l.cookie))));
+      if (round < 4) await sleep(400);
+    }
+    assert.ok(Date.now() - t0 < 3000, 'opened within the window');
+    for (const st of streams) assert.ok(await st.until((e) => e.event === 'world'), 'every stream gets its own first world');
+    await sleep(1100); // let the trailing send run
+    const n = h.hub.ctx.stats.worldBroadcasts - before;
+    assert.ok(n >= 1 && n <= 4, `world broadcasts: ${n}`);
+    assert.ok(h.hub.ctx.stats.framesWritten > 0);
+  } finally { streams.forEach((s) => s.close()); await h.close(); }
+});
+
+test('a newcomer gets its first world at once, alone', async () => {
+  const { h, login } = await setup();
+  let a, b;
+  try {
+    a = await openStream(h.url, login.cookie);
+    assert.ok(await a.until((e) => e.event === 'world'));
+    await sleep(1100); // A's own trailing send is over
+    const n = worlds(a).length;
+    const t0 = Date.now();
+    b = await openStream(h.url, login.cookie);
+    const first = await b.until((e) => e.event === 'world', 500);
+    assert.ok(first, 'the newcomer has a world at once');
+    assert.equal(first.data.viewers, 2);
+    await sleep(Math.max(0, 900 - (Date.now() - t0)));
+    assert.equal(worlds(a).length, n, 'nobody else gets a world in the first second');
+  } finally { a && a.close(); b && b.close(); await h.close(); }
+});
+
+test('the viewer count still reaches everyone within a second', async () => {
+  const { h, login } = await setup();
+  let a, b;
+  try {
+    a = await openStream(h.url, login.cookie);
+    assert.ok(await a.until((e) => e.event === 'world'));
+    await sleep(1100);
+    b = await openStream(h.url, login.cookie);
+    assert.ok(await a.until((e) => e.event === 'world' && e.data.viewers === 2, 1100)); // 1 s + slack
+    b.close();
+    assert.ok(await a.until((e) => e.event === 'world' && e.data.viewers === 1 && worlds(a).indexOf(e) > 0, 1100));
+  } finally { a && a.close(); b && b.close(); await h.close(); }
+});
+
+test('an identical world is not sent twice', async () => {
+  const { h, login, dev } = await setup();
+  let st;
+  try {
+    await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
+    st = await openStream(h.url, login.cookie);
+    assert.ok(await st.until((e) => e.event === 'island' && e.data.sessions.length === 1));
+    await sleep(1100);
+    const n = worlds(st).length;
+    assert.equal((await revoke(h, login, dev.device_id)).status, 302);
+    assert.ok(await st.until((e) => e.event === 'world' && e.data.islands[0].online === false));
+    await sleep(1200); // any trailing send has run
+    assert.equal(worlds(st).length - n, 1, 'exactly one world for the change');
+  } finally { st && st.close(); await h.close(); }
+});
+
+test('islands not heard from since the hub started are waking for 90 s, then offline', async () => {
+  const h = await startDevHub();
+  let h2, st;
+  try {
+    const a = await pairDevice(h.url, await devLogin(h.url, 'an@newera.inc', 'An'), 'A');
+    const b = await pairDevice(h.url, await devLogin(h.url, 'bo@newera.inc', 'Bo'), 'B');
+    await h.hub.close();
+    h2 = await startDevHub({ env: { HUB_DB: h.config.dbPath }, deps: { wakeMs: 150 } });
+    assert.equal((await postJson(h2.url, '/api/publish', pkt([sess(1)]), bearer(a.token))).status, 200);
+    st = await openStream(h2.url, (await devLogin(h2.url, 'an@newera.inc', 'An')).cookie);
+    const w = await st.until((e) => e.event === 'world' && e.data.islands.length === 2);
+    const byId = Object.fromEntries(w.data.islands.map((i) => [i.id, i]));
+    assert.equal(byId[a.island_id].online, true);
+    assert.equal('waking' in byId[a.island_id], false);
+    assert.equal(byId[b.island_id].online, false);
+    assert.equal(byId[b.island_id].waking, true);
+    await sleep(400); // the timer fires, but the hub's clock is still inside the window
+    assert.equal(st.events.some((e) => e.event === 'world' && e.data.islands.every((i) => !i.waking)), false);
+    h2.clock.advance(90_000);
+    const w2 = await st.until((e) => e.event === 'world' && e.data.islands.every((i) => !('waking' in i)), 2500);
+    assert.ok(w2, 'the waking flag goes away after 90 s');
+    assert.equal(w2.data.islands.find((i) => i.id === b.island_id).online, false);
+  } finally { st && st.close(); if (h2) await h2.close(); await h.close(); }
+});
+
+test('a device going offline does not relabel the other device\'s rooms', () => {
+  const { world, clock } = mkWorld();
+  world.publish(ISL, 'd1', 'kin', val([sess(1, { dept: 'A' }), sess(2, { dept: 'B' })]));
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' })]));
+  const labels = () => Object.fromEntries(world.snapshotFor('i1').map((x) => [x.id, x.project]));
+  assert.deepEqual(labels(), { [sid(1)]: 'A', [sid(2)]: 'B', [sid(3)]: 'C' });
+  clock.t += 60_000;
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' })], { seq: 2 }));
+  clock.t += 40_000; // d1 silent for 100 s
+  world.tick();
+  assert.deepEqual(labels(), { [sid(3)]: 'C' });
+});
+
+test('room labels survive a device reconnecting', () => {
+  const { world, clock } = mkWorld();
+  world.publish(ISL, 'd1', 'kin', val([sess(1, { dept: 'A' }), sess(2, { dept: 'B' })]));
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' })]));
+  clock.t += 100_000; // both offline
+  world.tick();
+  // d2 comes back first, then d1
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' })], { seq: 0 }));
+  assert.equal(world.snapshotFor('i1')[0].project, 'C');
+  world.publish(ISL, 'd1', 'kin', val([sess(1, { dept: 'A' }), sess(2, { dept: 'B' })], { seq: 0 }));
+  const s = Object.fromEntries(world.snapshotFor('i1').map((x) => [x.id, x.project]));
+  assert.deepEqual(s, { [sid(1)]: 'A', [sid(2)]: 'B', [sid(3)]: 'C' });
+  // a new letter on d2 gets the next free label, never one already given
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' }), sess(4, { dept: 'B' })], { seq: 1 }));
+  assert.equal(world.snapshotFor('i1').find((x) => x.id === sid(4)).project, 'D');
 });

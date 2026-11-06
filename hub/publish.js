@@ -8,8 +8,14 @@
 //     every island that has a slot (from the DB), so an island with no device sending stays in its slot as online:false.
 //     Islands with slot NULL (hidden, over capacity) never appear in any event. `remove` is sent only when the island
 //     row is gone; revoking the last device or a ban sends `island {id, sessions: []}` + `world` instead.
+//     `world` to everyone goes through one valve (H3): at most one per WORLD_EVERY_MS, leading + trailing, computed and
+//     serialised once, and not sent at all when the frame equals the last one sent (H11). A new viewer gets its own
+//     `world` and `island` events at once, alone; the new viewer count reaches the others by the trailing send.
+//     An island with a slot that has not been heard from since this hub started carries `waking: true` (still
+//     online: false) for OFFLINE_MS, while its machines come back after a restart (H2). Old pages ignore the key.
 //   GET  /                     welcome page with the sign-in button, or the claude-office.html page
 // ctx.streams = {check(), count()} is exposed for tests and the periodic session check (B8).
+// ctx.stats = {worldBroadcasts, framesWritten} counts what the streams cost.
 
 const path = require('node:path');
 const { HttpError, send, sendJson, SECURITY_HEADERS } = require('./http.js');
@@ -17,6 +23,7 @@ const { sha256hex, NO_REFRESH_TTL_MS } = require('./auth.js');
 const { validatePublish } = require('./validate.js');
 const { createOfficePage } = require('./csp.js');
 const { welcomePage, PAGE_CSP } = require('./pages.js');
+const { OFFLINE_MS } = require('./world.js');
 
 const PUBLISH_LIMIT = 16 * 1024;
 const PING_MS = 25 * 1000;
@@ -24,6 +31,7 @@ const INSTANCE_RE = /^[0-9a-f]{16}$/;
 const CHECK_MS = 60 * 1000;
 const TICK_MS = 5 * 1000;
 const ISLAND_EVERY_MS = 500; // at most 2 island events per second per island
+const WORLD_EVERY_MS = 1000; // at most one `world` broadcast per second
 const MAX_BUFFERED = 1024 * 1024;
 const TOUCH_EVERY_MS = 30 * 1000;
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -48,11 +56,18 @@ function routes(ctx) {
   const slottedRows = () => setSlots(db.listSlottedIslands());
   slottedRows();
   let closing = false;
+  const stats = { worldBroadcasts: 0, framesWritten: 0 };
+  ctx.stats = stats;
+  // H2: islands not heard from since this start are `waking` until startedAt + OFFLINE_MS.
+  const startedAt = deps.now();
+  const heard = new Set(); // island ids that have been live in RAM since startedAt
+  const isWaking = () => deps.now() - startedAt < OFFLINE_MS;
 
   function write(s, text) {
     try {
       if (s.res.destroyed || s.res.writableEnded) return;
       if (s.res.writableLength > MAX_BUFFERED) { s.res.destroy(); return; } // a stalled viewer must not grow memory
+      stats.framesWritten++;
       s.res.write(text);
     } catch { /* ignore */ }
   }
@@ -62,13 +77,17 @@ function routes(ctx) {
   // Islands come from the DB (name, colour, slot); RAM only adds the live state. Not in RAM = offline, nothing shared.
   const worldPayload = () => {
     const live = new Map(world.islands().map((m) => [m.id, m]));
+    const waking = isWaking();
     return {
       islands: slottedRows().map((row) => {
         const m = live.get(row.id);
-        return {
+        if (m) heard.add(row.id);
+        const i = {
           id: row.id, name: row.name, color: row.color, slot: row.slot,
           online: m ? m.online : false, private: m ? m.private : false, share: m ? m.share : 'kin',
         };
+        if (!m && waking && !heard.has(row.id)) i.waking = true;
+        return i;
       }),
       viewers: streams.size,
       capacity: MAX_ISLANDS,
@@ -77,6 +96,31 @@ function routes(ctx) {
   const islandPayload = (id) => ({ id, sessions: world.snapshotFor(id) });
   const isSlotted = (id) => slots.has(id);
 
+  // The `world` valve: leading + trailing, at most one broadcast per WORLD_EVERY_MS (real clock, throttle only).
+  let worldAt = 0;
+  let worldTimer = null;
+  let lastWorld = null; // the last `world` frame broadcast
+  function sendWorld() {
+    if (closing) return;
+    const f = frame('world', worldPayload());
+    if (f === lastWorld) return; // H11: nothing changed for the viewers
+    lastWorld = f;
+    worldAt = Date.now();
+    stats.worldBroadcasts++;
+    for (const s of streams) write(s, f);
+  }
+  // lead = false (a new viewer, who already has its own world): never send at once, only on the trailing edge.
+  function scheduleWorld(lead = true) {
+    if (closing || worldTimer) return; // a pending trailing send computes the newest state
+    let wait = WORLD_EVERY_MS - (Date.now() - worldAt);
+    if (wait <= 0) {
+      if (lead) return sendWorld();
+      wait = WORLD_EVERY_MS;
+    }
+    worldTimer = setTimeout(() => { worldTimer = null; sendWorld(); }, wait);
+    worldTimer.unref();
+  }
+
   function sendIsland(id) {
     if (!isSlotted(id)) return; // hidden islands are never sent
     lastSent.set(id, Date.now());
@@ -84,7 +128,10 @@ function routes(ctx) {
   }
   function onChange(e) {
     if (closing) return;
-    if (e.type === 'world') return broadcast('world', worldPayload());
+    if (e.id) heard.add(e.id);
+    // A claim shows up as `world` before the island's first `island` event: refresh the slots now, since the
+    // `world` broadcast itself may come up to WORLD_EVERY_MS later.
+    if (e.type === 'world') { slottedRows(); return scheduleWorld(); }
     if (e.type === 'remove') {
       const t = pending.get(e.id);
       if (t) { clearTimeout(t); pending.delete(e.id); }
@@ -93,7 +140,7 @@ function routes(ctx) {
       const row = db.getIsland(e.id);
       if (row) {
         if (row.slot != null) broadcast('island', { id: e.id, sessions: [] });
-        return broadcast('world', worldPayload());
+        return scheduleWorld();
       }
       broadcast('remove', { id: e.id });
       // A freed slot may promote a hidden island whose `island` events were dropped while hidden: send just that one,
@@ -119,7 +166,7 @@ function routes(ctx) {
   function endStream(s) {
     if (!streams.delete(s)) return;
     try { s.res.end(); } catch { /* ignore */ }
-    if (!closing) broadcast('world', worldPayload());
+    scheduleWorld();
   }
 
   // B8: logout / expiry / ban close that session's streams at once.
@@ -147,10 +194,24 @@ function routes(ctx) {
     setInterval(() => { try { world.tick(); } catch { /* ignore */ } }, TICK_MS),
   ];
   timers.forEach((t) => t.unref());
+  // Ends the waking window: one `world` without the flag. ctx.wakeMs (tests) re-checks the hub clock sooner.
+  let wakeTimer = null;
+  const armWake = () => {
+    wakeTimer = setTimeout(() => {
+      if (isWaking()) return armWake();
+      wakeTimer = null;
+      heard.clear(); // only used inside the window
+      scheduleWorld();
+    }, ctx.wakeMs || Math.max(1, startedAt + OFFLINE_MS - deps.now()));
+    wakeTimer.unref();
+  };
+  armWake();
   const random = deps.random || Math.random;
   ctx.closers.push(() => {
     closing = true; // no `world` (or `island`) is sent from here on
     timers.forEach(clearInterval);
+    clearTimeout(worldTimer); worldTimer = null;
+    clearTimeout(wakeTimer); wakeTimer = null;
     for (const t of pending.values()) clearTimeout(t);
     pending.clear();
     for (const s of [...streams]) {
@@ -226,11 +287,14 @@ function routes(ctx) {
       });
       const stream = { res, userId: s.user.id, tokenHash: s.session.token_hash };
       streams.add(stream);
-      res.on('close', () => { if (streams.delete(stream) && !closing) broadcast('world', worldPayload()); });
+      res.on('close', () => { if (streams.delete(stream)) scheduleWorld(); });
       res.write('retry: 3000\n\n');
+      // The newcomer gets its first world and every island at once, alone; the others learn the new viewer count
+      // from the trailing send (100 tabs reconnecting cost a few broadcasts, not 100).
       const wp = worldPayload();
-      broadcast('world', wp); // everybody learns the new viewer count; the newcomer gets its first world
+      write(stream, frame('world', wp));
       for (const i of wp.islands) write(stream, frame('island', islandPayload(i.id)));
+      scheduleWorld(false);
     },
   });
 
@@ -248,4 +312,4 @@ function routes(ctx) {
   return list;
 }
 
-module.exports = { routes, RESTART_MIN_MS, RESTART_SPREAD_MS };
+module.exports = { routes, RESTART_MIN_MS, RESTART_SPREAD_MS, WORLD_EVERY_MS };
