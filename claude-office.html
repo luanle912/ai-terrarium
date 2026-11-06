@@ -5206,30 +5206,33 @@ class ClaudeOffice extends React.Component{
     const list=((snap&&snap.sessions)||[]).slice().sort((a,b)=>(!a.parentId?0:1)-(!b.parentId?0:1));
     // Who walked out and why (WorldLogic.goneStep): a finished sub-agent stays out while still listed; one that left
     // because its session vanished (island offline or private) comes back when listed again.
-    const{skip,gone}=WorldLogic.goneStep(this.goneSids,new Set(list.map(s=>s.id)));
-    const seen=new Set();
+    // A hidden tab never runs frame, so agents marked gone there are dropped here, remembering why they left.
+    if(this.agents.some(a=>a.gone)){for(const a of this.agents)if(a.gone)this.goneSids.set(a.sid,a.leftWhy||'missing');this.agents=this.agents.filter(a=>!a.gone);}
+    const listed=new Set(list.map(s=>s.id));
+    const{skip,gone}=WorldLogic.goneStep(this.goneSids,listed);
+    // Unlisted agents leave first, so in a hidden tab (where leaving frees the desk at once) a snapshot that swaps
+    // every session still finds desks for the new ones.
+    this.agents.forEach(a=>{if(!listed.has(a.sid))this.leave(a);});
     for(const s of list){
-      seen.add(s.id);
       if(skip.has(s.id))continue;
       let a=this.agents.find(x=>x.sid===s.id&&!x.leaving);
       const back=!a&&this.agents.find(x=>x.sid===s.id&&x.leaving&&!x.gone);
       if(back){if(back.leftWhy!=='missing')continue;back.leaving=false;back.goalKey=null;a=back;}// still on the way out: back to the desk
       if(!a){
-        let par=null;if(s.parentId){par=this.agents.find(x=>x.sid===s.parentId&&!x.leaving);}
+        let par=null;if(s.parentId){par=this.agents.find(x=>x.sid===s.parentId&&!x.leaving&&!x.gone);}
         a=this.addAgent({seated:this.firstSnap&&!par,parent:par,live:s});if(!a)continue;
         if(this.firstSnap&&par){const d=DESKS[par.desk];a.x=d.gx+2.45;a.y=d.gy+0.55;a.moving=false;a.path=[];a.goalKey='sub'+a.parent+'-0';}
       }
-      if(s.parentId){const p=this.agents.find(x=>x.sid===s.parentId);if(p){a.parent=p.id;if(a.desk!==p.desk){a.desk=p.desk;a.goalKey=null;}}}
+      if(s.parentId){const p=this.agents.find(x=>x.sid===s.parentId&&!x.gone);if(p){a.parent=p.id;if(a.desk!==p.desk){a.desk=p.desk;a.goalKey=null;}}}
       a.status=ST[s.status]?s.status:'working';a.tool=[s.tool||'',s.detail||''];a.msg=s.detail||'';
       a.tokens=s.tokens||0;a.model=s.model||a.model;a.cwd=s.cwd||a.cwd;a.name=s.name||a.name;
       a.liveHist=s.recent||null;
-      const t=s.waitingOn&&this.agents.find(x=>x.sid===s.waitingOn);
+      const t=s.waitingOn&&this.agents.find(x=>x.sid===s.waitingOn&&!x.gone);
       a.target=t?t.id:null;
       if(a.status==='talking'&&s.talkingTo){const tgt=this.agents.find(x=>!x.leaving&&(x.name===s.talkingTo||x.short===s.talkingTo||x.sid===s.talkingTo));if(tgt)a.target=tgt.id;}
       if(a.status==='waiting'&&!a.target)a.status='working';
       if(a.parent&&s.status==='done'){if(!a.doneAt)a.doneAt=Date.now();}else a.doneAt=0;
     }
-    this.agents.forEach(a=>{if(!seen.has(a.sid))this.leave(a);});
     this.goneSids=gone;
     this.firstSnap=false;
   }
