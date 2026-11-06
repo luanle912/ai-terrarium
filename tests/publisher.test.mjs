@@ -153,7 +153,7 @@ test('no config means off and nothing is sent', async () => {
   const r = rig(tmp(), ok, { v: snap(1) });
   await r.run(3000);
   assert.equal(r.calls.length, 0);
-  assert.deepEqual(r.pub.state(), { state: 'off', share: null, private: false, hub: null });
+  assert.deepEqual({ ...r.pub.state(), instance: null }, { state: 'off', share: null, private: false, hub: null, deviceId: null, instance: null, lastOkAt: null, lastAttemptAt: null, lastErr: null, failures: 0, nextRetryAt: null, hubAck: null });
   r.pub.stop();
 });
 
@@ -505,12 +505,12 @@ test("200 {accepted:false, reason:'other_instance'} stands by and retries after 
   r.pub.stop();
 });
 
-test('a 400 is not a success: offline, logged with the reason, retried after 15 s, seq unchanged', async () => {
+test('a 400 is not a success: rejected, logged with the reason, retried after 15 s, seq unchanged', async () => {
   const dir = tmp(); mkCfg(dir);
   let bad = true;
   const r = rig(dir, () => bad ? reject(400, 'bad packet: duplicate id') : ok(), { v: snap(1) });
   await r.step();
-  assert.equal(r.pub.state().state, 'offline');
+  assert.equal(r.pub.state().state, 'rejected');
   assert.ok(r.logs.some((l) => l.includes('terrarium: hub rejected the packet (400: duplicate id)')), r.logs.join('\n'));
   await r.run(14500);
   assert.equal(r.calls.length, 1, 'not resent before 15 s');
@@ -530,7 +530,7 @@ test('a 413 is handled like a 400', async () => {
   const dir = tmp(); mkCfg(dir);
   const r = rig(dir, () => reject(413, 'payload too large'), { v: snap(1) });
   await r.step();
-  assert.equal(r.pub.state().state, 'offline');
+  assert.equal(r.pub.state().state, 'rejected');
   assert.ok(r.logs.some((l) => l.includes('terrarium: hub rejected the packet (413: payload too large)')), r.logs.join('\n'));
   await r.run(14500);
   assert.equal(r.calls.length, 1);
@@ -738,4 +738,105 @@ test('leave during an in-flight token poll: no config is written and the new tok
   const rev = calls.filter((c) => c.url === 'https://hub.example/api/device/revoke-self');
   assert.equal(rev.length, 1);
   assert.equal(rev[0].opts.headers.authorization, 'Bearer trd_fresh');
+});
+
+test('connecting until the first accepted send', async () => {
+  const dir = tmp(); mkCfg(dir);
+  let release;
+  const r = rig(dir, () => new Promise((res) => { release = () => res(ok()); }), { v: snap(1) });
+  assert.equal(r.pub.state().state, 'off');
+  const first = r.step();
+  assert.equal(r.pub.state().state, 'connecting', 'a first send in flight is still connecting');
+  assert.ok(r.logs.some((l) => /connecting/.test(l)));
+  release(); await first;
+  assert.equal(r.pub.state().state, 'sending');
+  r.pub.stop();
+});
+
+test('a 400 is rejected, with the reason, and kept apart from offline', async () => {
+  const dir = tmp(); mkCfg(dir);
+  const r = rig(dir, () => reject(400, 'bad packet: duplicate id'), { v: snap(1) });
+  await r.step();
+  const s = r.pub.state();
+  assert.equal(s.state, 'rejected');
+  assert.equal(s.lastErr.code, 'rejected:duplicate id');
+  assert.equal(s.lastErr.reason, 'duplicate id');
+  assert.equal(s.failures, 0, 'a rejection is not a network failure');
+  assert.equal(s.nextRetryAt, r.clock.t + 15000);
+  r.pub.stop();
+});
+
+test('lastOkAt, failures, lastErr and nextRetryAt follow the sends', async () => {
+  const dir = tmp(); mkCfg(dir, { deviceId: 'ab12cd34ef567890' });
+  let up = false;
+  const r = rig(dir, () => { if (!up) { const e = new Error('x'); e.code = 'ECONNREFUSED'; throw e; } return ok(); }, { v: snap(1) });
+  let s = r.pub.state();
+  assert.equal(s.lastOkAt, null); assert.equal(s.lastAttemptAt, null); assert.equal(s.lastErr, null); assert.equal(s.nextRetryAt, null);
+  assert.equal(s.hubAck, null); assert.equal(s.failures, 0);
+  await r.step();
+  const t0 = r.clock.t;
+  s = r.pub.state();
+  assert.equal(s.state, 'offline');
+  assert.equal(s.deviceId, 'ab12cd34ef567890');
+  assert.match(s.instance, /^[0-9a-f]{16}$/);
+  assert.deepEqual(s.lastErr, { code: 'network:ECONNREFUSED', at: t0 });
+  assert.equal(s.failures, 1);
+  assert.equal(s.lastAttemptAt, t0);
+  assert.equal(s.nextRetryAt, t0 + 2000);
+  assert.equal(s.lastOkAt, null);
+  up = true;
+  await r.run(2000);
+  s = r.pub.state();
+  assert.equal(s.state, 'sending');
+  assert.equal(s.failures, 0);
+  assert.equal(s.lastOkAt, r.clock.t);
+  assert.equal(s.lastErr.code, 'network:ECONNREFUSED', 'the last error is kept after recovery');
+  assert.equal(s.nextRetryAt, null);
+  r.pub.stop();
+});
+
+test('lastErr codes: http, stale_seq, other_instance, login_required, rate_limited', async () => {
+  const cases = [
+    [() => ({ status: 503, headers: { get: () => null } }), 'http:503'],
+    [() => ack({ accepted: false, reason: 'stale_seq', seq: 3 }), 'stale_seq'],
+    [() => ack({ accepted: false, reason: 'other_instance' }), 'other_instance'],
+    [() => status(403, { error: 'login_required' }), 'login_required'],
+    [() => ({ status: 429, headers: { get: () => '5' } }), 'rate_limited'],
+  ];
+  for (const [h, code] of cases) {
+    const dir = tmp(); mkCfg(dir);
+    const r = rig(dir, h, { v: snap(1) });
+    await r.step();
+    assert.equal(r.pub.state().lastErr.code, code);
+    r.pub.stop();
+  }
+});
+
+test('hubAck is legacy against a 204 hub and json against a 200 hub', async () => {
+  const d1 = tmp(); mkCfg(d1);
+  const a = rig(d1, ok, { v: snap(1) });
+  await a.step();
+  assert.equal(a.pub.state().hubAck, 'legacy');
+  a.pub.stop();
+  const d2 = tmp(); mkCfg(d2);
+  const b = rig(d2, () => ack({ accepted: true }), { v: snap(1) });
+  await b.step();
+  assert.equal(b.pub.state().hubAck, 'json');
+  b.pub.stop();
+});
+
+test('a failing publisher logs one summary a minute, not one line per try', async () => {
+  const dir = tmp(); mkCfg(dir);
+  const r = rig(dir, () => { const e = new Error('x'); e.code = 'ECONNREFUSED'; throw e; }, { v: snap(1) });
+  await r.step();
+  const before = r.logs.length;
+  await r.run(59000);
+  assert.equal(r.logs.length, before, 'quiet inside the first minute');
+  await r.run(2000);
+  const sum = r.logs.filter((l) => /still offline/.test(l));
+  assert.equal(sum.length, 1);
+  assert.match(sum[0], /^terrarium: still offline \(\d+ failures, network:ECONNREFUSED\); next try in \d+ s$/);
+  await r.run(60000);
+  assert.equal(r.logs.filter((l) => /still offline/.test(l)).length, 2);
+  r.pub.stop();
 });

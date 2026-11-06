@@ -153,7 +153,7 @@ function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date
   };
 }
 
-function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null } = {}) {
+function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, logLines = () => [] } = {}) {
   return (req, res) => {
     if (!hostAllowed(req.headers.host, port, allowedHosts)) { res.writeHead(403); res.end('Forbidden'); return; }
     const route = (req.url || '').split('?')[0];
@@ -174,6 +174,7 @@ function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFil
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       doScan(); res.write('data: ' + JSON.stringify(snap()) + '\n\n'); clients.add(res); req.on('close', () => clients.delete(res));
     } else if (route === '/snapshot') { doScan(); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(snap(), null, 2)); }
+    else if (route === '/api/log') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify({ lines: logLines() })); }
     else if (route === '/api/public-preview') {
       Promise.resolve().then(() => publicPreview()).then(j => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(j)); })
         .catch(() => { res.writeHead(500); res.end('error'); });
@@ -212,10 +213,14 @@ function listenWithRetry(server, port, host, { retryMs = 10000, log = console.lo
 function makePublicPreview({ publisher, getSnapshot, salt }) {
   const { createPublicView } = require('./lib/public-view.js');
   const viewFn = createPublicView(salt);
+  // A view that is not reaching the hub (offline, rejected, standby, paused) is marked stale for the page.
+  const STALE = ['offline', 'rejected', 'standby', 'paused'];
+  const mark = (st, view) => (STALE.includes(st.state) ? { ...view, stale: true } : view);
   return () => {
     const v = publisher ? publisher.view() : null;
-    if (v) return { ...publisher.state(), view: v };
-    return { state: publisher ? publisher.state().state : 'off', view: viewFn(getSnapshot(), { share: 'kin', projects: [], private: false }) };
+    const st = publisher ? publisher.state() : { state: 'off' };
+    if (v) return { ...st, view: mark(st, v) };
+    return { ...st, view: mark(st, viewFn(getSnapshot(), { share: 'kin', projects: [], private: false })) };
   };
 }
 
@@ -238,11 +243,12 @@ async function main() {
     leave: log => cfgLib.runCommand(['leave'], { log, revokeSelf: pub.revokeSelf }),
     hub: process.env.TERRARIUM_HUB || DEFAULT_HUB, name: os.hostname(),
   });
-  listenWithRetry(http.createServer(createHandler({ publicPreview, joinFlow })), PORT, '127.0.0.1')
+  const buf = require('./lib/logbuf.js').createLogBuffer();   // one ring buffer for the whole process, served at /api/log
+  listenWithRetry(http.createServer(createHandler({ publicPreview, joinFlow, logLines: buf.lines })), PORT, '127.0.0.1')
     .then(() => {
       console.log(`Claude Office → http://localhost:${PORT}  (UI + SSE, watching ${ROOT})`);
       // Only the process that holds the port publishes.
-      publisher = pub.startPublisher({ getSnapshot: snapshot, dir: cfgLib.configDir(), log: console.log });
+      publisher = pub.startPublisher({ getSnapshot: snapshot, dir: cfgLib.configDir(), log: buf.log });
     });
 }
 
