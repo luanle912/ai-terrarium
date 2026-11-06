@@ -36,7 +36,7 @@ export const W = 27,
   TW = 16,
   TH = 8,
   WALL = 56;
-// The scene is framed by the island around the office (6 tiles of lawn), not by the office alone.
+// The scene is framed by the square island around the office (web/island-land.js), not by the office alone.
 export const ISLAND = SkyLogic.buildIsland({ W, H });
 // The office stands on a plinth FLOOR_Z above the lawn, so P (everything in the office: floor, walls, people, bubbles,
 // clicks) is lifted by it, while PG is the bare lawn level used for trees, the waterfall and the plinth itself.
@@ -67,17 +67,17 @@ export const WC = RestroomLogic.layout(
 WC.floor.forEach(k => LAWN_WALK.delete(k));
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
-// The office dogs live on the lawn in front of and beside the office, never in the pond, the smoking corner or the
-// restroom.
+// The office dogs live on the lawn in front of and beside the office, never in the lake, the river, on the mountain
+// (LAWN_WALK already leaves those out), the smoking corner or the restroom. They drink at the lake.
 export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   W,
   H,
-  pond: ISLAND.pond.cells,
+  pond: new Set([...ISLAND.pond.cells, ...ISLAND.river.cells]),
   avoid: ISLAND.spots.filter(s => s.id === 'east-back' || s.id === 'east-front'),
 });
 // They run across the stone paths and past the stairs but never lie, sit, sniff or sleep on them (the stairs' foot and
-// the tile beyond it stay free). At night they curl up at the foot of the tree at (33,8), a quiet corner of the east
-// lawn away from both paths and still in view at 1×.
+// the tile beyond it stay free). At night they curl up at (33,8), by the grove on the east lawn: a quiet corner away
+// from the paths and still in view at 1×.
 export const DOG_CLEAR = new Set(ISLAND.paths.cells);
 STAIRS.forEach(s => {
   for (let i = 0; i < s.len; i++)

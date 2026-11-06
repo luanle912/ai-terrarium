@@ -1,6 +1,7 @@
 // The office island's land (no DOM, no canvas): its squircle shape, the cone-shaped underside, the outdoor spots,
-// the pond and waterfall, the garden paths and the decor. Pure and deterministic: every position comes from the grid
-// and hash(), so the island looks the same on every machine. web/sky-logic.js re-exports it as SkyLogic.
+// the mountain, river, lake (`pond`) and waterfall, the bridge, the rest corner, the lamps, the garden paths and the
+// decor. Nothing here is drawn (web/sky-island.js does that). Pure and deterministic: every position comes from the
+// grid and hash(), so the island looks the same on every machine. web/sky-logic.js re-exports it as SkyLogic.
 export const key = (x, y) => x + ',' + y;
 export const N4 = [
   [1, 0],
@@ -41,7 +42,7 @@ const annexLand = W => ANNEX_LAND.flatMap(([y, a, b]) => Array.from({ length: b 
 // The island is a squircle (power SQUIRCLE_P) around the whole office block: the office (W x H) plus the restroom
 // block and smoking corner on its east side, x from -1 to W + 10 and y from -1 to H. Its radius leaves SQUARE_MARGIN
 // grass tiles beside the block's long sides, so the lawn in front of and behind the office is about 15 tiles deep.
-const SQUARE_MARGIN = 4,
+const SQUARE_MARGIN = 5,
   SQUIRCLE_P = 5;
 const centre = (W, H) => ({ cx: (W + 10) / 2, cy: H / 2, R: (W + 10) / 2 + SQUARE_MARGIN });
 // A few long, low waves along the shore: bays and headlands, never one-tile bumps.
@@ -119,34 +120,19 @@ function buildIsland({ W, H }) {
   const spots = outdoorSpots(W, H);
   const inSpot = (x, y) => spots.some(s => x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h);
   const nearOffice = (x, y) => x >= -1 && x <= W && y >= -1 && y <= H;
-  // The waterfall pours out of a small pond on the east shore; agents bathe at two of its cells.
-  const east = list.filter(c => !cells.has(key(c.x + 1, c.y))).sort((a, b) => b.y - a.y);
-  const fall = east[Math.min(2, east.length - 1)];
-  const pond = new Set();
-  for (let dy = -1; dy <= 1; dy++)
-    for (let dx = -2; dx <= 0; dx++) {
-      const x = fall.x + dx,
-        y = fall.y + dy;
-      if (cells.has(key(x, y)) && !nearOffice(x, y) && !inSpot(x, y)) pond.add(key(x, y));
-    }
-  const pondSpots = [
-    { x: fall.x - 1, y: fall.y },
-    { x: fall.x - 1, y: fall.y - 1 },
-    { x: fall.x - 2, y: fall.y },
-    { x: fall.x - 1, y: fall.y + 1 },
-  ]
-    .filter(s => pond.has(key(s.x, s.y)))
-    .slice(0, 2);
-  const paths = lawnPaths(W, H, stairs(W, H), pondSpots);
-  const decor = [];
-  for (const c of list) {
-    if (nearOffice(c.x, c.y) || inSpot(c.x, c.y) || pond.has(key(c.x, c.y)) || paths.cells.has(key(c.x, c.y))) continue;
-    const r = hash(c.x, c.y, 2);
-    // Sparse on purpose: a few trees read as a lawn, dozens read as clutter.
-    if (r < 0.035) decor.push({ x: c.x, y: c.y, kind: 'tree' });
-    else if (r < 0.06) decor.push({ x: c.x, y: c.y, kind: 'rock' });
-    else if (r < 0.2) decor.push({ x: c.x, y: c.y, kind: 'flower' });
-  }
+  const free = (x, y) => cells.has(key(x, y)) && !nearOffice(x, y) && !inSpot(x, y);
+  const { river, pond, waterfall } = waters(cells, H, free);
+  const mountain = mountainOf(cells, river.cells);
+  const bridge = bridgeOf(H);
+  // The rest corner: a fishing spot on the far bank facing the lake right at the river mouth, the bench just upstream.
+  const mouth = river.line[river.line.length - 1][1];
+  const rest = {
+    bench: { x: RIVER_X - 2, y: mouth - 2 },
+    fish: { x: RIVER_X - 1, y: mouth },
+  };
+  const paths = lawnPaths(W, H, stairs(W, H), { bath: pond.spots, bridge, rest });
+  const lamps = lampsOf(H, bridge);
+  const decor = decorOf({ cells, free, river, pond, mountain, bridge, rest, paths, lamps });
   return {
     cells,
     list,
@@ -154,32 +140,225 @@ function buildIsland({ W, H }) {
     bounds: { minX, maxX, minY, maxY },
     spots,
     decor,
-    waterfall: { x: fall.x, y: fall.y },
-    pond: { cells: pond, spots: pondSpots },
+    waterfall,
+    pond,
     paths,
     shape,
+    mountain,
+    river,
+    bridge,
+    rest,
+    lamps,
   };
 }
 
+// ---- the landscape around the office ----
+// Coordinates are the office's (W x H at the origin): x < 0 is the strip beside the left wall, y < 0 the back lawn,
+// y > H the front lawn. A two-peak mountain stands on the back lawn toward small x (the top corner on screen); its
+// falls pour out of the gap between the peaks into a river two tiles wide that runs down the left strip, past the
+// office, into a lake on the left of the front lawn, and the lake spills over the front shore as the main waterfall.
+// Mountain, river and lake together cut the far bank off from the rest of the island, so a wooden bridge near the
+// river mouth is the only way over; the rest corner (a bench and a fishing spot) waits on the far bank by the lake, and
+// the far bank runs on up to the foot of the mountain. The near bank (x = -1, under the left wall) is plain grass.
+const RIVER_X = -3, // the river's two columns are RIVER_X and RIVER_X + 1, leaving one tile of bank either side
+  RIVER_HEAD = -8; // its first row, in the gorge at the foot of the falls
+// Peaks in tiles and their height above the lawn in px; the main one is the taller, further right on screen.
+const PEAKS = [
+    { x: -3, y: -11, h: 50, main: false },
+    { x: 3, y: -12, h: 72, main: true },
+  ],
+  GAP = { x: -1, y: -10 },
+  MOUNTAIN_R = 4.5;
+// The lake: an ellipse of tiles on the front lawn, reaching the front shore (centre y relative to H).
+const LAKE = { cx: 0, dy: 12, rx: 3.9, ry: 4.8 };
+// The bridge's row, relative to H: two rows above the river mouth, one tile clear of the reserved south-left spot.
+const BRIDGE_DY = 4;
+
+function waters(cells, H, free) {
+  const lake = new Set(),
+    cy = H + LAKE.dy;
+  for (const k of cells) {
+    const [x, y] = pos(k);
+    if (((x + 0.5 - LAKE.cx) / LAKE.rx) ** 2 + ((y + 0.5 - cy) / LAKE.ry) ** 2 <= 1 && free(x, y)) lake.add(k);
+  }
+  // The river runs down its two columns until either reaches the lake; the other column's last tiles join the lake,
+  // so the mouth opens two tiles wide.
+  let end = RIVER_HEAD;
+  while (!lake.has(key(RIVER_X, end + 1)) && !lake.has(key(RIVER_X + 1, end + 1))) end++;
+  for (const x of [RIVER_X, RIVER_X + 1])
+    for (let y = end + 1; !lake.has(key(x, y)) && cells.has(key(x, y)); y++) lake.add(key(x, y));
+  const riverCells = new Set(),
+    line = [];
+  for (let y = RIVER_HEAD; y <= end; y++) {
+    riverCells.add(key(RIVER_X, y));
+    riverCells.add(key(RIVER_X + 1, y));
+    line.push([RIVER_X + 1, y + 0.5]);
+  }
+  line.push([RIVER_X + 1, end + 1]);
+  // The main waterfall pours over the lake's front lip: the lake tile on the front shore nearest the lake's middle.
+  const lip = [...lake]
+    .map(pos)
+    .filter(([x, y]) => !cells.has(key(x, y + 1)))
+    .sort((a, b) => Math.abs(a[0] + 0.5 - LAKE.cx) - Math.abs(b[0] + 0.5 - LAKE.cx) || a[0] - b[0])[0];
+  // Agents bathe at the east bank, where the garden path arrives from the north: the eastmost lake tile with plain
+  // lawn north of it, and the lake tile beside it.
+  const bank = (x, y) => cells.has(key(x, y)) && !lake.has(key(x, y)) && !riverCells.has(key(x, y));
+  const [bx, by] = [...lake]
+    .map(pos)
+    .filter(([x, y]) => bank(x, y - 1))
+    .sort((a, b) => b[0] - a[0] || a[1] - b[1])[0];
+  const next = [
+    [bx, by + 1],
+    [bx - 1, by],
+    [bx - 1, by + 1],
+  ].find(([x, y]) => lake.has(key(x, y)));
+  return {
+    river: { cells: riverCells, line },
+    pond: { cells: lake, spots: [{ x: bx, y: by }, ...(next ? [{ x: next[0], y: next[1] }] : [])] },
+    waterfall: { x: lip[0], y: lip[1] },
+  };
+}
+
+// The mountain covers the tiles within MOUNTAIN_R of the ridge between its peaks, plus every tile of the left strip
+// behind the river head, so nobody walks round the river's source; the river's own gorge is left open.
+function mountainOf(cells, river) {
+  const [a, b] = PEAKS,
+    vx = b.x - a.x,
+    vy = b.y - a.y;
+  const toRidge = (x, y) => {
+    const t = Math.max(0, Math.min(1, ((x - a.x) * vx + (y - a.y) * vy) / (vx * vx + vy * vy)));
+    return Math.hypot(x - a.x - t * vx, y - a.y - t * vy);
+  };
+  const out = new Set();
+  for (const k of cells) {
+    const [x, y] = pos(k);
+    if (y > -3 || river.has(k)) continue;
+    if (toRidge(x, y) <= MOUNTAIN_R || (x <= RIVER_X + 2 && y < RIVER_HEAD)) out.add(k);
+  }
+  return { cells: out, peaks: PEAKS.map(p => ({ ...p })), gap: { ...GAP } };
+}
+
+const bridgeOf = H => {
+  const y = H + BRIDGE_DY;
+  return { cells: new Set([key(RIVER_X, y), key(RIVER_X + 1, y)]), x: RIVER_X, y, dir: 'x', len: 2 };
+};
+// Lamp posts: one at each end of the bridge, on its upstream side, and a few beside the stone path.
+const LAMPS_ALONG = [
+  [16, 2],
+  [11, 3],
+  [1, 3],
+];
+const lampsOf = (H, bridge) => [
+  { x: bridge.x - 1, y: bridge.y - 1 },
+  { x: bridge.x + bridge.len, y: bridge.y - 1 },
+  ...LAMPS_ALONG.map(([x, dy]) => ({ x, y: H + dy })),
+];
+
+// Trees grow in groves of 3-6 around a few hand-placed centres, bushes and a mushroom or two in their shade; rocks and
+// flowers gather in their own small patches. Sparse on purpose: a few groves read as a garden, a carpet as clutter.
+// Nothing solid stands on or right beside water, the mountain, a path, a lamp or the rest corner, so every lane stays
+// open; flowers may grow up to their edge.
+const GROVES = [
+  [12, -12],
+  [22, -14],
+  [30, -8],
+  [17, -5],
+  [38, -2],
+  [36, 11],
+  [14, 24],
+  [24, 27],
+  [31, 21],
+  [19, 19],
+];
+const ROCKS = [
+  [8, -5],
+  [26, -3],
+  [34, 26],
+  [9, 23],
+  [40, 5],
+];
+const FLOWERS = [
+  [6, -9],
+  [26, -10],
+  [34, -12],
+  [33, -3],
+  [40, 14],
+  [11, 20],
+  [20, 24],
+  [28, 18],
+  [36, 23],
+  [16, 28],
+];
+function decorOf({ cells, free, river, pond, mountain, bridge, rest, paths, lamps }) {
+  const taken = new Set([...river.cells, ...pond.cells, ...mountain.cells, ...bridge.cells, ...paths.cells]);
+  for (const p of [rest.bench, rest.fish, ...lamps]) taken.add(key(p.x, p.y));
+  const open = (x, y) => free(x, y) && !taken.has(key(x, y));
+  const roomy = (x, y) =>
+    x >= 0 && open(x, y) && N4.every(([a, b]) => !cells.has(key(x + a, y + b)) || !taken.has(key(x + a, y + b)));
+  const out = [],
+    used = new Set();
+  const put = (x, y, kind) => {
+    out.push({ x, y, kind });
+    used.add(key(x, y));
+  };
+  const ring = (cx, cy, r) => {
+    const out = [];
+    for (let y = cy - r; y <= cy + r; y++)
+      for (let x = cx - r; x <= cx + r; x++)
+        if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) === r && !used.has(key(x, y))) out.push([x, y]);
+    return out;
+  };
+  const byHash = s => (a, b) => hash(a[0], a[1], s) - hash(b[0], b[1], s);
+  for (const [cx, cy] of GROVES) {
+    const spots = [[cx, cy], ...ring(cx, cy, 1)].filter(([x, y]) => roomy(x, y)).sort(byHash(6));
+    if (spots.length < 3) continue;
+    spots.slice(0, 3 + Math.floor(hash(cx, cy, 7) * 4)).forEach(([x, y]) => put(x, y, 'tree'));
+    const shade = ring(cx, cy, 2)
+      .filter(([x, y]) => roomy(x, y))
+      .sort(byHash(8));
+    shade.slice(0, 2).forEach(([x, y]) => put(x, y, 'bush'));
+    shade.slice(2, 3 + Math.floor(hash(cx, cy, 9) * 2)).forEach(([x, y]) => put(x, y, 'mushroom'));
+  }
+  for (const [cx, cy] of ROCKS)
+    [[cx, cy], ...ring(cx, cy, 1)]
+      .filter(([x, y]) => roomy(x, y) && !used.has(key(x, y)))
+      .sort(byHash(10))
+      .slice(0, 2 + Math.floor(hash(cx, cy, 11) * 2))
+      .forEach(([x, y]) => put(x, y, 'rock'));
+  for (const [cx, cy] of FLOWERS)
+    [[cx, cy], ...ring(cx, cy, 1), ...ring(cx, cy, 2)]
+      .filter(([x, y]) => open(x, y) && !used.has(key(x, y)) && hash(x, y, 12) < 0.3)
+      .forEach(([x, y]) => put(x, y, 'flower'));
+  return out.sort((a, b) => a.x + a.y - (b.x + b.y) || a.x - b.x);
+}
+
 // ---- garden paths ----
-// Stepping-stone paths laid where agents really walk (desire lines): from the foot of each stair flight to the pond
-// (the restroom block is reached across the pantry floor, not from the lawn). They run one tile
-// clear of the plinth front, so the big front lawn stays whole. Each leg is a list of waypoints that share a row or a
-// column; `cells` are the tiles they cover (agents prefer them), `lines` the same legs in world coordinates for
-// drawing, starting just past the bottom step instead of at the tile centre under it.
-function lawnPaths(W, H, st, pondSpots) {
+// Stepping-stone paths laid where agents really walk (desire lines). From the foot of the south stairs one runs along
+// the plinth front, round the reserved south-left spot and on to the lake's bathing spots; the east stairs join it,
+// and a branch leads to the bridge and, past it, to the rest corner (the bridge deck is its own walk, no stones).
+// Another runs along the front of the restroom block to the smoking corner (the block itself is reached across the
+// pantry floor, not from the lawn). They run one tile clear of the plinth front, so the big front lawn stays whole.
+// Each leg is a list of waypoints that share a row or a column; `cells` are the tiles they cover (agents prefer
+// them), `lines` the same legs in world coordinates for drawing, starting just past the bottom step instead of at the
+// tile centre under it (a leg that branches off another starts at a tile centre).
+function lawnPaths(W, H, st, { bath: baths, bridge, rest }) {
   const e = st.find(s => s.side === 'east'),
-    s = st.find(s => s.side === 'south');
-  const bath = pondSpots.reduce((a, b) => (b.y < a.y ? b : a)),
+    s = st.find(s => s.side === 'south'),
+    free = outdoorSpots(W, H).find(o => o.id === 'south-left');
+  const bath = baths.reduce((a, b) => (b.y < a.y ? b : a)),
     row = H + 1,
-    sx = s.x + s.len - 1;
+    sx = s.x + s.len - 1,
+    turn = free.x + free.w + 1,
+    by = bridge.y;
   const legs = [
     {
       at: 'south',
       pts: [
         [sx, H],
         [sx, row],
-        [bath.x, row],
+        [turn, row],
+        [turn, by],
+        [bath.x, by],
         [bath.x, bath.y - 1],
       ],
     },
@@ -190,12 +369,35 @@ function lawnPaths(W, H, st, pondSpots) {
         [e.x, row],
       ],
     },
+    // joining the east stairs' leg to the south one along the plinth front (a T, so neither leg's end is cut short)
+    {
+      at: null,
+      pts: [
+        [e.x, row],
+        [sx, row],
+      ],
+    },
     // along the front of the restroom block to the smoking corner's entrance beside it
     {
       at: 'east',
       pts: [
         [e.x, e.y],
         [W + 5, e.y],
+      ],
+    },
+    // on from the lake path to the near end of the bridge, then from its far end to the rest corner
+    {
+      at: null,
+      pts: [
+        [bath.x, by],
+        [bridge.x + bridge.len, by],
+      ],
+    },
+    {
+      at: null,
+      pts: [
+        [bridge.x - 1, by],
+        [bridge.x - 1, rest.fish.y - 1],
       ],
     },
   ];
@@ -216,7 +418,8 @@ function lawnPaths(W, H, st, pondSpots) {
     const [[x, y], [bx, by]] = pts,
       c = ([x, y]) => [x + 0.5, y + 0.5],
       next = [x + 0.5 + Math.sign(bx - x), y + 0.5 + Math.sign(by - y)];
-    const out = [at === 'east' ? [x + STAIR_RUN + 0.25, y + 0.5] : [x + 0.5, y + STAIR_RUN + 0.25], next];
+    const foot = at === 'east' ? [x + STAIR_RUN + 0.25, y + 0.5] : [x + 0.5, y + STAIR_RUN + 0.25];
+    const out = at ? [foot, next] : [c([x, y])];
     for (const p of pts.slice(1)) {
       const q = c(p);
       if (q[0] !== out[out.length - 1][0] || q[1] !== out[out.length - 1][1]) out.push(q);
