@@ -161,8 +161,6 @@ export function mistRow(ctx, w, y, d, t, seed, cover, col, S, speedK, alpha, wit
     );
   }
 }
-// A small floating island in the style of the main one: diamond grass top with a dark outline, brown dirt lip,
-// one cone underneath, and a tree or rock on top. Smaller (farther) ones are hazier and fainter.
 function poly(ctx, pts, fill) {
   ctx.fillStyle = fill;
   ctx.beginPath();
@@ -170,15 +168,47 @@ function poly(ctx, pts, fill) {
   ctx.closePath();
   ctx.fill();
 }
+// A small floating island in the style of the main one: diamond grass top with a dark outline, brown dirt lip,
+// one cone underneath, and a tree or rock on top. Smaller (farther) ones are hazier and fainter. Each kind is painted
+// once into its own sprite (again only when its size, the haze colour or the screen density changes) and stamped
+// every frame, so the bobbing islands cost one drawImage each and allocate nothing.
+const farSprites = new Map();
+const farness = sc => Math.max(0, Math.min(1, 1.05 - sc));
 export function farIsland(ctx, x, y, sc, col, kind = 'plain') {
-  const far = Math.max(0, Math.min(1, 1.05 - sc)),
-    hz = c => mix(c, col.haze, 0.25 + 0.45 * far),
+  const res = 2 * Math.max(1, Math.ceil(globalThis.devicePixelRatio || 1)),
+    L = 22 * sc + 2,
+    T = 19 * sc + 2,
+    B = 36 * sc + 2;
+  let s = farSprites.get(kind);
+  if (!s) farSprites.set(kind, (s = { c: document.createElement('canvas'), sc: 0, haze: '', res: 0 }));
+  if (s.sc !== sc || s.haze !== col.haze || s.res !== res) {
+    s.sc = sc;
+    s.haze = col.haze;
+    s.res = res;
+    s.c.width = Math.ceil(2 * L * res);
+    s.c.height = Math.ceil((T + B) * res);
+    const g = s.c.getContext('2d');
+    g.setTransform(res, 0, 0, res, L * res, T * res);
+    paintFarIsland(g, sc, col.haze, kind);
+  }
+  const prevAlpha = ctx.globalAlpha,
+    prevSmooth = ctx.imageSmoothingEnabled;
+  ctx.globalAlpha = prevAlpha * (0.95 - 0.35 * farness(sc));
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(s.c, x - L, y - T, 2 * L, T + B);
+  ctx.imageSmoothingEnabled = prevSmooth;
+  ctx.globalAlpha = prevAlpha;
+}
+// The far island round (0, 0): the middle of its grass top.
+function paintFarIsland(ctx, sc, haze, kind) {
+  const far = farness(sc),
+    hz = c => mix(c, haze, 0.25 + 0.45 * far),
+    x = 0,
+    y = 0,
     hw = 20 * sc,
     hh = 10 * sc,
     lip = 4 * sc,
-    out = hz('#2b2350'),
-    prevAlpha = ctx.globalAlpha;
-  ctx.globalAlpha = prevAlpha * (0.95 - 0.35 * far);
+    out = hz('#2b2350');
   // the cone under the dirt lip, then the lip itself
   poly(
     ctx,
@@ -280,7 +310,6 @@ export function farIsland(ctx, x, y, sc, col, kind = 'plain') {
       hz('#767c8c'),
     );
   }
-  ctx.globalAlpha = prevAlpha;
 }
 // env: {df, hour, fx:{cloud,rain,snow,storm,fog}, col: SkyLogic.skyColors(...), reduced, view?: island camera view}
 // The gradient, sun, moon and stars stay put; clouds, far islands and birds follow the camera by depth.

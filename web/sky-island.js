@@ -1,6 +1,6 @@
-// Drawing the island itself: the lawn, its underside and outline, the mountain, river and lake beds, trees, the pond
-// glints and the waterfall. The static pieces' drawing lives in web/island-art.js.
-import { rgba } from './sky-mist.js';
+// Baking the island: the lawn, its underside and outline, the mountain, river and lake beds and the low decor in one
+// picture, and the things that stand up off the lawn (trees, bushes, lamps, the bench, the bridge's two halves) as
+// small sprites the scene sorts with the people and dogs. The pieces' drawing lives in web/island-art.js.
 import {
   drawBench,
   drawBridge,
@@ -10,33 +10,17 @@ import {
   drawMushroom,
   drawRock,
   drawUnderside,
+  hex,
+  mix,
   painter,
   shoreFace,
+  toHex,
 } from './island-art.js';
-export const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-export const toHex = a =>
-  '#' +
-  a
-    .map(v =>
-      Math.max(0, Math.min(255, Math.round(v)))
-        .toString(16)
-        .padStart(2, '0'),
-    )
-    .join('');
-export const mix = (a, b, p) => {
-  const A = hex(a),
-    B = hex(b);
-  return toHex(A.map((v, i) => v * (1 - p) + B[i] * p));
-};
-export const hash = (x, y, s) => {
-  const v = Math.sin(x * 127.1 + y * 311.7 + s * 74.7) * 43758.5453;
-  return v - Math.floor(v);
-};
+import { hash, WATER_Z } from './island-land.js';
+export { hash, hex, mix, toHex, WATER_Z };
 // Night pulls every island colour toward the same deep blue the office uses after dark.
 export const night = (c, df) => mix(c, '#0d1322', (1 - df) * 0.6);
 export const SNOW = '#eef3f7';
-// The lake's and the river's water surface sits this far below the grass.
-export const WATER_Z = -3;
 
 export function drawTree(ctx, P, d, df, snow) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
@@ -56,16 +40,23 @@ export function drawTree(ctx, P, d, df, snow) {
   ctx.fillRect(x - 3, y - 22, 6, 3);
 }
 
+// The island projection (lawn level) and its colours for one bake: through the island's light, and toward snow white
+// by `s` of the current snow cover.
+const TW = 16,
+  TH = 8;
+function bakeTools(frame, env) {
+  const { OX, OY } = frame,
+    P = (x, y, z = 0) => [OX + (x - y) * TW, OY + (x + y) * TH - z],
+    C = (c, s = 0) => night(s ? mix(c, SNOW, env.snow * s) : c, env.df);
+  return { P, C };
+}
+
 // The island as one image the size of the scene canvas. The land (lawn, underside, river and lake beds, mountain) is
-// painted first on its own canvas so it can be ringed with the 1 px outline; the bridge, lamps and small decor go on
-// top. Only trees behind the walls are baked in; trees in front are drawn with the office so desks and walls overlap
-// them correctly. Moving water, falls and lamp light are drawn every frame over this image.
+// painted first on its own canvas so it can be ringed with the 1 px outline; the paths, rim stones and low decor
+// (rocks, mushrooms, flowers) go on top. Whatever stands up off the lawn is left to renderProps. Moving water, falls
+// and lamp light are drawn every frame over this image.
 export function renderIsland(island, frame, k, env) {
-  const { LW, LH, OX, OY } = frame,
-    TW = 16,
-    TH = 8,
-    df = env.df,
-    snow = env.snow;
+  const { LW, LH, OX, OY } = frame;
   const canvas = () => {
     const c = document.createElement('canvas');
     c.width = Math.round(LW * k);
@@ -76,9 +67,7 @@ export function renderIsland(island, frame, k, env) {
   };
   const [cv, ctx] = canvas(),
     [land, lctx] = canvas();
-  const P = (x, y, z = 0) => [OX + (x - y) * TW, OY + (x + y) * TH - z];
-  // colours go through the island's light, and toward snow white by `s` of the current snow cover
-  const C = (c, s = 0) => night(s ? mix(c, SNOW, snow * s) : c, df);
+  const { P, C } = bakeTools(frame, env);
   const lp = painter(lctx, P),
     pt = painter(ctx, P);
   const key = (x, y) => x + ',' + y,
@@ -105,29 +94,27 @@ export function renderIsland(island, frame, k, env) {
     if (!has(x, y + 1)) shoreFace(lp, P, C, x, y, 'y');
     if (!has(x + 1, y)) shoreFace(lp, P, C, x, y, 'x');
   }
-  drawMountain(lp, P, C, island, snow);
-  // the 1 px outline: the land's silhouette pushed out a pixel each way, kept only where it falls outside the land
+  drawMountain(lp, P, C, island, env.snow);
+  // The 1 px outline: the land's silhouette pushed out a pixel each way and filled with the outline colour, straight
+  // onto the still empty island image, then the land itself on top, so only the ring outside it shows.
   {
-    const [sil, sctx] = canvas(),
-      o = Math.max(1, Math.round(k));
-    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    const o = Math.max(1, Math.round(k));
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     for (const [dx, dy] of [
       [o, 0],
       [-o, 0],
       [0, o],
       [0, -o],
     ])
-      sctx.drawImage(land, dx, dy);
-    sctx.globalCompositeOperation = 'source-in';
-    sctx.fillStyle = C('#2b2350');
-    sctx.fillRect(0, 0, sil.width, sil.height);
-    sctx.globalCompositeOperation = 'destination-out';
-    sctx.drawImage(land, 0, 0);
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(sil, 0, 0);
+      ctx.drawImage(land, dx, dy);
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.fillStyle = C('#2b2350');
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.globalCompositeOperation = 'source-over';
     ctx.drawImage(land, 0, 0);
     ctx.restore();
+    land.width = land.height = 0; // let the browser drop it now rather than at the next collection
   }
   // A ring of rim stones around the lake, open where the river runs in and where the water spills over the shore
   // into the waterfall.
@@ -189,93 +176,58 @@ export function renderIsland(island, frame, k, env) {
       );
     }
   }
-  // Everything standing on the lawn, back to front: the bridge, the lamps, the bench and the decor (of the trees only
-  // those behind the walls).
-  const flower = d => () => {
+  // The low decor, back to front: rocks, mushrooms and flowers lie under anyone walking past.
+  const flower = d => {
     const [px, py] = P(d.x + 0.5, d.y + 0.5, 0);
     ctx.fillStyle = C(['#ffd166', '#ff8fab', '#ffffff'][(d.x + d.y + 99) % 3]);
     ctx.fillRect(Math.round(px), Math.round(py) - 1, 1, 1);
   };
-  const DECOR = {
-    rock: d => () => drawRock(pt, P, C, d),
-    bush: d => () => drawBush(pt, P, C, d),
-    mushroom: d => () => drawMushroom(pt, P, C, d),
+  const LOW = {
+    rock: d => drawRock(pt, P, C, d),
+    mushroom: d => drawMushroom(pt, P, C, d),
     flower,
-    tree: d => (d.x < 0 || d.y < 0 ? () => drawTree(ctx, P, d, df, snow) : null),
   };
-  const { bridge, rest } = island,
-    items = [{ z: bridge.x + bridge.y + 1, f: () => drawBridge(pt, P, C, bridge) }];
-  for (const l of island.lamps) items.push({ z: l.x + l.y + 1, f: () => drawLamp(pt, P, C, island, l) });
-  items.push({ z: rest.bench.x + rest.bench.y + 1, f: () => drawBench(pt, P, C, rest.bench) });
-  for (const d of island.decor) {
-    const f = DECOR[d.kind] && DECOR[d.kind](d);
-    if (f) items.push({ z: d.x + d.y + 1, f });
-  }
-  items.sort((a, b) => a.z - b.z).forEach(it => it.f());
+  for (const d of island.decor) if (LOW[d.kind]) LOW[d.kind](d);
   return cv;
 }
 
-// Slow glints moving over the pond surface (drawn every frame over the baked island).
-export function drawPond(ctx, island, P, t, df) {
-  for (const k of island.pond.cells) {
-    const [x, y] = k.split(',').map(Number);
-    for (let j = 0; j < 2; j++) {
-      const p = (t * 0.25 + hash(x, y, 7 + j)) % 1,
-        [gx, gy] = P(x + 0.2 + hash(x, y, 9 + j) * 0.6, y + 0.2 + p * 0.6, WATER_Z);
-      ctx.globalAlpha = (0.25 + 0.45 * df) * Math.sin(p * Math.PI);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(Math.round(gx), Math.round(gy), 2, 1);
-    }
-  }
-  ctx.globalAlpha = 1;
-}
-
-// The waterfall is a sheet of water lying in the plane of the island's east cliff face (x = const), so it slants with
-// the cliff instead of being a flat screen-space strip: it pours over the pond's lip, runs down the face, then falls
-// on.
-export function drawWaterfall(ctx, island, P, t, len, df) {
-  const f = island.waterfall,
-    X = f.x + 1,
-    y0 = f.y + 0.15,
-    y1 = f.y + 0.85,
-    top = WATER_Z,
-    bot = -(island.depth.get(f.x + ',' + f.y) || 40) - len;
-  const quad = (ya, yb, za, zb) => {
-    const a = P(X, ya, za),
-      b = P(X, yb, za),
-      c = P(X, yb, zb),
-      d = P(X, ya, zb);
-    ctx.beginPath();
-    ctx.moveTo(a[0], a[1]);
-    ctx.lineTo(b[0], b[1]);
-    ctx.lineTo(c[0], c[1]);
-    ctx.lineTo(d[0], d[1]);
-    ctx.closePath();
-    ctx.fill();
+// Everything that stands up off the lawn, each baked into its own small sprite at the island image's resolution and
+// light: [{ x, y, z, img, dx, dy, lamp }]. (x, y) is its tile, z its depth among the scene's sorted sprites (x + y
+// of the point that decides what it hides), dx, dy where the sprite goes in canvas px, lamp the lamp's index or -1.
+// Trees in front of the office walls are left out: the scene draws them itself (as event trees on special days).
+// The bridge comes in two halves, the far railing with the deck and the near railing, so whoever crosses it is
+// drawn between them; someone behind a lamp post, a tree or the bench is hidden by it.
+export function renderProps(island, frame, k, env) {
+  const { P, C } = bakeTools(frame, env),
+    out = [];
+  // ext: [left, up, right, down] px round the point (x + 0.5, y + 0.5) on the lawn
+  const add = (x, y, z, ext, draw, lamp = -1) => {
+    const [ax, ay] = P(x + 0.5, y + 0.5, 0),
+      dx = Math.floor((ax - ext[0]) * k),
+      dy = Math.floor((ay - ext[1]) * k),
+      img = document.createElement('canvas');
+    img.width = Math.ceil((ax + ext[2]) * k) - dx;
+    img.height = Math.ceil((ay + ext[3]) * k) - dy;
+    const g = img.getContext('2d');
+    g.setTransform(k, 0, 0, k, -dx, -dy);
+    draw(painter(g, P), g);
+    out.push({ x, y, z, img, dx, dy, lamp });
   };
-  const ty = P(X, y0, top)[1],
-    by = P(X, y0, bot)[1];
-  // colours follow the island's light, so the fall does not glow at night
-  const g = ctx.createLinearGradient(0, ty, 0, by);
-  g.addColorStop(0, rgba(night('#6eb9f5', df), 0.95));
-  g.addColorStop(0.6, rgba(night('#96cdfa', df), 0.75));
-  g.addColorStop(1, rgba(night('#dceeff', df), 0));
-  ctx.fillStyle = g;
-  quad(y0, y1, top, bot);
-  // darker edges give the sheet thickness; light streaks slide down it
-  ctx.fillStyle = rgba(night('#3c82c8', df), 0.35);
-  quad(y0, y0 + 0.07, top, bot * 0.7);
-  quad(y1 - 0.07, y1, top, bot * 0.7);
-  for (let i = 0; i < 9; i++) {
-    const ya = y0 + 0.06 + (y1 - y0 - 0.16) * ((i * 0.37) % 1),
-      p = (t * 0.55 + i * 0.11) % 1,
-      za = top - (top - bot) * p;
-    ctx.fillStyle = rgba(night('#ffffff', df), 0.75 * (1 - p));
-    quad(ya, ya + 0.05, za, za - 14);
+  const { bridge, rest } = island,
+    bx = bridge.dir === 'x' ? bridge.len : 0,
+    by = bridge.dir === 'x' ? 0 : bridge.len,
+    span = [16 * (bridge.len + 2), 26, 16 * (bridge.len + 2), 18];
+  // a walker on the deck stands at least a quarter tile in from its ends and half a tile in from either railing
+  add(bridge.x, bridge.y, bridge.x + bridge.y - 0.2, span, pt => drawBridge(pt, P, C, bridge, 'back'));
+  add(bridge.x, bridge.y, bridge.x + bx + bridge.y + by + 0.8, span, pt => drawBridge(pt, P, C, bridge, 'front'));
+  island.lamps.forEach((l, i) => add(l.x, l.y, l.x + l.y + 1, [9, 25, 8, 3], pt => drawLamp(pt, P, C, island, l), i));
+  add(rest.bench.x, rest.bench.y, rest.bench.x + rest.bench.y + 1, [13, 15, 13, 8], pt =>
+    drawBench(pt, P, C, rest.bench),
+  );
+  for (const d of island.decor) {
+    if (d.kind === 'bush') add(d.x, d.y, d.x + d.y + 0.5, [11, 15, 11, 4], pt => drawBush(pt, P, C, d));
+    if (d.kind === 'tree' && (d.x < 0 || d.y < 0))
+      add(d.x, d.y, d.x + d.y + 0.5, [7, 25, 7, 4], (pt, g) => drawTree(g, P, d, env.df, env.snow));
   }
-  // foam where the pond spills over the lip
-  ctx.fillStyle = rgba(night('#ffffff', df), 0.6 + 0.3 * df);
-  quad(y0 - 0.05, y1 + 0.05, top + 0.8, top - 1.6);
+  return out;
 }
-
-// ---- sky behind the island and weather in front of it (both drawn in CSS px over the whole stage) ----

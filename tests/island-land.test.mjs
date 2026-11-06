@@ -124,6 +124,9 @@ test('the mountain stands on the back lawn with two peaks', () => {
   assert.equal(main.length, 1, 'exactly one main peak')
   const side = peaks.find((p) => !p.main)
   assert.ok(main[0].h > side.h, 'the main peak is the taller')
+  // ... and reads so on screen: its tip stands higher up the screen ((x + y) * 8 - h px) than the lower peak's
+  const tipY = (p) => (p.x + p.y + 1) * 8 - p.h
+  assert.ok(tipY(main[0]) <= tipY(side) - 8, `main tip at ${tipY(main[0])} px, the lower one at ${tipY(side)} px`)
   for (const p of peaks) assert.ok(cells.has(K(p.x, p.y)), `peak ${p.x},${p.y} is not on the mountain`)
   // Between: along the ridge from one peak to the other, the gap lies strictly inside and close to it.
   const [a, b] = peaks, vx = b.x - a.x, vy = b.y - a.y
@@ -271,4 +274,26 @@ test('the office dogs keep off the water and the mountain, drink at the lake and
   for (const d of drink) assert.ok(ISLAND.pond.cells.has(K(d.tx, d.ty)) && roam.has(K(d.x, d.y)), `drink spot ${d.x},${d.y}`)
   assert.equal(den.length, 3)
   for (const [x, y] of den) assert.ok(roam.has(K(x, y)) && !clear.has(K(x, y)), `den cell ${x},${y} is not a quiet roam cell`)
+})
+
+test('the mountain falls pour over a ledge at the back of the river head, below the peaks', () => {
+  const { fall, shoulder, peaks } = island.mountain
+  const head = Math.min(...[...island.river.cells].map((k) => at(k)[1]))
+  assert.equal(fall.y, head, 'the falls stand at the back edge of the river head row')
+  for (const x of [fall.x0, fall.x1]) assert.ok(island.river.cells.has(K(Math.floor(x), head)), `fall edge ${x} is not over the river`)
+  assert.ok(fall.top > 0 && fall.top < Math.min(...peaks.map((p) => p.h)), 'the falls start below the lower peak')
+  assert.ok(shoulder && shoulder.h > fall.top && shoulder.R > 0, 'the shoulder rises behind the falls')
+  assert.ok(island.mountain.cells.has(K(Math.floor(shoulder.x), Math.floor(shoulder.y))), 'the shoulder is off the mountain')
+})
+
+test('the bridge deck lifts whoever crosses it, and nobody off it', () => {
+  const { bridgeZ, deckZ, DECK_OVER } = loadWeb('island-land')
+  const b = island.bridge
+  assert.equal(b.dir, 'x')
+  const mid = b.x + b.len / 2
+  assert.equal(bridgeZ(b, mid, b.y + 0.5), deckZ(0.5))
+  assert.equal(deckZ(0.5), 6)
+  assert.ok(bridgeZ(b, b.x - DECK_OVER + 0.05, b.y + 0.5) > 3, 'the deck starts a quarter tile onto the bank')
+  for (const [x, y] of [[b.x - 1, b.y + 0.5], [b.x + b.len + 0.5, b.y + 0.5], [mid, b.y - 0.2], [mid, b.y + 1.2]])
+    assert.equal(bridgeZ(b, x, y), 0, `${x},${y} is off the bridge`)
 })

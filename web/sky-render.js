@@ -1,5 +1,6 @@
-// Drawing for the sky island: the island itself (pre-rendered once per resolution), trees and the waterfall.
-import { drawPond, drawTree, drawWaterfall, hash, mix, night, renderIsland } from './sky-island.js';
+// Drawing for the sky island: the island (pre-rendered once per resolution and light), its standing props, trees,
+// the sky behind it and the weather in front of it.
+import { drawTree, hash, mix, night, renderIsland, renderProps } from './sky-island.js';
 import {
   BAND_W,
   BAND_X0,
@@ -16,6 +17,19 @@ import {
   snapColor,
   visibleX,
 } from './sky-mist.js';
+// The far islands, [x / width, y / horizon, size, kind]: in the open sky above the square island's two back edges,
+// clear of the office and the mountain on a wide stage and well above the island on a phone. The world's overview of
+// 8 islands (env.overview) keeps them low in the gaps between its rows, clear of the islands and their labels.
+const FAR_ISLANDS = [
+    [0.13, 0.5, 0.8, 'tree'],
+    [0.3, 0.3, 0.5, 'plain'],
+    [0.88, 0.42, 0.7, 'rock'],
+  ],
+  FAR_OVERVIEW = [
+    [0.07, 0.84, 0.8, 'tree'],
+    [0.2, 0.7, 0.5, 'plain'],
+    [0.93, 0.78, 0.7, 'rock'],
+  ];
 function drawBack(ctx, w, h, t, env) {
   const { df, hour, fx, col, view } = env,
     hy = h * 0.5,
@@ -99,13 +113,11 @@ function drawBack(ctx, w, h, t, env) {
     );
   }
   inView(ctx, layerView(view, 0.2), () => {
-    [
-      [0.07, 0.84, 0.8, 'tree'],
-      [0.2, 0.7, 0.5, 'plain'],
-      [0.93, 0.78, 0.7, 'rock'],
-    ].forEach(([fx_, fy, sc, kind], i) =>
-      farIsland(ctx, w * fx_, hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S, sc * S, col, kind),
-    );
+    const far = env.overview ? FAR_OVERVIEW : FAR_ISLANDS;
+    for (let i = 0; i < far.length; i++) {
+      const [fx_, fy, sc, kind] = far[i];
+      farIsland(ctx, w * fx_, hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S, sc * S, col, kind);
+    }
     // Wider than the stage so a pan never shows where the horizon haze ends.
     const hb = ctx.createLinearGradient(0, hy - 18 * S, 0, hy + 18 * S);
     hb.addColorStop(0, rgba(col.haze, 0));
@@ -348,8 +360,7 @@ export const SkyRender = {
   mix,
   night,
   renderIsland,
-  drawWaterfall,
-  drawPond,
+  renderProps,
   drawTree,
   drawBack,
   drawFront,

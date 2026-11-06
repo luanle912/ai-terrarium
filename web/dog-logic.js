@@ -359,14 +359,16 @@ function company(dogs, w) {
     cand = dogs
       .filter(
         d =>
-          isFree(d) ||
-          (d.act === 'rest' && !d.path.length) ||
-          ((d.act === 'greet' || d.act === 'sit') && d.greet === a.id),
+          !(d.noCompany > w.now) &&
+          (isFree(d) ||
+            (d.act === 'rest' && !d.path.length) ||
+            ((d.act === 'greet' || d.act === 'sit') && d.greet === a.id)),
       )
       .sort((p, q) => Math.hypot(p.x - rx, p.y - ry) - Math.hypot(q.x - rx, q.y - ry))[0];
   if (!cand) return;
   Object.assign(cand, { act: 'company', greet: a.id, partner: null, lead: false, wag: false, until: Infinity });
-  if (!goTo(cand, w, w.rest, STROLL * LEGS[cand.breed])) idle(cand, w, 1);
+  // a dog that cannot get there is left out for a while, so the path search is not retried every step
+  if (!goTo(cand, w, w.rest, STROLL * LEGS[cand.breed])) idle(cand, w, 1), (cand.noCompany = w.now + 30);
 }
 // The cell a greeting dog sits on: right beside the person, or on the nearest bank when they bathe out in the pond
 // with water all round; off the path if any such cell is free, else on it anyway.
