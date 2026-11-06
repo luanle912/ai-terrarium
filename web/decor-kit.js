@@ -1,4 +1,5 @@
-// Drawing kit shared by the office decor: the pixel font, colour helpers and the kit of shapes (surfaces, pens, mounts).
+// Drawing kit shared by the office decor: the pixel font, colour helpers and the kit of shapes (surfaces, pens,
+// mounts).
 export const FONT = {
   A: '010101111101101',
   B: '110101110101110',

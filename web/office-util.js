@@ -185,9 +185,10 @@ export const cwdKey = s => {
 };
 
 export function bfs(from, to) {
-  // Office floor cells avoid furniture; lawn cells come from the island's walkable set; the two only meet at the stairs.
-  // Out on the lawn grass costs more than the garden path, so agents keep to the path unless it is a long way round.
-  // The restroom block is floor like the office: walked from the pantry beside it, never stepped onto from the lawn.
+  // Office floor cells avoid furniture; lawn cells come from the island's walkable set; the two only meet at the
+  // stairs. Out on the lawn grass costs more than the garden path, so agents keep to the path unless it is a long way
+  // round. The restroom block is floor like the office: walked from the pantry beside it, never stepped onto from the
+  // lawn.
   const key = p => p[0] + ',' + p[1],
     inside = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
   const ok = (x, y) => {

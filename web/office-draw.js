@@ -116,7 +116,8 @@ mixin(
       const df = th._day != null ? th._day : 1;
       // Draw at the screen's own resolution so edges stay sharp when the canvas is shown large. k is not rounded:
       // with the island-sized scene a whole-number k would make the browser shrink the bitmap and drop pixel rows.
-      // Zoomed in, the resolution follows the zoom (CameraLogic.renderScale); past 4× the browser scales it up pixelated.
+      // Zoomed in, the resolution follows the zoom (CameraLogic.renderScale); past 4× the browser scales it up
+      // pixelated.
       const k = this.renderK();
       if (this.k !== k) {
         this.k = k;
@@ -198,8 +199,9 @@ mixin(
             shade(stone, -52),
             null,
           );
-        // Stairs down from the pantry: the floor, two stone steps, then the lawn (back step first so the front one overlaps it).
-        // Each step is a stone box; on the east flight steps march out along +x, on the front flight along +y.
+        // Stairs down from the pantry: the floor, two stone steps, then the lawn (back step first so the front one
+        // overlaps it). Each step is a stone box; on the east flight steps march out along +x, on the front flight
+        // along +y.
         const run = SkyLogic.STAIR_RUN / 3;
         const step = (x0, x1, y0, y1, zt, top) => {
           poly([PG(x0, y1, 0), PG(x1, y1, 0), PG(x1, y1, zt), PG(x0, y1, zt)], shade(top, -20), null);
@@ -417,7 +419,8 @@ mixin(
           poly([P(0, 0), P(W, 0), P(W, b), P(b, b)], sh, null);
           poly([P(0, 0), P(b, b), P(b, H), P(0, H)], sh, null);
         });
-        // Floor paint: (a,b,c,d) is the text's reading and downward direction on screen; (x,y) is its top-left corner on the floor.
+        // Floor paint: (a,b,c,d) is the text's reading and downward direction on screen; (x,y) is its top-left corner
+        // on the floor.
         const paint = (x, y, txt, col, s, m) => {
           const [px, py] = P(x, y);
           ctx.save();
@@ -431,9 +434,9 @@ mixin(
         };
         const ALONG_X = [1, 0.5, -1, 0.5],
           ALONG_Y = [1, -0.5, 1, 0.5];
-        // Department names run along the zone's middle aisle (between the two desk columns), the only floor strip no desk hides.
-        // All names share one size, so they are capped at MAXC characters: a longer name drops its leading words first
-        // (core-payment-merchant → MERCHANT) so sibling projects stay distinguishable, then is cut.
+        // Department names run along the zone's middle aisle (between the two desk columns), the only floor strip no
+        // desk hides. All names share one size, so they are capped at MAXC characters: a longer name drops its leading
+        // words first (core-payment-merchant → MERCHANT) so sibling projects stay distinguishable, then is cut.
         const MAXC = 12,
           FS = 2;
         ZONES.forEach((z, zi) => {

@@ -12,14 +12,14 @@ mixin(
   ClaudeOffice,
   class {
     // The restroom block beside the pantry (RestroomLogic.layout, spec "Bản 3"): an open-top block on the office floor
-    // level that continues the office. Nothing here has a look of its own: the back wall is a full office wall, the front
-    // and east walls are office walls at 70 % (the front one with two doorways and swing doors in the office door's colours), the walls between rooms are
-    // office walls 32 px high, the floors are the pantry's tiles and planks, the fixtures are drawn with the pantry's kit
-    // and colours (cabinets, worktop, steel sinks, white pots, the bar stool), the bench is the smoking corner's, small
-    // pictogram plaques mark the doors and the lobby name is painted on the floor like PANTRY. The two muted accents (dusty
-    // blue men, dusty pink women) are only on the stall panels and the pictograms. Slab, floor and back wall are drawn at once
-    // (nothing on the block stands behind them); everything else goes into `items` by depth, walls one tile at a time so
-    // people sort in front of and behind them.
+    // level that continues the office. Nothing here has a look of its own: the back wall is a full office wall, the
+    // front and east walls are office walls at 70 % (the front one with two doorways and swing doors in the office
+    // door's colours), the walls between rooms are office walls 32 px high, the floors are the pantry's tiles and
+    // planks, the fixtures are drawn with the pantry's kit and colours (cabinets, worktop, steel sinks, white pots, the
+    // bar stool), the bench is the smoking corner's, small pictogram plaques mark the doors and the lobby name is
+    // painted on the floor like PANTRY. The two muted accents (dusty blue men, dusty pink women) are only on the stall
+    // panels and the pictograms. Slab, floor and back wall are drawn at once (nothing on the block stands behind them);
+    // everything else goes into `items` by depth, walls one tile at a time so people sort in front of and behind them.
     restroomItems(G, items, snow) {
       const { ctx, poly, th, t, df } = G,
         L = WC,
@@ -170,7 +170,8 @@ mixin(
         const k = x + ',' + Math.min(F - 1, Math.floor(y));
         (deco[k] = deco[k] || []).push(f);
       };
-      // a mirror on a room wall's east face: a thin trim frame round glass that catches the light like the office windows
+      // a mirror on a room wall's east face: a thin trim frame round glass that catches the light like the office
+      // windows
       const mirror = (x, ya, yb, za, zb) => {
         fR(x, ya, yb, za, zb, th.trim);
         fR(x, ya + 0.05, yb - 0.05, za + 1.2, zb - 1.2, th.glass);
@@ -230,9 +231,10 @@ mixin(
           },
         }),
       );
-      // ---- the front wall (with the two doorways) and the women's room's east wall: office walls at 70 % height, drawn
-      // like the back wall (wall colour, skirting, top band, cap). The office itself is open on its front and east, so
-      // these are the only outer walls that face the camera; they are solid, and a little of the rooms shows over them.
+      // ---- the front wall (with the two doorways) and the women's room's east wall: office walls at 70 % height,
+      // drawn like the back wall (wall colour, skirting, top band, cap). The office itself is open on its front and
+      // east, so these are the only outer walls that face the camera; they are solid, and a little of the rooms shows
+      // over them.
       const fw = L.walls.front,
         ew = L.walls.east,
         OH = HT.outer,
@@ -260,8 +262,8 @@ mixin(
         m: ['..#..', '.....', '.###.', '#.#.#', '..#..', '.#.#.', '.#.#.'],
         f: ['..#..', '.....', '.###.', '#.#.#', '.###.', '#####', '.#.#.'],
       };
-      // Door signs: a small white plaque with a trim frame on the wall just west of each doorway, at eye level, carrying the
-      // room's pictogram in its accent colour (no words: a real door sign is about this size).
+      // Door signs: a small white plaque with a trim frame on the wall just west of each doorway, at eye level,
+      // carrying the room's pictogram in its accent colour (no words: a real door sign is about this size).
       const plaque = d => {
         const x0 = d.x0 - 0.52,
           x1 = d.x0 - 0.1,
@@ -304,7 +306,8 @@ mixin(
         items.push({
           z: (d.x0 + d.x1) / 2 + F,
           f: () => {
-            // the lintel and the frame round the opening; a leaf pushed into the room is behind them, one pushed out in front
+            // the lintel and the frame round the opening; a leaf pushed into the room is behind them, one pushed out in
+            // front
             const s = swing[i],
               frame = () => {
                 frontPiece(d.x0, d.x1, DH);
@@ -493,8 +496,8 @@ mixin(
       }
     }
     // Words painted on the floor like PANTRY (in the office's floor paint): reading along +x, `s` px per font pixel.
-    // A label in another language may have letters the 3×5 font lacks (CJK, Í…): it is then painted with fillText, in the
-    // same floor plane and size.
+    // A label in another language may have letters the 3×5 font lacks (CJK, Í…): it is then painted with fillText, in
+    // the same floor plane and size.
     restroomPaint(ctx, [px, py], txt, col, s) {
       ctx.save();
       ctx.translate(Math.round(px), Math.round(py));

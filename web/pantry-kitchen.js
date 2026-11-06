@@ -1,4 +1,5 @@
-// Pantry kitchen pieces registered into I: fridge, cabinets, espresso machine, grinder, sink, microwave, drinks fridge, wall cabinet, neon sign, island, stools and pendant lights.
+// Pantry kitchen pieces registered into I: fridge, cabinets, espresso machine, grinder, sink, microwave, drinks fridge,
+// wall cabinet, neon sign, island, stools and pendant lights.
 import { I, shade } from './pantry-kit.js';
 I.fridge = {
   name: 'Tủ lạnh 2 cánh',

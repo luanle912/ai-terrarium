@@ -7,9 +7,9 @@ mixin(
   ClaudeOffice,
   class {
     // Smoking corner beside the restroom block (SmokeLogic.layout): a stone pad, a planted trough screening it from the
-    // block, a bench under a vine-covered cantilever pergola, an ash bin, and a light, an extinguisher and a sign by the
-    // entrance. It all stands on the grass, so it is drawn with PG (P is lifted by the plinth) and its colours go through
-    // night() and the snow cover like the rest of the island.
+    // block, a bench under a vine-covered cantilever pergola, an ash bin, and a light, an extinguisher and a sign by
+    // the entrance. It all stands on the grass, so it is drawn with PG (P is lifted by the plinth) and its colours go
+    // through night() and the snow cover like the rest of the island.
     smokingItems(G, items, snow) {
       const { ctx, poly, df } = G,
         X = SMOKE.x,
@@ -80,8 +80,8 @@ mixin(
           }
         },
       });
-      // The planted trough on the side facing the restroom block, about 1.2 m tall: it screens the view and breaks the drift of
-      // smoke. One item per tile so it sorts between people on the lawn behind it and people in the corner.
+      // The planted trough on the side facing the restroom block, about 1.2 m tall: it screens the view and breaks the
+      // drift of smoke. One item per tile so it sorts between people on the lawn behind it and people in the corner.
       [0, 1, 2].forEach(r =>
         items.push({
           z: Z + 1.8 + r,
@@ -116,12 +116,12 @@ mixin(
           gbox(X + 1.3, Y + 0.06, 2.5, 0.06, 7, 13, bw, shade(bw, -25), shade(bw, -40));
         },
       });
-      // The pergola only roofs the bench (1.2 tiles deep) and is drawn before anyone in the corner. Deeper, its front beam
-      // would cross the people on the bench; at this depth every beam and rafter projects above their heads, so drawing
-      // it first never hides a face, and the floating status badges stay on top of it.
-      // Posts: two at the back, one at the front on the pantry side; the front-right corner is held by a knee brace, since
-      // a post there would stand right in front of the end seat. A back post sorts by its own near corner: a dog sitting
-      // on the lawn just behind it (y = Y-1) must be drawn first, and nobody on the bench stands in its column.
+      // The pergola only roofs the bench (1.2 tiles deep) and is drawn before anyone in the corner. Deeper, its front
+      // beam would cross the people on the bench; at this depth every beam and rafter projects above their heads, so
+      // drawing it first never hides a face, and the floating status badges stay on top of it. Posts: two at the back,
+      // one at the front on the pantry side; the front-right corner is held by a knee brace, since a post there would
+      // stand right in front of the end seat. A back post sorts by its own near corner: a dog sitting on the lawn just
+      // behind it (y = Y-1) must be drawn first, and nobody on the bench stands in its column.
       [1.0, 3.83].forEach(x => items.push({ z: X + x + Y + 0.12, f: () => gbox(X + x, Y, 0.12, 0.12, 0, 38, wood) }));
       items.push({
         z: Z + 2.08,

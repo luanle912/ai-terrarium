@@ -222,7 +222,8 @@ export function drawPond(ctx, island, P, t, df) {
 }
 
 // The waterfall is a sheet of water lying in the plane of the island's east cliff face (x = const), so it slants with
-// the cliff instead of being a flat screen-space strip: it pours over the pond's lip, runs down the face, then falls on.
+// the cliff instead of being a flat screen-space strip: it pours over the pond's lip, runs down the face, then falls
+// on.
 export function drawWaterfall(ctx, island, P, t, len, df) {
   const f = island.waterfall,
     X = f.x + 1,

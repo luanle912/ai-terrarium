@@ -162,8 +162,8 @@ function buildIsland({ W, H, lawn = LAWN, back = LAWN_BACK }) {
 // Stepping-stone paths laid where agents really walk (desire lines): from the foot of each stair flight to the pond
 // (the restroom block is reached across the pantry floor, not from the lawn). They run one tile
 // clear of the plinth front, so the big front lawn stays whole. Each leg is a list of waypoints that share a row or a
-// column; `cells` are the tiles they cover (agents prefer them), `lines` the same legs in world coordinates for drawing,
-// starting just past the bottom step instead of at the tile centre under it.
+// column; `cells` are the tiles they cover (agents prefer them), `lines` the same legs in world coordinates for
+// drawing, starting just past the bottom step instead of at the tile centre under it.
 function lawnPaths(W, H, st, pondSpots) {
   const e = st.find(s => s.side === 'east'),
     s = st.find(s => s.side === 'south');
@@ -615,7 +615,8 @@ const SKY_WARM = {
 };
 const GREY_DAY = '#8e9aab',
   GREY_NIGHT = '#2a2f3d';
-// df is the day factor (0 night .. 1 day). Warmth peaks halfway through dawn and dusk; cloud cover and storms grey it all.
+// df is the day factor (0 night .. 1 day). Warmth peaks halfway through dawn and dusk; cloud cover and storms grey it
+// all.
 function skyColors(df, hour, fx) {
   const warm = 4 * df * (1 - df),
     grey = (Math.max(0, fx.cloud - 0.2) / 0.8) * 0.55 + fx.storm * 0.3,

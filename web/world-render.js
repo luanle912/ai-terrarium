@@ -211,7 +211,8 @@ Object.assign(ClaudeOffice.prototype, {
             display: 'block',
           },
         }),
-        // Takes hover and clicks; on a phone it scrolls a spacer as tall as the sky (drawSky8 sets overflow and height).
+        // Takes hover and clicks; on a phone it scrolls a spacer as tall as the sky (drawSky8 sets overflow and
+        // height).
         h(
           'div',
           {

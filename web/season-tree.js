@@ -21,7 +21,9 @@ const SEASONS = {
     window: '21 ngày trước → 10 ngày sau mùng 1',
     accent: '#ffd23f',
     colors: ['#ffd23f', '#f29e0b', '#7a4a2a', '#c0392b', '#f5c542'],
-    desc: 'Cành mai nâu uốn, hoa mai vàng 5 cánh nở khắp cành, bao lì xì đỏ treo đung đưa, cánh mai rơi chậm. Chậu đỏ viền vàng.',
+    desc:
+      'Cành mai nâu uốn, hoa mai vàng 5 cánh nở khắp cành, bao lì xì đỏ treo đung đưa, cánh mai rơi chậm. ' +
+      'Chậu đỏ viền vàng.',
   },
   valentine: {
     label: tr('seasonTree.valentine.label'),

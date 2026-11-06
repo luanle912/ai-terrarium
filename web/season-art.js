@@ -1,4 +1,5 @@
-// Pixel helpers for the event trees: rectangles, triangles, blobs, hearts and stars, the Tet and mid-autumn palettes and date helpers.
+// Pixel helpers for the event trees: rectangles, triangles, blobs, hearts and stars, the Tet and mid-autumn palettes
+// and date helpers.
 export const R = (ctx, x, y, w, h, c) => {
   ctx.fillStyle = c;
   ctx.fillRect(Math.round(x), Math.round(y), w, h);

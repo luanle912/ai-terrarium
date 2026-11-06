@@ -127,8 +127,8 @@ mixin(
         );
 
       // Phone: one fixed-height row (logo, source, pause, add) and one strip of status and department chips that
-      // scrolls sideways instead of wrapping, so the header never pushes the island down. A phone on its side is wide but
-      // short, so there the strip sits inside the row between the logo and the controls.
+      // scrolls sideways instead of wrapping, so the header never pushes the island down. A phone on its side is wide
+      // but short, so there the strip sits inside the row between the logo and the controls.
       const strip = flex =>
         h(
           'div',
