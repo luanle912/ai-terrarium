@@ -67,7 +67,8 @@ export const WC = RestroomLogic.layout(
 WC.floor.forEach(k => LAWN_WALK.delete(k));
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
-// The office dogs live on the lawn in front of and beside the office, never in the pond, the smoking corner or the restroom.
+// The office dogs live on the lawn in front of and beside the office, never in the pond, the smoking corner or the
+// restroom.
 export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   W,
   H,

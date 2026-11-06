@@ -97,11 +97,13 @@ export class ClaudeOffice extends React.Component {
     this.preview = null;
     this.lastSky = Date.now();
     this.reducedMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
-    // Phones (narrow, or a phone on its side) get a compact header: one row of controls plus one sideways-scrolling strip,
-    // so the island keeps the height. render() runs every 300 ms (uiTimer), so it simply reads the query each time.
+    // Phones (narrow, or a phone on its side) get a compact header: one row of controls plus one sideways-scrolling
+    // strip, so the island keeps the height. render() runs every 300 ms (uiTimer), so it simply reads the query each
+    // time.
     this.narrowMq = window.matchMedia ? window.matchMedia('(max-width: 640px), (max-height: 520px)') : null;
-    // Camera: drag pans, wheel/trackpad pinch zooms about the cursor, two fingers pinch-zoom (CameraLogic). kZoom is the zoom the canvas resolution
-    // follows; it catches up 150 ms after the last wheel tick so the island bitmap is not re-baked on every tick.
+    // Camera: drag pans, wheel/trackpad pinch zooms about the cursor, two fingers pinch-zoom (CameraLogic). kZoom is
+    // the zoom the canvas resolution follows; it catches up 150 ms after the last wheel tick so the island bitmap is
+    // not re-baked on every tick.
     this.cam = { z: 1, tx: 0, ty: 0 };
     this.kZoom = 1;
     this.drag = null;
@@ -317,7 +319,8 @@ export class ClaudeOffice extends React.Component {
       });
     } else this.setState({ realStatus: { state: 'error', text: tr('weather.status.fallback', { reason: r.reason }) } });
   }
-  // Called every frame: Random steps its schedule, Off settles on clear, Real follows refreshReal (or Random while it fails).
+  // Called every frame: Random steps its schedule, Off settles on clear, Real follows refreshReal (or Random while it
+  // fails).
   stepWeather(now) {
     const mode = this.state.weatherMode;
     if (mode === 'random' || (mode === 'real' && this.state.realStatus.state === 'error'))

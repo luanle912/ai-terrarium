@@ -233,7 +233,8 @@ export function paintIsland(g, color, df, lit, mine) {
     px1(g, GOLD, b.cx + 1, y + 2, 2, 1);
   }
   tree(g, cx + 21, cy + 8, df);
-  outline(g, SkyRender.mix(OUTLINE, '#3a4766', 1 - df), false); // lighter at night, so islands keep their edge on a dark sky
+  // lighter at night, so islands keep their edge on a dark sky
+  outline(g, SkyRender.mix(OUTLINE, '#3a4766', 1 - df), false);
 }
 // A place with no island: a see-through diamond with a dashed outline; the viewer's place-to-be ("yours") is gold.
 export function paintTile(g, kind) {
@@ -252,7 +253,8 @@ export function paintTile(g, kind) {
   );
   outline(g, yours ? GOLD : kind === 'full' ? 'rgba(200,208,222,0.8)' : 'rgba(236,242,250,0.85)', true);
 }
-// Lines of text on a dark plate in the island-label style, centred on (x, y) in stage px: lines = [[text, font, colour]].
+// Lines of text on a dark plate in the island-label style, centred on (x, y) in stage px: lines = [[text, font,
+// colour]].
 export function plate(ctx, x, y, lines, border, alpha) {
   ctx.save();
   let wd = 0;

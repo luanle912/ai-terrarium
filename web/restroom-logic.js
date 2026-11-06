@@ -3,10 +3,10 @@
 // tests/restroom-logic.test.mjs runs this block.
 const k = (x, y) => x + ',' + y;
 // Laid out from the corner of the outdoor spot 'east-back' (SkyLogic.outdoorSpots, 6×7 tiles from x = W, y = 0). One
-// tile is about 0.7 m (a desk is 2×1 tiles) and `wall` is the office's full wall height (3 tiles). The back wall runs on
-// the office's own back-wall line (inner face y = 0, BACK thick behind it), so the block continues the pantry without a
-// step. Left to right: the men's room (3 tiles) and the women's room (3 tiles), five rows deep; the front two rows are the
-// lobby, open to the pantry on the west.
+// tile is about 0.7 m (a desk is 2×1 tiles) and `wall` is the office's full wall height (3 tiles). The back wall runs
+// on the office's own back-wall line (inner face y = 0, BACK thick behind it), so the block continues the pantry
+// without a step. Left to right: the men's room (3 tiles) and the women's room (3 tiles), five rows deep; the front two
+// rows are the lobby, open to the pantry on the west.
 function layout(zone, wall) {
   const X = zone.x,
     Y = zone.y,

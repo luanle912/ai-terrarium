@@ -1,4 +1,5 @@
-// Office furniture registered into F: desks and chairs, bookshelves, coffee corner, fridge, cooler, vending machine, tables, glass partitions and plants.
+// Office furniture registered into F: desks and chairs, bookshelves, coffee corner, fridge, cooler, vending machine,
+// tables, glass partitions and plants.
 import { SCREEN } from './office-decor.js';
 import { F, shade, text3, wallPen } from './decor-kit.js';
 F.desk = (K, t, o) => {

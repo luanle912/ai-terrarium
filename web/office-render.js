@@ -143,7 +143,8 @@ mixin(
         : tr('source.sim');
       const srcColor = isLive ? (ls === 'ok' ? '#46a758' : ls === 'error' ? '#e5484d' : '#f5a524') : '#ffd166';
       // Approval, errors, the selected and the hovered agent always show their bubble. "Gọn" (compact) also keeps the
-      // bubbles of agents at work, while agents on a break speak a line when they change activity and fade (BubbleLogic).
+      // bubbles of agents at work, while agents on a break speak a line when they change activity and fade
+      // (BubbleLogic).
       const shown = this.agents.filter(a => !a.gone);
       const pinnedOf = a => sel === a.id || this.hoverId === a.id || a.status === 'permission' || a.status === 'error';
       const busy = a => BubbleLogic.BUSY.has(a.status);
@@ -315,7 +316,8 @@ mixin(
               display: 'block',
             },
           }),
-          // The view is fitted to the island top (FH tall), not the whole scene: the deep underside may run off the bottom.
+          // The view is fitted to the island top (FH tall), not the whole scene: the deep underside may run off the
+          // bottom.
           h(
             'div',
             {

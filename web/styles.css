@@ -152,8 +152,8 @@ button {
   font-family: inherit;
   font-size: 11px;
 }
-/* World mode: the "← Overview" (world.view.all) button on one island. A chunky pixel plaque that presses down when clicked; it arrives as the
-   clouds part, and names the Esc key where there is a keyboard. */
+/* World mode: the "← Overview" (world.view.all) button on one island. A chunky pixel plaque that presses down when
+   clicked; it arrives as the clouds part, and names the Esc key where there is a keyboard. */
 .sky-back {
   position: absolute;
   z-index: 11;

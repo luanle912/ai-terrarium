@@ -44,8 +44,9 @@ mixin(
       }
     }
 
-    // "Xem như người khác": the island is fed from the same public view the hub would get (Kín or Cơ bản) instead of the
-    // full local stream, so the owner sees exactly what others see. Polled once a second; stale answers are dropped.
+    // "Xem như người khác": the island is fed from the same public view the hub would get (Kín or Cơ bản) instead of
+    // the full local stream, so the owner sees exactly what others see. Polled once a second; stale answers are
+    // dropped.
     stopOthers() {
       clearInterval(this.othersTimer);
       this.othersTimer = null;
@@ -83,7 +84,8 @@ mixin(
       return this.depts.get(key);
     }
     colOwners() {
-      const cnt = [0, 1, 2, 3].map(() => Object.create(null)); // keys are project names, possibly other people's ("__proto__")
+      // Keys are project names, possibly other people's ("__proto__"), so the maps have no prototype.
+      const cnt = [0, 1, 2, 3].map(() => Object.create(null));
       this.agents.forEach(a => {
         if (a.gone || a.leaving) return;
         const c = colOf(a.desk);
@@ -550,7 +552,8 @@ mixin(
           if (g.spot) a.actNow = g.spot.act;
         }
       }
-      // At a stall or the vanity: count the visit along (RestroomLogic.visit); while inside the stall, the person is not drawn.
+      // At a stall or the vanity: count the visit along (RestroomLogic.visit); while inside the stall, the person is
+      // not drawn.
       else if (a.actNow === 'wc') {
         a.wcT = (a.wcT || 0) + dt * this.speed;
         a.wcIn = RestroomLogic.visit(a.wcT) === 'inside';

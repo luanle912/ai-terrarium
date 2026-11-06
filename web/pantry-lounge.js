@@ -1,4 +1,5 @@
-// Pantry lounge pieces registered into I: sofa, coffee table, armchair, floor lamp, rug, booth, cafe tables, arcade, foosball and plants.
+// Pantry lounge pieces registered into I: sofa, coffee table, armchair, floor lamp, rug, booth, cafe tables, arcade,
+// foosball and plants.
 import { PLANT } from './pantry-items.js';
 import { I, shade } from './pantry-kit.js';
 I.sofa = {

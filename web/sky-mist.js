@@ -1,4 +1,5 @@
-// Mist and far islands of the sky: pre-rendered mist sprites, low-resolution mist layers, depth bands and the parallax view.
+// Mist and far islands of the sky: pre-rendered mist sprites, low-resolution mist layers, depth bands and the parallax
+// view.
 import { CameraLogic } from './camera-logic.js';
 import { hash, hex, mix, toHex } from './sky-island.js';
 export const rgba = (hexc, a) => {
