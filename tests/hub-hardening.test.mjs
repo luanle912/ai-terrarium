@@ -6,6 +6,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { startDevHub, devLogin, pairDevice } from './hub-helpers.mjs';
+import { moduleGraph } from './web.mjs';
 
 const require = createRequire(import.meta.url);
 const { createOfficePage, inlineScriptHashes } = require('../hub/csp.js');
@@ -13,22 +14,40 @@ const OFFICE = path.join(import.meta.dirname, '..', 'claude-office.html');
 const html = fs.readFileSync(OFFICE, 'utf8');
 const sha = (s) => "'sha256-" + crypto.createHash('sha256').update(s).digest('base64') + "'";
 
-test('every inline script of the page is hashed into script-src', async () => {
+test('the page runs only its own web/ files and the pinned CDN scripts', async () => {
   const inline = [...html.matchAll(/<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/g)];
-  assert.ok(inline.length > 5);
+  assert.equal(inline.length, 0, 'the page code lives in web/, not inline');
   const h = await startDevHub();
   try {
     const login = await devLogin(h.url, 'a@newera.inc');
     const r = await fetch(h.url + '/', { headers: { cookie: login.cookie } });
     assert.equal(r.status, 200);
     const csp = r.headers.get('content-security-policy');
-    for (const m of inline) assert.ok(csp.includes(sha(m[1])), 'missing hash');
     const scriptSrc = /script-src ([^;]*)/.exec(csp)[1];
-    assert.equal(scriptSrc.split(' ').filter((t) => t.startsWith("'sha256-")).length, new Set(inline.map((m) => sha(m[1]))).size);
-    assert.ok(scriptSrc.includes('https://cdnjs.cloudflare.com'));
+    assert.deepEqual(scriptSrc.split(' '), ["'self'", 'https://cdnjs.cloudflare.com']);
     assert.ok(!scriptSrc.includes('unsafe-inline'));
     assert.ok(csp.includes("default-src 'none'") && csp.includes("frame-ancestors 'none'") && csp.includes("base-uri 'none'") && csp.includes("form-action 'self'"));
     assert.ok(csp.includes("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com"));
+  } finally { await h.close(); }
+});
+
+test('the hub serves every web/ module and the stylesheet the page loads, without the general limit, and nothing outside web/', async () => {
+  const assets = ['/web/styles.css', ...moduleGraph().map((n) => `/web/${n}.js`)];
+  assert.ok(assets.length > 30);
+  const h = await startDevHub();
+  try {
+    for (let round = 0; round < 5; round++) {
+      for (const a of assets) {
+        const r = await fetch(h.url + a);
+        assert.equal(r.status, 200, a);
+        assert.match(r.headers.get('content-type'), a.endsWith('.css') ? /^text\/css/ : /^text\/javascript/);
+        assert.equal(r.headers.get('cache-control'), 'no-cache');
+        await r.arrayBuffer();
+      }
+    }
+    for (const bad of ['/web/../hub/secret.js', '/web/%2e%2e/hub/config.js', '/web/i18n/../../server.js', '/web/x.html', '/web/A.js', '/web/a/b/c.js', '/web/nope.js']) {
+      assert.equal((await fetch(h.url + bad)).status, 404, bad);
+    }
   } finally { await h.close(); }
 });
 
