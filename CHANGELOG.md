@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **How bubbles show** — With many people in the office the scene was mostly name tags. ⚙ Settings → *Bubble text* now picks how bubbles show: *Compact* (the default) keeps the bubble of everyone at work (typing, thinking, talking, waiting), while someone on a break says a line for about six seconds when they start something new and then it fades, at most four at a time; *Always* shows every bubble as before; *Off* shows none. Approvals, errors, the selected agent and the one under the mouse always show theirs, and the choice is remembered in the browser
 
+### Changed
+
+- **The page is split into files** — `claude-office.html` was one 7,150-line file that every change touched, so pull requests kept colliding and parts were hard to find. It is now a short shell that loads `web/`: one stylesheet, one translation table per language, the DOM-free logic files, and the page component spread over `office-*.js` and `world-*.js` by concern (no file over about 340 lines). The code moved verbatim, so the page looks and behaves exactly as before; there is still no build step and no dependency. Both the local server and the hub serve `web/` (only plain `[a-z0-9-]` names, never cached stale), the hub's page policy now allows its own scripts instead of hashing inline ones, and the tests read the files directly. **After updating, restart `node server.js`** if you run it yourself: an older server cannot serve `web/`, and the page says so instead of staying blank. Plugin users get the new server with the update
+
 ### Fixed
 
 - **Blurry bubbles when zoomed** — Zoomed in, the name tags turned blurry because the browser kept the island layer at the size it was first drawn and stretched it; the layer is now redrawn sharp as soon as the zoom or pan stops
