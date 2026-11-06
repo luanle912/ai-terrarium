@@ -1,48 +1,330 @@
-:root{--bg:#0e1117;--fg:#e6e9ef;--muted:#8b93a7;--border:#2a3142;--surface:#151a24;--accent:#7fb2ff;--warn:#ffd166;color-scheme:dark}
-body{background:var(--bg);color:var(--fg);font-family:'JetBrains Mono',ui-monospace,monospace;-webkit-font-smoothing:antialiased;margin:0;overflow:hidden}
-.app{height:100vh;height:100dvh}
-a{color:var(--accent)}a:hover{color:#b8d4ff}
-button{font-family:inherit}
-*{box-sizing:border-box}
-.btn{border:2px solid var(--border);background:var(--surface);color:var(--fg);padding:7px 12px;font-size:12px;cursor:pointer;font-family:inherit}
-.btn:hover{background:#1d2433}
-.btn-active{background:var(--fg);color:var(--bg)}
-.btn.btn-active:hover{background:#ffffff}
-.btn-accent{border-color:var(--warn);background:var(--warn);color:#1a1300;font-weight:600}
-.btn-accent:hover{background:#ffe08f}
+:root {
+  --bg: #0e1117;
+  --fg: #e6e9ef;
+  --muted: #8b93a7;
+  --border: #2a3142;
+  --surface: #151a24;
+  --accent: #7fb2ff;
+  --warn: #ffd166;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  overflow: hidden;
+}
+.app {
+  height: 100vh;
+  height: 100dvh;
+}
+a {
+  color: var(--accent);
+}
+a:hover {
+  color: #b8d4ff;
+}
+button {
+  font-family: inherit;
+}
+* {
+  box-sizing: border-box;
+}
+.btn {
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  padding: 7px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn:hover {
+  background: #1d2433;
+}
+.btn-active {
+  background: var(--fg);
+  color: var(--bg);
+}
+.btn.btn-active:hover {
+  background: #ffffff;
+}
+.btn-accent {
+  border-color: var(--warn);
+  background: var(--warn);
+  color: #1a1300;
+  font-weight: 600;
+}
+.btn-accent:hover {
+  background: #ffe08f;
+}
 /* a single-row strip that scrolls sideways on small screens, without a visible scrollbar */
-.hscroll{scrollbar-width:none;overscroll-behavior-x:contain}.hscroll::-webkit-scrollbar{display:none}
+.hscroll {
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.hscroll::-webkit-scrollbar {
+  display: none;
+}
 /* On a phone the island is ~350 px wide, so full-size bubbles would cover the office; same query as narrowMq */
-@media (max-width: 640px), (max-height: 520px){.app{--bubble-k:0.7;--bubble-w:150px}}
-.chip{display:flex;align-items:center;gap:6px;padding:3px 8px;background:var(--surface);border:1px solid #232a39;color:#aab2c5;white-space:nowrap;flex:none;font-size:11px}
-.settings-toggle{position:absolute;bottom:12px;right:12px;z-index:100;width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--surface);color:var(--fg);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px}
-.settings-toggle:hover{background:#1d2433}
-.settings-panel{position:absolute;bottom:56px;right:12px;z-index:100;width:280px;max-width:calc(100% - 24px);max-height:calc(100% - 68px);overflow-y:auto;background:var(--surface);border:2px solid var(--border);padding:14px;display:flex;flex-direction:column;gap:12px;font-size:12px}
-.settings-panel label{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.settings-panel input[type=range]{flex:1;max-width:120px}
-.settings-panel input[type=text]{flex:1;max-width:160px;background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:4px 8px;font-family:inherit;font-size:11px}
-.settings-panel select{background:var(--bg);border:1px solid var(--border);color:var(--fg);padding:4px 8px;font-family:inherit;font-size:11px}
+@media (max-width: 640px), (max-height: 520px) {
+  .app {
+    --bubble-k: 0.7;
+    --bubble-w: 150px;
+  }
+}
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--surface);
+  border: 1px solid #232a39;
+  color: #aab2c5;
+  white-space: nowrap;
+  flex: none;
+  font-size: 11px;
+}
+.settings-toggle {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 100;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+}
+.settings-toggle:hover {
+  background: #1d2433;
+}
+.settings-panel {
+  position: absolute;
+  bottom: 56px;
+  right: 12px;
+  z-index: 100;
+  width: 280px;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 68px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 12px;
+}
+.settings-panel label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.settings-panel input[type='range'] {
+  flex: 1;
+  max-width: 120px;
+}
+.settings-panel input[type='text'] {
+  flex: 1;
+  max-width: 160px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 11px;
+}
+.settings-panel select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 11px;
+}
 /* World mode: the "← Overview" (world.view.all) button on one island. A chunky pixel plaque that presses down when clicked; it arrives as the
    clouds part, and names the Esc key where there is a keyboard. */
-.sky-back{position:absolute;z-index:11;top:12px;left:12px;display:flex;align-items:center;gap:10px;padding:5px 8px 5px 0;background:var(--surface);color:#ffffff;border:3px solid var(--fg);box-shadow:4px 4px 0 rgba(0,0,0,0.45);font-family:'Pixelify Sans',monospace;font-size:15px;font-weight:600;line-height:1;cursor:pointer;animation:sky-back-in .28s .16s both steps(4,end)}
-.sky-back:hover{background:#1d2433}
-.sky-back:active{transform:translate(3px,3px);box-shadow:1px 1px 0 rgba(0,0,0,0.45)}
-.sky-back:focus-visible{outline:2px solid var(--warn);outline-offset:3px}
-.sky-back .tab{align-self:stretch;width:5px;margin:-5px 0}
-.sky-back kbd{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:500;color:var(--muted);border:1px solid var(--border);border-bottom-width:2px;padding:2px 4px}
-@media (hover:none){.sky-back kbd{display:none}}
-@keyframes sky-back-in{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+.sky-back {
+  position: absolute;
+  z-index: 11;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px 5px 0;
+  background: var(--surface);
+  color: #ffffff;
+  border: 3px solid var(--fg);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  animation: sky-back-in 0.28s 0.16s both steps(4, end);
+}
+.sky-back:hover {
+  background: #1d2433;
+}
+.sky-back:active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.45);
+}
+.sky-back:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: 3px;
+}
+.sky-back .tab {
+  align-self: stretch;
+  width: 5px;
+  margin: -5px 0;
+}
+.sky-back kbd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  padding: 2px 4px;
+}
+@media (hover: none) {
+  .sky-back kbd {
+    display: none;
+  }
+}
+@keyframes sky-back-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 /* The island's panel: top right on a wide stage, a bottom sheet on a phone (collapsed to its title bar until tapped).
    It arrives with the plaque, as the clouds part. */
-.sky-sheet{position:absolute;z-index:10;top:12px;right:12px;width:300px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);box-sizing:border-box;display:flex;flex-direction:column;background:var(--surface);border:3px solid var(--fg);box-shadow:6px 6px 0 rgba(0,0,0,0.45);font-size:12px;animation:sky-panel-in .28s .16s both steps(4,end)}
-.sky-sheet.is-phone{top:auto;left:12px;right:12px;bottom:12px;width:auto;max-width:none;max-height:72%;animation-name:sky-sheet-up}
-.sky-sheet-head{display:flex;align-items:center;gap:4px;padding-right:8px;flex:none}
-.sky-sheet-bar{flex:1;min-width:0;display:flex;align-items:center;gap:10px;min-height:46px;padding:6px 4px 6px 12px;background:transparent;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
-.sky-sheet-bar:focus-visible{outline:2px solid var(--warn);outline-offset:-5px}
-.sky-sheet-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.sky-sheet-chev{flex:none;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border:2px solid var(--border);color:var(--muted);font-size:10px;line-height:1}
-.sky-sheet-bar:hover .sky-sheet-chev{border-color:var(--fg);color:#ffffff}
-.sky-sheet-body{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:12px 14px 14px;display:flex;flex-direction:column;gap:12px;border-top:2px solid var(--border)}
-@keyframes sky-panel-in{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
-@keyframes sky-sheet-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.sky-back,.sky-sheet{animation:none}}
+.sky-sheet {
+  position: absolute;
+  z-index: 10;
+  top: 12px;
+  right: 12px;
+  width: 300px;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 24px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 3px solid var(--fg);
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  animation: sky-panel-in 0.28s 0.16s both steps(4, end);
+}
+.sky-sheet.is-phone {
+  top: auto;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  width: auto;
+  max-width: none;
+  max-height: 72%;
+  animation-name: sky-sheet-up;
+}
+.sky-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+  flex: none;
+}
+.sky-sheet-bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 6px 4px 6px 12px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sky-sheet-bar:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: -5px;
+}
+.sky-sheet-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sky-sheet-chev {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+}
+.sky-sheet-bar:hover .sky-sheet-chev {
+  border-color: var(--fg);
+  color: #ffffff;
+}
+.sky-sheet-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 2px solid var(--border);
+}
+@keyframes sky-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sky-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-back,
+  .sky-sheet {
+    animation: none;
+  }
+}

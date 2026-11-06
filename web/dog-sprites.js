@@ -1,10 +1,23 @@
 // Pixel sprites for the three office dogs, all drawn facing right; the page mirrors them to face left.
 // Each letter is a palette colour ('.' is empty). The bottom row is where the paws touch the lawn and `ax` is the
 // column under the dog's middle. A frame may also be {from, set} to patch a few pixels of another frame.
-const BREEDS={
-  corgi:{name:'Corgi',ax:7,pal:{o:'#d9822b',O:'#b2621c',w:'#f6f1e7',s:'#d8cfbf',k:'#1d1a18',p:'#e7a3a0',g:'#c3b8a6',c:'#3e8ed0',t:'#e0606a'},
-    frames:{
-      stand:[
+const BREEDS = {
+  corgi: {
+    name: 'Corgi',
+    ax: 7,
+    pal: {
+      o: '#d9822b',
+      O: '#b2621c',
+      w: '#f6f1e7',
+      s: '#d8cfbf',
+      k: '#1d1a18',
+      p: '#e7a3a0',
+      g: '#c3b8a6',
+      c: '#3e8ed0',
+      t: '#e0606a',
+    },
+    frames: {
+      stand: [
         '.........o..o..',
         '........oo.op..',
         '........oooowo.',
@@ -14,9 +27,17 @@ const BREEDS={
         'wOooooooooww...',
         '.wssssssswww...',
         '.ooO....wwg....',
-        '.wws....wws....'],
-      wag:{from:'stand',set:[[0,6,'.'],[0,4,'w'],[14,4,'t']]},
-      run1:[
+        '.wws....wws....',
+      ],
+      wag: {
+        from: 'stand',
+        set: [
+          [0, 6, '.'],
+          [0, 4, 'w'],
+          [14, 4, 't'],
+        ],
+      },
+      run1: [
         '.........o..o...',
         '........oo.op...',
         '........oooowo..',
@@ -26,8 +47,9 @@ const BREEDS={
         'wOooooooooww....',
         '.wssssssswww....',
         'oO.........ww...',
-        'w...........ws..'],
-      run2:[
+        'w...........ws..',
+      ],
+      run2: [
         '.........o..o..',
         '........oo.op..',
         '........oooowo.',
@@ -37,44 +59,52 @@ const BREEDS={
         'wOooooooooww...',
         '.wssssssswww...',
         '...oOg.wwg.....',
-        '...wsw.ws......'],
-      sit:{ax:6,rows:[
-        '......o..o..',
-        '.....oo.op..',
-        '.....oooowo.',
-        '.....oookwwk',
-        '....oocwwww.',
-        '...oooowww..',
-        '..ooooowww..',
-        '.wooooowww..',
-        '.wwooOowwg..',
-        'wwsooO.wwg..',
-        '.wsss..wws..']},
-      lie:[
+        '...wsw.ws......',
+      ],
+      sit: {
+        ax: 6,
+        rows: [
+          '......o..o..',
+          '.....oo.op..',
+          '.....oooowo.',
+          '.....oookwwk',
+          '....oocwwww.',
+          '...oooowww..',
+          '..ooooowww..',
+          '.wooooowww..',
+          '.wwooOowwg..',
+          'wwsooO.wwg..',
+          '.wsss..wws..',
+        ],
+      },
+      lie: [
         '..........o..o..',
         '.........oo.op..',
         '.........oooowo.',
         '.........oookwwk',
         '.ooooooooocwwww.',
         'wooooooooooww...',
-        'wOssssssssswwww.'],
-      sleep:[
+        'wOssssssssswwww.',
+      ],
+      sleep: [
         '................',
         '................',
         '................',
         '..........o..o..',
         '.ooooooooooo.op.',
         'woooooooooocoOwwk',
-        'wOssssssssswwwww.'],
-      bow:[
+        'wOssssssssswwwww.',
+      ],
+      bow: [
         '..........o..o..',
         'ww.......oo.op..',
         'wooooo...oooowo.',
         '.ooooooooooookwwk',
         '.Ooooooooocwwwwt.',
         '.oO..sssswwww....',
-        '.ww....wwwwwwww..'],
-      drink:[
+        '.ww....wwwwwwww..',
+      ],
+      drink: [
         '...............',
         '...............',
         '...............',
@@ -84,11 +114,26 @@ const BREEDS={
         'wOooooooocoooop',
         '.wssssssswwoooo',
         '.ooO....wwgokww',
-        '.wws....wws.wwk'],
-    }},
-  husky:{name:'Husky',ax:8,pal:{G:'#727b8c',D:'#4c5361',w:'#f2f4f7',s:'#c8cdd8',k:'#1b1d22',b:'#58b4ff',p:'#e7a3a0',c:'#f5a524',t:'#e0606a'},
-    frames:{
-      stand:[
+        '.wws....wws.wwk',
+      ],
+    },
+  },
+  husky: {
+    name: 'Husky',
+    ax: 8,
+    pal: {
+      G: '#727b8c',
+      D: '#4c5361',
+      w: '#f2f4f7',
+      s: '#c8cdd8',
+      k: '#1b1d22',
+      b: '#58b4ff',
+      p: '#e7a3a0',
+      c: '#f5a524',
+      t: '#e0606a',
+    },
+    frames: {
+      stand: [
         '...........D.D...',
         '..GG......DGGpG..',
         '.G..G....GGGwGG..',
@@ -100,9 +145,21 @@ const BREEDS={
         '...wsssssswww....',
         '...wws....wws....',
         '...wws....wws....',
-        '...wws....wws....'],
-      wag:{from:'stand',set:[[2,1,'.'],[3,1,'.'],[1,2,'.'],[4,2,'G'],[1,1,'G'],[2,1,'G'],[16,4,'t']]},
-      run1:[
+        '...wws....wws....',
+      ],
+      wag: {
+        from: 'stand',
+        set: [
+          [2, 1, '.'],
+          [3, 1, '.'],
+          [1, 2, '.'],
+          [4, 2, 'G'],
+          [1, 1, 'G'],
+          [2, 1, 'G'],
+          [16, 4, 't'],
+        ],
+      },
+      run1: [
         '............D.D...',
         '...........DGGpG..',
         '..........GGGwGG..',
@@ -114,8 +171,9 @@ const BREEDS={
         '..wwsssssswwww....',
         '.ws.........ws....',
         'ws...........ws...',
-        'w.............w...'],
-      run2:[
+        'w.............w...',
+      ],
+      run2: [
         '...........D.D...',
         '..GG......DGGpG..',
         '.G..G....GGGwGG..',
@@ -127,22 +185,27 @@ const BREEDS={
         '...wsssssswww....',
         '....ws..wws......',
         '....ws.ws........',
-        '....ws.w.........'],
-      sit:{ax:6,rows:[
-        '.......D.D...',
-        '......DGGpG..',
-        '.....GGGwGG..',
-        '.....GwwbGwwk',
-        '.....cwwwwww.',
-        '....GcGwwss..',
-        '...GGGGwww...',
-        '..GGGGGwww...',
-        '.GGGGGGwww...',
-        'GwGGGDGwws...',
-        'wwwwGD.wws...',
-        '.wsss..wws...',
-        'wwsss..wws...']},
-      lie:[
+        '....ws.w.........',
+      ],
+      sit: {
+        ax: 6,
+        rows: [
+          '.......D.D...',
+          '......DGGpG..',
+          '.....GGGwGG..',
+          '.....GwwbGwwk',
+          '.....cwwwwww.',
+          '....GcGwwss..',
+          '...GGGGwww...',
+          '..GGGGGwww...',
+          '.GGGGGGwww...',
+          'GwGGGDGwws...',
+          'wwwwGD.wws...',
+          '.wsss..wws...',
+          'wwsss..wws...',
+        ],
+      },
+      lie: [
         '............D.D...',
         '...........DGGpG..',
         '..........GGGwGG..',
@@ -150,8 +213,9 @@ const BREEDS={
         '.GG.......cwwwwww.',
         'G..DDDDDDDcGwwss..',
         'Gw.GGGGGGGGGwwwww.',
-        '.wwwsssssssswwwww.'],
-      sleep:[
+        '.wwwsssssssswwwww.',
+      ],
+      sleep: [
         '..................',
         '..................',
         '..................',
@@ -159,8 +223,9 @@ const BREEDS={
         '.GG.......DGGpG...',
         'G..DDDDDDDGGGwGG..',
         'Gw.GGGGGGGGDwwGwwk',
-        '.wwwsssssssswwwww.'],
-      bow:[
+        '.wwwsssssssswwwww.',
+      ],
+      bow: [
         '..GG..............',
         '.G..G.............',
         '.Gw.DDDD..........',
@@ -170,8 +235,9 @@ const BREEDS={
         '...wsssssswGwbGwwk',
         '...ws....wwwwwwww.',
         '...ws.....wwwwwwww',
-        '...ws.............'],
-      drink:[
+        '...ws.............',
+      ],
+      drink: [
         '.................',
         '..GG.............',
         '.G..G............',
@@ -183,11 +249,16 @@ const BREEDS={
         '...wsssssswwGGwGG',
         '...wws....wwGwbww',
         '...wws....wws.www',
-        '...wws....wws..wk'],
-    }},
-  dalmatian:{name:'Dalmatian',ax:8,pal:{w:'#f4f1ea',s:'#d3ccc0',k:'#22242b',g:'#b1aa9e',p:'#e8a0a0',c:'#e5484d',t:'#e0606a'},
-    frames:{
-      stand:[
+        '...wws....wws..wk',
+      ],
+    },
+  },
+  dalmatian: {
+    name: 'Dalmatian',
+    ax: 8,
+    pal: { w: '#f4f1ea', s: '#d3ccc0', k: '#22242b', g: '#b1aa9e', p: '#e8a0a0', c: '#e5484d', t: '#e0606a' },
+    frames: {
+      stand: [
         '.............www.',
         '...........kkwww.',
         'w..........kkwkww',
@@ -200,9 +271,19 @@ const BREEDS={
         '...wwg....wwg....',
         '...kwg....wwg....',
         '...wwg....wkg....',
-        '...wwg....wwg....'],
-      wag:{from:'stand',set:[[0,2,'.'],[1,3,'.'],[0,3,'w'],[0,4,'w'],[15,4,'t']]},
-      run1:[
+        '...wwg....wwg....',
+      ],
+      wag: {
+        from: 'stand',
+        set: [
+          [0, 2, '.'],
+          [1, 3, '.'],
+          [0, 3, 'w'],
+          [0, 4, 'w'],
+          [15, 4, 't'],
+        ],
+      },
+      run1: [
         '..............www.',
         '............kkwww.',
         '............kkwkww',
@@ -214,8 +295,9 @@ const BREEDS={
         '.wwws.....swwww...',
         'wwg..........wg...',
         'kg............wg..',
-        'w..............ww.'],
-      run2:[
+        'w..............ww.',
+      ],
+      run2: [
         '.............www.',
         '...........kkwww.',
         '...........kkwkww',
@@ -228,39 +310,46 @@ const BREEDS={
         '....wwg..wwg.....',
         '....kwg..wkg.....',
         '....wwg..wwg.....',
-        '.....wg...wg.....'],
-      sit:{ax:6,rows:[
-        '.........www.',
-        '.......kkwww.',
-        '.......kkwkww',
-        '.......kwwwwk',
-        '.......cwss..',
-        '.....wwcww...',
-        '....wwkwww...',
-        '...wkwwwkw...',
-        '..wwwwwwww...',
-        '.wwkwwwwwg...',
-        '.wwwwkgwwg...',
-        'wwwwwg.wwg...',
-        '.wswwg.wkg...',
-        'wwsss..wwg...']},
-      lie:[
+        '.....wg...wg.....',
+      ],
+      sit: {
+        ax: 6,
+        rows: [
+          '.........www.',
+          '.......kkwww.',
+          '.......kkwkww',
+          '.......kwwwwk',
+          '.......cwss..',
+          '.....wwcww...',
+          '....wwkwww...',
+          '...wkwwwkw...',
+          '..wwwwwwww...',
+          '.wwkwwwwwg...',
+          '.wwwwkgwwg...',
+          'wwwwwg.wwg...',
+          '.wswwg.wkg...',
+          'wwsss..wwg...',
+        ],
+      },
+      lie: [
         '..............www.',
         '............kkwww.',
         '............kkwkww',
         '............kwwwwk',
         '..wwkwwwwkwwcwss..',
         'wwwwwwkwwwwkwwwwww',
-        '.wkwssssssswwwwwww'],
-      sleep:[
+        '.wkwssssssswwwwwww',
+      ],
+      sleep: [
         '..................',
         '..................',
         '..................',
         '.............www..',
         '..wwkwwwwkwkkwwwwk',
         'wwwwwwkwwwwkkswwww',
-        '.wkwssssssswwwwwww'],
-      bow:[
+        '.wkwssssssswwwwwww',
+      ],
+      bow: [
         'w.................',
         '.w.wwk............',
         '.wwwwwwkw.........',
@@ -270,8 +359,9 @@ const BREEDS={
         '..ww.....wwckwwwwk',
         '..kw.......wwss...',
         '..ww......wwwwwww.',
-        '..ww......wwwwwww.'],
-      drink:[
+        '..ww......wwwwwww.',
+      ],
+      drink: [
         '.................',
         '.................',
         '.................',
@@ -284,19 +374,29 @@ const BREEDS={
         '...wwg....wwkkkw.',
         '...kwg....wwgkww.',
         '...wwg....wkg.ww.',
-        '...wwg....wwg..wk'],
-    }},
+        '...wwg....wwg..wk',
+      ],
+    },
+  },
 };
-const cache=new Map();
-function frame(b,name){
-  const id=b+'/'+name;if(cache.has(id))return cache.get(id);
-  const B=BREEDS[b],src0=B.frames[name],src=Array.isArray(src0)?{rows:src0}:src0;let rows;
-  if(src.rows)rows=src.rows;
-  else{rows=frame(b,src.from).rows.map(r=>r.split(''));for(const[x,y,c]of src.set||[])rows[y][x]=c;rows=rows.map(r=>r.join(''));}
-  const w=Math.max(...rows.map(r=>r.length));
-  const f={rows,w,h:rows.length,ax:src.ax!=null?src.ax:(src.from?frame(b,src.from).ax:B.ax)};
-  cache.set(id,f);return f;
+const cache = new Map();
+function frame(b, name) {
+  const id = b + '/' + name;
+  if (cache.has(id)) return cache.get(id);
+  const B = BREEDS[b],
+    src0 = B.frames[name],
+    src = Array.isArray(src0) ? { rows: src0 } : src0;
+  let rows;
+  if (src.rows) rows = src.rows;
+  else {
+    rows = frame(b, src.from).rows.map(r => r.split(''));
+    for (const [x, y, c] of src.set || []) rows[y][x] = c;
+    rows = rows.map(r => r.join(''));
+  }
+  const w = Math.max(...rows.map(r => r.length));
+  const f = { rows, w, h: rows.length, ax: src.ax != null ? src.ax : src.from ? frame(b, src.from).ax : B.ax };
+  cache.set(id, f);
+  return f;
 }
-const frameNames=b=>Object.keys(BREEDS[b].frames);
-export const DogSprites = {BREEDS,frame,frameNames};
-
+const frameNames = b => Object.keys(BREEDS[b].frames);
+export const DogSprites = { BREEDS, frame, frameNames };
