@@ -5,6 +5,13 @@ import { tr } from './i18n.js';
 import { h } from './office-scene.js';
 import { ClaudeOffice } from './office.js';
 import { WorldLogic } from './world-logic.js';
+// The parts of the error line (WorldLogic.failParts), each its own key so a missing wait is never shown as "0 s".
+const PILL_PART = {
+  error: p => tr('world.pill.error', p),
+  retryIn: p => tr('world.pill.retryIn', p),
+  retrying: () => tr('world.pill.retrying'),
+  times: p => tr('world.pill.times', p),
+};
 
 const TONE_COL = { ok: '#46a758', warn: '#f5a524', bad: '#e5484d', muted: '#8b8fa3' };
 const LOG_LINES = 50;
@@ -87,11 +94,9 @@ Object.assign(ClaudeOffice.prototype, {
               key: 'err',
               style: { ...sub, color: v.tone === 'bad' ? '#ff8a8d' : 'var(--warn)', wordBreak: 'break-word' },
             },
-            tr('world.pill.failing', {
-              code: v.err.code,
-              s: String(Math.ceil((v.retryInMs || 0) / 1000)),
-              n: String(v.failures),
-            }),
+            WorldLogic.failParts(v)
+              .map(([k, p]) => PILL_PART[k](p))
+              .join(' · '),
           ),
         );
       if (v.err && v.err.reason && v.tone !== 'ok')

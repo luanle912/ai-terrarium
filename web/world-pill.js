@@ -49,5 +49,15 @@ export const WorldPill = (() => {
   // The chip opens the hub on this machine's island when the server names it (a 16-hex device id).
   const deviceLink = (hub, deviceId) =>
     typeof deviceId === 'string' && /^[0-9a-f]{16}$/.test(deviceId) ? hub + '#this-device=' + deviceId : hub;
-  return { pillView, agoParts, deviceLink };
+  // The error line as parts (world.pill.<part> keys), joined with ' · ': the code; the wait only when a retry is
+  // planned (none while paused for a sign-in), "retrying" once it is due; the failure count when there is one.
+  function failParts(v) {
+    if (!v || !v.err) return [];
+    const out = [['error', { code: v.err.code }]];
+    if (typeof v.retryInMs === 'number')
+      out.push(v.retryInMs > 0 ? ['retryIn', { s: String(Math.ceil(v.retryInMs / 1000)) }] : ['retrying', {}]);
+    if (v.failures > 0) out.push(['times', { n: String(v.failures) }]);
+    return out;
+  }
+  return { pillView, agoParts, deviceLink, failParts };
 })();
