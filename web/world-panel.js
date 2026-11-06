@@ -273,7 +273,8 @@ Object.assign(ClaudeOffice.prototype, {
         leaveLink,
       ]);
     }
-    const devs = w.mine ? w.mine.devices : [],
+    // This computer ("Máy này", from the hub link's #this-device) leads the list.
+    const devs = w.mine ? [...w.mine.devices].sort((a, b) => (b.id === w.thisDevice) - (a.id === w.thisDevice)) : [],
       colors = w.mine ? w.mine.colors : [],
       d = w.draft,
       sending = mine && mine.online !== false;
@@ -478,7 +479,9 @@ Object.assign(ClaudeOffice.prototype, {
               ? devs.map(x => {
                   const [lab, col] = SEND_LABEL.get(x.send) || ['—', '#8b8fa3'],
                     revoked = x.send === 'revoked',
-                    c = asking(x, 'list');
+                    c = asking(x, 'list'),
+                    here = x.id === w.thisDevice,
+                    sent = Number.isFinite(x.lastAt) ? x.lastAt : x.lastUsedAt;
                   return h(
                     'div',
                     { key: x.id, style: { display: 'flex', flexDirection: 'column', gap: 6 } },
@@ -491,15 +494,20 @@ Object.assign(ClaudeOffice.prototype, {
                         { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 } },
                         h(
                           'span',
-                          {
-                            style: {
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              color: '#ffffff',
+                          { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+                          h(
+                            'span',
+                            {
+                              style: {
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                color: '#ffffff',
+                              },
                             },
-                          },
-                          clip(x.name, 40) || '—',
+                            clip(x.name, 40) || '—',
+                          ),
+                          here && h('span', { className: 'sky-here' }, tr('world.mine.thisDevice')),
                         ),
                         h(
                           'span',
@@ -509,6 +517,8 @@ Object.assign(ClaudeOffice.prototype, {
                               ? tr('world.mine.devices.shareSuffix', { level: SHARE_LABEL.get(x.share) })
                               : ''),
                         ),
+                        Number.isFinite(sent) &&
+                          h('span', { style: MUTED }, tr('world.mine.lastSent', { time: when(sent) })),
                       ),
                       !revoked && !c && askRevoke(x, 'list'),
                     ),

@@ -302,6 +302,100 @@ button {
   gap: 12px;
   border-top: 2px solid var(--border);
 }
+/* "Máy này" on this computer's row in "Của tôi" */
+.sky-here {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--warn);
+  background: rgba(255, 209, 102, 0.12);
+  color: var(--warn);
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+/* the "?" in the connection chip and the legend it opens (world-legend.js) */
+.sky-legend-btn {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-left: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #4a5468;
+  background: var(--bg);
+  color: #aab2c5;
+  font:
+    600 10px/1 'JetBrains Mono',
+    monospace;
+  cursor: pointer;
+}
+.sky-legend-btn:hover,
+.sky-legend-btn.is-open {
+  border-color: var(--fg);
+  color: #ffffff;
+}
+.sky-legend-btn:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: 2px;
+}
+.sky-legend {
+  position: fixed;
+  z-index: 120;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: var(--surface);
+  border: 2px solid var(--fg);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+  color: var(--fg);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: normal;
+  cursor: default;
+  animation: sky-legend-in 0.16s both steps(3, end);
+}
+.sky-legend-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px 6px 6px;
+  border-left: 3px solid transparent;
+}
+.sky-legend-row strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+.sky-legend-row span span {
+  color: var(--muted);
+}
+.sky-legend-row.is-lit {
+  border-left-color: var(--row);
+  background: color-mix(in srgb, var(--row) 16%, transparent);
+}
+.sky-legend-row.is-lit span span {
+  color: #d4d9e3;
+}
+.sky-legend-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  background: var(--row);
+}
+@keyframes sky-legend-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @keyframes sky-panel-in {
   from {
     opacity: 0;
@@ -324,7 +418,8 @@ button {
 }
 @media (prefers-reduced-motion: reduce) {
   .sky-back,
-  .sky-sheet {
+  .sky-sheet,
+  .sky-legend {
     animation: none;
   }
 }

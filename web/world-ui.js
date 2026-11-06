@@ -7,9 +7,9 @@ import { I18n, tr } from './i18n.js';
 import { WorldLogic } from './world-logic.js';
 import { SkyRender } from './sky-render.js';
 import { h } from './office-scene.js';
-export const VIEW_KEY = 'ai-terrarium.view';
+export const VIEW_KEY = 'ai-terrarium.view',
+  DEVICE_KEY = 'ai-terrarium.thisDevice';
 export const OFF_MS = 250,
-  OFFLINE_ALPHA = 0.65,
   ME_PROBE_MS = 10000,
   LINK_DIM = 0.55;
 export const KIND_LABEL = new Map([
@@ -40,6 +40,15 @@ export const clip = (s, n) => {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 };
 export const validSlot = s => Number.isInteger(s) && s >= 0 && s < WorldLogic.SLOTS;
+// "4 giây trước", "3 phút trước", "2 giờ trước" (WorldLogic.agoParts picks the unit), and a clock time.
+export const agoText = ms => {
+  const { unit, n } = WorldLogic.agoParts(ms);
+  if (unit === 'h') return tr('world.ago.h', { n: String(n) });
+  if (unit === 'm') return tr('world.ago.m', { n: String(n) });
+  return tr('world.ago.s', { n: String(n) });
+};
+export const hhmmss = ms => new Date(ms).toTimeString().slice(0, 8);
+export const hhmm = ms => new Date(ms).toTimeString().slice(0, 5);
 // An island that is not sending: offline, or waking (the hub restarted and its machine has not sent again yet).
 export const dimmed = m => m.online === false || m.waking === true;
 // How many sessions of an island are at work, and whether one waits for approval or for another session.

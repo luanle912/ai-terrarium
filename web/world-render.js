@@ -149,12 +149,7 @@ Object.assign(ClaudeOffice.prototype, {
             h('span', null, tr('world.header.viewers')),
             h('strong', { style: { color: '#ffffff' } }, w.viewers),
           ),
-          h(
-            'div',
-            { className: 'chip', title: connText },
-            h('span', { style: { width: 8, height: 8, background: connCol, display: 'inline-block' } }),
-            h('span', null, connText),
-          ),
+          this.worldConnChip(connCol, connText),
         ),
         h(
           'div',

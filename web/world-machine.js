@@ -5,6 +5,7 @@ import { tr } from './i18n.js';
 import { h } from './office-scene.js';
 import { ClaudeOffice } from './office.js';
 import { WorldLogic } from './world-logic.js';
+import { agoText, hhmmss } from './world-ui.js';
 // The parts of the error line (WorldLogic.failParts), each its own key so a missing wait is never shown as "0 s".
 const PILL_PART = {
   error: p => tr('world.pill.error', p),
@@ -27,13 +28,6 @@ const stateLabel = s =>
     paused: tr('world.state.paused'),
     revoked: tr('world.state.revoked'),
   })[s] || s;
-const agoText = ms => {
-  const { unit, n } = WorldLogic.agoParts(ms);
-  if (unit === 'h') return tr('world.ago.h', { n: String(n) });
-  if (unit === 'm') return tr('world.ago.m', { n: String(n) });
-  return tr('world.ago.s', { n: String(n) });
-};
-const hhmmss = ms => new Date(ms).toTimeString().slice(0, 8);
 // Only {at, line} pairs survive; the line is always a string, shown as React text (never parsed as HTML).
 const logLines = d =>
   d && Array.isArray(d.lines)

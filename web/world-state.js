@@ -4,6 +4,7 @@ import { WorldLogic } from './world-logic.js';
 import { ClaudeOffice } from './office.js';
 import { IslandScene } from './island-scene.js';
 import {
+  DEVICE_KEY,
   HEX_ID,
   ME_EVERY_MS,
   ME_JITTER,
@@ -49,6 +50,8 @@ Object.assign(ClaudeOffice.prototype, {
       draft: null,
       confirm: null,
       probe: WorldLogic.meProbeState(),
+      legend: false,
+      thisDevice: this.thisDeviceId(),
     };
     this.setState({ sel: null, selIsland: null, live: 'off' });
     // The pointer handlers bound at mount drive the local camera; the world has none of it (no drag, no zoom).
@@ -131,8 +134,12 @@ Object.assign(ClaudeOffice.prototype, {
           settings: !!this.state.showSettings,
           confirm: !!x.confirm,
           mod: e.ctrlKey || e.metaKey || e.altKey,
+          legend: !!x.legend,
         });
-        if (act === 'confirm') {
+        if (act === 'legend') {
+          this.setLegend(false);
+          if (this.legendBtn) this.legendBtn.focus();
+        } else if (act === 'confirm') {
           if (x.confirm.busy) return;
           clearTimeout(x.confirm.timer);
           x.confirm = null;
@@ -141,6 +148,26 @@ Object.assign(ClaudeOffice.prototype, {
       };
       window.addEventListener('keydown', this.onWorldKey);
     }
+  },
+  // Which of my devices is this computer: the local page's "Máy này" chip opens the hub at #this-device=<16 hex>. Read
+  // once, kept for this tab in sessionStorage (so a reload still knows) and taken out of the address bar.
+  thisDeviceId() {
+    let id = null;
+    const m = /^#this-device=([0-9a-f]{16})$/.exec(location.hash || '');
+    if (m) {
+      id = m[1];
+      try {
+        sessionStorage.setItem(DEVICE_KEY, id);
+      } catch (_) {}
+      try {
+        history.replaceState(history.state, '', location.pathname + location.search);
+      } catch (_) {}
+    } else
+      try {
+        const v = sessionStorage.getItem(DEVICE_KEY);
+        if (typeof v === 'string' && HEX_ID.test(v)) id = v;
+      } catch (_) {}
+    return id;
   },
   // Asks /api/me when an unseen island may be mine (WorldLogic.meProbeStep), with one trailing call when throttled.
   meProbe(ids, first) {
@@ -185,6 +212,11 @@ Object.assign(ClaudeOffice.prototype, {
       i => i && typeof i.id === 'string' && validSlot(i.slot),
     );
     w.viewers = Number.isFinite(d.viewers) ? d.viewers : 0;
+    // The hub's clock when it built this frame, and ours when it arrived: island ages are counted from these
+    // (WorldLogic.freshness), so a wrong clock on this computer does not age or freshen islands. An older hub sends no
+    // `now`: ages are then unknown and islands look as their online flag says.
+    w.hubNow = Number.isFinite(d.now) ? d.now : null;
+    w.recvAt = performance.now();
     w.capacity = Number.isInteger(d.capacity) && d.capacity > 0 ? d.capacity : WorldLogic.SLOTS;
     // Without an island of my own, an island never seen before may be mine (just paired on another tab): ask
     // /api/me, at most once every ME_PROBE_MS, so the centre turns from "chỗ của bạn" into my island by itself.
