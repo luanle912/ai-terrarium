@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
@@ -157,4 +158,155 @@ test('an interrupt records interruptedAt', () => {
   ingest(st, { type: 'user', timestamp: new Date(sec(4)).toISOString(), message: { role: 'user', content: '[Request interrupted by user]' } }, false, T0);
   assert.equal(st.interruptedAt, sec(4));
   assert.equal(st.pending.size, 0);
+});
+
+// ---- Live-session registry, sub-agent outcome, buildSessions ----
+const { readRegistryDir, liveFromRegistry, subOutcome, buildSessions, SUB_STALE_MS } = S;
+const REG = path.join(DIR, 'registry');
+const yes = () => true;
+const BG = '00000000-0000-4000-8000-0000000000b1', INT = '00000000-0000-4000-8000-0000000000c1', DUP = '00000000-0000-4000-8000-0000000000d1';
+const build = (states, live, now) => buildSessions(states, live, { now, permMs: PERM_MS, activeMs: 120 * 60e3 });
+const fixtureLive = () => liveFromRegistry(readRegistryDir(REG), { alive: yes });
+const byId = (out, id) => out.find(s => s.id === id);
+const ev = (type, s, message, extra = {}) => ({ type, timestamp: new Date(sec(s)).toISOString(), message, ...extra });
+
+test('an empty registry means no session, not every transcript of the last 2 hours', () => {
+  const live = liveFromRegistry({ ok: true, entries: [] }, { alive: yes });
+  assert.ok(live instanceof Map);
+  assert.equal(live.size, 0);
+  const states = ['auto-long-bash.jsonl', 'default-bash.jsonl', 'mixed/00000000-0000-4000-8000-000000000001.jsonl'].map(f => load(f));
+  assert.deepEqual(build(states, live, sec(10)), []);
+});
+
+test('no registry directory falls back to time filtering', () => {
+  assert.equal(liveFromRegistry({ ok: false, code: 'ENOENT' }, { prev: new Map([['x', {}]]), alive: yes }), null);
+  const states = [load('auto-long-bash.jsonl'), load(`bg-sub/${BG}.jsonl`), load(`interrupted-sub/${INT}.jsonl`)];
+  assert.equal(build(states, null, sec(70)).length, 3);
+});
+
+test('a failed read keeps the last good list', () => {
+  const prev = new Map([['a', { pid: 1, file: '1.json' }], ['b', { pid: 2, file: '2.json' }]]);
+  assert.equal(liveFromRegistry({ ok: false, code: 'EMFILE' }, { prev, alive: yes }), prev);
+  assert.equal(liveFromRegistry({ ok: false, code: 'EMFILE' }, { alive: yes }), null);
+});
+
+test('a registry file caught mid-write keeps its previous entry', () => {
+  const first = liveFromRegistry({ ok: true, entries: [{ file: '7.json', json: { pid: 7, sessionId: 's7', status: 'busy', cwd: '/w', name: 'n', statusUpdatedAt: 5 } }] }, { alive: yes });
+  assert.deepEqual(first.get('s7'), { pid: 7, name: 'n', status: 'busy', cwd: '/w', updatedAt: 5, procStart: undefined, file: '7.json' });
+  const next = liveFromRegistry({ ok: true, entries: [{ file: '7.json', json: null }, { file: '8.json', json: null }] }, { prev: first, alive: yes });
+  assert.deepEqual([...next.keys()], ['s7']);
+  assert.deepEqual(next.get('s7'), first.get('s7'));
+});
+
+test('a dead pid is not live', () => {
+  const seen = [];
+  const live = liveFromRegistry({ ok: true, entries: [{ file: '42.json', json: { sessionId: 's', procStart: 'p' } }] }, { alive: (pid, ps) => { seen.push([pid, ps]); return false; } });
+  assert.equal(live.size, 0);
+  assert.deepEqual(seen, [[42, 'p']], 'the pid falls back to the file name');
+  const noId = liveFromRegistry({ ok: true, entries: [{ file: '43.json', json: { pid: 43 } }] }, { alive: yes });
+  assert.equal(noId.size, 0, 'an entry without a sessionId is dropped');
+  assert.equal(S.defaultAlive(process.pid), true);
+});
+
+test('readRegistryDir reads a temp directory', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'terrarium-reg-'));
+  try {
+    fs.writeFileSync(path.join(d, '100.json'), JSON.stringify({ pid: 100, sessionId: 'good' }));
+    fs.writeFileSync(path.join(d, '101.json'), '{"pid": 1');
+    fs.writeFileSync(path.join(d, 'notes.txt'), 'x');
+    const r = readRegistryDir(d);
+    assert.equal(r.ok, true);
+    const sorted = r.entries.sort((a, b) => a.file.localeCompare(b.file));
+    assert.deepEqual(sorted, [{ file: '100.json', json: { pid: 100, sessionId: 'good' } }, { file: '101.json', json: null }]);
+    assert.deepEqual(readRegistryDir(path.join(d, 'missing')), { ok: false, code: 'ENOENT' });
+  } finally { fs.rmSync(d, { recursive: true, force: true }); }
+  const fx = fixtureLive();
+  assert.deepEqual([...fx.keys()].sort(), [BG, INT, DUP]);
+  assert.equal(fx.get(BG).status, 'idle');
+});
+
+test('a background sub-agent keeps working after its parent ends its turn', () => {
+  const live = fixtureLive();
+  const parent = load(`bg-sub/${BG}.jsonl`), sub = load(`bg-sub/${BG}/subagents/agent-bg1.jsonl`);
+  // The parent's end_turn lands at T0+60s, the sub's Read at T0+80s.
+  let out = build([parent, sub], live, sec(85));
+  assert.equal(byId(out, BG).status, 'done');
+  assert.equal(byId(out, 'agent-bg1').status, 'working');
+  assert.equal(byId(out, 'agent-bg1').tool, 'Read');
+  assert.equal(byId(out, 'agent-bg1').parentId, BG);
+  ingest(sub, ev('user', 100, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_read', content: 'ok' }] }, { isSidechain: true }), true, sec(100));
+  out = build([parent, sub], live, sec(105));
+  assert.equal(byId(out, 'agent-bg1').status, 'thinking');
+  assert.equal(byId(out, BG).status, 'done');
+});
+
+test('a sub-agent that hands back is done for 30 s, then gone', () => {
+  const live = fixtureLive();
+  const parent = load(`bg-sub/${BG}.jsonl`), sub = load(`bg-sub/${BG}/subagents/agent-bg1.jsonl`);
+  ingest(sub, ev('user', 81, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_read', content: 'ok' }] }), true, sec(81));
+  ingest(sub, ev('assistant', 82, { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'tu_h', name: 'SubagentHandback', input: { message: 'done' } }] }), true, sec(82));
+  ingest(sub, ev('user', 83, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_h', content: 'ok' }] }), true, sec(83));
+  assert.equal(subOutcome(sub, { now: sec(83 + 29) }), 'done');
+  assert.equal(subOutcome(sub, { now: sec(83 + 31) }), 'drop');
+  assert.equal(byId(build([parent, sub], live, sec(83 + 29)), 'agent-bg1').status, 'done');
+  assert.equal(byId(build([parent, sub], live, sec(83 + 31)), 'agent-bg1'), undefined);
+});
+
+test('subOutcome: a quiet sub-agent with no pending tool is dropped after SUB_STALE_MS, a busy one is kept', () => {
+  const sub = load(`bg-sub/${BG}/subagents/agent-bg1.jsonl`);
+  assert.equal(subOutcome(sub, { now: sec(80) + SUB_STALE_MS + 1000 }), 'keep', 'a pending tool keeps it');
+  ingest(sub, ev('user', 81, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_read', content: 'ok' }] }), true, sec(81));
+  assert.equal(subOutcome(sub, { now: sec(81) + SUB_STALE_MS - 1000 }), 'keep');
+  assert.equal(subOutcome(sub, { now: sec(81) + SUB_STALE_MS + 1000 }), 'drop');
+  ingest(sub, ev('assistant', 90, { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'all done' }] }), true, sec(90));
+  assert.equal(subOutcome(sub, { now: sec(100) }), 'done');
+  assert.equal(subOutcome(sub, { now: sec(121) }), 'drop');
+});
+
+test('interrupting the parent ends its sub-agents', () => {
+  const live = fixtureLive();
+  const parent = load(`interrupted-sub/${INT}.jsonl`), sub = load(`interrupted-sub/${INT}/subagents/agent-int1.jsonl`);
+  // The sub's Bash starts at T0+55s; the parent is interrupted at T0+60s.
+  assert.equal(parent.interruptedAt, sec(60));
+  assert.equal(subOutcome(sub, { now: sec(58) }), 'keep');
+  assert.equal(subOutcome(sub, { now: sec(65), parentInterruptedAt: parent.interruptedAt }), 'done');
+  assert.equal(byId(build([parent, sub], live, sec(65)), 'agent-int1').status, 'done');
+  assert.equal(byId(build([parent, sub], live, sec(60 + 31)), 'agent-int1'), undefined);
+  // A sub-agent that ran on after the interrupt is not ended by it.
+  ingest(sub, ev('user', 62, { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_b', content: 'ok' }] }), true, sec(62));
+  assert.equal(subOutcome(sub, { now: sec(65), parentInterruptedAt: parent.interruptedAt }), 'keep');
+});
+
+test('two transcripts with one sessionId give one root', () => {
+  const live = new Map([[DUP, fixtureLive().get(DUP)]]);
+  const old = load(`dup-root/${DUP}.jsonl`), neu = load('dup-root/00000000-0000-4000-8000-0000000000d2.jsonl');
+  const sub = load(`dup-root/${DUP}/subagents/agent-dup1.jsonl`);
+  for (const order of [[old, neu, sub], [sub, neu, old]]) {
+    const out = build(order, live, sec(60));
+    const roots = out.filter(s => !s.parentId);
+    assert.equal(roots.length, 1);
+    assert.equal(roots[0].id, DUP);
+    assert.equal(roots[0].model, 'claude-new');
+    assert.equal(roots[0].tokens, 150);
+    assert.equal(roots[0].status, 'waiting');
+    assert.equal(roots[0].waitingOn, 'agent-dup1');
+    assert.equal(byId(out, 'agent-dup1').parentId, DUP);
+  }
+  // Equal lastTs: the newer file wins.
+  const a = load(`dup-root/${DUP}.jsonl`, sec(1)), b = load(`dup-root/${DUP}.jsonl`, sec(2));
+  b.tokens = 999;
+  assert.equal(build([b, a], null, sec(20))[0].tokens, 999);
+  assert.equal(build([a, b], null, sec(20))[0].tokens, 999);
+});
+
+test('snapshot keeps its shape', () => {
+  const live = fixtureLive();
+  const out = build([load(`bg-sub/${BG}.jsonl`), load(`bg-sub/${BG}/subagents/agent-bg1.jsonl`), load(`dup-root/${DUP}.jsonl`), load('dup-root/00000000-0000-4000-8000-0000000000d2.jsonl'), load(`dup-root/${DUP}/subagents/agent-dup1.jsonl`)], live, sec(85));
+  const KEYS = ['id', 'parentId', 'name', 'project', 'cwd', 'model', 'tokens', 'status', 'tool', 'detail', 'talkingTo', 'recent', 'updatedAt'];
+  // INT has no transcript here, so it is a registry-only root.
+  assert.equal(out.length, 5);
+  for (const s of out) assert.deepEqual(Object.keys(s).filter(k => k !== 'waitingOn').sort(), [...KEYS].sort(), s.id);
+  const regOnly = byId(out, INT);
+  assert.equal(regOnly.updatedAt, sec(85));
+  assert.equal(regOnly.status, 'idle');
 });
