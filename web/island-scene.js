@@ -31,6 +31,7 @@ export const SCENE_METHODS = [
   'drawDesk',
   'actArms',
   'drawPerson',
+  'drawRod',
   'drawSleeper',
   'headPos',
   'hit',
