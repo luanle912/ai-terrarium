@@ -17,6 +17,8 @@ const TW = 16,
 // Lamps light up as the day fades: off at df >= 0.8, full at df <= 0.2.
 const lampGlow = df => clamp01((0.8 - df) / 0.6);
 // The falls and the river run up to twice as hard in the rain.
+// Wind for the vines: a breeze, more in rain, most in a storm.
+const windOf = fx => Math.min(1.4, 0.15 + 0.6 * fx.rain + 0.8 * fx.storm);
 const fallFlow = fx => Math.min(2, 1 + fx.rain);
 // A rainbow by day once the rain has stopped (lastRainAt: the last time fx.rain was above 0.3), fading out linearly
 // over three minutes. It eases in as the rain thins below 0.1 and as the day brightens past 0.6, so it never pops.
@@ -100,6 +102,25 @@ function creatures(t, df, seed) {
 
 // ---- drawing state ----
 // lastRainAt is shared by every island on the page: they all see the same weather.
+// Running phases of the moving water and the vines: each advances by elapsed time × its current speed, so a speed that
+// changes during a weather blend changes how fast things move, never where they are (t × speed would jump).
+const PHASES = { flow: 0, wind: 0, t: null };
+const motionPhases = {
+  reset() {
+    PHASES.flow = 0;
+    PHASES.wind = 0;
+    PHASES.t = null;
+  },
+  step(t, fx) {
+    if (t !== PHASES.t) {
+      const dt = PHASES.t == null ? 0 : Math.max(0, Math.min(0.25, t - PHASES.t));
+      PHASES.flow += dt * fallFlow(fx);
+      PHASES.wind += dt * (0.5 + 0.7 * windOf(fx));
+      PHASES.t = t;
+    }
+    return PHASES;
+  },
+};
 const state = { lastRainAt: -Infinity },
   RAINBOW_ARGS = { fx: null, df: 1, lastRainAt: -Infinity, now: 0 };
 // Where things are, in scene px, worked out once per island (PG is the island projection, fixed for the page).
@@ -325,14 +346,14 @@ function wisp(ctx, m, v, x, y, w, h, a) {
 }
 
 // ---- the layers ----
-function drawWater(ctx, g, P, t, df, flow, rain) {
+function drawWater(ctx, g, P, t, df, flow, rain, fp) {
   const r = g.river,
     dim = 0.25 + 0.45 * df;
   // bright dashes drifting down the river, faster in the rain
   ctx.fillStyle = P.current;
   for (let i = 0; i < g.streaks.length; i++) {
     const s = g.streaks[i],
-      p = (s.ph + (t * 0.32 * flow * s.sp) / r.len) % 1,
+      p = (s.ph + (fp * 0.32 * s.sp) / r.len) % 1,
       y = r.y0 + p * r.len;
     ctx.globalAlpha = dim * Math.sin(p * Math.PI) * 0.9;
     ctx.fillRect(Math.round(sx(g, s.x, y)), Math.round(sy(g, s.x, y, -WATER_Z)), 3, 1);
@@ -362,7 +383,7 @@ function drawWater(ctx, g, P, t, df, flow, rain) {
     }
   ctx.globalAlpha = 1;
 }
-function drawMountainFall(ctx, g, P, t, flow) {
+function drawMountainFall(ctx, g, P, t, flow, fp) {
   const m = g.mfall,
     wide = (flow - 1) * 0.12;
   // the gradients are made again only when the light moves a step
@@ -378,7 +399,7 @@ function drawMountainFall(ctx, g, P, t, flow) {
   quadY(ctx, g, m.Y, m.xa - wide, m.xb + wide, m.top, m.bot);
   ctx.fillStyle = P.foam;
   for (let i = 0; i < 4; i++) {
-    const p = (t * 0.7 * flow + i * 0.25) % 1,
+    const p = (fp * 0.7 + i * 0.25) % 1,
       z = m.top - (m.top - m.bot) * p,
       u = m.xa + 0.12 + (m.xb - m.xa - 0.3) * ((i * 0.43) % 1);
     ctx.globalAlpha = 0.6 * (1 - p);
@@ -396,12 +417,11 @@ function drawMountainFall(ctx, g, P, t, flow) {
   }
   ctx.globalAlpha = 1;
 }
-function drawVines(ctx, g, P, t, wind, still) {
-  const amp = still ? 0 : 0.7 + 2.2 * wind,
-    w = 0.5 + 0.7 * wind;
+function drawVines(ctx, g, P, wp, wind, still) {
+  const amp = still ? 0 : 0.7 + 2.2 * wind;
   for (let i = 0; i < g.vines.length; i++) {
     const v = g.vines[i],
-      sway = amp * (Math.sin(t * w + v.ph) + 0.35 * wind * Math.sin(t * w * 2.3 + v.ph * 1.7)),
+      sway = amp * (Math.sin(wp + v.ph) + 0.35 * wind * Math.sin(wp * 2.3 + v.ph * 1.7)),
       stiff = v.root ? 0.3 : 1;
     let run = 0,
       runX = 0;
@@ -423,7 +443,7 @@ function drawVines(ctx, g, P, t, wind, still) {
     }
   }
 }
-function drawMainFall(ctx, g, P, t, flow) {
+function drawMainFall(ctx, g, P, t, flow, fp) {
   const f = g.fall,
     wide = (flow - 1) * 0.06;
   if (f.q !== P.q) {
@@ -444,7 +464,7 @@ function drawMainFall(ctx, g, P, t, flow) {
   ctx.fillStyle = P.foam;
   for (let i = 0; i < g.fallStreaks.length; i++) {
     const s = g.fallStreaks[i],
-      p = (t * 0.45 * flow + s.ph) % 1,
+      p = (fp * 0.45 + s.ph) % 1,
       z = f.top - (f.top - f.bot) * p,
       u = f.xa + (f.xb - f.xa) * s.u;
     ctx.globalAlpha = 0.7 * (1 - p);
@@ -568,12 +588,14 @@ function drawLife(ctx, island, PG, t, env) {
   const P = palette(df),
     flow = fallFlow(fx),
     tw = still ? 0 : t,
-    wind = Math.min(1.4, 0.15 + 0.6 * fx.rain + 0.8 * fx.storm),
+    wind = windOf(fx),
+    ph = motionPhases.step(t, fx),
+    fp = still ? 0 : ph.flow,
     life = creatures(tw, df, 7);
-  drawWater(ctx, g, P, tw, df, flow, still ? 0 : fx.rain);
-  drawMountainFall(ctx, g, P, tw, flow);
-  drawVines(ctx, g, P, t, wind, still);
-  drawMainFall(ctx, g, P, tw, flow);
+  drawWater(ctx, g, P, tw, df, flow, still ? 0 : fx.rain, fp);
+  drawMountainFall(ctx, g, P, tw, flow, fp);
+  drawVines(ctx, g, P, ph.wind, wind, still);
+  drawMainFall(ctx, g, P, tw, flow, fp);
   const smooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = true;
   const col = env.col,
@@ -590,4 +612,4 @@ function drawLife(ctx, island, PG, t, env) {
   if (!still) drawBirds(ctx, g, P, life);
 }
 
-export const IslandLife = { lampGlow, fallFlow, rainbowLevel, creatures, drawLife };
+export const IslandLife = { lampGlow, fallFlow, rainbowLevel, creatures, motionPhases, drawLife };

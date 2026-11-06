@@ -84,3 +84,22 @@ test('in the dusk between, neither birds nor fireflies', () => {
     assert.equal(c.flies.length, 0)
   }
 })
+
+test('motion phases advance with elapsed time, so a weather blend never makes falls or vines jump', () => {
+  const M = IslandLife.motionPhases
+  M.reset()
+  M.step(3600, { rain: 0, storm: 0 })
+  const a = M.step(3600.016, { rain: 0, storm: 0 }),
+    f0 = a.flow,
+    w0 = a.wind
+  // an hour after load the rain jumps mid-blend: the phases move by one frame's worth, not by t × Δspeed
+  const b = M.step(3600.032, { rain: 0.6, storm: 0.4 })
+  assert.ok(b.flow - f0 < 0.05, `flow phase step ${b.flow - f0}`)
+  assert.ok(b.wind - w0 < 0.05, `wind phase step ${b.wind - w0}`)
+  // the same t twice (several islands drawn in one frame) does not advance
+  const again = M.step(3600.032, { rain: 0.6, storm: 0.4 }).flow
+  assert.equal(again, b.flow)
+  // a long gap (a hidden tab) is capped at 0.25 s
+  const c = M.step(3700, { rain: 0, storm: 0 })
+  assert.ok(c.flow - b.flow <= 0.25 * 2 + 1e-9)
+})
