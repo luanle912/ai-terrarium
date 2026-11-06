@@ -25,6 +25,7 @@ export const SCENE_METHODS = [
   'goalFor',
   'updateAgent',
   'draw',
+  'drawEventTree',
   'drawSeg',
   'drawPlanter',
   'pantryItems',

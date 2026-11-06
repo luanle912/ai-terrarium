@@ -34,6 +34,8 @@ test('a rainbow shows by day for three minutes after the rain stops', () => {
   assert.ok(level(clear, 1, 30_000) > level(clear, 1, 90_000), 'fades as time passes')
   assert.ok(Math.abs(level(clear, 1, 90_000) - 0.5) < 1e-9, 'linear: half way at 90 s')
   assert.equal(IslandLife.rainbowLevel({ fx: clear, df: 1, lastRainAt: -Infinity, now }), 0, 'no rain yet')
+  // the sun after the rain, not snow, a storm or fog that follow it
+  for (const k of ['snow', 'storm', 'fog']) assert.equal(level({ ...clear, [k]: 1 }, 1, 30_000), 0, `in ${k}`)
 })
 
 test('birds fly by day, fireflies glow at night, and the same arrays are reused', () => {

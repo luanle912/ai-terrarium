@@ -1,5 +1,5 @@
 // Baking the island: the lawn, its underside and outline, the mountain, river and lake beds and the low decor in one
-// picture, and the things that stand up off the lawn (trees, bushes, lamps, the bench, the bridge's two halves) as
+// picture, and the things that stand up off the lawn (bushes, lamps, the bench, the bridge's two halves) as
 // small sprites the scene sorts with the people and dogs. The pieces' drawing lives in web/island-art.js.
 import {
   drawBench,
@@ -194,9 +194,9 @@ export function renderIsland(island, frame, k, env) {
 // Everything that stands up off the lawn, each baked into its own small sprite at the island image's resolution and
 // light: [{ x, y, z, img, dx, dy, lamp }]. (x, y) is its tile, z its depth among the scene's sorted sprites (x + y
 // of the point that decides what it hides), dx, dy where the sprite goes in canvas px, lamp the lamp's index or -1.
-// Trees in front of the office walls are left out: the scene draws them itself (as event trees on special days).
-// The bridge comes in two halves, the far railing with the deck and the near railing, so whoever crosses it is
-// drawn between them; someone behind a lamp post, a tree or the bench is hidden by it.
+// Trees are left out: the scene draws them itself (as event trees in a season or on a holiday). The bridge comes in
+// two halves, the far railing with the deck and the near railing, so whoever crosses it is drawn between them;
+// someone behind a lamp post, a bush or the bench is hidden by it.
 export function renderProps(island, frame, k, env) {
   const { P, C } = bakeTools(frame, env),
     out = [];
@@ -224,10 +224,7 @@ export function renderProps(island, frame, k, env) {
   add(rest.bench.x, rest.bench.y, rest.bench.x + rest.bench.y + 1, [13, 15, 13, 8], pt =>
     drawBench(pt, P, C, rest.bench),
   );
-  for (const d of island.decor) {
+  for (const d of island.decor)
     if (d.kind === 'bush') add(d.x, d.y, d.x + d.y + 0.5, [11, 15, 11, 4], pt => drawBush(pt, P, C, d));
-    if (d.kind === 'tree' && (d.x < 0 || d.y < 0))
-      add(d.x, d.y, d.x + d.y + 0.5, [7, 25, 7, 4], (pt, g) => drawTree(g, P, d, env.df, env.snow));
-  }
   return out;
 }
