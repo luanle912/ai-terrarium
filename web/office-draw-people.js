@@ -2,7 +2,8 @@ import { SkyRender } from './sky-render.js';
 import { DogLogic } from './dog-logic.js';
 import { DogSprites } from './dog-sprites.js';
 import { SmokeLogic } from './smoke-logic.js';
-import { DESKS, P, PA, PG } from './office-scene.js';
+import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW } from './office-scene.js';
+import { bridgeZ, WATER_Z } from './island-land.js';
 import { LOOK, PERSON } from './office-people.js';
 import { ICON, ST, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
@@ -86,18 +87,22 @@ mixin(
     // Fishing at the rest corner: a rod from the hand up and out over the lake, a thin line down to a tiny bob on the
     // water a tile and a half out. The bob rides the water and now and then dips (a nibble) with a ring spreading
     // round it; with reduced motion it lies still.
+    // The angler's rod, line and float, the float bobbing on the lake's surface (WATER_Z under the lawn) with a ring
+    // spreading round it. No allocation: one angler at most, drawn every frame.
     drawRod(G, a, sx, by, t) {
       const { ctx, rect: R } = G,
         calm = this.env && this.env.reduced,
         nib = !calm && t % 7 < 0.6,
-        tip = [sx + 16, by - 24 + (nib ? 2 : 0)],
-        [bx0, by0] = PG(a.x + 1.5, a.y + 0.2),
-        bx = Math.round(bx0),
-        bob = Math.round(by0) + (calm ? 0 : nib ? 1 : Math.round(Math.sin(t * 2.2) * 0.6));
+        tx = sx + 16,
+        ty = by - 24 + (nib ? 2 : 0),
+        fx = a.x + 1.5,
+        fy = a.y + 0.2,
+        bx = Math.round(OX + (fx - fy) * TW),
+        bob = Math.round(OY + (fx + fy) * TH - WATER_Z) + (calm ? 0 : nib ? 1 : Math.round(Math.sin(t * 2.2) * 0.6));
       for (let k = 0; k <= 12; k++)
         R(
-          sx + 5 + Math.round(((tip[0] - sx - 5) * k) / 12),
-          by - 8 + Math.round(((tip[1] - by + 8) * k) / 12),
+          sx + 5 + Math.round(((tx - sx - 5) * k) / 12),
+          by - 8 + Math.round(((ty - by + 8) * k) / 12),
           1,
           1,
           '#6b4a2b',
@@ -105,15 +110,17 @@ mixin(
       ctx.strokeStyle = 'rgba(232,238,245,0.7)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(tip[0] + 0.5, tip[1] + 0.5);
-      ctx.quadraticCurveTo(bx + 1.5, tip[1] + 6, bx + 0.5, bob - 1);
+      ctx.moveTo(tx + 0.5, ty + 0.5);
+      ctx.quadraticCurveTo(bx + 1.5, ty + 6, bx + 0.5, bob - 1);
       ctx.stroke();
       if (!calm) {
         const p = (t * 0.45) % 1;
-        ctx.strokeStyle = 'rgba(255,255,255,' + 0.45 * (1 - p) + ')';
+        ctx.globalAlpha = 0.45 * (1 - p);
+        ctx.strokeStyle = '#ffffff';
         ctx.beginPath();
         ctx.ellipse(bx + 0.5, bob + 1, 2 + p * 5, 1 + p * 2, 0, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.globalAlpha = 1;
       }
       R(bx - 1, bob - 1, 2, 1, '#e5484d');
       R(bx - 1, bob, 2, 1, '#ffffff');
@@ -520,7 +527,7 @@ mixin(
         p = DogLogic.pose(d, t),
         f = DogSprites.frame(d.breed, p.frame),
         img = this.dogSprite(d.breed, p.frame, dfB, snB);
-      let [sx, sy] = PG(d.x, d.y);
+      let [sx, sy] = PG(d.x, d.y, bridgeZ(ISLAND.bridge, d.x, d.y));
       sx = Math.round(sx);
       sy = Math.round(sy);
       const top = sy - f.h - p.dy,

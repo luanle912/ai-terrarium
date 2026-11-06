@@ -7,6 +7,7 @@
 // lampGlow, fallFlow, rainbowLevel and creatures are pure (tests/island-life.test.mjs); drawLife needs a canvas.
 import { hash, night, WATER_Z } from './sky-island.js';
 import { mistSprite, MIST_VARIANTS } from './sky-mist.js';
+import { LAMP_Z } from './island-art.js';
 import { SkyLogic } from './sky-logic.js';
 
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -129,8 +130,7 @@ const RIVER_STREAKS = 22,
   LAKE_GLINTS = 26,
   RIPPLES = 10,
   FALL_STREAKS = 9,
-  VINES = 18,
-  LAMP_Z = 15; // lamp heads stand this high above the lawn (posts drawn by renderIsland)
+  VINES = 18;
 function geometry(island, PG) {
   const hit = GEO.get(island);
   if (hit && hit.PG === PG) return hit;
@@ -174,10 +174,10 @@ function geometry(island, PG) {
     grad: null,
   };
   g.fallStreaks = Array.from({ length: FALL_STREAKS }, (_, i) => ({ u: 0.08 + 0.84 * ((i * 0.37) % 1), ph: i * 0.11 }));
-  // mountain falls: out of the gap between the peaks, down the back of the gorge (the river's head row) into the river
-  // from half the lower peak's height, where the gap's saddle sits
-  const low = Math.min(...island.mountain.peaks.map(p => p.h));
-  g.mfall = { Y: ry0, xa: rx0 + 0.55, xb: rx0 + 1.45, top: Math.round(low * 0.5), bot: WATER_Z, q: -1, grad: null };
+  // mountain falls: over the notch in the rock ledge at the back of the river's head row (island.mountain.fall), down
+  // into the river
+  const mf = island.mountain.fall;
+  g.mfall = { Y: mf.y, xa: mf.x0, xb: mf.x1, top: mf.top, bot: WATER_Z, q: -1, grad: null };
   // cone tip: the deepest column
   const tip = island.list.reduce((a, c) => (c.d > a.d ? c : a));
   g.tip = { x: o[0] + (tip.x - tip.y) * TW, y: o[1] + (tip.x + tip.y + 1) * TH + tip.d };
@@ -521,20 +521,33 @@ function drawRainbow(ctx, g, level) {
   ctx.drawImage(img, x - 8, y - 56);
   ctx.globalAlpha = 1;
 }
-function drawLamps(ctx, g, t, glow, still) {
+// The lamps' light: a warm pool on the lawn under each (with the rest of the island life, under everyone walking
+// past) and the glow round its glass (drawLampLight, right after the scene draws that lamp's post among the sorted
+// sprites, so the post never covers its own light).
+const lampLevel = (glow, t, i, still) => glow * (still ? 1 : 0.94 + 0.06 * Math.sin(t * 0.6 + i * 1.9));
+function drawPools(ctx, g, t, glow, still) {
   if (glow <= 0.01) return;
-  const halo = sprite('halo', 40, 40, HALO),
-    pool = sprite('pool', 40, 40, POOL);
+  const pool = sprite('pool', 40, 40, POOL);
   for (let i = 0; i < g.lamps.length; i++) {
-    const l = g.lamps[i],
-      a = glow * (still ? 1 : 0.94 + 0.06 * Math.sin(t * 0.6 + i * 1.9));
-    ctx.globalAlpha = a;
+    const l = g.lamps[i];
+    ctx.globalAlpha = lampLevel(glow, t, i, still);
     ctx.drawImage(pool, l.x - 20, l.y - 20);
-    ctx.drawImage(halo, l.x - 20, l.y - LAMP_Z - 20);
-    ctx.fillStyle = '#ffe7a3';
-    ctx.fillRect(Math.round(l.x) - 1, Math.round(l.y - LAMP_Z) - 1, 3, 2);
   }
   ctx.globalAlpha = 1;
+}
+function drawLampLight(ctx, island, PG, i, t, env) {
+  const glow = lampGlow(env.df);
+  if (glow <= 0.01) return;
+  const l = geometry(island, PG).lamps[i],
+    halo = sprite('halo', 40, 40, HALO),
+    smooth = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = true;
+  ctx.globalAlpha = lampLevel(glow, t, i, !!env.reduced);
+  ctx.drawImage(halo, l.x - 20, l.y - LAMP_Z - 20);
+  ctx.fillStyle = '#ffe7a3';
+  ctx.fillRect(Math.round(l.x) - 1, Math.round(l.y - LAMP_Z) - 1, 3, 2);
+  ctx.globalAlpha = 1;
+  ctx.imageSmoothingEnabled = smooth;
 }
 function drawFlies(ctx, g, life, dark, still) {
   if (!life.flies.length || dark <= 0.01) return;
@@ -606,10 +619,10 @@ function drawLife(ctx, island, PG, t, env) {
   RAINBOW_ARGS.lastRainAt = state.lastRainAt;
   RAINBOW_ARGS.now = now;
   drawRainbow(ctx, g, rainbowLevel(RAINBOW_ARGS));
-  drawLamps(ctx, g, t, lampGlow(df), still);
+  drawPools(ctx, g, t, lampGlow(df), still);
   drawFlies(ctx, g, life, clamp01((0.3 - df) / 0.1), still);
   ctx.imageSmoothingEnabled = smooth;
   if (!still) drawBirds(ctx, g, P, life);
 }
 
-export const IslandLife = { lampGlow, fallFlow, rainbowLevel, creatures, motionPhases, drawLife };
+export const IslandLife = { lampGlow, fallFlow, rainbowLevel, creatures, motionPhases, drawLife, drawLampLight };

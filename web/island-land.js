@@ -14,6 +14,8 @@ export const hash = (x, y, s) => {
   const v = Math.sin(x * 127.1 + y * 311.7 + s * 74.7) * 43758.5453;
   return v - Math.floor(v);
 };
+// The lake's and the river's water surface sits this far below the grass (px).
+export const WATER_Z = -3;
 
 // east-back runs along the pantry's east side, flush with the office's back wall, and holds the restroom block (raised
 // to the office floor); east-front, right beside the block's east side, holds the smoking corner; south-left is free.
@@ -162,13 +164,20 @@ function buildIsland({ W, H }) {
 // the far bank runs on up to the foot of the mountain. The near bank (x = -1, under the left wall) is plain grass.
 const RIVER_X = -3, // the river's two columns are RIVER_X and RIVER_X + 1, leaving one tile of bank either side
   RIVER_HEAD = -8; // its first row, in the gorge at the foot of the falls
-// Peaks in tiles and their height above the lawn in px; the main one is the taller, further right on screen.
+// Peaks in tiles, their height above the lawn in px and their foot's radius in tiles. The main one, further right on
+// screen, stands nearer the viewer, so it is more than twice as tall to read as the taller one (its tip sits higher
+// on screen than the lower peak's).
 const PEAKS = [
-    { x: -3, y: -11, h: 50, main: false },
-    { x: 3, y: -12, h: 72, main: true },
+    { x: -3, y: -11, h: 40, R: 3.4, main: false },
+    { x: 3, y: -12, h: 92, R: 4.4, main: true },
   ],
   GAP = { x: -1, y: -10 },
-  MOUNTAIN_R = 4.5;
+  MOUNTAIN_R = 4.5,
+  // a low rocky shoulder at the river's head, at the foot of the lower peak, behind the mountain falls
+  SHOULDER = { x: -3.1, y: -9.5, h: 33, R: 2.3 },
+  // The mountain falls pour over a notch in a rock ledge at the back of the river's head row, FALL_Z px up, into the
+  // river (web/island-art.js draws the ledge, web/island-life.js the water).
+  FALL_Z = 20;
 // The lake: an ellipse of tiles on the front lawn, reaching the front shore (centre y relative to H).
 const LAKE = { cx: 0, dy: 12, rx: 3.9, ry: 4.8 };
 // The bridge's row, relative to H: two rows above the river mouth, one tile clear of the reserved south-left spot.
@@ -235,13 +244,35 @@ function mountainOf(cells, river) {
     if (y > -3 || river.has(k)) continue;
     if (toRidge(x, y) <= MOUNTAIN_R || (x <= RIVER_X + 2 && y < RIVER_HEAD)) out.add(k);
   }
-  return { cells: out, peaks: PEAKS.map(p => ({ ...p })), gap: { ...GAP } };
+  return {
+    cells: out,
+    peaks: PEAKS.map(p => ({ ...p })),
+    gap: { ...GAP },
+    shoulder: { ...SHOULDER },
+    // the falls: a sheet across the middle of the river's head row, in its back edge (the plane y = fall.y)
+    fall: { y: RIVER_HEAD, x0: RIVER_X + 0.55, x1: RIVER_X + 1.45, top: FALL_Z },
+  };
 }
 
 const bridgeOf = H => {
   const y = H + BRIDGE_DY;
   return { cells: new Set([key(RIVER_X, y), key(RIVER_X + 1, y)]), x: RIVER_X, y, dir: 'x', len: 2 };
 };
+// The bridge deck runs a quarter tile onto either bank and arches low over the water: its height above the lawn at t
+// (0..1 along it).
+export const DECK_OVER = 0.25;
+export const deckZ = t => 3 + 3 * Math.sin(Math.PI * t);
+// How far the deck lifts someone standing at (x, y) (tile coordinates, a tile's middle at +0.5): 0 off the bridge.
+export function bridgeZ(bridge, x, y) {
+  const along = bridge.dir === 'x',
+    a = along ? x : y,
+    w = along ? y : x,
+    a0 = (along ? bridge.x : bridge.y) - DECK_OVER,
+    a1 = (along ? bridge.x : bridge.y) + bridge.len + DECK_OVER,
+    w0 = along ? bridge.y : bridge.x;
+  if (w < w0 || w > w0 + 1 || a <= a0 || a >= a1) return 0;
+  return deckZ((a - a0) / (a1 - a0));
+}
 // Lamp posts: one at each end of the bridge, on its upstream side, and a few beside the stone path.
 const LAMPS_ALONG = [
   [16, 2],

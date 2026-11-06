@@ -18,6 +18,7 @@ import {
   PG,
   SEGS,
   STAIRS,
+  behindWalls,
   W,
   WALL,
   ZONES,
@@ -41,7 +42,13 @@ mixin(
         dpr = window.devicePixelRatio || 1,
         b = this.camBox();
       // Clouds follow the island camera (zoom and pan), each layer by its depth.
-      const skyEnv = b ? { ...env, view: CameraLogic.skyView(this.cam, b) } : env;
+      // The world's "Toàn cảnh" of 8 islands keeps its own far islands (SkyRender.drawBack, env.overview).
+      const overview = !!(this.world && this.world.view === 'all'),
+        skyEnv = b
+          ? { ...env, view: CameraLogic.skyView(this.cam, b), overview }
+          : overview
+            ? { ...env, overview }
+            : env;
       for (const [cv, fn] of [
         [this.backCanvas, SkyRender.drawBack],
         [this.frontCanvas, SkyRender.drawFront],
@@ -134,19 +141,36 @@ mixin(
         ic = this.islandCache,
         dfB = Math.round(df * 10),
         snB = Math.round(snow * 10);
-      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB)
+      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB) {
+        const frame = { LW, LH, OX, OY },
+          light = { df: dfB / 10, snow: snB / 10 };
         this.islandCache = {
-          img: SkyRender.renderIsland(ISLAND, { LW, LH, OX, OY }, k, { df: dfB / 10, snow: snB / 10 }),
+          img: SkyRender.renderIsland(ISLAND, frame, k, light),
+          props: SkyRender.renderProps(ISLAND, frame, k, light),
           k,
           df: dfB,
           sn: snB,
         };
+      }
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(this.islandCache.img, 0, 0);
       ctx.restore();
-      // Water, falls, mist, lamp light, vines, birds, fireflies and the rainbow (web/island-life.js).
+      // Water, falls, mist, lamp pools, vines, birds, fireflies and the rainbow (web/island-life.js).
       if (env) IslandLife.drawLife(ctx, ISLAND, PG, t, env);
+      // What stands up off the lawn (trees, bushes, lamps, the bench, the bridge) is sorted with the people and dogs;
+      // whatever stands in the strip right behind the walls goes down before them (below), so the walls hide it.
+      const items = [],
+        behind = [],
+        stamp = p => () => {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.drawImage(p.img, p.dx, p.dy);
+          ctx.setTransform(k, 0, 0, k, 0, 0);
+          if (p.lamp >= 0 && env) IslandLife.drawLampLight(ctx, ISLAND, PG, p.lamp, t, env);
+        },
+        backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y)),
+        walker = a => !a.sleeping && !a.seated && !a.wcIn;
+      for (const p of this.islandCache.props) (backOf(p) ? behind : items).push({ z: p.z, f: stamp(p) });
       const poly = (pts, fill, stroke) => {
         ctx.beginPath();
         pts.forEach((p, i) =>
@@ -229,6 +253,10 @@ mixin(
         ctx.fillRect(Math.round(x), Math.round(y), w, hh);
       };
       const G = { ctx, poly, box, rect, th, t, df };
+      for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
+      for (const a of this.agents)
+        if (walker(a) && backOf(a)) behind.push({ z: a.x + a.y, f: () => this.drawPerson(G, a) });
+      behind.sort((p, q) => p.z - q.z).forEach(it => it.f());
       // Walls are WT tiles thick so their cut edges show; openings sit RD deep in the wall.
       const WT = 0.35,
         ZT = WALL + 3,
@@ -476,7 +504,6 @@ mixin(
         ctx.globalAlpha = 1;
       });
       if (SeasonTree) this.seasonKey = SeasonTree.seasonFor(new Date());
-      const items = [];
       {
         const OD = OfficeDecor;
         DESKS.forEach((d, i) => {
@@ -549,7 +576,7 @@ mixin(
         },
       });
 
-      this.dogs.forEach(d => items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) }));
+      for (const d of this.dogs) if (!backOf(d)) items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
       this.agents.forEach(a => {
         if (a.sleeping) {
           const d = DESKS[a.desk];
@@ -572,7 +599,7 @@ mixin(
               }
             },
           });
-        } else if (!a.seated && !a.wcIn) {
+        } else if (walker(a) && !backOf(a)) {
           items.push({ z: a.x + a.y + (a.stool ? 0.1 : 0), f: () => this.drawPerson(G, a) });
         }
       });

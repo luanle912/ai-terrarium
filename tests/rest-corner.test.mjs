@@ -79,27 +79,31 @@ test('dogs now roam the far bank, the rest corner and the back lawn, never water
     assert.ok(Dog.path(roam, front, c).length > 0, `${c} cannot be reached`)
 })
 
-test('no dog is drawn over the office walls: the strip right behind them stays out of the dogs\' lawn', () => {
-  // A dog behind a wall (x < 0 or y < 0) would be drawn over it, since the walls go down before the sorted items.
-  // Its feet are 16 px up the screen per tile behind the wall, so within `reach` tiles it overlaps the wall face.
+test('no dog stands in the strip right behind the office walls, where they would hide it', () => {
+  // A dog behind a wall is drawn before the walls (scene.behindWalls), so they hide it. Its feet are 16 px up the
+  // screen per tile behind the wall, so within `reach` tiles the wall face covers it: it would vanish there (the far
+  // bank beside the river too: the left wall covers the whole strip out to the island's edge).
   const reach = Math.floor((WALL + 3 + FLOOR_Z) / (2 * TH))
   assert.equal(reach, 4)
+  assert.equal(scene.WALL_REACH, reach)
   for (const k of DOG_PLACES.roam) {
     const [x, y] = k.split(',').map(Number)
+    assert.ok(!scene.behindWalls(x, y), `${k} is right behind a wall`)
     if (x < 0 && x >= -reach) assert.ok(y - x < -1 || y - x > H + 1, `${k} is right behind the left wall`)
     if (y < 0 && y >= -reach) assert.ok(x - y < -1 || x - y > W + 1, `${k} is right behind the back wall`)
   }
 })
 
 test('nothing tall baked into the island stands in front of a roaming dog', () => {
-  // The mountain, back-lawn trees, the lamp posts and the bench are part of the island picture under every sprite.
+  // The mountain is part of the island picture under every sprite (trees, bushes, lamps, the bench and the bridge are
+  // sorted with the dogs). No dog stands up to as many rows behind a mountain cell as the stone there rises: at
+  // least the two rows of its foot, and behind the peaks themselves as far as they rise (8 px a row).
   const tall = [...ISLAND.mountain.cells].map(k => k.split(',').map(Number))
+  const peaks = ISLAND.mountain.peaks.map(p => [p.x, p.y, Math.floor(p.h / TH)])
   for (const k of DOG_PLACES.roam) {
     const [x, y] = k.split(',').map(Number)
-    for (const [mx, my] of tall)
-      assert.ok(!(Math.abs(mx - my - (x - y)) <= 1 && mx + my > x + y && mx + my - (x + y) <= 2), `${k} hides behind the mountain at ${mx},${my}`)
-    for (const l of ISLAND.lamps)
-      assert.ok(!(Math.abs(l.x - l.y - (x - y)) <= 1 && l.x + l.y > x + y && l.x + l.y - (x + y) <= 2), `${k} is behind a lamp`)
+    for (const [mx, my, r = 2] of [...tall, ...peaks])
+      assert.ok(!(Math.abs(mx - my - (x - y)) <= 1 && mx + my > x + y && mx + my - (x + y) <= r), `${k} hides behind the mountain at ${mx},${my}`)
   }
 })
 
@@ -162,4 +166,20 @@ test('a dog never stands right behind something tall baked into the island', () 
   // the cells one and two tiles up the screen from it, in its screen column (x − y within one), are out
   for (const k of ['2,11', '3,11', '2,12']) assert.ok(free.has(k) && !roam.has(k), `${k} is behind it`)
   for (const k of ['3,12', '4,13', '1,10', '2,10', '1,12', '5,12']) assert.ok(roam.has(k), `${k} is not behind it`)
+})
+
+test('a dog that cannot reach the bench is not sent again every step', () => {
+  // w.rest off the dogs' lawn: goTo fails. Each free dog is tried once and then left out for a while.
+  let seed = 9
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  const sitter = { id: 'b', x: spot('bench').pt[0], y: spot('bench').pt[1], act: 'bench', at: true }
+  const w = { ...DOG_PLACES, rest: [rest.bench.x, rest.bench.y], agents: [sitter], hour: 10, snow: 0, now: 0, rand }
+  const dogs = Dog.create(w)
+  const tried = () => dogs.map(d => d.noCompany ?? null).join('|')
+  for (let i = 0; i < 10; i++) { w.now += 1 / 30; Dog.step(dogs, w, 1 / 30) }
+  const after10 = tried()
+  assert.ok(dogs.some(d => d.noCompany > w.now), 'no dog was tried')
+  for (let i = 0; i < 60; i++) { w.now += 1 / 30; Dog.step(dogs, w, 1 / 30) }
+  assert.equal(tried(), after10, 'a dog was sent to the bench again within the back-off')
+  assert.ok(!dogs.some(d => d.act === 'company'))
 })

@@ -54,8 +54,10 @@ test('the frame takes in both mountain peaks', () => {
 
 test('the mountain never shrinks the office by more than 10%', () => {
   const flat = SkyLogic.sceneFrame({ ...island, mountain: null }, FRAME)
+  // (the real mountain fits within 10 % anyway: this line alone would pass without the cap in sceneFrame)
   assert.ok(fit(SkyLogic.sceneFrame(island, FRAME)) >= 0.9 * fit(flat))
-  // A mountain far too tall to fit is let run off the top instead of shrinking the office.
+  // A mountain far too tall to fit is let run off the top instead of shrinking the office: this is the case that
+  // guards the cap.
   const tall = { ...island.mountain, peaks: island.mountain.peaks.map((p) => ({ ...p, h: p.h * 8 })) }
   const f = SkyLogic.sceneFrame({ ...island, mountain: tall }, FRAME)
   assert.ok(fit(f) >= 0.9 * fit(flat), `office at ${fit(f) / fit(flat)} of its size`)
