@@ -98,6 +98,7 @@ test('new publisher -> old hub: every publish is 204 (legacy ack), sending, no 4
     assert.ok(await until(() => p.state().state === 'sending' && d.online()), 'sending and online');
     assert.ok(await until(() => d.statuses.length >= 1));
     assert.ok(d.statuses.every((s) => s === 204), 'statuses: ' + d.statuses);
+    assert.ok(fs.existsSync(path.join(d.dir, 'rooms.json')), 'rooms.json is created next to the config');
     assert.ok(!hub.logs.some((l) => /\b400\b|bad packet/.test(String(l))), 'hub log: ' + hub.logs.join('|'));
   } finally { d.cleanup(); await hub.close(); }
 });
