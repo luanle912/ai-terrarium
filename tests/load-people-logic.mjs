@@ -1,8 +1,6 @@
-// Runs web/people-logic.js the way the browser does (as a plain script that sets
-// globalThis.PeopleLogic), so who an agent looks like can be tested without a DOM.
-import { runWeb } from './web.mjs'
+// Imports web/people-logic.js, the module the page uses, so who an agent looks like can be tested without a DOM.
+import { loadWeb } from './web.mjs'
 
 export function loadPeopleLogic() {
-  runWeb('people-logic')
-  return globalThis.PeopleLogic
+  return loadWeb('people-logic').PeopleLogic
 }

@@ -1,5 +1,5 @@
 // Office Decor — detailed furniture rendering from design system
-(function(){
+
 const FONT={A:'010101111101101',B:'110101110101110',C:'011100100100011',D:'110101101101110',E:'111100110100111',F:'111100110100100',G:'011100101101011',H:'101101111101101',I:'111010010010111',J:'001001001101010',K:'101101110101101',L:'100100100100111',M:'101111111101101',N:'110101101101101',O:'010101101101010',P:'110101110100100',Q:'010101101110011',R:'110101110101101',S:'011100010001110',T:'111010010010010',U:'101101101101111',V:'101101101101010',W:'101101111111101',X:'101101010101101',Y:'101101010010010',Z:'111001010100111','0':'111101101101111','1':'010110010010111','2':'110001010100111','3':'110001010001110','4':'101101111001001','5':'111100110001110','6':'011100111101111','7':'111001010010010','8':'111101111101111','9':'111101111001110','%':'101001010100101',':':'000010000010000','-':'000000111000000','!':'010010010000010','/':'001001010100100','.':'000000000000010'};
 function text3(g,str,x,y,col){g.fillStyle=col;x=Math.round(x);y=Math.round(y);[...String(str).toUpperCase()].forEach((ch,i)=>{const f=FONT[ch];if(!f)return;const gx=x+i*4;for(let b=0;b<15;b++)if(f[b]==='1'){if(g.__wall)g.glyph(gx+1,gx+(b%3),y+Math.floor(b/3),1,1);else g.fillRect(gx+(b%3),y+Math.floor(b/3),1,1);}});}
 const textW=s=>String(s).length*4-1;
@@ -291,5 +291,5 @@ function deskWorkstation(ctx,PF,d,owner,t,drawPersonFn){
   }});
   return items;
 }
-window.OfficeDecor={ITEMS,F,kit,SCREEN,SCREEN_MAP,deskWorkstation,drawUsageBoard,boardSurface,BW,BH,fmtReset,mount,skewRect,wallPen,text3,surf,shade,mix,windowDraw,clockDraw,exitDraw,posterDraw,doorDraw,dyOf};
-})();
+export const OfficeDecor = {ITEMS,F,kit,SCREEN,SCREEN_MAP,deskWorkstation,drawUsageBoard,boardSurface,BW,BH,fmtReset,mount,skewRect,wallPen,text3,surf,shade,mix,windowDraw,clockDraw,exitDraw,posterDraw,doorDraw,dyOf};
+

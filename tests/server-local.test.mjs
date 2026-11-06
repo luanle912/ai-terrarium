@@ -4,6 +4,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { hostAllowed, corsOrigin, createHandler, listenWithRetry } = require('../server.js');
+import { moduleGraph } from './web.mjs';
 
 function listen(server, port = 0) {
   return new Promise(r => server.listen(port, '127.0.0.1', () => r(server.address().port)));
@@ -53,8 +54,9 @@ test('the page and every web/ file it loads are served, never cached stale, and 
     const page = await request(port, { path: '/' });
     assert.equal(page.status, 200);
     assert.equal(page.headers['cache-control'], 'no-cache');
-    const assets = [...page.body.matchAll(/(?:src|href)="(web\/[^"]+)"/g)].map(m => '/' + m[1]);
-    assert.ok(assets.length > 20);
+    assert.match(page.body, /<script type="module" src="web\/main\.js"><\/script>/);
+    const assets = ['/web/styles.css', ...moduleGraph().map(n => `/web/${n}.js`)];
+    assert.ok(assets.length > 30);
     for (const a of assets) {
       const r = await request(port, { path: a });
       assert.equal(r.status, 200, a);

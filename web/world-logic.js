@@ -4,7 +4,7 @@
 // other islands come or go. On a phone the centre is a full-width card on top and the ring is two columns below it.
 // Moving between views is covered by two cloud bands: close in 350 ms, hold 100 ms, open in 400 ms. With reduced
 // motion it is a 200 ms cross-fade instead. All rects are in stage px, h = w * ISLAND_ASPECT.
-globalThis.WorldLogic = (() => {
+export const WorldLogic = (() => {
   const SLOTS = 8, PHONE_MAX_W = 520, CENTRE_SCALE = 1.4, HOVER_LIFT = 6, GUTTER = 12
   const CLOUD_IN_MS = 350, CLOUD_HOLD_MS = 100, CLOUD_OUT_MS = 400, CLOUD_MS = 850, FADE_MS = 200
   const CENTRE_DROP = 0.1  // how far (in ring-cell heights) the centre sits lower than a plain stack

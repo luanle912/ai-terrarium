@@ -1,5 +1,9 @@
 // The local page and the hub: choosing local or world mode at start, and the World section of ⚙ Settings
 // (join, leave, status chip).
+import { tr } from './i18n.js';
+import { h } from './office-scene.js';
+import { ClaudeOffice } from './office.js';
+import { SHARE_LABEL } from './world-ui.js';
 Object.assign(ClaudeOffice.prototype,{
     // Decide the mode once, before any data source opens: world only on a 200 JSON answer saying so (the local
     // server answers 404, a file:// page cannot fetch). ?server= is never read in world mode (B9).

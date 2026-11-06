@@ -1,4 +1,12 @@
-"use strict";
+import { SeasonTree } from './season-tree.js';
+import { OfficeDecor } from './office-decor.js';
+import { PantryItems } from './pantry-items.js';
+import { SkyLogic } from './sky-logic.js';
+import { CameraLogic } from './camera-logic.js';
+import { SkyRender } from './sky-render.js';
+import { DESKS, FH, FLOOR_Z, H, ISLAND, LH, LW, OX, OY, P, PG, SEGS, STAIRS, W, WALL, ZONES, lerpHex, mix, zoneAt } from './office-scene.js';
+import { shade, text3, vacantTheme } from './office-util.js';
+import { ClaudeOffice, mixin } from './office.js';
 // Drawing the office: sky, camera, the floor, walls, planters, pantry and desks.
 mixin(ClaudeOffice,class{
   // The sky fills the whole stage behind the scene canvas; rain, snow, fog and a near cloud go over it.
@@ -79,8 +87,8 @@ mixin(ClaudeOffice,class{
     poly([P(-WT,-WT,ZT),P(0,0,ZT),P(0,H,ZT),P(-WT,H,ZT)],shade(th.trim,18),null);
     poly([P(W,-WT,0),P(W,0,0),P(W,0,ZT),P(W,-WT,ZT)],shade(th.wr,-34),null);
     poly([P(-WT,H,0),P(0,H,0),P(0,H,ZT),P(-WT,H,ZT)],shade(th.wl,-20),null);
-    {const OD=window.OfficeDecor;if(OD)[1.6,4.8,11.6,14.8].forEach(x=>OD.F.window(OD.kit(ctx,...P(x,0)),t,{night:df<0.5}));}
-    {const OD=window.OfficeDecor,u=this.usage||[];
+    {const OD=OfficeDecor;if(OD)[1.6,4.8,11.6,14.8].forEach(x=>OD.F.window(OD.kit(ctx,...P(x,0)),t,{night:df<0.5}));}
+    {const OD=OfficeDecor,u=this.usage||[];
       const u5h=u.find(x=>x.kind==='five_hour')||{pct:null,resets:''};
       const u7d=u.find(x=>x.kind==='seven_day')||{pct:null,resets:''};
       const rMin=r=>{if(!r)return 0;const d=new Date(r)-Date.now();return Math.max(0,d/60000);};
@@ -99,7 +107,7 @@ mixin(ClaudeOffice,class{
       ctx.strokeStyle='#2d3142';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(hA)*3,cy+Math.sin(hA)*3.5);ctx.stroke();
       ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(mA)*4.5,cy+Math.sin(mA)*5);ctx.stroke();
       ctx.strokeStyle='#e5484d';ctx.lineWidth=0.5;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(sA)*5,cy+Math.sin(sA)*5.5);ctx.stroke();}
-    {const OD=window.OfficeDecor;if(OD)OD.F.door(OD.kit(ctx,...P(0,5.5)),t);}
+    {const OD=OfficeDecor;if(OD)OD.F.door(OD.kit(ctx,...P(0,5.5)),t);}
     for(let y=0;y<H;y++)for(let x=0;x<W;x++){
       poly([P(x,y),P(x+1,y),P(x+1,y+1),P(x,y+1)],(x+y)%2?th.fa:th.fb,th.stroke?'#dfe5ef':null);
       if(df>0.2){ctx.globalAlpha=df;poly([P(x,y+0.5),P(x+1,y+0.5),P(x+1,y+0.52),P(x,y+0.52)],shade(th.fa,-18),null);ctx.globalAlpha=1;}
@@ -136,9 +144,9 @@ mixin(ClaudeOffice,class{
     }
     poly([P(0.05,6.4),P(0.9,6.4),P(0.9,7.6),P(0.05,7.6)],lerpHex('#3a2f55','#b5523b',df),null);
     [1.6,4.8,11.6,14.8].forEach(x=>{ctx.globalAlpha=0.07+(0.22-0.07)*df;poly([P(x+0.3,0.05),P(x+2.1,0.05),P(x+2.6,1.6),P(x+0.8,1.6)],lerpHex('#7fb2ff','#fff3c4',df),null);ctx.globalAlpha=1;});
-    if(window.SeasonTree)this.seasonKey=window.SeasonTree.seasonFor(new Date());
+    if(SeasonTree)this.seasonKey=SeasonTree.seasonFor(new Date());
     const items=[];
-    {const OD=window.OfficeDecor;
+    {const OD=OfficeDecor;
     DESKS.forEach((d,i)=>{const owner=this.agents.find(a=>a.desk===i&&!a.leaving&&!a.parent);
       OD.deskWorkstation(ctx,P,d,owner,t,()=>this.drawPerson(G,owner)).forEach(it=>items.push(it));});}
     {const own=this.colOwners();SEGS.forEach(sg=>items.push({z:sg.v?sg.X+sg.y+0.5:sg.x+0.5+sg.Y,f:()=>this.drawSeg(G,sg,own)}));}
@@ -147,7 +155,7 @@ mixin(ClaudeOffice,class{
     this.restroomItems(G,items,snow);
     // All front-facing island trees become event trees when treeOn is active
     {const frontTrees=ISLAND.decor.filter(d=>d.kind==='tree'&&d.x>=0&&d.y>=0);
-    const ST_=window.SeasonTree;
+    const ST_=SeasonTree;
     frontTrees.forEach(d=>{if(this.treeOn&&ST_){items.push({z:d.x+d.y+0.5,f:()=>{const[px,py]=PG(d.x+0.5,d.y+0.5,0);ctx.save();ctx.translate(Math.round(px),Math.round(py));ST_.drawSeasonTree(ctx,0,0,this.season,t);ctx.restore();}});}else{items.push({z:d.x+d.y+0.5,f:()=>SkyRender.drawTree(ctx,PG,d,dfB/10,snB/10)});}});}
     [[8.5,13.5],[19.5,13.5],[18.5,0.5]].forEach(([x,y])=>items.push({z:x+y,f:()=>{box(x-0.2,y-0.2,0.4,0.4,0,7,th.pot);const[px,py]=P(x,y,7);[[-5,-8,10,8,0],[-3,-14,6,6,1],[-7,-5,4,4,1],[3,-6,4,4,0],[-1,-17,3,4,0]].forEach(([a,b,w,hh,v])=>rect(px+a,py+b,w,hh,v?shade(th.plant,-25):th.plant));}}));
     items.push({z:9,f:()=>{box(8.55,0.05,0.9,0.4,0,42,shade(th.trim,-5));[10,20,30,40].forEach(z=>box(8.58,0.06,0.84,0.38,z,z+1,shade(th.trim,-30)));
@@ -184,7 +192,7 @@ mixin(ClaudeOffice,class{
     if(y%2===0){rect(px-6,py-17,2,9,gD);rect(px-9,py-20,5,5,gL);rect(px+4,py-15,2,7,g);rect(px+4,py-19,5,5,g);}
   }
   pantryItems(G,items){
-    const{ctx,th,t,df}=G,PI=window.PantryItems;
+    const{ctx,th,t,df}=G,PI=PantryItems;
     if(!PI)return;
     const isNight=df<0.5;
     const Z=PI.depths(PI.LAYOUT);

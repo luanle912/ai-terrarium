@@ -1,7 +1,5 @@
 // Speech bubbles: an agent "says" a line when its activity changes, then the bubble fades, so a crowded office is
 // not buried under labels. Kept DOM-free so tests/bubble-logic.test.mjs can run it.
-(function(){
-  'use strict';
   const SHOW_MS=6000,FADE_MS=600,COOL_MS=15000,MAX_TALKING=4;
   // What counts as a new line: the status, plus the tool for work and the activity for a break. A tool change while
   // still working is a minor change and waits out COOL_MS; any status change speaks at once.
@@ -40,5 +38,5 @@
   // a line and fades), 'always', 'off' (only approvals, errors, the selected and the hovered agent).
   const MODES=['speech','always','off'],STORAGE_KEY='terrarium-bubbles';
   const BUSY=new Set(['working','thinking','talking','waiting']);
-  globalThis.BubbleLogic={SHOW_MS,FADE_MS,COOL_MS,MAX_TALKING,MODES,STORAGE_KEY,BUSY,topic,step};
-})();
+  export const BubbleLogic = {SHOW_MS,FADE_MS,COOL_MS,MAX_TALKING,MODES,STORAGE_KEY,BUSY,topic,step};
+

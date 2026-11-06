@@ -1,19 +1,32 @@
-// The page's code lives in web/ as plain (classic) scripts that share globals, loaded by claude-office.html in order.
-// Tests run a file the way the browser does: in this realm by default (so its objects compare equal to plain test
-// literals), or in a given context.
+// The page's code lives in web/ as ES modules; claude-office.html loads web/main.js, which imports the rest.
+// Tests import a module directly (require() of an ES module, Node 22.12+), so a test sees the same exports the page
+// uses and one shared instance per module, as in the browser.
 import { readFileSync } from 'node:fs'
-import vm from 'node:vm'
+import { createRequire } from 'node:module'
 
+const require = createRequire(import.meta.url)
 export const PAGE = new URL('../claude-office.html', import.meta.url)
 const WEB = new URL('../web/', import.meta.url)
 
 // name is the path inside web/ without .js, e.g. 'sky-logic' or 'i18n/vi'.
 export const readWeb = name => readFileSync(new URL(name + '.js', WEB), 'utf8')
+export const loadWeb = name => require(new URL(name + '.js', WEB).pathname)
 
-export function runWeb(name, ctx) {
-  const code = readWeb(name), filename = `web/${name}.js`
-  return ctx ? vm.runInNewContext(code, ctx, { filename }) : vm.runInThisContext(code, { filename })
+// Every module the page loads, starting at main.js and following static imports, in first-seen order.
+export function moduleGraph() {
+  const seen = []
+  const visit = name => {
+    if (seen.includes(name)) return
+    seen.push(name)
+    const dir = name.includes('/') ? name.slice(0, name.lastIndexOf('/') + 1) : ''
+    for (const m of readWeb(name).matchAll(/^import (?:[^'"]* from )?'\.\/([^']+)\.js';$/gm)) {
+      const parts = (dir + m[1]).split('/'), out = []
+      for (const p of parts) if (p === '..') out.pop(); else if (p !== '.') out.push(p)
+      visit(out.join('/'))
+    }
+  }
+  const entry = /<script type="module" src="web\/([a-z0-9/-]+)\.js"><\/script>/.exec(readFileSync(PAGE, 'utf8'))
+  if (!entry) throw new Error('claude-office.html has no module entry under web/')
+  visit(entry[1])
+  return seen
 }
-
-// The scripts claude-office.html loads from web/, in page order.
-export const pageScripts = () => [...readFileSync(PAGE, 'utf8').matchAll(/<script src="web\/([a-z0-9/-]+)\.js"><\/script>/g)].map(m => m[1])

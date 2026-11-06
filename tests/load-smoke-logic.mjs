@@ -1,8 +1,6 @@
-// Runs web/smoke-logic.js the way the browser does (as a plain script that sets
-// globalThis.SmokeLogic), so the smoking corner's layout and timing can be tested without a DOM.
-import { runWeb } from './web.mjs'
+// Imports web/smoke-logic.js, the module the page uses, so the smoking corner's layout and timing can be tested without a DOM.
+import { loadWeb } from './web.mjs'
 
 export function loadSmokeLogic() {
-  runWeb('smoke-logic')
-  return globalThis.SmokeLogic
+  return loadWeb('smoke-logic').SmokeLogic
 }

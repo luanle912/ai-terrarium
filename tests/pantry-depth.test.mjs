@@ -1,14 +1,10 @@
-// Draw order of the pantry furniture: runs web/pantry-items.js (it only defines drawing functions and the layout) and
+// Draw order of the pantry furniture: imports web/pantry-items.js (it only defines drawing functions and the layout) and
 // checks the depth keys PantryItems.depths() gives each LAYOUT entry.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runWeb } from './web.mjs'
+import { loadWeb } from './web.mjs'
 
-function loadPantry() {
-  const ctx = { window: {} }
-  runWeb('pantry-items', ctx)
-  return ctx.window.PantryItems
-}
+const loadPantry = () => loadWeb('pantry-items').PantryItems
 
 const PI = loadPantry()
 const Z = PI.depths(PI.LAYOUT)

@@ -1,8 +1,6 @@
 // The three office dogs out on the lawn: where they may go, what they do next and which pose they show.
 // Pure (no DOM, no canvas): the page and tests/dog-logic.test.mjs both run this block. Randomness comes in
 // through world.rand so a test can replay a whole day.
-(function(){
-'use strict';
 const BREEDS=['corgi','husky','dalmatian'];
 const key=(x,y)=>x+','+y,fl=Math.floor;
 // Tiles per second. A corgi's short legs cover less ground; the long-legged dalmatian is the fastest.
@@ -288,5 +286,5 @@ function pose(d,t){
   return{frame,dy,flip:d.face<0};
 }
 
-globalThis.DogLogic={BREEDS,STROLL,RUN,isNight,nightMix,roamCells,path,drinkSpots,denCells,faceToward,create,step,pose,startChase,startPlay,wander,greetSpot};
-})();
+export const DogLogic = {BREEDS,STROLL,RUN,isNight,nightMix,roamCells,path,drinkSpots,denCells,faceToward,create,step,pose,startChase,startPlay,wander,greetSpot};
+

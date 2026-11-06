@@ -1,8 +1,13 @@
-"use strict";
+import { tr } from './i18n.js';
+import { SeasonTree } from './season-tree.js';
+import { SkyLogic } from './sky-logic.js';
+import { CameraLogic } from './camera-logic.js';
+import { DogLogic } from './dog-logic.js';
+import { DOG_PLACES, LH, LW, REAL_WEATHER_EVERY_MS, THEMES, WEATHER_LABEL, dayFactor, lerpTheme } from './office-scene.js';
 // ClaudeOffice, the page component. Its methods are spread over the office-*.js files; each adds its own with
 // mixin(ClaudeOffice, class{ ... }), which copies them onto the prototype exactly as if they were written here.
-function mixin(target,src){for(const k of Object.getOwnPropertyNames(src.prototype))if(k!=='constructor')Object.defineProperty(target.prototype,k,Object.getOwnPropertyDescriptor(src.prototype,k));}
-class ClaudeOffice extends React.Component{
+export function mixin(target,src){for(const k of Object.getOwnPropertyNames(src.prototype))if(k!=='constructor')Object.defineProperty(target.prototype,k,Object.getOwnPropertyDescriptor(src.prototype,k));}
+export class ClaudeOffice extends React.Component{
   constructor(props){
     super(props);
     const params=new URLSearchParams(location.search);
@@ -122,7 +127,7 @@ class ClaudeOffice extends React.Component{
   }
   get isLive(){return this.state.dataSource==='live';}
   get speed(){return this.state.speed||1;}
-  get season(){return this.seasonKey&&this.seasonKey!=='default'?this.seasonKey:(window.SeasonTree?window.SeasonTree.seasonFor():'default');}
+  get season(){return this.seasonKey&&this.seasonKey!=='default'?this.seasonKey:(SeasonTree?SeasonTree.seasonFor():'default');}
   get treeOn(){return this.season!=='default';}
   get theme(){const f=dayFactor();if(f<=0)return Object.assign({_day:0},THEMES.night);if(f>=1)return Object.assign({_day:1},THEMES.day);return lerpTheme(f);}
 

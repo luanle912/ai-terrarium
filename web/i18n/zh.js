@@ -1,5 +1,5 @@
 // zh strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
-(globalThis.I18N_STRINGS=globalThis.I18N_STRINGS||{}).zh={
+export default {
 "seasonTree.newyear.label":"元旦",
 "seasonTree.tet.label":"春节",
 "seasonTree.valentine.label":"情人节",

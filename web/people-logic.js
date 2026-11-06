@@ -1,8 +1,6 @@
 // Who an agent is to look at: man or woman, skin, hair, clothes. Fixed per session id (sid), so reloading the page or
 // another island showing the same session never changes anyone. No DOM, no canvas; tests/people-logic.test.mjs runs
 // this block.
-(function(){
-'use strict';
 // FNV-1a, 32 bit: the same string gives the same number in every browser and in node.
 function hash(s){s=String(s);let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193);}return h>>>0;}
 // One independent draw per trait: the sid salted with the trait's name. FNV's low bits follow the characters' low
@@ -33,5 +31,5 @@ function look(sid){
     legs:bottom==='pants'?take(sid,'pants',PANTS):top==='dress'?null:take(sid,'skirt',SKIRT),
     shoes:take(sid,'shoes',S.shoes),acc:take(sid,'acc',S.acc)};
 }
-globalThis.PeopleLogic={hash,genderOf,look,SKIN,HAIR,PANTS,SKIRT,LAYER,STYLE};
-})();
+export const PeopleLogic = {hash,genderOf,look,SKIN,HAIR,PANTS,SKIRT,LAYER,STYLE};
+

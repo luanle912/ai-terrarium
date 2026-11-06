@@ -1,4 +1,10 @@
 // World mode drawing: the 8-slot sky of small islands, one island in full, cloud transitions, hit testing.
+import { tr } from './i18n.js';
+import { WorldLogic } from './world-logic.js';
+import { SkyRender } from './sky-render.js';
+import { FH, LH, LW } from './office-scene.js';
+import { ClaudeOffice } from './office.js';
+import { ART_H, ART_W, GOLD, ISL, LABEL_H, LABEL_H2, OFFLINE_ALPHA, OFF_MS, ONE_BOTTOM, ONE_TOP, PANEL_COL, art, clip, measured, okColor, paintIsland, paintTile, plate, releaseCanvas, tally } from './world-ui.js';
 Object.assign(ClaudeOffice.prototype,{
     // The 8-slot layout for the current islands and stage, remembered until one of its inputs changes, with what every
     // frame of "Toàn cảnh" needs from it: the ring cells top row first and the island in each slot.

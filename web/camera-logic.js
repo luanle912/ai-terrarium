@@ -1,7 +1,7 @@
 // Pan & zoom maths for the island view, kept DOM-free so tests/camera-logic.test.mjs can run it.
 // The view is the island wrapper laid out at (ox, oy) on the stage, cw × ch for its focus box (the island top),
 // shown with transform translate(tx, ty) scale(z) from its top-left corner.
-(function(){
+
   // DRAG_SPEED < 1: the view moves slower than the mouse (asked for: a 1:1 drag felt like it travelled too far).
   // PAN_MARGIN_X: extra drag room left and right, as a share of the stage width. At 1× the island is usually exactly
   // as wide as the stage, so without it there would be no horizontal drag at all.
@@ -48,5 +48,5 @@
   // The view of a sky layer at depth k (0 = the fixed sky, 1 = moves with the island, >1 = nearer than it): zoom and
   // pan scale with k around the same fixed point, so far layers drift less than near ones (parallax).
   function parallax(v,k){return{z:1+(v.z-1)*k,ax:v.ax*k,ay:v.ay*k};}
-  globalThis.CameraLogic={ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,PAN_MARGIN_X,wheelFactor,clamp,zoomAt,panBy,pinch,isDrag,dragOffset,renderScale,skyView,parallax};
-})();
+  export const CameraLogic = {ZOOM_MIN,ZOOM_MAX,DRAG_THRESHOLD,DRAG_SPEED,PAN_MARGIN_X,wheelFactor,clamp,zoomAt,panBy,pinch,isDrag,dragOffset,renderScale,skyView,parallax};
+

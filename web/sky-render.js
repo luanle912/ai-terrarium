@@ -1,6 +1,5 @@
 // Drawing for the sky island: the island itself (pre-rendered once per resolution), trees and the waterfall.
-(function(){
-'use strict';
+import { CameraLogic } from './camera-logic.js';
 const hex=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
 const toHex=a=>'#'+a.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
 const mix=(a,b,p)=>{const A=hex(a),B=hex(b);return toHex(A.map((v,i)=>v*(1-p)+B[i]*p));};
@@ -176,7 +175,7 @@ function blitMist(ctx,g,w,y0){
 // ---- camera: sky layers zoom and pan with the island, each by its depth ----
 // v is a view {z, ax, ay} (CameraLogic.skyView/parallax): a layer point p is drawn at (ax, ay) + z · p.
 const NO_VIEW={z:1,ax:0,ay:0};
-const layerView=(view,k)=>view&&globalThis.CameraLogic?CameraLogic.parallax(view,k):NO_VIEW;
+const layerView=(view,k)=>view&&CameraLogic?CameraLogic.parallax(view,k):NO_VIEW;
 function inView(ctx,v,draw){
   if(v===NO_VIEW){draw();return;}
   ctx.save();ctx.translate(v.ax,v.ay);ctx.scale(v.z,v.z);draw();ctx.restore();
@@ -333,5 +332,5 @@ function drawCurtains(ctx,w,h,left,right,t,col){
   bank(left,3,false);bank(w-right,11,true);
 }
 
-window.SkyRender={mix,night,renderIsland,drawWaterfall,drawPond,drawTree,drawBack,drawFront,drawCurtains};
-})();
+export const SkyRender = {mix,night,renderIsland,drawWaterfall,drawPond,drawTree,drawBack,drawFront,drawCurtains};
+

@@ -1,4 +1,11 @@
-"use strict";
+import { SkyRender } from './sky-render.js';
+import { DogLogic } from './dog-logic.js';
+import { DogSprites } from './dog-sprites.js';
+import { SmokeLogic } from './smoke-logic.js';
+import { DESKS, P, PA, PG } from './office-scene.js';
+import { LOOK, PERSON } from './office-people.js';
+import { ICON, ST, shade, text3 } from './office-util.js';
+import { ClaudeOffice, mixin } from './office.js';
 // Drawing people (at desks, walking, asleep, in the pond) and the office dogs.
 mixin(ClaudeOffice,class{
   headPos(a){if(a.stool&&!a.moving){const[sx,sy]=PA(a.x,a.y);return[sx,sy-(a.stool===2?30:25)];}if(a.sleeping){const[hx,hy]=P(a.x-0.45,a.y,4);return[hx,hy];}const[sx,sy]=PA(a.x,a.y);if(a.actNow==="bath"&&!a.moving)return[sx,sy-11];return[sx,sy-(a.seated?23:21)];}

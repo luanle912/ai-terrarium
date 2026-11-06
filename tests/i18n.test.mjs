@@ -1,15 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import fs, { readFileSync } from 'node:fs'
 
 import { loadI18n } from './load-i18n.mjs'
-import { PAGE, readWeb, pageScripts } from './web.mjs'
+import { PAGE, readWeb, loadWeb, moduleGraph } from './web.mjs'
 
 // The page's own code: the shell plus every web/ script except the translation tables and the lookup itself.
 const SOURCES = [['claude-office.html', readFileSync(PAGE, 'utf8')],
-  ...pageScripts().filter(n => n !== 'i18n' && !n.startsWith('i18n/')).map(n => [`web/${n}.js`, readWeb(n)])]
+  ...moduleGraph().filter(n => n !== 'i18n' && !n.startsWith('i18n/')).map(n => [`web/${n}.js`, readWeb(n)])]
 const I18n = loadI18n('vi')
-const STRINGS = globalThis.I18N_STRINGS
+const { I18N_STRINGS: STRINGS, tr } = loadWeb('i18n')
 const LANGS = I18n.CODES
 const params = v => (Array.isArray(v) ? v.join('\n') : String(v)).match(/\{\w+\}/g)?.sort() ?? []
 // Case-insensitive so all-caps labels such as 'MỨC CHIA SẺ' are caught too.
@@ -23,10 +23,10 @@ test('tr fills params, falls back to English, then Vietnamese, then shows the ke
     STRINGS.vi['t.both'] = 'Xin chào {name}'; STRINGS.en['t.both'] = 'Hello {name}'
     STRINGS.vi['t.viOnly'] = 'Chỉ tiếng Việt'
     I18n.setLang('ja', { persist: false })
-    assert.equal(globalThis.tr('t.both', { name: 'An' }), 'Hello An')
-    assert.equal(globalThis.tr('t.viOnly'), 'Chỉ tiếng Việt')
-    assert.equal(globalThis.tr('t.nowhere'), 't.nowhere')
-    assert.equal(globalThis.tr('t.both', {}), 'Hello {name}', 'an unknown param stays visible')
+    assert.equal(tr('t.both', { name: 'An' }), 'Hello An')
+    assert.equal(tr('t.viOnly'), 'Chỉ tiếng Việt')
+    assert.equal(tr('t.nowhere'), 't.nowhere')
+    assert.equal(tr('t.both', {}), 'Hello {name}', 'an unknown param stays visible')
   } finally {
     for (const l of LANGS) STRINGS[l] = saved[l]
     I18n.setLang('vi', { persist: false })
@@ -92,9 +92,11 @@ test('no Vietnamese text is hard-coded in the page outside the translation table
   assert.deepEqual(hits.map(([at, l]) => `${at}: ${l.trim().slice(0, 120)}`), [])
 })
 
-test('the page loads every web/ script exactly once, translation tables before the lookup', () => {
-  const names = pageScripts()
-  assert.equal(new Set(names).size, names.length)
-  assert.ok(names.indexOf('i18n') > Math.max(...names.filter(n => n.startsWith('i18n/')).map(n => names.indexOf(n))))
+test('the page reaches every web/ module from main.js, with one translation table per language', () => {
+  const names = moduleGraph()
+  const files = []
+  const walk = (dir, pre) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { if (e.isDirectory()) walk(dir + '/' + e.name, pre + e.name + '/'); else if (e.name.endsWith('.js')) files.push(pre + e.name.slice(0, -3)) } }
+  walk(new URL('../web', import.meta.url).pathname, '')
+  assert.deepEqual([...names].sort(), files.sort(), 'no module left unreachable, none missing')
   assert.deepEqual(names.filter(n => n.startsWith('i18n/')).map(n => n.slice(5)).sort(), [...LANGS].sort(), 'one table per language')
 })
