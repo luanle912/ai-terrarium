@@ -42,7 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pairing errors of the local server are visible** — When the local server answers a join or leave with an error, or does not answer, the page says so (with the status) and stops asking after three failed checks, instead of waiting for ever
 - **The chip does not vanish when the local server dies** — After two failed polls the "World" chip turns grey "server local không phản hồi" instead of disappearing
 
-
 ## [2.0.0] - 2026-11-06
 
 A major version because the source layout changes completely (the page moved from one HTML file into ES modules under `web/`); the page, the hub protocol, the CLI and the configuration work as before.
