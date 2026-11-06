@@ -116,9 +116,15 @@ test('new publisher -> new hub: two publishers on one device, the later one send
     assert.ok(await until(() => first.state().state === 'standby'), `first=${first.state().state} second=${second.state().state}`);
     // stop the one that is sending (by handle, never by process name), let the hub's 90 s silence window pass
     second.stop();
-    skew += 100000;
-    hub.clock.advance(100000);
-    assert.ok(await until(() => first.state().state === 'sending' && d.statuses.slice(-1)[0] === 200, 10000), `first=${first.state().state}`);
+    // A send of the stopped one already in flight can still land after the clocks move and refresh its 90 s window;
+    // keep both clocks moving past each standby retry until the first one takes over.
+    let took = false;
+    for (let i = 0; i < 6 && !took; i++) {
+      skew += i ? 31000 : 100000;
+      hub.clock.advance(i ? 31000 : 100000);
+      took = await until(() => first.state().state === 'sending' && d.statuses.slice(-1)[0] === 200, 3000);
+    }
+    assert.ok(took, `first=${first.state().state}`);
     assert.ok(d.online());
   } finally { d.cleanup(); await hub.close(); }
 });
