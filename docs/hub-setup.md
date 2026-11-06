@@ -108,6 +108,16 @@ người dùng từ `CF-Connecting-IP`. **Chỉ** dùng `cloudflare` khi origin 
 nhiên 5–20 giây rồi mới đóng, nên trang người xem quay lại sau khi hub lên lại thay vì gặp 502 của proxy và dừng hẳn.
 Cứ dừng hub bằng `systemctl stop`/`kill` (SIGTERM) như thường; đừng dùng `kill -9`.
 
+Người xem tự kết nối lại sau đúng `retryMs` của hub (5–20 giây, rải đều để 300 luồng không dồn vào một giây) và vẫn giữ cảnh
+đang xem; trang cũ chạy `EventSource` trần cũng chờ theo dòng `retry:` đó. Khung `restarting` được ghi ngay trước khi
+đóng kết nối, nên một proxy có thể làm rơi nó: khi đó người xem rơi về lùi nhịp của chính họ (1, 2, 4, 8, 16 rồi 30 giây).
+Đã đo với 300 luồng: 300/300 có lại luồng sau 20 giây, mỗi người nhận tối đa 18 sự kiện `world` trong 30 giây đầu.
+
+**90 giây đầu sau khi hub lên.** Hub mất bộ nhớ khi khởi động lại, nên một đảo chưa gửi lại gói nào hiện `waking: true`
+trong `world` (vẫn `online: false`) tối đa 90 giây, và trang vẽ nó là "đang chờ máy gửi lại" thay vì offline. Publisher
+của các máy đang chạy gửi lại trong chưa tới 30 giây (nhịp tim) nên đảo đó sáng lại trước hạn; đảo của máy đã tắt hết
+cửa sổ 90 giây thì chuyển thành offline.
+
 Luồng SSE (`/api/world/stream`) cần proxy không đệm và không cắt kết nối rảnh quá sớm. Hub gửi dòng `: ping` mỗi
 25 giây nên cấu hình mặc định của hai bên đều chạy được.
 
@@ -179,6 +189,17 @@ Một hub chứa **tối đa 8 đảo**, mỗi đảo một **chỗ cố định
   đã nhận; không gửi khoá nào hub cũ từ chối). Trang mới trên tiến trình hub cũ không bật canh gác vì thiếu `ping` có tên,
   và cư xử như trước. Bảng đầy đủ nằm ở mục 9 của `docs/specs/2026-11-06-connection-hardening-design.md`; ma trận
   cũ/mới được kiểm bằng `tests/compat-matrix.test.mjs` (lấy code cũ từ git `21e9bd8`).
+
+## 3f. Triển khai đợt 2 (khởi động lại êm, ngủ/tỉnh)
+
+- **Kiểm `HUB_TRUST_PROXY` của môi trường thật trước khi deploy.** Chỉ nhận `''`, `1` hoặc `cloudflare`; mọi giá trị khác
+  làm hub không khởi động (lỗi `HUB_TRUST_PROXY must be 1 or cloudflare`). Bản cũ lặng lẽ bỏ qua giá trị lạ.
+- **Thứ tự: hub trước, rồi tới plugin** (xem mục 3e). Trang cũ vẫn chạy với hub mới: `retry:` được trình duyệt tôn trọng.
+- **`Retry-After`** của giới hạn luồng (429 mỗi người, 503 toàn hub) dành cho client: `EventSource` của trình duyệt bỏ qua
+  header này (trang chỉ đọc được `Retry-After` của câu trả lời 429 từ `/api/config` rồi chờ đúng thời gian); client tự viết
+  nên đọc và làm theo.
+- **Máy ngủ/tỉnh.** Publisher thấy khoảng trống giữa hai nhịp quá 10 giây thì ghi `terrarium: woke up; resending` và gửi
+  lại ngay; trang thế giới nối lại tức thì khi trình duyệt báo `online` hoặc tab hiện lại, và giữ cảnh tới 5 phút mất kết nối.
 
 ## 4. Sao lưu
 
