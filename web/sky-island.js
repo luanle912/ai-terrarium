@@ -85,7 +85,7 @@ export function renderIsland(island, frame, k, env) {
     if (!has(x, y + 1)) shoreFace(lp, P, C, x, y, 'y', x === f.x && y === f.y);
     if (!has(x + 1, y)) shoreFace(lp, P, C, x, y, 'x');
   }
-  drawWater(lp, P, C, island);
+  drawWater(lp, P, C, island, frame);
   drawMountain(lp, P, C, island, env.snow);
   // The 1 px outline: the land's silhouette pushed out a pixel each way and filled with the outline colour, straight
   // onto the still empty island image, then the land itself on top, so only the ring outside it shows.

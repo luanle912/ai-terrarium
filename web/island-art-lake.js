@@ -16,6 +16,8 @@ import {
   outlinePx,
   PAVILION,
   pavilionLantern,
+  paletteLayer,
+  perFrame,
   pixelLayer,
   rgbOf,
   stamp,
@@ -34,21 +36,36 @@ export function lakeField(island) {
   if (fields.has(island)) return fields.get(island);
   const f = island.waterfall,
     wet = new Set(island.pond.cells);
-  const blur = new Map(),
-    B = (x, y) => {
-      const k = x + ',' + y;
-      if (!blur.has(k) && !island.cells.has(k)) blur.set(k, 0); // past the shore is sky, not water
-      if (!blur.has(k)) {
-        let v = 0;
-        for (let j = -1; j <= 1; j++)
-          for (let i = -1; i <= 1; i++) if (wet.has(x + i + ',' + (y + j))) v += KERNEL[(j + 1) * 3 + i + 1];
-        blur.set(k, v / 16);
-      }
-      return blur.get(k);
-    };
+  // the island's tiles and their blur on typed grids over its bounds (a ring of sky round them)
+  let gx0 = Infinity,
+    gy0 = Infinity,
+    gx1 = -Infinity,
+    gy1 = -Infinity;
+  for (const c of island.list) {
+    gx0 = Math.min(gx0, c.x - 1);
+    gy0 = Math.min(gy0, c.y - 1);
+    gx1 = Math.max(gx1, c.x + 2);
+    gy1 = Math.max(gy1, c.y + 2);
+  }
+  const GW = gx1 - gx0,
+    land = new Uint8Array(GW * (gy1 - gy0)),
+    blur = new Float32Array(GW * (gy1 - gy0)),
+    gi = (x, y) => (x < gx0 || y < gy0 || x >= gx1 || y >= gy1 ? -1 : (y - gy0) * GW + x - gx0);
+  for (const c of island.list) land[gi(c.x, c.y)] = 1;
+  for (const c of island.list) {
+    let v = 0;
+    for (let j = -1; j <= 1; j++)
+      for (let i = -1; i <= 1; i++) if (wet.has(c.x + i + ',' + (c.y + j))) v += KERNEL[(j + 1) * 3 + i + 1];
+    blur[gi(c.x, c.y)] = v / 16; // past the shore is sky, not water: 0
+  }
+  const B = (x, y) => {
+    const i = gi(x, y);
+    return i < 0 ? 0 : blur[i];
+  };
   const at = (x, y) => {
     if (Math.abs(x - f.x - 0.5) <= 0.42 && y >= f.y + 0.3 && y <= f.y + 1.05) return 0.75;
-    if (!island.cells.has(Math.floor(x) + ',' + Math.floor(y))) return 0;
+    const t = gi(Math.floor(x), Math.floor(y));
+    if (t < 0 || !land[t]) return 0;
     const u = x - 0.5,
       v = y - 0.5,
       i = Math.floor(u),
@@ -70,7 +87,13 @@ const WATER = { shallow: '#62b8ea', mid: '#4aa3df', deep: '#3b8fcf', line: '#a9d
 // The lake on the land canvas: every pixel of its box is looked at twice, at the lawn's level and at
 // the water's (WATER_Z lower). Water where both are in; the far bank's wall where the lawn level is in and the water
 // level is not; cobbles on the lawn at the edge, with their side showing on the near banks.
-export function drawWater(pt, P, C, island) {
+export function drawWater(pt, P, C, island, frame) {
+  const w = perFrame(waters, island, frame, () => paintWater(P, island));
+  stamp(pt.ctx, w.L.paint(C), w.sx0, w.sy0);
+}
+const waters = new WeakMap();
+// The lake's pixels in palette keys, worked out once per island and frame (only the light changes between bakes).
+function paintWater(P, island) {
   const { at, wet } = lakeField(island),
     [OX, OY] = P(0, 0, 0),
     tiles = [...wet].map(k => k.split(',').map(Number)),
@@ -80,8 +103,8 @@ export function drawWater(pt, P, C, island) {
     sy1 = Math.ceil(OY + Math.max(...tiles.map(([x, y]) => x + y + 2)) * 8) + 6,
     W = sx1 - sx0,
     H = sy1 - sy0,
-    L = pixelLayer(W, H),
-    rgb = rgbOf(C),
+    L = paletteLayer(W, H),
+    rgb = L.key,
     kind = new Uint8Array(W * H), // 0 nothing, 1 water, 2 bank wall, 3 cobble, 4 cobble side
     deep = new Float32Array(W * H),
     cell = new Int32Array(W * H);
@@ -132,8 +155,7 @@ export function drawWater(pt, P, C, island) {
       } else c = rgb(COBBLE_SIDE, 0.3);
       L.set(x, y, c);
     }
-  L.flush();
-  stamp(pt.ctx, L.cv, sx0, sy0);
+  return { L, sx0, sy0 };
 }
 
 // On the water, back to front: the stepping stones out to the pavilion, then the lotus pads with their flowers.
