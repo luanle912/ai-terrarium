@@ -1,6 +1,6 @@
 // Drawing for the sky island: the island (pre-rendered once per resolution and light), its standing props, trees,
 // the sky behind it and the weather in front of it.
-import { drawTree, hash, mix, night, renderIsland, renderProps } from './sky-island.js';
+import { hash, mix, night, renderIsland, renderProps } from './sky-island.js';
 import {
   BAND_W,
   BAND_X0,
@@ -366,7 +366,6 @@ export const SkyRender = {
   night,
   renderIsland,
   renderProps,
-  drawTree,
   drawBack,
   drawFront,
   drawCurtains,
