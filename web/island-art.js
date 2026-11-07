@@ -159,6 +159,66 @@ export function linePx(g, a, b, colour) {
 }
 // The 2x2 ordered dither: 0, 0.5, 0.75, 0.25 over a pixel's (x, y) parity, for stepped colour bands that blend.
 export const bayer = (x, y) => [0, 0.5, 0.75, 0.25][(x & 1) + ((y & 1) << 1)];
+// A pixel layer worked out once and recoloured at every bake: each pixel holds an index into a list of
+// [colour, snow] keys (0 is clear), so a new light or snow level only maps the few keys through C and writes the
+// pixels. g takes the canvas calls fillPx and linePx make (whole-pixel fillRects in one fillStyle) and records them.
+export function paletteLayer(w, h) {
+  const W = Math.max(1, Math.ceil(w)),
+    H = Math.max(1, Math.ceil(h)),
+    idx = new Uint16Array(W * H),
+    keys = [],
+    ids = new Map();
+  let y0 = H,
+    y1 = 0;
+  const key = (c, s = 0) => {
+    const k = c + '|' + s;
+    let i = ids.get(k);
+    if (i === undefined) {
+      keys.push([c, s]);
+      ids.set(k, (i = keys.length));
+    }
+    return i;
+  };
+  const fill = (x, y, w, h, i) => {
+    const xa = Math.max(0, x),
+      xb = Math.min(W, x + w),
+      ya = Math.max(0, y),
+      yb = Math.min(H, y + h);
+    if (xa >= xb || ya >= yb) return;
+    for (let r = ya; r < yb; r++) idx.fill(i, r * W + xa, r * W + xb);
+    y0 = Math.min(y0, ya);
+    y1 = Math.max(y1, yb);
+  };
+  const set = (x, y, i) => fill(x, y, 1, 1, i);
+  const g = {
+    fillStyle: '',
+    fillRect(x, y, w, h) {
+      fill(x, y, w, h, key(this.fillStyle));
+    },
+  };
+  // the layer in C's colours, on a canvas of its own
+  const paint = C => {
+    const L = pixelLayer(W, H),
+      px = new Uint32Array(L.img.data.buffer),
+      pal = new Uint32Array(keys.length + 1);
+    keys.forEach(([c, s], i) => {
+      const [r, gr, b] = hex(C(c, s));
+      pal[i + 1] = ((255 << 24) | (b << 16) | (gr << 8) | r) >>> 0; // RGBA bytes on a little-endian machine
+    });
+    for (let i = y0 * W, e = y1 * W; i < e; i++) if (idx[i]) px[i] = pal[idx[i]];
+    if (y1 > y0) L.g.putImageData(L.img, 0, 0, 0, y0, W, y1 - y0);
+    return L.cv;
+  };
+  return { w: W, h: H, idx, keys, key, set, g, paint };
+}
+// A cache of light-independent layers per island and scene frame (world mode bakes many islands, each its own).
+export function perFrame(store, island, frame, make) {
+  let per = store.get(island);
+  if (!per) store.set(island, (per = new Map()));
+  const k = frame.LW + ',' + frame.LH + ',' + frame.OX + ',' + frame.OY;
+  if (!per.has(k)) per.set(k, make());
+  return per.get(k);
+}
 // Light colours for a pixel layer, worked out once per bake: rgb(colour, snow) is C's colour as [r, g, b].
 export function rgbOf(C) {
   const memo = new Map();
@@ -186,11 +246,17 @@ const STONE_TOP = '#7a7a84',
   DEEP_Z = 60;
 // How far the grass hangs over the soil at a point of the shore: 1-4 px in long, soft waves.
 const lipAt = (u, v) => 2.4 + 1.1 * Math.sin(u * 1.7 + v * 0.9) + 0.5 * Math.sin(u * 4.1 - v * 2.3);
+const undersides = new WeakMap();
 export function drawUnderside(pt, P, C, island, frame) {
-  const cv = document.createElement('canvas');
-  cv.width = Math.ceil(frame.LW);
-  cv.height = Math.ceil(frame.LH);
-  const g = cv.getContext('2d'),
+  stamp(pt.ctx, undersideLayer(P, island, frame).paint(C));
+}
+// The underside's pixels in palette keys, painted once per island and frame (only the light changes between bakes).
+export function undersideLayer(P, island, frame) {
+  return perFrame(undersides, island, frame, () => paintUnderside(P, island, frame));
+}
+function paintUnderside(P, island, frame) {
+  const L = paletteLayer(frame.LW, frame.LH),
+    g = L.g,
     dep = (x, y) => island.depth.get(x + ',' + y),
     tones = new Map();
   // a block's stone: its band's grey, lighter or darker by up to 8 %, shaded on the x + 1 face; its joint darker still
@@ -199,7 +265,7 @@ export function drawUnderside(pt, P, C, island, frame) {
     if (!tones.has(k)) {
       const base = mix(deep ? STONE_DEEP : STONE_TOP, j > 0 ? '#ffffff' : '#000000', Math.abs(j) / 100),
         face = lit ? base : mix(base, '#000000', 0.3);
-      tones.set(k, [C(face), C(mix(face, '#000000', 0.28))]);
+      tones.set(k, [face, mix(face, '#000000', 0.28)]);
     }
     return tones.get(k);
   };
@@ -222,7 +288,7 @@ export function drawUnderside(pt, P, C, island, frame) {
       }
     }
   }
-  stamp(pt.ctx, cv);
+  return L;
 }
 // The soil layer and the grass lip on one shore face of a lawn tile: plane 'y' (its y + 1 edge) or 'x' (x + 1).
 // bare: soil only (under the lip the main fall spills over).
