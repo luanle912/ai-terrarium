@@ -244,3 +244,11 @@ test('ducks, fish and duckweed reuse the same arrays and objects every call', ()
 test('the pavilion lantern height is one named constant, about 28 px above the water', () => {
   assert.ok(L.LANTERN_Z >= 20 && L.LANTERN_Z <= 36)
 })
+
+test('ducks dive at their own times, never all together when the page opens', () => {
+  L.reset(island)
+  for (let t = 0; t <= 8; t += 0.25) {
+    const under = L.ducks(island, t, 1, false).filter(d => d.dive > 0.05).length
+    assert.ok(under <= 1, `${under} ducks under at ${t} s`)
+  }
+})
