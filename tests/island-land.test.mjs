@@ -64,6 +64,26 @@ test('the island is a hexagon pointing up and down', () => {
   assert.ok(Math.max(...cols) - Math.min(...cols) < 4 * R - 20, 'the left and right points are not cut off')
 })
 
+test('the upright edges are broken rock, not a comb', () => {
+  // On a tile grid a straight up-and-down edge steps one tile out, one tile in, every row (x + y): a comb. Per row,
+  // the outermost column (x - y) on each side; a comb is a stretch where it flips back and forth row after row.
+  const rows = new Map()
+  for (const [x, y] of tiles) {
+    const r = rows.get(x + y) || [Infinity, -Infinity]
+    rows.set(x + y, [Math.min(r[0], x - y), Math.max(r[1], x - y)])
+  }
+  const keys = [...rows.keys()].sort((a, b) => a - b)
+  for (const side of [0, 1]) {
+    const col = keys.map(k => rows.get(k)[side])
+    let run = 0, longest = 0
+    for (let i = 2; i < col.length; i++) {
+      run = col[i] === col[i - 2] && col[i] !== col[i - 1] ? run + 1 : 0
+      longest = Math.max(longest, run)
+    }
+    assert.ok(longest <= 4, `the ${side ? 'right' : 'left'} edge is a comb for ${longest + 2} rows`)
+  }
+})
+
 test('the island contains the whole office block', () => {
   for (let y = -1; y <= H; y++) for (let x = -1; x <= W + 10; x++) assert.ok(has(x, y), `office block cell ${x},${y}`)
 })
@@ -107,12 +127,15 @@ test('the underside is one cone with its tip near the middle', () => {
 })
 
 test('the cone falls off outward without steps', () => {
+  const byXY = new Map(island.list.map(c => [c.x + ',' + c.y, c]))
   const { cx, cy } = island.shape
   const far = (x, y) => Math.hypot(x + 0.5 - cx, y + 0.5 - cy)
   for (const c of island.list)
     for (const [a, b] of N4) {
-      const d = island.depth.get(c.x + a + ',' + (c.y + b))
-      if (d === undefined || far(c.x + a, c.y + b) <= far(c.x, c.y)) continue
+      const o = byXY.get(c.x + a + ',' + (c.y + b))
+      if (o === undefined || far(c.x + a, c.y + b) <= far(c.x, c.y)) continue
+      const d = o.d - o.lip // a rock hanging under the lip of an upright edge is not the cone
+      assert.ok(o.lip <= 12, `the rock under ${o.x},${o.y} hangs ${o.lip} px`)
       assert.ok(d <= c.d + 2, `${c.x + a},${c.y + b} hangs ${d} under ${c.x},${c.y} at ${c.d}`)
     }
 })

@@ -58,21 +58,39 @@ const shoreWave = a => {
 // are softer on the two upright edges but never vanish there. Around the bottom point (where the lake and the main
 // waterfall sit) they fade out, so the lake keeps its shore.
 const SOFT = 0.7;
+// On a tile grid an edge that runs straight up the screen is a comb: one tile out, one tile in, every row. So the
+// upright edges zigzag instead: out and in by a tile a row, turning at points a hash puts between ZIG[0] and ZIG[1]
+// tiles out or in, so the runs are 1-4 rows long: short straight stretches of tile edge at changing angles, which read
+// as broken rock. jag(along) is the zigzag's offset (tiles) at a point along the edge; `seed` tells the edges apart.
+const ZIG = [1.2, 2.4],
+  ZIG_SLOPE = 2;
+function jag(along, seed) {
+  let a = -60,
+    v = 0;
+  for (let i = 0; ; i++) {
+    const to = (i & 1 ? 1 : -1) * (ZIG[0] + hash(i, seed, 61) * (ZIG[1] - ZIG[0])),
+      len = Math.abs(to - v) / ZIG_SLOPE;
+    if (along < a + len) return v + (to - v) * ((along - a) / len);
+    a += len;
+    v = to;
+  }
+}
 function hexOut(x, y, { cx, cy, R, K }, wavy) {
   const dx = x + 0.5 - cx,
     dy = y + 0.5 - cy,
     a = Math.abs(dx) - R,
     b = Math.abs(dy) - R,
-    c = Math.abs(dx - dy) - K;
+    c0 = Math.abs(dx - dy) - K,
+    // the zigzag leans outward (headlands more than bays, so the lawn by the office stays wide) and keeps off the
+    // corners where the upright edges meet the others
+    face = Math.max(0, 1 - Math.abs(c0) / 8) * Math.min(1, Math.max(0, (c0 - Math.max(a, b) - 0.5) / 1.5)),
+    c = wavy ? c0 + face * (jag(dx + dy, dx > dy ? 5 : 9) - 1) : c0;
   const f = SOFT * Math.log(Math.exp(a / SOFT) + Math.exp(b / SOFT) + Math.exp(c / SOFT));
   if (!wavy) return f;
-  const upright = 0.55 + 0.45 * Math.min(1, Math.max(0, -c / 6)),
+  // on the upright edges the zigzag stands in for the waves
+  const upright = (0.55 + 0.45 * Math.min(1, Math.max(0, -c / 6))) * (1 - face),
     nearTip = Math.min(1, Math.max(0, (2 * R - (dx + dy) - 14) / 10));
-  // the two upright edges also wander along their length, so neither runs ruler-straight
-  const along = dx + dy,
-    onCut = Math.max(0, 1 - Math.abs(c) / 3),
-    wander = onCut * (0.9 * Math.sin(along * 0.42 + (dx > dy ? 1.3 : 4.1)) + 0.45 * Math.sin(along * 0.97 + 2.2));
-  return f - (shoreWave(Math.atan2(dy, dx)) * upright + wander) * nearTip;
+  return f - shoreWave(Math.atan2(dy, dx)) * upright * nearTip;
 }
 // The hexagon's own distance from the middle, 0 there and 1 on its edges, for the underside.
 const hexN = (x, y, { cx, cy, R, K }) => {
@@ -118,6 +136,16 @@ function buildIsland({ W, H }) {
     for (let x = x0; x < x1; x++)
       if (hexOut(x, y, shape, true) <= 0.5 || (x >= -1 && x <= W + 10 && y >= -1 && y <= H)) cells.add(key(x, y));
   for (const [x, y] of annexLand(W)) cells.add(key(x, y));
+  // the zigzag can leave a lone tile out on a point or a one-tile notch: trim and fill them (never the office block)
+  const around = (x, y) => N4.filter(([a, b]) => cells.has(key(x + a, y + b))).length;
+  for (let pass = 0; pass < 3; pass++)
+    for (let y = y0 - 1; y <= y1; y++)
+      for (let x = x0 - 1; x <= x1; x++) {
+        const k = key(x, y),
+          n = around(x, y);
+        if (cells.has(k) && n < 2 && !(x >= -1 && x <= W + 10 && y >= -1 && y <= H)) cells.delete(k);
+        else if (!cells.has(k) && n > 2) cells.add(k);
+      }
   let minX = Infinity,
     maxX = -Infinity,
     minY = Infinity,
@@ -132,13 +160,20 @@ function buildIsland({ W, H }) {
   // The underside is one cone: its tip, under the middle, hangs about a third of the island's screen width
   // ((x - y) * 16 px per tile) below the grass, and it rises evenly to the shore. The depth follows the plain hexagon
   // (the shore's waves would make it rise along the shore) and its noise stays under 2 px, so it never steps.
+  // Along the two upright edges every shore tile hangs a rock of its own depth under the lip (none, or 3-12 px more),
+  // so the edge's teeth do not hang one even strip each.
+  const lip = (x, y) => {
+    const up = Math.abs(x + 0.5 - cx - (y + 0.5 - cy)) - shape.K;
+    return shore.get(key(x, y)) === 0 && up > -3 && hash(x, y, 5) > 0.4 ? 3 + hash(x, y, 6) * 9 : 0;
+  };
   const maxD = Math.round(((maxX - minY - (minX - maxY)) * 16) / 3),
     shore = shoreOf(cells);
   const list = [...cells]
     .map(k => {
       const [x, y] = pos(k),
         n = Math.min(1, hexN(x, y, shape));
-      return { x, y, shore: shore.get(k), d: 8 + (maxD - 8) * (1 - n) ** 1.6 + hash(x, y, 1) * 2 };
+      const r = lip(x, y);
+      return { x, y, shore: shore.get(k), d: 8 + (maxD - 8) * (1 - n) ** 1.6 + hash(x, y, 1) * 2 + r, lip: r };
     })
     .sort((a, b) => a.x + a.y - (b.x + b.y) || a.x - b.x);
   const spots = outdoorSpots(W, H);
