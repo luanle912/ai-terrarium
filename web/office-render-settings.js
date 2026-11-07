@@ -1,11 +1,75 @@
 // The ⚙ settings panel of the local page. Called from ClaudeOffice#render (office-render.js).
 import { tr } from './i18n.js';
 import { BubbleLogic } from './bubble-logic.js';
+import { SeasonLogic } from './season-logic.js';
 import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 mixin(
   ClaudeOffice,
   class {
+    // The Season section, under Weather (the local page's panel and the world's): the choice, what shows now and four
+    // buttons that show a season for a minute (SeasonLogic.startSeasonPreview).
+    seasonSection() {
+      const now = this.seasonNow(),
+        choice = this.seasonChoice || 'auto',
+        name = key => SeasonLogic.seasonLabel(key);
+      return h(
+        'div',
+        { id: 'season-section', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+        h(
+          'label',
+          null,
+          tr('settings.season'),
+          h(
+            'select',
+            {
+              'aria-label': tr('settings.season.mode'),
+              value: choice,
+              onChange: e => this.setSeasonChoice(e.target.value),
+            },
+            h('option', { value: 'auto' }, SeasonLogic.autoLabel()),
+            SeasonLogic.KEYS.map(k => h('option', { key: k, value: k }, name(k))),
+          ),
+        ),
+        h('span', null, tr('settings.season.current', { label: SeasonLogic.seasonLabel(now, this.season) })),
+        h(
+          'div',
+          { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
+          SeasonLogic.KEYS.map(k =>
+            h(
+              'button',
+              {
+                key: k,
+                className: 'btn',
+                title: tr('settings.season.previewTitle', { label: name(k) }),
+                style: { padding: '3px 7px', fontSize: 11 },
+                onClick: () => this.previewSeason(k),
+              },
+              name(k),
+            ),
+          ),
+        ),
+      );
+    }
+    setSeasonChoice(choice) {
+      if (!SeasonLogic.CHOICES.includes(choice)) return;
+      this.seasonChoice = choice;
+      SeasonLogic.saveSeasonChoice(this.storage, choice);
+      this.setState({ seasonChoice: choice });
+    }
+    // A preview shows the season for SEASON_PREVIEW_MS, then the choice's own returns.
+    previewSeason(key) {
+      if (!SeasonLogic.KEYS.includes(key)) return;
+      this.seasonPreview = SeasonLogic.startSeasonPreview(key, Date.now());
+      this.setState({ seasonPreviewAt: Date.now() });
+    }
+    // The header's season chip: open Settings and scroll to the Season section.
+    openSeasonSettings() {
+      this.setState({ showSettings: true }, () => {
+        const el = document.getElementById('season-section');
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+      });
+    }
     // The ⚙ settings panel of the local page.
     renderSettingsPanel({
       agentCount,
@@ -208,6 +272,7 @@ mixin(
               ),
             ),
           ),
+          this.seasonSection(),
           isSim &&
             h(
               'label',
