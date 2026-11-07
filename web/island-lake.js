@@ -131,6 +131,7 @@ function pavilionOf(lake, baths) {
     return out.some(p => bath.has(key(p.x, p.y))) ? null : out;
   };
   const path = [lineTo([-1, 0]), lineTo([0, -1])].filter(Boolean).sort((a, b) => a.length - b.length)[0];
+  if (!path) throw new Error('island-lake: no clear line of stepping stones out to the pavilion at ' + px + ',' + py);
   return { x: px + 0.5, y: py + 0.5, pillar: { x: px, y: py }, path };
 }
 
@@ -267,6 +268,7 @@ function restOf(lake, cells, pav, free) {
     .map(pos)
     .filter(([x, y]) => y <= py - 3 && fits([x, y]))
     .sort((a, b) => Math.abs(a[1] - (py - 3)) - Math.abs(b[1] - (py - 3)) || a[0] - b[0]);
+  if (!spots.length) throw new Error('island-lake: no bank tile fits the rest corner');
   const [x, y] = spots[0];
   return { bench: { x: x - 1, y: y - 2 }, fish: { x, y } };
 }

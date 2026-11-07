@@ -348,9 +348,13 @@ test('everything outdoors is reachable and nobody walks into water or the mounta
     assert.ok(!ISLAND.mountain.cells.has(k), `dogs roam the mountain at ${k}`)
   }
   assert.ok(drink.filter((d) => ISLAND.pond.cells.has(K(d.tx, d.ty))).length >= 2, 'nowhere to drink at the lake')
+  assert.ok(drink.some((d) => ISLAND.mountain.pool.cells.has(K(d.tx, d.ty))), 'nowhere to drink at the pool')
   for (const d of drink) {
     const water = ISLAND.pond.cells.has(K(d.tx, d.ty)) || ISLAND.mountain.pool.cells.has(K(d.tx, d.ty))
     assert.ok(water && roam.has(K(d.x, d.y)), `drink spot ${d.x},${d.y}`)
+    // never lapping at a pavilion stepping stone or beside a bather
+    const at = (list) => list.some((p) => p.x === d.tx && p.y === d.ty)
+    assert.ok(!at(ISLAND.pavilion.path) && !at(ISLAND.pond.spots), `a dog drinks at a stone or a bather: ${d.tx},${d.ty}`)
   }
   assert.equal(den.length, 3)
   for (const [x, y] of den) assert.ok(roam.has(K(x, y)) && !clear.has(K(x, y)), `den cell ${x},${y} is not a quiet roam cell`)

@@ -126,7 +126,17 @@ export const DOG_PLACES = {
   roamList: [...DOG_ROAM].map(k => k.split(',').map(Number)),
   clear: DOG_CLEAR,
   den: DogLogic.denCells(DOG_ROAM, [33, 8], DOG_CLEAR),
-  drink: DogLogic.drinkSpots(DOG_ROAM, WATER, DOG_CLEAR),
+  // not at the pavilion's stepping stones or where an agent bathes
+  drink: DogLogic.drinkSpots(
+    DOG_ROAM,
+    new Set(
+      [...WATER].filter(
+        k =>
+          !ISLAND.pavilion.path.some(p => p.x + ',' + p.y === k) && !ISLAND.pond.spots.some(p => p.x + ',' + p.y === k),
+      ),
+    ),
+    DOG_CLEAR,
+  ),
   rest: DogLogic.besideCell(DOG_ROAM, [REST.bench.x, REST.bench.y], DOG_CLEAR, [FISH_PT]),
 };
 export const REAL_WEATHER_EVERY_MS = 15 * 60_000;
