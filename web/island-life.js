@@ -8,7 +8,7 @@
 // lampGlow, fallFlow, rainbowLevel and creatures are pure (tests/island-life.test.mjs); drawLife needs a canvas.
 import { hash, night, WATER_Z } from './sky-island.js';
 import { mistSprite, MIST_VARIANTS } from './sky-mist.js';
-import { LAMP_Z } from './island-art.js';
+import { LAMP_Z, pavilionLantern } from './island-art.js';
 import { SkyLogic } from './sky-logic.js';
 import { IslandLakeLife } from './island-lake-life.js';
 
@@ -559,6 +559,17 @@ function drawLampLight(ctx, island, PG, i, t, env) {
   ctx.globalAlpha = 1;
   ctx.imageSmoothingEnabled = smooth;
 }
+// The pavilion's lantern and its halo, drawn right after the pavilion's sorted sprite (web/office-draw.js) so the roof
+// never covers it; it hangs where the art puts it (pavilionLantern).
+function drawLanternLight(ctx, island, PG, t, env) {
+  const at = pavilionLantern(island),
+    glow = lampGlow(env.df);
+  if (!at || glow <= 0.01) return;
+  const smooth = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = true;
+  L.drawLanternLight(ctx, geometry(island, PG), at, lampLevel(glow, t, 7, !!env.reduced), sprite('halo', 40, 40, HALO));
+  ctx.imageSmoothingEnabled = smooth;
+}
 function drawFlies(ctx, g, life, dark, still) {
   if (!life.flies.length || dark <= 0.01) return;
   const glow = sprite('fly', 16, 16, GLOW);
@@ -637,13 +648,19 @@ function drawLife(ctx, island, PG, t, env) {
   RAINBOW_ARGS.now = now;
   drawRainbow(ctx, g, rainbowLevel(RAINBOW_ARGS));
   drawPools(ctx, g, t, glow, still);
-  // The pavilion's lantern and its halo. Drawn here for now, under the pavilion sprite; once the pavilion is a sorted
-  // sprite this call moves to right after it (like drawLampLight).
-  L.drawLanternLight(ctx, g, island, lampLevel(glow, t, 7, still), sprite('halo', 40, 40, HALO));
   drawFlies(ctx, g, life, clamp01((0.3 - df) / 0.1), still);
   ctx.imageSmoothingEnabled = smooth;
   // the birds sit out heavy rain and storms
   if (!still && fx.rain < 0.5 && fx.storm < 0.3) drawBirds(ctx, g, P, life);
 }
 
-export const IslandLife = { lampGlow, fallFlow, rainbowLevel, creatures, motionPhases, drawLife, drawLampLight };
+export const IslandLife = {
+  lampGlow,
+  fallFlow,
+  rainbowLevel,
+  creatures,
+  motionPhases,
+  drawLife,
+  drawLampLight,
+  drawLanternLight,
+};
