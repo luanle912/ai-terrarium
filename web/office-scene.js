@@ -74,15 +74,26 @@ export const WC = RestroomLogic.layout(
 WC.floor.forEach(k => LAWN_WALK.delete(k));
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
-// The office dogs live on the lawn all round the office, by the lake and on the back lawn; never in the lake, the lake
-// at the mountain's foot, on the mountain, the bench, the smoking corner or the restroom. They drink at both lakes.
-// Trees, bushes, lamps, the bench and the mountain are sorted with them; the lawn the mountain hides is not walked at
-// all (SkyLogic.lawnWalk). The strip right behind the walls is left out too: web/office-draw.js would draw a dog there
-// correctly, before the walls, but they would hide it whole (the left wall covers the strip beside it out to the
-// island's edge).
+// The office dogs live on the lawn all round the office, by the lake and on the back lawn; never in the lake, the
+// pool under the mountain falls, on the mountain, the bench, the smoking corner or the restroom. They drink at the
+// lake and, where they can reach it, at the pool. Trees, bushes, lamps and the bench are sorted with them, but the
+// mountain is part of the island picture under every sprite, so no dog stands where it would be drawn over it: up to
+// as many rows behind a mountain cell as the stone above that cell rises (8 px a row), and at least the two rows behind
+// its grassy foot. The strip right behind the
+// walls is left out too: web/office-draw.js would draw a dog there correctly, before the walls, but they would hide it
+// whole (the left wall covers the strip beside it out to the island's edge).
 const REST = ISLAND.rest,
-  WATER = new Set([...ISLAND.pond.cells, ...ISLAND.mountain.lake.cells]),
-  FISH_PT = [REST.fish.x + 0.6, REST.fish.y + 0.5];
+  WATER = new Set([...ISLAND.pond.cells, ...ISLAND.mountain.pool.cells]),
+  FISH_PT = [REST.fish.x + 0.6, REST.fish.y + 0.5],
+  M = ISLAND.mountain,
+  // the height of the stone over a point: each cone as if it rose straight from its foot to its tip, and the rock of
+  // the gap the falls pour out of
+  stoneH = (x, y) =>
+    Math.max(
+      0,
+      ...M.peaks.map(p => p.h * (1 - Math.hypot(x - p.x - 0.5, y - p.y - 0.5) / (1.12 * p.R))),
+      Math.abs(x - M.gap.x) < 1.5 && Math.abs(y - M.gap.y) < 1 ? M.gap.z + 7 : 0,
+    );
 export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   W,
   H,
@@ -92,6 +103,10 @@ export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
     { x: REST.bench.x, y: REST.bench.y, w: 1, h: 1 },
   ],
   wallReach: WALL_REACH,
+  tall: [...M.cells].map(k => {
+    const [x, y] = k.split(',').map(Number);
+    return [x, y, Math.max(2, Math.ceil(stoneH(x + 0.5, y + 0.5) / TH))];
+  }),
 });
 // They run across the stone paths and past the stairs but never lie, sit, sniff or sleep on them (the stairs' foot and
 // the tile beyond it stay free), nor on the fishing spot. At night they curl up at (33,8), by the grove on the east

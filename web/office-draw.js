@@ -5,7 +5,6 @@ import { CameraLogic } from './camera-logic.js';
 import { SkyRender } from './sky-render.js';
 import { IslandLife } from './island-life.js';
 import { PropUse } from './prop-use.js';
-import { MountainArt } from './mountain-art.js';
 import {
   DESKS,
   FH,
@@ -155,26 +154,6 @@ mixin(
       ctx.drawImage(sc, Math.round((X - 24) * k), Math.round((Y - 48) * k));
       ctx.setTransform(k, 0, 0, k, 0, 0);
     }
-    // The mountain's columns as sorted items { z, f }: each draws its strip of the mountain sprite, then the same strip
-    // of the falls' current frame and the foam's (this.mtnStep), all in whole device px so the strips meet exactly.
-    mountainCols(ctx, M, k) {
-      const step = this.mtnStep || (this.mtnStep = { fall: 0, foam: -1 });
-      const strip = (o, a, b) => {
-        const x0 = Math.max(a, o.dx),
-          x1 = Math.min(b, o.dx + o.w);
-        if (x1 > x0) ctx.drawImage(o.img, x0 - o.dx, 0, x1 - x0, o.h, x0, o.dy, x1 - x0, o.h);
-      };
-      return M.cols.map(({ z, a, b }) => ({
-        z,
-        f: () => {
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          strip(M, a, b);
-          strip(M.falls[step.fall], a, b);
-          if (step.foam >= 0) strip(M.foam[step.foam], a, b);
-          ctx.setTransform(k, 0, 0, k, 0, 0);
-        },
-      }));
-    }
     renderK() {
       return CameraLogic.renderScale(this.canvas.clientWidth, window.devicePixelRatio || 1, this.kZoom, LW);
     }
@@ -207,11 +186,9 @@ mixin(
       if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB) {
         const frame = { LW, LH, OX, OY },
           light = { df: dfB / 10, snow: snB / 10 };
-        const mountain = SkyRender.renderMountain(ISLAND, frame, k, light);
         this.islandCache = {
           img: SkyRender.renderIsland(ISLAND, frame, k, light),
           props: SkyRender.renderProps(ISLAND, frame, k, light),
-          mountain: mountain && this.mountainCols(ctx, mountain, k),
           k,
           df: dfB,
           sn: snB,
@@ -238,13 +215,6 @@ mixin(
         backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y)),
         walker = a => !a.sleeping && !a.seated && !a.wcIn;
       for (const p of this.islandCache.props) (backOf(p) ? behind : items).push({ z: p.z, f: stamp(p) });
-      // the mountain, column by column (made with the cache: nothing new a frame), its falls and foam stepping on
-      if (this.islandCache.mountain) {
-        const still = !env || env.reduced;
-        this.mtnStep.fall = still ? 0 : MountainArt.fallFrame(t);
-        this.mtnStep.foam = still ? 0 : MountainArt.foamFrame(t);
-        for (const it of this.islandCache.mountain) items.push(it);
-      }
       // The island's trees, all round the office: event trees while a season or holiday is on, else plain ones.
       // Event trees are drawn in their own colours; after dark each goes through a scratch canvas and takes the same
       // night tint as the lawn (SkyRender.night: toward #0d1322 by (1 - light) x 0.6), so it does not glow.

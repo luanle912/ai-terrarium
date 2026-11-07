@@ -2,7 +2,6 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { loadSkyLogic } from './load-sky-logic.mjs'
-import { loadWeb } from './web.mjs'
 
 const SkyLogic = loadSkyLogic()
 const W = 27, H = 14
@@ -31,7 +30,7 @@ test('decor avoids office, spots and the office margin', () => {
     assert.ok(has(d.x, d.y), `decor ${d.x},${d.y} is off the island`)
     assert.ok(!(d.x >= -1 && d.x <= W && d.y >= -1 && d.y <= H), `decor ${d.x},${d.y} touches the office`)
     assert.ok(!inSpot(d.x, d.y), `decor ${d.x},${d.y} sits on a reserved spot`)
-    assert.ok(['tree', 'rock', 'flower', 'bush', 'mushroom', 'pine'].includes(d.kind), `unknown decor ${d.kind}`)
+    assert.ok(['tree', 'rock', 'flower', 'bush', 'mushroom'].includes(d.kind), `unknown decor ${d.kind}`)
   }
 })
 
@@ -45,13 +44,12 @@ test('the waterfall pours over the front shore out of the lake', () => {
 
 const FRAME = { W, H, TW: 16, TH: 8, WALL: 64, pad: 16 }
 const fit = (f) => Math.min(1280 / f.LW, 720 / f.FH)
-// Screen y of the mountain's tip in the scene canvas: it stands peakRise px above the foot's front corner.
-const { peakRise } = loadWeb('mountain-shape')
-const peakTop = (f, m) => f.OY + (m.foot.x + m.foot.y) * FRAME.TH - peakRise(m.scale)
+// Screen y of a peak's tip in the scene canvas (the peak stands on its tile's centre).
+const peakTop = (f, p) => f.OY + (p.x + p.y + 1) * FRAME.TH - p.h
 
-test('the frame takes in the mountain\'s peak', () => {
+test('the frame takes in both mountain peaks', () => {
   const f = SkyLogic.sceneFrame(island, FRAME)
-  assert.ok(peakTop(f, island.mountain) >= 0, 'the peak runs off the top')
+  for (const p of island.mountain.peaks) assert.ok(peakTop(f, p) >= 0, `peak ${p.x},${p.y} runs off the top`)
 })
 
 test('the mountain never shrinks the office by more than 10%', () => {
@@ -64,7 +62,7 @@ test('the mountain never shrinks the office by more than 10%', () => {
   }
   // A mountain far too tall to fit is let run off the top instead of shrinking the office: this is the case that
   // guards the cap.
-  const tall = { ...island.mountain, scale: island.mountain.scale * 8 }
+  const tall = { ...island.mountain, peaks: island.mountain.peaks.map((p) => ({ ...p, h: p.h * 8 })) }
   const f = SkyLogic.sceneFrame({ ...island, mountain: tall }, FRAME)
   assert.ok(fit(f) >= 0.9 * fit(flat), `office at ${fit(f) / fit(flat)} of its size`)
   assert.ok(f.FH > flat.FH, 'the frame still grows toward the mountain as far as it may')
@@ -319,12 +317,11 @@ test('agents leave the office only by the stairs', () => {
   assert.equal(SkyLogic.canCross([W, 10], [W + 1, 10], W, H, stairs), true)
 })
 
-test('the lawn walk avoids water, the mountain, its lake, decor and lamps but reaches the bathing spots', () => {
+test('the lawn walk avoids water, the mountain, its pool, decor and lamps but reaches the bathing spots', () => {
   const walk = SkyLogic.lawnWalk(island, W, H)
   for (const s of island.pond.spots) assert.ok(walk.has(s.x + ',' + s.y))
   for (const k of island.pond.cells) if (!island.pond.spots.some((s) => s.x + ',' + s.y === k)) assert.ok(!walk.has(k), `water cell ${k} is walkable`)
-  for (const k of island.mountain.lake.cells) assert.ok(!walk.has(k), `foot lake cell ${k} is walkable`)
-  for (const k of island.mountain.hidden) assert.ok(!walk.has(k), `${k} behind the mountain is walkable`)
+  for (const k of island.mountain.pool.cells) assert.ok(!walk.has(k), `pool cell ${k} is walkable`)
   for (const p of island.pavilion.path) assert.ok(!walk.has(p.x + ',' + p.y), `the pavilion's stone at ${p.x},${p.y} is walkable`)
   for (const k of island.mountain.cells) assert.ok(!walk.has(k), `mountain cell ${k} is walkable`)
   for (const l of island.lamps) assert.ok(!walk.has(l.x + ',' + l.y), `lamp at ${l.x},${l.y} is walkable`)
@@ -418,7 +415,7 @@ test('stepping stones keep off the reserved spots, the pond and the office', () 
       const at = `stone at ${st.x.toFixed(2)},${st.y.toFixed(2)} reaches ${x.toFixed(2)},${y.toFixed(2)}`
       for (const s of island.spots) assert.ok(!(x > s.x && x < s.x + s.w && y > s.y && y < s.y + s.h), `${at}, inside spot ${s.id}`)
       assert.ok(!island.pond.cells.has(Math.floor(x) + ',' + Math.floor(y)), `${at}, in the pond`)
-      assert.ok(!island.mountain.lake.cells.has(Math.floor(x) + ',' + Math.floor(y)), `${at}, in the foot lake`)
+      assert.ok(!island.mountain.pool.cells.has(Math.floor(x) + ',' + Math.floor(y)), `${at}, in the pool`)
       assert.ok(!inOffice(x, y), `${at}, on the office floor`)
       assert.ok(has(Math.floor(x), Math.floor(y)), `${at}, off the island`)
     }

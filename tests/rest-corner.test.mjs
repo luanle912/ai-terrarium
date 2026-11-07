@@ -45,7 +45,7 @@ test('an agent walks to the rest corner over the lawn, never through water or ro
       for (const c of route) {
         const k = K(...c)
         assert.ok(!ISLAND.pond.cells.has(k), `walks through the lake at ${k}`)
-        assert.ok(!ISLAND.mountain.lake.cells.has(k) && !ISLAND.mountain.cells.has(k), `walks over the mountain or its lake at ${k}`)
+        assert.ok(!ISLAND.mountain.pool.cells.has(k) && !ISLAND.mountain.cells.has(k), `walks over the mountain or its pool at ${k}`)
       }
     }
   }
@@ -61,7 +61,7 @@ test('an agent at the rest corner walks back from where it is, not from inside t
 
 test('dogs roam the lake shore, the rest corner and the back lawn, never water, the mountain or the bench', () => {
   const { roam } = DOG_PLACES
-  const water = k => ISLAND.pond.cells.has(k) || ISLAND.mountain.lake.cells.has(k)
+  const water = k => ISLAND.pond.cells.has(k) || ISLAND.mountain.pool.cells.has(k)
   for (const k of roam) {
     assert.ok(!water(k), `dogs roam the water at ${k}`)
     assert.ok(!ISLAND.mountain.cells.has(k), `dogs roam the mountain at ${k}`)
@@ -94,12 +94,16 @@ test('no dog stands in the strip right behind the office walls, where they would
   }
 })
 
-test('no dog roams where the mountain hides it', () => {
-  // The mountain is a sprite sorted with the dogs by its front edge, so a dog behind it is drawn behind it; none stands
-  // where it would vanish (its feet inside the mountain's outline on screen: island.mountain.hidden) or on its foot.
+test('nothing tall baked into the island stands in front of a roaming dog', () => {
+  // The mountain is part of the island picture under every sprite (trees, bushes, lamps and the bench are sorted
+  // with the dogs). No dog stands up to as many rows behind a mountain cell as the stone there rises: at
+  // least the two rows of its foot, and behind the peaks themselves as far as they rise (8 px a row).
+  const tall = [...ISLAND.mountain.cells].map(k => k.split(',').map(Number))
+  const peaks = ISLAND.mountain.peaks.map(p => [p.x, p.y, Math.floor(p.h / TH)])
   for (const k of DOG_PLACES.roam) {
-    assert.ok(!ISLAND.mountain.hidden.has(k), `${k} hides behind the mountain`)
-    assert.ok(!ISLAND.mountain.cells.has(k), `${k} is on the mountain`)
+    const [x, y] = k.split(',').map(Number)
+    for (const [mx, my, r = 2] of [...tall, ...peaks])
+      assert.ok(!(Math.abs(mx - my - (x - y)) <= 1 && mx + my > x + y && mx + my - (x + y) <= r), `${k} hides behind the mountain at ${mx},${my}`)
   }
 })
 
