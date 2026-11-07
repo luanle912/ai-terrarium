@@ -102,6 +102,35 @@ Song song: A trước; B và C song song sau A; D cuối.
 - Đo khung hình trước/sau (≤ 1 ms thêm).
 - **Commit** `feat: ducks, fish, drifting duckweed and the falls on the new lake and pool`
 
+### Task E [logic+ui]: Núi tuyết pixel (bản C) — thay phần núi của Task A/B/C
+
+**Nguồn:** `docs/specs/2026-11-08-mountain-c-brief.md` (nguyên văn của anh Kiệt: toạ độ, gờ, tuyết, khe, thác, hồ chân núi,
+bảng màu, cây) và spec mục 11.10 (quyết định: toạ độ ×1,4; không suối; viền `#3B2F4A` cả đảo; mặt trời 2 vòng phẳng; vẽ bằng
+code vào canvas cache, không PNG). Làm sau khi Task B đã vào nhánh.
+
+**Interfaces:**
+- `island.mountain` đổi thành `{cells, foot: {x, y}, lake: {cells, rim}, scale: 1.4}` — `cells` là ô chân núi (hình thoi
+  khoảng 5×5 ô, thẳng hàng lưới, ở bãi sau như núi hiện tại) và không đi được; `foot` là ô góc trước F (neo sprite và sắp
+  lớp); `lake` là ô của hồ chân núi (không đi được, chó uống ở mép). Bỏ `peaks`, `gap`, `pool`.
+- `MountainArt.sprite(env) => {canvas, ax, ay}` (module mới `web/mountain-art.js`): vẽ một lần theo mô tả ở cỡ art pixel
+  (toạ độ ×1,4, làm tròn về pixel nguyên), cache theo `(df bậc 0.1, snow bậc 0.1)`; `ax, ay` là vị trí góc F trong canvas.
+  Màu qua `night()` như phần còn lại; tuyết phủ thêm theo `env.snow`.
+- Sắp lớp: núi là một sprite sắp theo `foot` như cây và chùa (`web/office-draw.js`).
+- Chuyển động (`web/island-life.js` hoặc `web/island-lake-life.js`): thác trong khe dịch pattern trắng 1 px mỗi 120 ms; bọt
+  hồ chân núi 2 khung 300 ms; không cấp phát mỗi khung.
+- Màu viền `#3B2F4A` thay `#2b2350` ở mọi nơi (`grep -rn 2b2350 web/`), kể cả đảo nhỏ trên trời.
+- Mặt trời (`web/sky-render.js`): bỏ quầng gradient, thay bằng 2 vòng tròn màu phẳng, alpha cố định.
+- Cây quanh núi theo mục 5 của mô tả: 2 cụm thông (3 cỡ), bụi, đá, 2–3 nấm, hoa 1 px; dữ liệu trong `buildIsland` (decor
+  kind mới `pine`), vẽ là sprite sắp lớp.
+
+- [ ] **Test hỏng:** `the mountain is one peak on the back lawn with a lake at its foot` (ô núi và hồ không đi được, ô `foot`
+  là góc trước của hình thoi chân núi, hồ chân núi nằm trong vùng mô tả cho hồ); `everything outdoors is still reachable`;
+  `the mountain sprite uses only the brief's palette` (đọc pixel của canvas vẽ ra trong môi trường test bằng một canvas giả
+  ghi lệnh `fillStyle`, mọi màu thuộc bảng màu mục 4 hoặc `night()` của chúng); `no #2b2350 is left in web/`; khung nhìn:
+  `the mountain never shrinks the office by more than 10%`.
+- [ ] Cài đặt; chụp 1280×800 ngày/đêm/tuyết, cận núi (deviceScaleFactor 2), đặt cạnh ảnh tham chiếu mô tả.
+- [ ] **Commit** `feat: a pixel snow peak with a falls and a lake at its foot (mountain C)`
+
 ### Task D [all]: Soi UI/UX bằng Chrome, sửa, tài liệu
 
 - Soi ở 1280×800, 1440×900, 390×844; ngày/đêm/mưa/tuyết/sương; zoom, kéo; chế độ thế giới (một đảo, Toàn cảnh). Sửa mọi
