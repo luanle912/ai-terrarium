@@ -200,7 +200,7 @@ mixin(
       ctx.restore();
       // Water, falls, mist, lamp pools, vines, birds, fireflies and the rainbow (web/island-life.js).
       if (env) IslandLife.drawLife(ctx, ISLAND, PG, t, env);
-      // What stands up off the lawn (trees, bushes, lamps, the bench, the bridge) is sorted with the people and dogs;
+      // What stands up off the lawn (trees, bushes, lamps, the bench, the pavilion) is sorted with the people and dogs;
       // whatever stands in the strip right behind the walls goes down before them (below), so the walls hide it.
       const items = [],
         behind = [],
@@ -209,6 +209,8 @@ mixin(
           ctx.drawImage(p.img, p.dx, p.dy);
           ctx.setTransform(k, 0, 0, k, 0, 0);
           if (p.lamp >= 0 && env) IslandLife.drawLampLight(ctx, ISLAND, PG, p.lamp, t, env);
+          // the pavilion's lantern glows over its own sprite (web/island-life.js, when it draws one)
+          if (p.lantern && env && IslandLife.drawLanternLight) IslandLife.drawLanternLight(ctx, ISLAND, PG, t, env);
         },
         backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y)),
         walker = a => !a.sleeping && !a.seated && !a.wcIn;

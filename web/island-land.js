@@ -234,9 +234,6 @@ function mountainOf(cells) {
   };
 }
 
-// The first island's bridge is gone; the people and dogs it lifted now always stand on the lawn. Kept until the
-// drawing code (web/office-draw-people.js) stops asking: 0 everywhere.
-export const bridgeZ = () => 0;
 // Lamp posts beside the stone path: at the path's corner below the south stairs, beside the east stairs' leg, and
 // on the way down to the lake, each a tile off the stones.
 const lampsOf = (H, paths, baths) => {
