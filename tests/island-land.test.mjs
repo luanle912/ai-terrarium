@@ -44,11 +44,17 @@ test('the island is a hexagon pointing up and down', () => {
     const n = byRow.get(r)
     assert.ok(n >= 1 && n <= 3, `the point at row x + y = ${r} is ${n} tiles wide`)
   }
-  // the left and right sides run straight up and down the screen: a long run of tiles in the outermost column
+  // the left and right sides run up and down the screen, wavy but long: plenty of tiles within 3 columns of the edge
+  // (Kiet: a hexagon, but not ruler-straight — "nhiễu nhiễu chút")
   for (const c of [Math.min(...cols), Math.max(...cols)]) {
-    const n = byCol.get(c)
-    assert.ok(n >= 6, `the upright edge at x - y = ${c} is only ${n} tiles long`)
+    let n = 0
+    for (const [col, k] of byCol) if (Math.abs(col - c) <= 3) n += k
+    assert.ok(n >= 20, `the upright edge at x - y = ${c} has only ${n} tiles near it`)
   }
+  // ... and they are not ruler-straight: the outermost column holds only part of the edge (a straight edge of v2's
+  // first build put 16 tiles in it)
+  for (const c of [Math.min(...cols), Math.max(...cols)])
+    assert.ok(byCol.get(c) <= 10, `the upright edge at x - y = ${c} runs ruler-straight for ${byCol.get(c)} tiles`)
   // ... and they are about as far from the middle on either side
   const { cx, cy } = island.shape
   const mid = cx - cy
