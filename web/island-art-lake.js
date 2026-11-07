@@ -1,10 +1,10 @@
-// The lake at the bottom point and the pool under the mountain falls, as pixel art: soft rounded water (not the tile
-// grid's steps) sunk WATER_Z below the grass, a far bank wall with a light waterline, and a raised ring of cobbles
-// round each; the lip where the lake spills into the main fall runs right out to the shore. On the water: the
-// stepping stones out to the pavilion and the lotus pads and flowers. The one-pillar pavilion itself (a stone pillar,
-// a bracketed wooden platform with a small railing, a square hall and two tiers of curved roof, inspired by Hanoi's One
-// Pillar Pagoda) is a sprite the scene sorts with the people. Moving water, ducks, fish and the lantern's glow are
-// web/island-life.js's. lakeField is pure (tests/island-art.test.mjs).
+// The lake at the bottom point as pixel art: soft rounded water (not the tile grid's steps) sunk WATER_Z below the
+// grass, a far bank wall with a light waterline, and a raised ring of cobbles round it (the lake at the mountain's
+// foot is web/mountain-art.js's); the lip where the lake spills into the main fall runs right out to the shore. On
+// the water: the stepping stones out to the pavilion and the lotus pads and flowers. The one-pillar pavilion itself
+// (a stone pillar, a bracketed wooden platform with a small railing, a square hall and two tiers of curved roof,
+// inspired by Hanoi's One Pillar Pagoda) is a sprite the scene sorts with the people. Moving water, ducks, fish and
+// the lantern's glow are web/island-life.js's. lakeField is pure (tests/island-art.test.mjs).
 import { WATER_Z, hash } from './island-land.js';
 import {
   bayer,
@@ -26,14 +26,14 @@ export const WATER_T = 0.5;
 const RIM_T = 0.13,
   KERNEL = [1, 2, 1, 2, 4, 2, 1, 2, 1],
   fields = new WeakMap();
-// A smooth field over the island, 1 deep in open water and 0 on dry land: every lake or pool tile's share of a small
+// A smooth field over the island, 1 deep in open water and 0 on dry land: every lake tile's share of a small
 // blur round it, read between tile centres. Its WATER_T line is the water's soft edge: it runs along a straight bank's
 // tile edge, rounds off the corners and never reaches a lawn tile's middle. At the main fall's lip a channel the
 // fall's width runs out to the shore. at(x, y) in tiles.
 export function lakeField(island) {
   if (fields.has(island)) return fields.get(island);
   const f = island.waterfall,
-    wet = new Set([...island.pond.cells, ...(island.mountain ? island.mountain.pool.cells : [])]);
+    wet = new Set(island.pond.cells);
   const blur = new Map(),
     B = (x, y) => {
       const k = x + ',' + y;
@@ -67,7 +67,7 @@ const WATER = { shallow: '#62b8ea', mid: '#4aa3df', deep: '#3b8fcf', line: '#a9d
   COBBLE = ['#cfc9bd', '#bdb6aa', '#aaa397'],
   MORTAR = '#8a8478',
   COBBLE_SIDE = '#7e776c';
-// The lake and the pool on the land canvas: every pixel of their boxes is looked at twice, at the lawn's level and at
+// The lake on the land canvas: every pixel of its box is looked at twice, at the lawn's level and at
 // the water's (WATER_Z lower). Water where both are in; the far bank's wall where the lawn level is in and the water
 // level is not; cobbles on the lawn at the edge, with their side showing on the near banks.
 export function drawWater(pt, P, C, island) {

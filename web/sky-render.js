@@ -1,6 +1,6 @@
 // Drawing for the sky island: the island (pre-rendered once per resolution and light), its standing props, trees,
 // the sky behind it and the weather in front of it.
-import { drawTree, hash, mix, night, renderIsland, renderProps } from './sky-island.js';
+import { drawTree, hash, mix, night, renderIsland, renderMountain, renderProps } from './sky-island.js';
 import {
   BAND_W,
   BAND_X0,
@@ -30,6 +30,8 @@ const FAR_ISLANDS = [
     [0.2, 0.7, 0.5, 'plain'],
     [0.93, 0.78, 0.7, 'rock'],
   ];
+// The sun's halo: [radius, alpha] of each flat ring, the wide faint one first.
+const SUN_HALO = [36, 0.14, 20, 0.28];
 function drawBack(ctx, w, h, t, env) {
   const { df, hour, fx, col, view } = env,
     hy = h * 0.5,
@@ -79,11 +81,14 @@ function drawBack(ctx, w, h, t, env) {
       sx = w * (0.12 + 0.76 * p),
       sy = hy * (0.9 - 0.75 * Math.sin(Math.PI * p)),
       a = df * (1 - fx.cloud * 0.75);
-    const sg = ctx.createRadialGradient(sx, sy, 2, sx, sy, 80 * S);
-    sg.addColorStop(0, 'rgba(255,248,215,' + 0.85 * a + ')');
-    sg.addColorStop(1, 'rgba(255,248,215,0)');
-    ctx.fillStyle = sg;
-    ctx.fillRect(sx - 80 * S, sy - 80 * S, 160 * S, 160 * S);
+    // its halo: two flat rings of the same pale yellow, each at one fixed alpha (no gradient)
+    ctx.fillStyle = '#fff8d7';
+    for (let i = 0; i < SUN_HALO.length; i += 2) {
+      ctx.globalAlpha = SUN_HALO[i + 1] * a;
+      ctx.beginPath();
+      ctx.arc(sx, sy, SUN_HALO[i] * S, 0, 7);
+      ctx.fill();
+    }
     ctx.globalAlpha = a;
     ctx.fillStyle = '#fffbe0';
     ctx.beginPath();
@@ -361,6 +366,7 @@ export const SkyRender = {
   night,
   renderIsland,
   renderProps,
+  renderMountain,
   drawTree,
   drawBack,
   drawFront,

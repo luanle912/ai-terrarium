@@ -215,7 +215,7 @@ function paintFarIsland(ctx, sc, haze, kind) {
     hw = 20 * sc,
     hh = 10 * sc,
     lip = 4 * sc,
-    out = hz('#2b2350');
+    out = hz('#3B2F4A');
   // the cone under the dirt lip, then the lip itself
   poly(
     ctx,

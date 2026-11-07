@@ -1,10 +1,11 @@
 // The office island's land (no DOM, no canvas): its hexagon shape, the cone-shaped underside, the outdoor spots,
-// the mountain and the pool at its foot, the lake at the bottom point (web/island-lake.js), the rest corner, the
+// the mountain and the lake at its foot, the lake at the bottom point (web/island-lake.js), the rest corner, the
 // lamps, the garden paths and the decor. Nothing here is drawn (web/sky-island.js does that). Pure and
 // deterministic: every position comes from the grid and hash(), so the island looks the same on every machine.
 // web/sky-logic.js re-exports it as SkyLogic.
 import { key, pos, N4, hash } from './island-grid.js';
 import { lakeOf } from './island-lake.js';
+import { BRIEF, FOOT_TILES, fromF, inPoly, inRim, SCALE, shapes } from './mountain-shape.js';
 export { key, N4, hash, WATER_Z } from './island-grid.js';
 
 // east-back runs along the pantry's east side, flush with the office's back wall, and holds the restroom block (raised
@@ -149,7 +150,7 @@ function buildIsland({ W, H }) {
   const mountain = mountainOf(cells);
   const paths = lawnPaths(W, H, stairs(W, H), { bath: pond.spots, rest });
   const lamps = lampsOf(H, paths, pond.spots);
-  const decor = decorOf({ cells, free, pond, mountain, rest, paths, lamps });
+  const decor = decorOf({ cells, free, pond, mountain, rest, paths, lamps, pines: pinesOf(cells, mountain) });
   return {
     cells,
     list,
@@ -173,65 +174,72 @@ function buildIsland({ W, H }) {
 
 // ---- the mountain ----
 // Coordinates are the office's (W x H at the origin): x < 0 is the strip beside the left wall, y < 0 the back lawn,
-// y > H the front lawn. A two-peak mountain stands on the back lawn toward small x (the top point on screen). Its
-// falls pour out of the gap between the peaks down into a small pool at its foot, which runs nowhere. Peaks are in
-// tiles, their height above the lawn in px and their foot's radius in tiles; the main one is half as tall again as
-// the first island's (68 px) and its tip sits well above the lower peak's on screen.
-const PEAKS = [
-    { x: -4, y: -6, h: 58, R: 3.6, main: false },
-    { x: 2, y: -12, h: 102, R: 5, main: true },
-  ],
-  // the saddle between the peaks: tiles this close to the line between them are rock too
-  SADDLE_R = 2.5,
-  // The pool: POOL.w x POOL.h tiles at the foot of the notch between the peaks, in a cove of the rock open toward the
-  // front lawn. The gap the falls pour out of sits over the middle of its back edge, GAP_Z px up; the sheet of water
-  // is GAP_W tiles either side of it (web/island-art.js draws the rock of the notch, web/island-life.js the water).
-  POOL = { x: 0, y: -8, w: 2, h: 2 },
-  GAP_Z = 26,
-  GAP_W = 0.45;
-
-// The mountain covers both peaks' feet, the saddle between them and everything behind them out to the shore (so
-// nobody walks where the peaks would hide them), on the back lawn at least 3 rows behind the office; the pool is cut
-// out of it.
+// y > H the front lawn. One snow peak (web/mountain-shape.js) stands on the back lawn toward small x (the top point on
+// screen): its foot is a FOOT_TILES-square of tiles (a diamond on screen) whose front corner F is the tile corner FOOT.
+// Its falls run down a cleft in the lit face into a small lake at its foot, which runs nowhere.
+const FOOT = { x: 2, y: -7 };
+// Where a point (x, y on the lawn, tiles) shows on screen, in px from F.
+const fromFoot = (x, y) => [(x - y - (FOOT.x - FOOT.y)) * 16, (x + y - (FOOT.x + FOOT.y)) * 8];
+// A point px from F on screen, back on the lawn (tiles).
+const toLawn = (u, v) => [FOOT.x + (u / 16 + v / 8) / 2, FOOT.y + (v / 8 - u / 16) / 2];
+// The x + y of the foot's front edge (L-F, then F-R) in the screen column x - y = c: what stands in front of it in
+// that column sorts after the mountain (web/office-draw.js draws it in columns, each at its front edge).
+const frontEdge = c => Math.min(c + 2 * FOOT.y, 2 * FOOT.x - c);
 function mountainOf(cells) {
-  const [a, b] = PEAKS,
-    ax = a.x + 0.5,
-    ay = a.y + 0.5,
-    vx = b.x - a.x,
-    vy = b.y - a.y;
-  const toRidge = (x, y) => {
-    const t = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy)));
-    return Math.hypot(x - ax - t * vx, y - ay - t * vy);
-  };
-  const pool = new Set();
-  for (let y = POOL.y; y < POOL.y + POOL.h; y++) for (let x = POOL.x; x < POOL.x + POOL.w; x++) pool.add(key(x, y));
-  // behind the ridge: nearer the top of the screen than the line through both peaks' middles, within their span
-  const ridgeD = Math.max(a.x + a.y, b.x + b.y) + 1,
-    s0 = a.x - a.y - a.R,
-    s1 = b.x - b.y + b.R;
-  const out = new Set();
+  const sh = shapes(SCALE),
+    out = new Set(),
+    hidden = new Set(),
+    lake = new Set();
+  for (let y = FOOT.y - FOOT_TILES; y < FOOT.y; y++)
+    for (let x = FOOT.x - FOOT_TILES; x < FOOT.x; x++) out.add(key(x, y));
   for (const k of cells) {
+    if (out.has(k)) continue;
     const [x, y] = pos(k),
-      mx = x + 0.5,
-      my = y + 0.5;
-    if (y > -3 || pool.has(k)) continue;
-    const foot = PEAKS.some(p => Math.hypot(mx - p.x - 0.5, my - p.y - 0.5) <= p.R);
-    const behind = mx + my < ridgeD && x - y >= s0 && x - y <= s1;
-    if (foot || behind || toRidge(mx, my) <= SADDLE_R) out.add(k);
+      [u, v] = fromFoot(x + 0.5, y + 0.5);
+    // a tile whose middle is inside the stone rim is lake; one whose middle the mountain covers on screen is hidden
+    if (inRim(sh.lake, u, v)) lake.add(k);
+    else if (inPoly(sh.silhouette, u, v)) hidden.add(k);
   }
-  // the pool's rim: the lawn and rock tiles round it
   const rim = [];
-  for (let y = POOL.y - 1; y <= POOL.y + POOL.h; y++)
-    for (let x = POOL.x - 1; x <= POOL.x + POOL.w; x++)
-      if (!pool.has(key(x, y)) && cells.has(key(x, y))) rim.push({ x, y });
-  return {
-    cells: out,
-    peaks: PEAKS.map(p => ({ ...p })),
-    // where the falls start: x across the middle of the pool's back row, y its back edge (the falls are a sheet in the
-    // plane y = gap.y, gap.w tiles either side of x), z px up
-    gap: { x: POOL.x + POOL.w / 2, y: POOL.y, z: GAP_Z, w: GAP_W },
-    pool: { cells: pool, rim },
-  };
+  for (const k of cells) {
+    if (lake.has(k) || out.has(k)) continue;
+    const [x, y] = pos(k);
+    let near = false;
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) near ||= lake.has(key(x + a, y + b));
+    if (near) rim.push({ x, y });
+  }
+  return { cells: out, foot: { ...FOOT }, lake: { cells: lake, rim }, scale: SCALE, hidden };
+}
+
+// Pines in the brief's two clumps on the mountain's grassy foot (BRIEF.pines), three sizes mixed: each { x, y, kind:
+// 'pine', at: [x, y] where it stands (tiles), size 0..2, z }. Several may share a tile. z sorts it: at least its own
+// x + y, and in front of the mountain's front edge in every column it covers, so a pine on the foot is drawn over it.
+const PINE_HALF = [4, 5, 6]; // px either side of a pine's middle, by size
+function pinesOf(cells, m) {
+  const sh = shapes(SCALE),
+    out = [];
+  BRIEF.pines.forEach(([x0, x1, y0, y1, n], j) => {
+    for (let i = 0, tries = 0; i < n && tries < 60; tries++) {
+      const [u, v] = fromF([x0 + (x1 - x0) * hash(tries, j, 80), y0 + (y1 - y0) * hash(tries, j, 81)], SCALE),
+        [wx, wy] = toLawn(Math.round(u), Math.round(v)),
+        x = Math.floor(wx),
+        y = Math.floor(wy),
+        k = key(x, y),
+        size = (2 * i + j) % 3;
+      // on the grass: the island's lawn, or the mountain's grassy foot (no higher than the band's top, ~9 px)
+      const onFoot = m.cells.has(k),
+        band = (Math.min(u, -u) / 2 - v) / SCALE; // px up from the front edge, in the brief's px
+      if (!cells.has(k) || m.lake.cells.has(k) || m.hidden.has(k) || (onFoot && band > 7)) continue;
+      if (inRim(sh.lake, u, v - 3) || out.some(p => Math.hypot(p.u - u, (p.v - v) * 2) < 9)) continue;
+      const c = wx - wy,
+        w = PINE_HALF[size] / 16,
+        edge = Math.max(frontEdge(c - w), frontEdge(c + w)),
+        z = Math.max(wx + wy, edge + 0.05);
+      out.push({ x, y, kind: 'pine', at: [wx, wy], size, z, u, v });
+      i++;
+    }
+  });
+  return out.map(({ u, v, ...p }) => p);
 }
 
 // Lamp posts beside the stone path: at the path's corner below the south stairs, beside the east stairs' leg, and
@@ -280,9 +288,10 @@ const FLOWERS = [
   [3, 18],
   [16, 28],
 ];
-function decorOf({ cells, free, pond, mountain, rest, paths, lamps }) {
-  const taken = new Set([...pond.cells, ...mountain.cells, ...mountain.pool.cells, ...paths.cells]);
-  for (const p of [rest.bench, rest.fish, ...lamps]) taken.add(key(p.x, p.y));
+function decorOf({ cells, free, pond, mountain, rest, paths, lamps, pines }) {
+  const m = mountain,
+    taken = new Set([...pond.cells, ...m.cells, ...m.lake.cells, ...m.hidden, ...paths.cells]);
+  for (const p of [rest.bench, rest.fish, ...lamps, ...pines]) taken.add(key(p.x, p.y));
   const open = (x, y) => free(x, y) && !taken.has(key(x, y));
   const roomy = (x, y) =>
     x >= 0 && open(x, y) && N4.every(([a, b]) => !cells.has(key(x + a, y + b)) || !taken.has(key(x + a, y + b)));
@@ -320,6 +329,28 @@ function decorOf({ cells, free, pond, mountain, rest, paths, lamps }) {
     [[cx, cy], ...ring(cx, cy, 1), ...ring(cx, cy, 2)]
       .filter(([x, y]) => open(x, y) && !used.has(key(x, y)) && hash(x, y, 12) < 0.3)
       .forEach(([x, y]) => put(x, y, 'flower'));
+  // By the mountain's lake (brief section 5): a bush and a rock or two, red mushrooms with white spots, and 1 px
+  // flowers in the brief's pink, yellow and white, sparse on the grass round it. Its rim keeps clear of anything solid
+  // (dogs drink there).
+  const lake = [...m.lake.cells].map(pos),
+    rim = new Set(m.lake.rim.map(r => key(r.x, r.y))),
+    by = (x, y) => Math.min(...lake.map(([a, b]) => Math.max(Math.abs(a - x), Math.abs(b - y)))),
+    round = [];
+  for (let y = m.foot.y - 2; y <= m.foot.y + 4; y++)
+    for (let x = m.foot.x - 6; x <= m.foot.x + 2; x++)
+      if (open(x, y) && !used.has(key(x, y)) && by(x, y) <= 3) round.push([x, y]);
+  round.sort(byHash(13));
+  const solid = round.filter(([x, y]) => by(x, y) >= 2 && !rim.has(key(x, y))),
+    soft = round.filter(([x, y]) => !solid.some(p => p[0] === x && p[1] === y));
+  solid.slice(0, 1).forEach(([x, y]) => put(x, y, 'bush'));
+  solid.slice(1, 3).forEach(([x, y]) => put(x, y, 'rock'));
+  solid.slice(3, 6).forEach(([x, y]) => out.push({ x, y, kind: 'mushroom', red: true }) && used.add(key(x, y)));
+  const BLOOM = ['#FF7AA8', '#FFD84A', '#FFFFFF'];
+  soft
+    .concat(solid.slice(6))
+    .slice(0, 5)
+    .forEach(([x, y], i) => out.push({ x, y, kind: 'flower', colour: BLOOM[i % 3] }));
+  out.push(...pines);
   return out.sort((a, b) => a.x + a.y - (b.x + b.y) || a.x - b.x);
 }
 

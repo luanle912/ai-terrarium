@@ -234,7 +234,7 @@ function palette(df) {
     feather: night('#ffffff', d),
     shade: night('#cdd5e2', d),
     beak: night('#f2a33a', d),
-    eye: '#2b2350',
+    eye: '#3B2F4A',
     wake: night('#e8f6ff', d),
     fish: '#16284a',
     weed: night('#86c24e', d),
