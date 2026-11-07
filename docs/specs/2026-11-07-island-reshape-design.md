@@ -203,3 +203,24 @@ giữ nguyên.
 
 Đảo vuông, văn phòng giữa, outline, đất nâu, cỏ caro; sương, đèn dọc lối đá (trừ hai đèn cầu), chim, đom đóm, dây leo,
 cầu vồng, cây theo mùa thành cụm, đảo bay nhỏ ở nền; góc nghỉ (dời chỗ); núi đổi theo mùa/thời tiết.
+
+### 11.7. Hình đảo gần lục giác (bổ sung 2026-11-08)
+
+- Anh Kiệt: "cho gần gần hình lục giác nhé, tránh tròn quá hoặc vuông quá". Mặt đảo trên màn hình là **lục giác**, góc bo
+  nhẹ và mép lượn sóng nhẹ như bản 1 (không tròn như squircle, không vuông như hình thoi). Hướng đặt lục giác (nhọn trên/dưới
+  hay bằng trên/dưới): **chờ anh chọn** (bản phác H1/H2).
+- Văn phòng vẫn ở giữa; khoảng cỏ hẹp nhất quanh khối văn phòng vẫn khoảng 4 ô; hồ và thác chính ở 6h.
+
+### 11.8. Hồ lớn có chùa một cột (bổ sung 2026-11-08)
+
+- Anh Kiệt: "hồ cho bự ra + trang trí nhé (vịt, bèo, bóng cá, ...), tham khảo chùa Một Cột".
+- **Hồ lớn hơn rõ rệt** so với bản 1 (khoảng gấp đôi diện tích), hình mềm, vẫn ở 6h và đổ thác chính khỏi mép.
+- **Gian chùa nhỏ trên một cột** đứng giữa hồ, lấy cảm hứng từ chùa Một Cột (Hà Nội): một gian vuông nhỏ mái ngói cong hai
+  tầng mái, đỡ trên một cột đá giữa nước, có bậc/cầu đá nhỏ dẫn ra từ bờ. Pixel art cùng phong cách và hướng sáng với văn
+  phòng; về đêm có đèn lồng ấm. Là cảm hứng, không chép y nguyên công trình thật.
+- **Trang trí mặt hồ:** lá sen và hoa sen (hồng, trắng) quanh chân cột, đám bèo trôi rất chậm, 2–3 con vịt bơi chậm và thỉnh
+  thoảng lặn/ngoi, bóng cá tối mờ lượn dưới mặt nước, gợn nước khi vịt bơi. Ban đêm vịt ngủ (đứng yên, cúi đầu), đom đóm
+  quanh sen. Mọi chuyển động chậm, không cấp phát mỗi khung.
+- Góc nghỉ (ghế đá, câu cá) ở bờ hồ; chỗ tắm của nhân vật có thể bỏ nếu không hợp với hồ có chùa (người làm quyết, nói rõ
+  trong báo cáo); chó uống nước ở bờ.
+- Nhân vật không đi ra chùa (là cảnh), trừ khi có lối đá rõ ràng; đợt này để là cảnh.
