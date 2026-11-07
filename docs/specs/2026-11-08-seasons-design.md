@@ -52,3 +52,20 @@ như hiện nay. *(Em tự quyết: lễ không phủ màu lên cả đảo nữ
   vẫn trả tên lễ cho chip.
 - Ảnh 1280×800 mỗi mùa (ngày và đêm) + điện thoại, chế độ thế giới; xem trước được bằng một cách xem nhanh từng mùa (vd.
   `?season=winter` chỉ khi chạy với cờ dev, hoặc nút xem trước trong ⚙ như xem trước thời tiết).
+
+## 7. Cài đặt: tách Thời tiết và Mùa (anh Kiệt, 2026-11-08)
+
+Anh Kiệt: "ở setting tách riêng ra weather và season nhé". Trong ⚙ Settings có **hai mục riêng**, cùng kiểu với mục Weather
+hiện có (ảnh anh gửi: ô chọn "Random", dòng "Now: Clear", các nút Clear/Cloudy/Rain/Storm/Snow/Fog):
+
+- **Thời tiết** — giữ nguyên như hiện nay (Ngẫu nhiên / Thời tiết thật theo thành phố; "Hiện tại: …"; nút xem trước
+  Quang, Mây, Mưa, Giông, Tuyết, Sương).
+- **Mùa** — mục mới ngay dưới:
+  - ô chọn: **Tự động (theo ngày)** / Xuân / Hạ / Thu / Đông; lựa chọn được nhớ (localStorage, như cài đặt thời tiết);
+  - dòng "Hiện tại: Thu" (hoặc tên lễ khi đang có lễ, ví dụ "Hiện tại: Thu · Trung thu");
+  - các nút **xem trước** Xuân, Hạ, Thu, Đông: đổi mùa trong 1 phút rồi quay lại, giống xem trước thời tiết.
+- "Tuyết" trong Thời tiết là trời đang tuyết rơi; "Đông" trong Mùa là cảnh mùa đông (cây khô, người tuyết, tuyết phủ). Hai
+  thứ độc lập: có thể xem trước tuyết rơi giữa mùa hạ, hoặc mùa đông trời quang (vẫn có tuyết phủ theo mục 3).
+- Chip mùa ở header bấm vào thì mở thẳng mục Mùa trong ⚙.
+- Mọi chữ qua `tr()`, đủ 7 ngôn ngữ.
+- Mục 6 (Kiểm): thay "`?season=` hoặc nút xem trước" bằng các nút xem trước ở mục Mùa này.
