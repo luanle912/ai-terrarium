@@ -455,10 +455,12 @@ export function boulder(pt, C, sx, sy, s) {
   );
 }
 // A round bush of two or three leafy clumps with a dark outline, lit from the upper left; some carry red berries.
-export function drawBush(pt, P, C, d) {
+// In fruit (spring) every bush carries more of them, small red and purple ones.
+export function drawBush(pt, P, C, d, fruit) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
     big = hash(d.x, d.y, 41) > 0.5,
-    berries = hash(d.x, d.y, 43) > 0.6,
+    berries = fruit || hash(d.x, d.y, 43) > 0.6,
+    ripe = fruit ? 0.82 : 0.93,
     tones = lit3(C('#5fb35a', 0.75), C('#3f9046', 0.55), C('#2f7136', 0.45)),
     clumps = big
       ? [
@@ -476,7 +478,11 @@ export function drawBush(pt, P, C, d) {
     px,
     py - 4,
     clumps,
-    (u, v, i, j) => (berries && hash(i, j, d.x * 7 + d.y) > 0.93 ? C('#d94a5a') : tones(u, v)),
+    (u, v, i, j) => {
+      const h = berries ? hash(i, j, d.x * 7 + d.y) : 0;
+      if (h <= ripe) return tones(u, v);
+      return fruit && h > 0.91 ? C('#8e4ec6') : C('#d94a5a');
+    },
     C('#24402c'),
   );
 }

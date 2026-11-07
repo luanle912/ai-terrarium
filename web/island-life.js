@@ -11,6 +11,9 @@ import { mistSprite, MIST_VARIANTS } from './sky-mist.js';
 import { LAMP_Z, pavilionLantern } from './island-art.js';
 import { SkyLogic } from './sky-logic.js';
 import { IslandLakeLife } from './island-lake-life.js';
+import { IslandSeasonLife } from './island-season-life.js';
+import { SeasonIsland } from './season-island.js';
+import { SeasonLogic } from './season-logic.js';
 
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const TW = 16,
@@ -357,11 +360,13 @@ function glints(ctx, g, list, t, a) {
     ctx.fillRect(Math.round(sx(g, l.x, y)), Math.round(sy(g, l.x, y, WATER_Z)), 2, 1);
   }
 }
-function drawWater(ctx, g, P, t, df, rain) {
+// Frozen, the ice still glints but no rings spread on it.
+function drawWater(ctx, g, P, t, df, rain, frozen) {
   const dim = 0.25 + 0.45 * df;
   ctx.fillStyle = P.glint;
   glints(ctx, g, g.glints, t, dim * 0.8);
   glints(ctx, g, g.poolGlints, t, dim * 0.7);
+  if (frozen) return;
   // in calm weather a slow ring now and then (two at a time, 9 s each), many quick ones in the rain
   for (let i = 0; i < 2; i++) {
     const c = t / 9 + i / 2,
@@ -427,11 +432,12 @@ function drawMountainFall(ctx, g, P, t, flow, fp) {
   }
   ctx.globalAlpha = 1;
 }
-function drawVines(ctx, g, P, wp, wind, still) {
+// lean: px the season's breeze pushes a vine's tip aside (autumn), its sway going on round it.
+function drawVines(ctx, g, P, wp, wind, still, lean) {
   const amp = still ? 0 : 0.7 + 2.2 * wind;
   for (let i = 0; i < g.vines.length; i++) {
     const v = g.vines[i],
-      sway = amp * (Math.sin(wp + v.ph) + 0.35 * wind * Math.sin(wp * 2.3 + v.ph * 1.7)),
+      sway = lean + amp * (Math.sin(wp + v.ph) + 0.35 * wind * Math.sin(wp * 2.3 + v.ph * 1.7)),
       stiff = v.root ? 0.3 : 1;
     let run = 0,
       runX = 0;
@@ -492,13 +498,13 @@ function drawMainFall(ctx, g, P, t, flow, fp) {
   }
   ctx.globalAlpha = 1;
 }
-function drawMist(ctx, g, m, t, flow, still) {
+function drawMist(ctx, g, m, t, flow, still, frozen) {
   const tt = still ? 0 : t,
     f = g.fall,
     fx = sx(g, (f.xa + f.xb) / 2, f.Y),
     fy = sy(g, (f.xa + f.xb) / 2, f.Y, f.bot * 0.82);
-  // where the main fall drops: the sheet frays into spray
-  for (let i = 0; i < 2; i++) {
+  // where the main fall drops: the sheet frays into spray (none while it is frozen)
+  for (let i = 0; i < (frozen ? 0 : 2); i++) {
     const br = 0.5 + 0.5 * Math.sin(tt * 0.3 + i * 2.4);
     wisp(
       ctx,
@@ -612,9 +618,12 @@ function drawBirds(ctx, g, P, life) {
 }
 
 // Everything that moves or glows, over the baked island. PG is the island projection, t seconds, env the frame's
-// {df, fx, reduced, col, snow?} (col: SkyLogic.skyColors, for the mist).
+// {df, fx, reduced, col, snow?, season?} (col: SkyLogic.skyColors, for the mist; season: SeasonLogic's key, whose
+// look freezes the water and the falls in winter and leans the vines on the autumn breeze).
 function drawLife(ctx, island, PG, t, env) {
-  const g = geometry(island, PG),
+  const look = SeasonLogic.look(env.season),
+    frozen = look.frozen,
+    g = geometry(island, PG),
     df = env.df,
     fx = env.fx,
     still = !!env.reduced,
@@ -627,7 +636,7 @@ function drawLife(ctx, island, PG, t, env) {
     ph = motionPhases.step(t, fx),
     fp = still ? 0 : ph.flow,
     life = creatures(tw, df, 7);
-  drawWater(ctx, g, P, tw, df, still ? 0 : fx.rain);
+  drawWater(ctx, g, P, tw, df, still ? 0 : fx.rain, frozen);
   // the lake's life: fish under the water, duckweed and ducks on it, the lantern's light on it
   const L = IslandLakeLife,
     glow = lampGlow(df);
@@ -635,14 +644,15 @@ function drawLife(ctx, island, PG, t, env) {
   L.drawWeed(ctx, g, L.weed(island, tw, env.frozen), df);
   L.drawDucks(ctx, g, L.ducks(island, t, df, still, env.frozen), df, tw);
   L.drawLanternWater(ctx, g, island, glow, tw);
-  drawMountainFall(ctx, g, P, tw, flow, fp);
-  drawVines(ctx, g, P, ph.wind, wind, still);
-  drawMainFall(ctx, g, P, tw, flow, fp);
+  if (frozen) IslandSeasonLife.drawIceFalls(ctx, g, df);
+  else drawMountainFall(ctx, g, P, tw, flow, fp);
+  drawVines(ctx, g, P, ph.wind, wind, still, look.wind * 9 * SeasonIsland.breeze(still ? 0 : t));
+  if (!frozen) drawMainFall(ctx, g, P, tw, flow, fp);
   const smooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = true;
   const col = env.col,
     m = mistSprites(col ? col.cloud : '#f2f5fa', col ? col.cloudShade : '#c9d2e3');
-  drawMist(ctx, g, m, t, 0.7 + 0.3 * flow, still);
+  drawMist(ctx, g, m, t, 0.7 + 0.3 * flow, still, frozen);
   RAINBOW_ARGS.fx = fx;
   RAINBOW_ARGS.df = df;
   RAINBOW_ARGS.lastRainAt = state.lastRainAt;

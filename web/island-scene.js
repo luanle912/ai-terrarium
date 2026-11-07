@@ -45,7 +45,8 @@ export const SCENE_METHODS = [
   'dogSprite',
   'drawDog',
 ];
-// Every island bakes the same ground for a given resolution, light and snow, so one bake per k serves them all.
+// Every island bakes the same ground for a given resolution, light, snow and season, so one bake per k serves them
+// all.
 export const SCENE_ISLAND_CACHE = new Map();
 // Dog sprites depend only on breed, frame and light, so all islands share one cache.
 export const SCENE_DOG_SPRITES = new Map();
@@ -90,6 +91,10 @@ export class IslandScene {
   }
   get snowShown() {
     return this.host.snowShown;
+  }
+  // every island shows the season of the viewer's page
+  seasonNow() {
+    return this.host.seasonNow();
   }
   get islandCache() {
     return SCENE_ISLAND_CACHE.get(this.k);
