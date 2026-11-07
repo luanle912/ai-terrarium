@@ -328,8 +328,11 @@ Object.assign(ClaudeOffice.prototype, {
   drawSimpleIsland(ctx, rect, meta, { busy, alert, hover, mine, t, reduced, labelH }) {
     const df = Math.round((this.env ? this.env.df : 1) * 10) / 10,
       lit = Math.min(6, busy | 0),
-      color = okColor(meta.color);
-    const img = art('i' + color + df + lit + (mine ? 'm' : ''), g => paintIsland(g, color, df, lit, !!mine));
+      color = okColor(meta.color),
+      season = this.seasonNow();
+    const img = art('i' + color + df + lit + (mine ? 'm' : '') + season, g =>
+      paintIsland(g, color, df, lit, !!mine, season),
+    );
     const p = this.artPlace(rect, labelH),
       dy = this.artShift(p, hover, t, meta.slot, reduced),
       lh = labelH || LABEL_H,
