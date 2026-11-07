@@ -28,24 +28,6 @@ export { hash, hex, mix, toHex, WATER_Z };
 export { night };
 export const SNOW = '#eef3f7';
 
-export function drawTree(ctx, P, d, df, snow) {
-  const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
-    x = Math.round(px),
-    y = Math.round(py);
-  const leaf = night(mix('#3e9a45', SNOW, snow * 0.5), df),
-    top = night(mix('#57b85a', SNOW, snow * 0.6), df);
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  ctx.fillRect(x - 5, y - 1, 10, 2);
-  ctx.fillStyle = night('#6b4a2a', df);
-  ctx.fillRect(x - 1, y - 10, 2, 10);
-  ctx.fillStyle = leaf;
-  ctx.fillRect(x - 5, y - 19, 10, 9);
-  ctx.fillStyle = mix(leaf, '#000000', 0.18);
-  ctx.fillRect(x + 1, y - 19, 4, 9);
-  ctx.fillStyle = top;
-  ctx.fillRect(x - 3, y - 22, 6, 3);
-}
-
 // The island projection (lawn level) and its colours for one bake: through the island's light, toward snow white
 // by `s` of the current snow cover, and the grass toward the season's tint. env.season is the season's key
 // (SeasonLogic; summer, the standard, when missing), env.block the office block {W, H} the island is built round.
@@ -168,9 +150,9 @@ export function renderIsland(island, frame, k, env) {
 // Everything that stands up off the lawn, each baked into its own small sprite at the island image's resolution and
 // light: [{ x, y, z, img, dx, dy, lamp, lantern }]. (x, y) is its tile, z its depth among the scene's sorted sprites
 // (x + y of the point that decides what it hides), dx, dy where the sprite goes in canvas px, lamp the lamp's index or
-// -1, lantern true for the pavilion. Summer's trees are left out: the scene draws them itself (web/sky-island.js
-// drawTree, or a holiday's tree). The other seasons' trees are baked here, marked tree: true, so the scene can leave
-// out the few that turn into a holiday's tree; in winter the snowmen stand among them (SeasonIsland.snowmanTiles).
+// -1, lantern true for the pavilion. The island's trees, in the season's colours, are marked tree: true, so the scene
+// can leave out the few that turn into a holiday's tree; in winter the snowmen stand among them
+// (SeasonIsland.snowmanTiles).
 // Someone behind a lamp post, a bush, the bench, a tree, a snowman or the pavilion is hidden by it.
 export function renderProps(island, frame, k, env) {
   const { P, C, look } = bakeTools(frame, env),
@@ -201,12 +183,11 @@ export function renderProps(island, frame, k, env) {
   );
   for (const d of island.decor)
     if (d.kind === 'bush') add(d.x, d.y, d.x + d.y + 0.5, [11, 15, 11, 4], pt => drawBush(pt, P, C, d, look.fruit));
-  if (look.trees !== 'green')
-    for (const d of island.decor)
-      if (d.kind === 'tree') {
-        add(d.x, d.y, d.x + d.y + 0.5, TREE_EXT, pt => drawSeasonTree(pt, P, C, d, look.trees));
-        out[out.length - 1].tree = true;
-      }
+  for (const d of island.decor)
+    if (d.kind === 'tree') {
+      add(d.x, d.y, d.x + d.y + 0.5, TREE_EXT, pt => drawSeasonTree(pt, P, C, d, look.trees));
+      out[out.length - 1].tree = true;
+    }
   if (look.frozen && env.block)
     for (const m of SeasonIsland.snowmanTiles(island, env.block.W, env.block.H))
       add(m.x, m.y, m.x + m.y + 0.5, SNOWMAN_EXT, pt => drawSnowman(pt, P, C, m));

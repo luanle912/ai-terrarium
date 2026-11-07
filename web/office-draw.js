@@ -6,7 +6,6 @@ import { SkyRender } from './sky-render.js';
 import { IslandLife } from './island-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
-import { SeasonLogic } from './season-logic.js';
 import { PropUse } from './prop-use.js';
 import {
   DESKS,
@@ -188,8 +187,7 @@ mixin(
         ic = this.islandCache,
         dfB = Math.round(df * 10),
         snB = Math.round(snow * 10),
-        season = this.seasonNow(),
-        look = SeasonLogic.look(season);
+        season = this.seasonNow();
       if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season) {
         // let the browser drop the old bake's canvases now rather than at the next collection
         if (ic) for (const c of [ic.img, ...ic.props.map(p => p.img)]) c.width = c.height = 0;
@@ -225,7 +223,7 @@ mixin(
         backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y)),
         walker = a => !a.sleeping && !a.seated && !a.wcIn;
       // The island's trees: on a holiday the few by the office are the holiday's tree (HOLIDAY_TREES); the rest are
-      // the season's, baked among the props, or in summer the plain ones drawn here. Holiday trees are drawn in their
+      // the season's, baked among the props. Holiday trees are drawn in their
       // own colours; after dark each goes through a scratch canvas and takes the same night tint as the lawn
       // (SkyRender.night: toward #0d1322 by (1 - light) x 0.6), so it does not glow.
       const tk = SeasonTree && this.treeOn ? this.season : null,
@@ -236,11 +234,11 @@ mixin(
       for (const p of this.islandCache.props)
         if (!(p.tree && held(p))) (backOf(p) ? behind : items).push({ z: p.z, f: stamp(p) });
       for (const d of ISLAND.decor) {
-        if (d.kind !== 'tree' || !(held(d) || look.trees === 'green')) continue;
-        const f = held(d)
-          ? () => this.drawEventTree(ctx, d, holiday, t, k, dusk)
-          : () => SkyRender.drawTree(ctx, PG, d, dfB / 10, snB / 10);
-        (backOf(d) ? behind : items).push({ z: d.x + d.y + 0.5, f });
+        if (d.kind !== 'tree' || !held(d)) continue;
+        (backOf(d) ? behind : items).push({
+          z: d.x + d.y + 0.5,
+          f: () => this.drawEventTree(ctx, d, holiday, t, k, dusk),
+        });
       }
       const poly = (pts, fill, stroke) => {
         ctx.beginPath();

@@ -659,7 +659,8 @@ function drawLife(ctx, island, PG, t, env) {
   RAINBOW_ARGS.now = now;
   drawRainbow(ctx, g, rainbowLevel(RAINBOW_ARGS));
   drawPools(ctx, g, t, glow, still);
-  drawFlies(ctx, g, life, clamp01((0.3 - df) / 0.1), still);
+  // no fireflies over the ice of a winter night
+  drawFlies(ctx, g, life, frozen ? 0 : clamp01((0.3 - df) / 0.1), still);
   ctx.imageSmoothingEnabled = smooth;
   // the birds sit out heavy rain and storms
   if (!still && fx.rain < 0.5 && fx.storm < 0.3) drawBirds(ctx, g, P, life);

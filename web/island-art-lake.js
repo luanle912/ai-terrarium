@@ -250,11 +250,12 @@ export function drawPavilion(pt, P, C, island) {
       const [sx, sy] = P(x, y, z);
       return [sx - ox, sy - oy];
     },
-    poly = (pts, c) =>
+    // s: how much of the snow cover settles on this face (the roof's slopes; 0 elsewhere)
+    poly = (pts, c, s = 0) =>
       fillPx(
         g,
         pts.map(v => Q(...v)),
-        C(c),
+        C(c, s),
       ),
     line = (a, b, c) => linePx(g, Q(...a), Q(...b), C(c));
   // the lit (y + 1) and shaded (x + 1) faces of a square r tiles either side of the middle, from z0 up to z1
@@ -278,7 +279,7 @@ export function drawPavilion(pt, P, C, island) {
       right,
     );
   };
-  const square = (r, z, c) =>
+  const square = (r, z, c, s = 0) =>
     poly(
       [
         [cx - r, cy - r, z],
@@ -287,18 +288,19 @@ export function drawPavilion(pt, P, C, island) {
         [cx - r, cy + r, z],
       ],
       c,
+      s,
     );
   // a hipped roof of curved tiles: eaves r0 out at z0 up to a top r1 out at z1, a dark fascia under the eaves, two
   // courses of tiles across each face and the four corners turned up in little horns
   const roof = (r0, z0, r1, z1) => {
     const E = (sx, sy, z = z0) => [cx + sx * r0, cy + sy * r0, z],
       T = (sx, sy) => [cx + sx * r1, cy + sy * r1, z1];
-    poly([E(-1, -1), E(1, -1), T(1, -1), T(-1, -1)], ROOF.top);
-    poly([E(-1, -1), E(-1, 1), T(-1, 1), T(-1, -1)], ROOF.top);
-    square(r1, z1, ROOF.top);
+    poly([E(-1, -1), E(1, -1), T(1, -1), T(-1, -1)], ROOF.top, 0.85);
+    poly([E(-1, -1), E(-1, 1), T(-1, 1), T(-1, -1)], ROOF.top, 0.85);
+    square(r1, z1, ROOF.top, 0.85);
     faces(r0, z0 - 1.5, z0, ROOF.fascia, ROOF.fascia);
-    poly([E(-1, 1), E(1, 1), T(1, 1), T(-1, 1)], ROOF.left);
-    poly([E(1, -1), E(1, 1), T(1, 1), T(1, -1)], ROOF.right);
+    poly([E(-1, 1), E(1, 1), T(1, 1), T(-1, 1)], ROOF.left, 0.75);
+    poly([E(1, -1), E(1, 1), T(1, 1), T(1, -1)], ROOF.right, 0.6);
     for (const t of [0.34, 0.67]) {
       const at = (sx, sy) => {
         const e = E(sx, sy),

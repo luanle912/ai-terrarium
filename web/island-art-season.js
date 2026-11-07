@@ -1,8 +1,8 @@
 // The seasons' still pieces of the office island, baked with the rest of it by web/sky-island.js: the island trees in
-// spring (fresh green with pale blossom clusters), autumn (gold and orange, a few leaves already on the lawn) and
-// winter (bare branches with snow on them), the snowmen of winter, the extra flowers of spring and the grass tint of a
-// season. Summer is the standard: its trees are web/sky-island.js drawTree and nothing here changes it. Everything
-// draws in the scene's logical px through P and takes its colours through C(colour, snowAmount), like
+// spring (fresh green with pale blossom clusters), summer (deep green), autumn (gold and orange, a few leaves already
+// on the lawn) and winter (bare branches with snow on them), the snowmen of winter, the extra flowers of spring and the
+// grass tint of a season. The trees keep one round-canopy shape and size all year; only their colours change.
+// Everything draws in the scene's logical px through P and takes its colours through C(colour, snowAmount), like
 // web/island-art.js, so the island's light and snow reach it too.
 import { hash, key } from './island-land.js';
 import { blob, linePx, lit3, mix, OUTLINE } from './island-art.js';
@@ -32,7 +32,7 @@ export function seasonC(C, look) {
   };
 }
 
-// ---- the island trees of spring, autumn and winter ----
+// ---- the island trees of the four seasons ----
 // [left, up, right, down] px round the tree's foot that its sprite needs (web/sky-island.js renderProps).
 export const TREE_EXT = [12, 32, 12, 4];
 const CANOPY = [
@@ -41,6 +41,7 @@ const CANOPY = [
   [0, -3.5, 6.2, 5.2],
 ];
 const TONES = {
+  green: ['#5fb552', '#3e9a45', '#2b7036'],
   fresh: ['#a8e27c', '#7cc95a', '#55a544'],
   gold: ['#f2b134', '#e0703a', '#c0392b'],
 };
@@ -59,7 +60,7 @@ function trunk(pt, C, x, y, h) {
   ctx.fillStyle = C('#4e3420');
   ctx.fillRect(x + 1, y - h, 1, h);
 }
-// One island tree at its tile d: kind 'fresh' (spring), 'gold' (autumn) or 'bare' (winter).
+// One island tree at its tile d: kind 'fresh' (spring), 'green' (summer), 'gold' (autumn) or 'bare' (winter).
 export function drawSeasonTree(pt, P, C, d, kind) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
     x = Math.round(px),
