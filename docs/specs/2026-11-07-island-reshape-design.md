@@ -253,3 +253,15 @@ cho núi; các quyết định sau thắng ở chỗ khác nguyên văn:
 - **Cỏ chân núi:** màu cỏ sườn của mô tả dùng trên sườn núi; chỗ chạm mặt cỏ đảo hoà về màu cỏ đảo để không thành vạt màu lạ.
 - Cây quanh núi theo mục 5 của mô tả (2 cụm thông, bụi, nấm, hoa 1 px); xa hơn dùng cây thu sẵn có.
 - Ô dưới chân núi và hồ chân núi không đi được; chó có thể uống ở mép hồ chân núi.
+
+### 11.11. Đáy đảo: khối đá như cũ (2026-11-08, thay mục 11.5)
+
+Anh Kiệt xem đáy nón pixel bằng đất và gửi lại ảnh đáy của đảo cũ: "chóp em thay bằng các khối đá như cũ á, oke hơn, dùng đất
+nó cứ bẩn bẩn". Đáy đảo vẽ lại theo kiểu đảo cũ:
+
+- Mỗi ô là một **cột đá xám** thả xuống (khối hộp iso: mặt trái sáng hơn, mặt phải tối hơn, các bậc đá xám lệch nhau như ảnh),
+  chiều dài cột theo độ sâu nón (sâu ở giữa, ngắn dần ra mép) nên đáy vẫn thu lại thành chóp, nhưng bằng **bậc khối đá**.
+- Chỉ còn **lớp đất nâu mỏng** ngay dưới mép cỏ (như ảnh), phần còn lại là đá xám; không dải đất lớn, không dither đất.
+- Dây leo/rễ thòng dưới mép giữ nguyên; viền `#3B2F4A` theo mục 11.10. Vẫn nướng một lần như phần tĩnh khác.
+- Tham khảo cách vẽ của đảo cũ: `git show 28c466c:web/sky-island.js` (`renderIsland`, phần underside và `BANDS`), bỏ các dải
+  đất nâu dày của nó.
