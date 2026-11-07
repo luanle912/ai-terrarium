@@ -241,6 +241,8 @@ test('lotus, duckweed and duck lanes stay on open water', () => {
     // a leaf right behind the pavilion on screen would peek out over its roof
     const behind = l.x + l.y < pillar.x + pillar.y && Math.abs(l.x - l.y - (pillar.x - pillar.y)) <= 1
     assert.ok(!behind, `the lotus leaf at ${l.x},${l.y} shows over the pavilion's roof`)
+    const { fish } = island.rest
+    assert.ok(!(l.y === fish.y && l.x - fish.x <= 2), `the fishing line lands on the lotus leaf at ${l.x},${l.y}`)
     leaves.add(K(l.x, l.y))
   }
   for (const c of ['pink', 'white']) assert.ok(island.lotus.some((l) => l.flower === c), `no ${c} lotus flower`)

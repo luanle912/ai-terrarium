@@ -54,7 +54,12 @@ export function lakeOf({ cells, shape, free }) {
       return Math.max(Math.abs(x - fx), Math.abs(y - fy)) > 2;
     }),
   );
-  const lotus = lotusOf(calm, pavilion);
+  const rest = restOf(lake, cells, pavilion, free);
+  // the fishing line lands a tile and a half out from the fishing spot: no lotus there
+  const lotus = lotusOf(
+    new Set([...calm].filter(k => !(pos(k)[1] === rest.fish.y && pos(k)[0] - rest.fish.x <= 2))),
+    pavilion,
+  );
   const duckweed = duckweedOf(calm, pavilion, lotus, pond.spots);
   return {
     pond,
@@ -63,7 +68,7 @@ export function lakeOf({ cells, shape, free }) {
     lotus,
     duckweed,
     ducks: { lanes: duckLanes(lake, pavilion, lotus) },
-    rest: restOf(lake, cells, pavilion, free),
+    rest,
   };
 }
 
