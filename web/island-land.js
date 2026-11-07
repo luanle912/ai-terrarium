@@ -43,11 +43,20 @@ const centre = (W, H) => {
   const half = (W + 11) / 2; // from the block's middle to its end tiles' middles, along x
   return { cx: (W + 10) / 2, cy: H / 2, R: half + SQUARE_MARGIN, K: half + (H + 1) / 2 + HEX_CUT };
 };
-// A few long, low waves along the shore: bays and headlands, never one-tile bumps (in tiles at the shore).
-const shoreWave = a => 0.5 * Math.sin(a * 3 + 0.6) + 0.35 * Math.sin(a * 5 + 2.1) + 0.2 * Math.sin(a * 7 + 4.0);
+// Waves along the whole shore, the upright edges included: bays and headlands up to ~2 tiles, never one-tile bumps,
+// so the hexagon reads as land rather than a ruler-drawn shape.
+const shoreWave = a => {
+  const w =
+    0.75 * Math.sin(a * 3 + 0.6) +
+    0.5 * Math.sin(a * 5 + 2.1) +
+    0.35 * Math.sin(a * 8 + 4.0) +
+    0.22 * Math.sin(a * 13 + 1.3);
+  return w > 0 ? w : 0.45 * w; // headlands reach out further than bays cut in, so the lawn by the office stays wide
+};
 // How far (in tiles) a tile centre lies outside the hexagon: <= 0.5 is land. The three edges blend over about a tile
 // (a soft maximum), so the corners turn softly instead of stepping. The waves run along the square's four sides and
-// fade out toward the cuts, so the two upright edges stay straight on screen.
+// are softer on the two upright edges but never vanish there. Around the bottom point (where the lake and the main
+// waterfall sit) they fade out, so the lake keeps its shore.
 const SOFT = 0.7;
 function hexOut(x, y, { cx, cy, R, K }, wavy) {
   const dx = x + 0.5 - cx,
@@ -56,7 +65,14 @@ function hexOut(x, y, { cx, cy, R, K }, wavy) {
     b = Math.abs(dy) - R,
     c = Math.abs(dx - dy) - K;
   const f = SOFT * Math.log(Math.exp(a / SOFT) + Math.exp(b / SOFT) + Math.exp(c / SOFT));
-  return wavy ? f - shoreWave(Math.atan2(dy, dx)) * Math.min(1, Math.max(0, -c / 6)) : f;
+  if (!wavy) return f;
+  const upright = 0.55 + 0.45 * Math.min(1, Math.max(0, -c / 6)),
+    nearTip = Math.min(1, Math.max(0, (2 * R - (dx + dy) - 14) / 10));
+  // the two upright edges also wander along their length, so neither runs ruler-straight
+  const along = dx + dy,
+    onCut = Math.max(0, 1 - Math.abs(c) / 3),
+    wander = onCut * (0.9 * Math.sin(along * 0.42 + (dx > dy ? 1.3 : 4.1)) + 0.45 * Math.sin(along * 0.97 + 2.2));
+  return f - (shoreWave(Math.atan2(dy, dx)) * upright + wander) * nearTip;
 }
 // The hexagon's own distance from the middle, 0 there and 1 on its edges, for the underside.
 const hexN = (x, y, { cx, cy, R, K }) => {
