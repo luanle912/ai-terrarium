@@ -78,6 +78,7 @@ function setup(island) {
       sp: 0.85 + 0.3 * hash(i, 4, 71),
       dir: hash(i, 5, 71) < 0.5 ? 1 : -1,
       every: DIVE_EVERY + DIVE_SPREAD * hash(i, 6, 71),
+      d0: hash(i, 7, 73), // where in its dive cycle each duck starts, so they never all dive at once
       out: { x: 0, y: 0, face: 1, dive: 0, asleep: false, go: 0 },
     };
   });
@@ -174,7 +175,7 @@ function ducks(island, t, df, still) {
     // keep the old facing while heading straight up or down the screen, so it never flickers
     if (Math.abs(vx - vy) > 0.05 * (L.seg[j] || 1)) o.face = vx - vy > 0 ? 1 : -1;
     // a dive: under for about DIVE_FOR s of swimming once a cycle, surfacing as the ducks slow for the night
-    const c = (run / DUCK_SPEED) % k.every;
+    const c = (run / DUCK_SPEED + k.d0 * k.every) % k.every;
     o.dive = c < DIVE_FOR ? clamp01(1.6 * Math.sin((Math.PI * c) / DIVE_FOR)) * go : 0;
     o.asleep = df < 0.3;
     o.go = go;
