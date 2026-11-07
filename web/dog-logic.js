@@ -201,7 +201,7 @@ function rest(d, dogs, w) {
   if (!spot || !goTo(d, w, spot, STROLL * LEGS[d.breed])) wander(d, w);
 }
 function drink(d, w) {
-  if (!w.drink.length) return wander(d, w);
+  if (w.frozen || !w.drink.length) return wander(d, w);
   const s = [...w.drink].sort((a, b) => Math.hypot(a.x - d.x, a.y - d.y) - Math.hypot(b.x - d.x, b.y - d.y))[
     fl(w.rand() * 3) % w.drink.length
   ];
@@ -309,6 +309,8 @@ function next(d, dogs, w) {
     ['rest', evening ? 3.2 : 1.4],
     ['drink', 0.8],
   ];
+  // The lakes are iced over in winter (w.frozen): no drinking there.
+  if (w.frozen) opts.pop();
   // With reduced motion (w.calm) they only stroll, sniff, drink and nap: no dashing about.
   if (free.length && !w.calm) opts.push(['chase', evening ? 0.3 : 1.3], ['play', evening ? 0.3 : 0.9]);
   if (d.breed === 'husky' && !w.calm) opts.push(['zoom', 0.35 + 1.6 * (w.snow || 0)]);

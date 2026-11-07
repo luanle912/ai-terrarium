@@ -631,9 +631,9 @@ function drawLife(ctx, island, PG, t, env) {
   // the lake's life: fish under the water, duckweed and ducks on it, the lantern's light on it
   const L = IslandLakeLife,
     glow = lampGlow(df);
-  L.drawFish(ctx, g, L.fish(island, tw), df);
-  L.drawWeed(ctx, g, L.weed(island, tw), df);
-  L.drawDucks(ctx, g, L.ducks(island, t, df, still), df, tw);
+  L.drawFish(ctx, g, L.fish(island, tw, env.frozen), df);
+  L.drawWeed(ctx, g, L.weed(island, tw, env.frozen), df);
+  L.drawDucks(ctx, g, L.ducks(island, t, df, still, env.frozen), df, tw);
   L.drawLanternWater(ctx, g, island, glow, tw);
   drawMountainFall(ctx, g, P, tw, flow, fp);
   drawVines(ctx, g, P, ph.wind, wind, still);

@@ -1,5 +1,6 @@
 import { tr } from './i18n.js';
 import { SeasonTree } from './season-tree.js';
+import { SeasonLogic } from './season-logic.js';
 import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { DogLogic } from './dog-logic.js';
@@ -67,6 +68,8 @@ export class ClaudeOffice extends React.Component {
     this.usedLooks = 0;
     this.last = 0;
     this.seasonKey = 'default';
+    this.seasonChoice = SeasonLogic.loadSeasonChoice(this.storage);
+    this.seasonPreview = null;
     this.goneSids = new Map();
     this.depts = new Map();
     this.setCanvas = el => {
@@ -379,6 +382,15 @@ export class ClaudeOffice extends React.Component {
         ? SeasonTree.seasonFor()
         : 'default';
   }
+  // The season shown now: a preview, else the choice made in Settings, else the date's (SeasonLogic.currentSeason).
+  seasonNow() {
+    return SeasonLogic.currentSeason({
+      date: new Date(),
+      choice: this.seasonChoice || 'auto',
+      preview: this.seasonPreview || null,
+      now: Date.now(),
+    }).key;
+  }
   get treeOn() {
     return this.season !== 'default';
   }
@@ -453,6 +465,14 @@ export class ClaudeOffice extends React.Component {
     } else this.nextFlashAt = now + 2000;
     this.flash = reduced ? 0 : SkyLogic.flashLevel(now, this.flashStart || 0, this.flashMs || 0);
     const hour = d.getHours() + d.getMinutes() / 60;
-    return { df, hour, fx, reduced, flash: this.flash, col: SkyLogic.skyColors(df, hour, fx) };
+    return {
+      df,
+      hour,
+      fx,
+      reduced,
+      frozen: SeasonLogic.look(this.seasonNow()).frozen,
+      flash: this.flash,
+      col: SkyLogic.skyColors(df, hour, fx),
+    };
   }
 }

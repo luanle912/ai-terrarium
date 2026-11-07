@@ -39,6 +39,7 @@ export const SCENE_METHODS = [
   'smokingItems',
   'restroomItems',
   'restroomPaint',
+  'seasonNow',
   'stepDogs',
   'stepProps',
   'dogSprite',
@@ -80,6 +81,12 @@ export class IslandScene {
   }
   get speed() {
     return this.host.speed;
+  }
+  get seasonChoice() {
+    return this.host.seasonChoice;
+  }
+  get seasonPreview() {
+    return this.host.seasonPreview;
   }
   get snowShown() {
     return this.host.snowShown;

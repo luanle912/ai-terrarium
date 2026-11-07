@@ -105,7 +105,15 @@ function seasonLabel(key, holidayKey) {
 // Settings dropdown entry for "follow the date".
 const autoLabel = () => tr('season.auto');
 
+// On the ice nobody fishes or bathes (the bench stays): the free idle spots to pick from, and whether the spot someone
+// is at is still fine. Everything is open again when the lakes thaw.
+const onIce = spot => !!spot && (spot.act === 'fish' || spot.act === 'bath');
+const idleOpen = (spots, free, frozen) => (frozen ? free.filter(i => !onIce(spots[i])) : free);
+const idleStays = (spots, i, frozen) => !(frozen && i != null && onIce(spots[i]));
+
 export const SeasonLogic = {
+  idleOpen,
+  idleStays,
   KEYS,
   CHOICES,
   SEASON_KEY,

@@ -146,12 +146,15 @@ function setup(island) {
 }
 
 // ---- pure logic ----
+// What a frozen lake shows of its life: nothing (ducks, fish and weed are all gone until the thaw).
+const NONE = [];
 // How hard the ducks swim: not at all at night (df < 0.3), easing up to full by df 0.5.
 const duckGo = df => clamp01((df - 0.3) / 0.2);
 // Where each duck is: x, y in tiles; face +1 heading right on screen, -1 left; dive 0 afloat .. 1 under; asleep at
 // night. The swim distance runs on elapsed time × speed (a gap is capped at 0.25 s), so dusk eases them to a stop
 // where they are and morning sets them off from there.
-function ducks(island, t, df, still) {
+function ducks(island, t, df, still, frozen) {
+  if (frozen) return NONE;
   const d = setup(island),
     sw = d.swim,
     go = still ? 0 : duckGo(df);
@@ -187,7 +190,8 @@ function ducks(island, t, df, still) {
 }
 // Fish shadows at time t: x, y in tiles, hx, hy their heading (a unit vector in tile axes), a how clearly they show
 // (0.55..1, as they glide deeper or nearer the surface).
-function fish(island, t) {
+function fish(island, t, frozen) {
+  if (frozen) return NONE;
   const d = setup(island);
   for (let i = 0; i < d.fish.length; i++) {
     const f = d.fish[i],
@@ -207,7 +211,8 @@ function fish(island, t) {
   return d.fishOut;
 }
 // Duckweed at time t: x, y in tiles, one per island.duckweed home, never more than WEED_OPEN from its middle.
-function weed(island, t) {
+function weed(island, t, frozen) {
+  if (frozen) return NONE;
   const d = setup(island);
   for (let i = 0; i < d.weed.length; i++) {
     const w = d.weed[i],

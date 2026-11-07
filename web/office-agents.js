@@ -3,6 +3,7 @@ import { WorldLogic } from './world-logic.js';
 import { DogLogic } from './dog-logic.js';
 import { PeopleLogic } from './people-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
+import { SeasonLogic } from './season-logic.js';
 import { PropUse } from './prop-use.js';
 import { DEPT_PAL, DESKS, DOOR, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
 import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
@@ -488,8 +489,15 @@ mixin(
           a.wcDone = true;
         }
         // Men use WC NAM and women WC NỮ (RestroomLogic.roomOf); about one idle choice in four is a free stall there.
+        // On the frozen lakes nobody fishes or bathes: whoever is there leaves (SeasonLogic.idleStays).
+        const frozen = SeasonLogic.look(this.seasonNow()).frozen;
+        if (!SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen)) a.idleSpot = null;
         if (a.idleSpot == null || taken.has(a.idleSpot)) {
-          const free = IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i));
+          const free = SeasonLogic.idleOpen(
+            IDLE_SPOTS,
+            IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i)),
+            frozen,
+          );
           a.idleSpot = RestroomLogic.pickIdle(IDLE_SPOTS, free, a.wcDone ? null : RestroomLogic.roomOf(a), Math.random);
         }
         if (a.idleSpot != null) {
@@ -587,6 +595,7 @@ mixin(
       w.hour = now.getHours() + now.getMinutes() / 60;
       w.snow = this.snowShown || 0;
       w.calm = !!(this.env && this.env.reduced);
+      w.frozen = SeasonLogic.look(this.seasonNow()).frozen;
       // People out on the lawn (down the stairs, bathing in the pond) are who the dogs run over to greet.
       // `act` is what they are doing, or the idle spot they are walking to, so a smoker is left alone on the way too.
       // People going to or at the restroom are left out altogether: the dogs leave them be.
