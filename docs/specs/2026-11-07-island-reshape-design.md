@@ -230,3 +230,26 @@ cầu vồng, cây theo mùa thành cụm, đảo bay nhỏ ở nền; góc ngh�
 - Anh chọn **B — đỉnh nhọn có gờ đá**: hai đỉnh nhọn như núi thật, mặt đá tô pixel ba sắc độ (mặt trái vừa, mặt phải tối,
   mặt hướng lên sáng), cắt ngang bằng các **gờ đá dày có bóng ở dưới** để đọc ra khối, tuyết đọng trên các gờ cao và đỉnh,
   chân núi phủ cỏ leo lên theo gờ thấp. Viền tím than quanh khối núi. Không dùng khối hộp xếp tầng.
+
+### 11.10. Núi tuyết pixel (bản C) — thay mục 11.3, 11.4, 11.9 (2026-11-08)
+
+Anh Kiệt thấy núi bản 2 "còn đơn giản quá" và gửi mô tả chi tiết một ngọn núi tuyết pixel iso, lưu nguyên văn ở
+`docs/specs/2026-11-08-mountain-c-brief.md` (toạ độ, gờ, tuyết, khe, thác, hồ chân núi, bảng màu, cây). Mô tả đó là chuẩn
+cho núi; các quyết định sau thắng ở chỗ khác nguyên văn:
+
+- **Một ngọn núi** (không còn hai đỉnh, không còn khe giữa hai đỉnh). Thác chảy trong khe đá trên mặt sáng, đổ vào **hồ chân
+  núi** (elip rx 13, ry 6, viền đá) — thay vũng 2×2 của bản 2.
+- **Cỡ: toạ độ trong mô tả nhân ×1,4** rồi mới vẽ thành pixel (vẫn 1 art px = 1 px logic của cảnh; không phóng to ảnh).
+  Lý do: ô game là 32×16 px logic (`TW = 16` là nửa bề ngang), nên toạ độ gốc chỉ cho chân núi ~3,5×3,5 ô và đỉnh 70 px
+  (~1,1 lần toà nhà cao 64 px); ×1,4 cho đỉnh ~98 px ≈ 1,5 lần toà nhà như mô tả muốn, chân núi ~5×5 ô.
+- **Không có suối và không có thác thứ hai ở mép đảo** (anh chọn). Nước: tuyết tan → khe → thác → hồ chân núi, dừng ở đó.
+  Thác chính duy nhất ở mép đảo là thác 6h dưới hồ vịt.
+- **Màu viền `#3B2F4A` cho cả đảo** (thay `#2b2350` ở mọi nơi: mép đảo, đáy, chùa, cây, đá, đảo nhỏ trên trời).
+- **Quầng mặt trời:** bỏ gradient, thay bằng 2 vòng tròn màu phẳng, độ trong suốt cố định; áp dụng mọi chế độ (local và thế
+  giới).
+- **Vẽ:** không dùng file PNG (server và hub chỉ phục vụ `.js`/`.css` trong `web/`); núi được vẽ một lần bằng code theo đúng
+  toạ độ và bảng màu vào một canvas cache ở cỡ art pixel, rồi dùng như sprite tĩnh, sắp lớp theo góc trước F. Hồ chân núi và
+  thác là lớp riêng để chuyển động: thác dịch pattern trắng 1 px mỗi ~120 ms, bọt hồ 2 khung ~300 ms.
+- **Cỏ chân núi:** màu cỏ sườn của mô tả dùng trên sườn núi; chỗ chạm mặt cỏ đảo hoà về màu cỏ đảo để không thành vạt màu lạ.
+- Cây quanh núi theo mục 5 của mô tả (2 cụm thông, bụi, nấm, hoa 1 px); xa hơn dùng cây thu sẵn có.
+- Ô dưới chân núi và hồ chân núi không đi được; chó có thể uống ở mép hồ chân núi.
