@@ -382,7 +382,8 @@ export class ClaudeOffice extends React.Component {
         ? SeasonTree.seasonFor()
         : 'default';
   }
-  // The season shown now: a preview, else the choice made in Settings, else the date's (SeasonLogic.currentSeason).
+  // The season the island shows (SeasonLogic): a one-minute preview, else the choice in Settings, else the date.
+  // seasonChoice / seasonPreview are set from Settings; until then the date decides.
   seasonNow() {
     return SeasonLogic.currentSeason({
       date: new Date(),
@@ -451,10 +452,12 @@ export class ClaudeOffice extends React.Component {
     const reduced = !!(this.reducedMq && this.reducedMq.matches),
       fx = SkyLogic.weatherFx(this.wx, now),
       df = dayFactor();
+    // Winter keeps at least its own snow on the lawn, the roofs and the mountain whatever the weather.
+    const season = this.seasonNow();
     {
       const sn = SkyLogic.stepSnow(this.snow, fx, this.preview, dtMs);
       this.snow = sn.cover;
-      this.snowShown = sn.shown;
+      this.snowShown = Math.max(sn.shown, SeasonLogic.look(season).minSnow);
     }
     if (fx.storm > 0.5 && !reduced) {
       if (now >= this.nextFlashAt) {
@@ -470,9 +473,10 @@ export class ClaudeOffice extends React.Component {
       hour,
       fx,
       reduced,
-      frozen: SeasonLogic.look(this.seasonNow()).frozen,
+      frozen: SeasonLogic.look(season).frozen,
       flash: this.flash,
       col: SkyLogic.skyColors(df, hour, fx),
+      season,
     };
   }
 }

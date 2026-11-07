@@ -4,7 +4,8 @@
 // snowAmount), like the rest of web/island-art.js. The fall from the gap between the peaks into the pool, its foam and
 // rings move in web/island-life.js.
 import { hash, N4, WATER_Z } from './island-land.js';
-import { mix, OUTLINE, pixelLayer, rgbOf, stamp, STONE } from './island-art.js';
+import { mix, OUTLINE, paletteLayer, pixelLayer, rgbOf, stamp, STONE } from './island-art.js';
+import { iceC, iceDetail } from './island-art-season.js';
 
 // ---- the mountain ----
 // Each peak is a rocky cone of flat faces: a ring of SIDES points on the lawn, a smaller ring turned half a step at
@@ -210,10 +211,12 @@ export function poolShape(island) {
     wet: (x, y) => y >= y0 && inBlock(x, y, x0 + POOL_RIM, x1 - POOL_RIM, y0 - 0.3, y1 - POOL_RIM),
   };
 }
-export function drawPool(pt, P, C, island) {
+// Frozen (winter): pale ice with a crack and a drift of snow, and no foam (the falls are ice too).
+export function drawPool(pt, P, C, island, frozen) {
   const m = island.mountain,
     sh = poolShape(island);
   if (!sh) return;
+  if (frozen) C = iceC(C);
   const { x0, x1, y0, y1, foot, wet } = sh;
   const [OX, OY] = P(0, 0, 0),
     sx0 = Math.floor(OX + (x0 - y1) * 16) - 2,
@@ -250,6 +253,13 @@ export function drawPool(pt, P, C, island) {
       else if (N4.some(([a, b]) => rimAt(x + a, y + b)) && lawnAt(sx0 + x, sy0 + y, 0)[1] > y0 + 0.15)
         L.set(x, y, rgb(OUTLINE));
     }
+  if (frozen) {
+    const ice = paletteLayer(W, H);
+    iceDetail(ice, kind, W, H, 4);
+    L.flush();
+    stamp(pt.ctx, L.cv, sx0, sy0);
+    return stamp(pt.ctx, ice.paint(C), sx0, sy0);
+  }
   // foam where the falls land: a few white flecks along their foot, on the water only
   const g = m.gap,
     [fa, fy] = P(g.x - g.w, g.y, WATER_Z),

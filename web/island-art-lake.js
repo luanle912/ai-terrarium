@@ -22,6 +22,7 @@ import {
   rgbOf,
   stamp,
 } from './island-art.js';
+import { iceC, iceDetail } from './island-art-season.js';
 
 // The water's edge is where the field crosses WATER_T; the cobbles lie on the lawn where it is within RIM_T below.
 export const WATER_T = 0.5;
@@ -87,9 +88,16 @@ const WATER = { shallow: '#62b8ea', mid: '#4aa3df', deep: '#3b8fcf', line: '#a9d
 // The lake on the land canvas: every pixel of its box is looked at twice, at the lawn's level and at
 // the water's (WATER_Z lower). Water where both are in; the far bank's wall where the lawn level is in and the water
 // level is not; cobbles on the lawn at the edge, with their side showing on the near banks.
-export function drawWater(pt, P, C, island, frame) {
+// Frozen (winter), the water is pale ice with cracks and drifts of snow on it (web/island-art-season.js).
+export function drawWater(pt, P, C, island, frame, frozen) {
   const w = perFrame(waters, island, frame, () => paintWater(P, island));
-  stamp(pt.ctx, w.L.paint(C), w.sx0, w.sy0);
+  if (!frozen) return stamp(pt.ctx, w.L.paint(C), w.sx0, w.sy0);
+  stamp(pt.ctx, w.L.paint(iceC(C)), w.sx0, w.sy0);
+  if (!w.ice) {
+    w.ice = paletteLayer(w.L.w, w.L.h);
+    iceDetail(w.ice, w.kind, w.L.w, w.L.h, 3);
+  }
+  stamp(pt.ctx, w.ice.paint(C), w.sx0, w.sy0);
 }
 const waters = new WeakMap();
 // The lake's pixels in palette keys, worked out once per island and frame (only the light changes between bakes).
@@ -155,11 +163,12 @@ function paintWater(P, island) {
       } else c = rgb(COBBLE_SIDE, 0.3);
       L.set(x, y, c);
     }
-  return { L, sx0, sy0 };
+  return { L, sx0, sy0, kind };
 }
 
-// On the water, back to front: the stepping stones out to the pavilion, then the lotus pads with their flowers.
-export function drawLakeDecor(pt, P, C, island) {
+// On the water, back to front: the stepping stones out to the pavilion, then the lotus pads with their flowers (not
+// on a frozen lake).
+export function drawLakeDecor(pt, P, C, island, frozen) {
   const pav = island.pavilion;
   if (pav)
     for (const s of pav.path) {
@@ -168,7 +177,7 @@ export function drawLakeDecor(pt, P, C, island) {
       blob(pt, x, y + 1, [[0, 0, w, w * 0.5]], () => C('#7e776c', 0.3), C(OUTLINE));
       blob(pt, x, y - 1, [[0, 0, w, w * 0.5]], lit3(C('#dcd6ca', 0.85), C('#c4bdb0', 0.85), C('#aaa397', 0.6)));
     }
-  for (const l of island.lotus || []) {
+  for (const l of frozen ? [] : island.lotus || []) {
     const n = 2 + (hash(l.x, l.y, 85) > 0.5 ? 1 : 0),
       pads = [];
     for (let i = 0; i < n; i++) {
