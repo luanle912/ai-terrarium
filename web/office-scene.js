@@ -1,6 +1,5 @@
 import { I18n, tr } from './i18n.js';
 import { SkyLogic } from './sky-logic.js';
-import { bridgeZ } from './island-land.js';
 import { DogLogic } from './dog-logic.js';
 import { SmokeLogic } from './smoke-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
@@ -37,7 +36,7 @@ export const W = 27,
   TW = 16,
   TH = 8,
   WALL = 56;
-// The scene is framed by the square island around the office (web/island-land.js), not by the office alone.
+// The scene is framed by the hexagon island around the office (web/island-land.js), not by the office alone.
 export const ISLAND = SkyLogic.buildIsland({ W, H });
 // The office stands on a plinth FLOOR_Z above the lawn, so P (everything in the office: floor, walls, people, bubbles,
 // clicks) is lifted by it, while PG is the bare lawn level used for trees, the waterfall and the plinth itself.
@@ -48,17 +47,9 @@ export const P = (x, y, z = 0) => PG(x, y, z + FLOOR_Z);
 // Agents can step down the stairs onto the lawn, so a person stands at the ground height of wherever they are.
 export const STAIRS = SkyLogic.stairs(W, H),
   LAWN_WALK = SkyLogic.lawnWalk(ISLAND, W, H);
-// The restroom block beside the pantry is raised to the office floor too, and whoever crosses the bridge walks up and
-// over its arched deck.
+// The restroom block beside the pantry is raised to the office floor too.
 export const PA = (x, y, z = 0) =>
-  PG(
-    x,
-    y,
-    z +
-      (RestroomLogic.onFloor(WC, x, y)
-        ? FLOOR_Z
-        : SkyLogic.groundZ(x, y, W, H, STAIRS, FLOOR_Z) + bridgeZ(ISLAND.bridge, x, y)),
-  );
+  PG(x, y, z + (RestroomLogic.onFloor(WC, x, y) ? FLOOR_Z : SkyLogic.groundZ(x, y, W, H, STAIRS, FLOOR_Z)));
 // The walls rise WALL_REACH tiles' worth up the screen (16 px a tile): a sprite standing on a cell that close behind
 // either wall, in a screen column the wall covers, is (partly) hidden by it, so the scene draws such sprites before the
 // walls (web/office-draw.js).
@@ -83,15 +74,16 @@ export const WC = RestroomLogic.layout(
 WC.floor.forEach(k => LAWN_WALK.delete(k));
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
-// The office dogs live on the lawn all round the office and, over the bridge, on the far bank and the back lawn;
-// never in the lake, the river (the bridge deck is fine), on the mountain, the bench, the smoking corner or the
-// restroom. They drink at the lake. Trees, bushes, lamps, the bench and the bridge are sorted with them, but the
+// The office dogs live on the lawn all round the office, by the lake and on the back lawn; never in the lake, the
+// pool under the mountain falls, on the mountain, the bench, the smoking corner or the restroom. They drink at the
+// lake and, where they can reach it, at the pool. Trees, bushes, lamps and the bench are sorted with them, but the
 // mountain is part of the island picture under every sprite, so no dog stands where it would be drawn over it: up to
 // as many rows behind a mountain cell as the stone above that cell rises (8 px a row), and at least the two rows behind
 // its grassy foot. The strip right behind the
 // walls is left out too: web/office-draw.js would draw a dog there correctly, before the walls, but they would hide it
-// whole (the far bank beside the river included: the left wall covers the strip out to the island's edge).
+// whole (the left wall covers the strip beside it out to the island's edge).
 const REST = ISLAND.rest,
+  WATER = new Set([...ISLAND.pond.cells, ...ISLAND.mountain.pool.cells]),
   FISH_PT = [REST.fish.x + 0.6, REST.fish.y + 0.5],
   M = ISLAND.mountain,
   // the height of the stone over a point: each cone as if it rose straight from its foot to its tip, and the rock of
@@ -105,7 +97,7 @@ const REST = ISLAND.rest,
 export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   W,
   H,
-  pond: new Set([...ISLAND.pond.cells, ...[...ISLAND.river.cells].filter(k => !ISLAND.bridge.cells.has(k))]),
+  pond: WATER,
   avoid: [
     ...ISLAND.spots.filter(s => s.id === 'east-back' || s.id === 'east-front'),
     { x: REST.bench.x, y: REST.bench.y, w: 1, h: 1 },
@@ -134,7 +126,7 @@ export const DOG_PLACES = {
   roamList: [...DOG_ROAM].map(k => k.split(',').map(Number)),
   clear: DOG_CLEAR,
   den: DogLogic.denCells(DOG_ROAM, [33, 8], DOG_CLEAR),
-  drink: DogLogic.drinkSpots(DOG_ROAM, ISLAND.pond.cells, DOG_CLEAR),
+  drink: DogLogic.drinkSpots(DOG_ROAM, WATER, DOG_CLEAR),
   rest: DogLogic.besideCell(DOG_ROAM, [REST.bench.x, REST.bench.y], DOG_CLEAR, [FISH_PT]),
 };
 export const REAL_WEATHER_EVERY_MS = 15 * 60_000;
@@ -215,7 +207,7 @@ export const IDLE_SPOTS = [
   ...WC.spots,
   // bathing in the pond out on the lawn, reached down the pantry stairs
   ...ISLAND.pond.spots.map(s => ({ act: 'bath', tile: [s.x, s.y], pt: [s.x + 0.5, s.y + 0.5], front: true })),
-  // the rest corner on the far bank by the lake, over the bridge: sitting on the stone bench (web/island-art.js; the
+  // the rest corner on the lake's inner bank: sitting on the stone bench (web/island-art.js; the
   // sitter sits at its front edge, where a stool-1 sitter's hem meets the 6.5 px seat)
   // and fishing at the water's edge, the lake on the +x side; both face the viewer
   {

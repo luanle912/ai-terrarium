@@ -5,8 +5,8 @@ import { loadWeb } from './web.mjs'
 import { loadI18n } from './load-i18n.mjs'
 import { loadDogLogic } from './load-dog-logic.mjs'
 
-// The rest corner by the lake (spec 6.4): a stone bench and a fishing spot on the far bank, reached over the bridge,
-// with a dog lying beside the bench sitter. office-scene.js builds the page's island at load; it only needs React for h().
+// The rest corner by the lake (spec 6.4, moved by 11.2): a stone bench and a fishing spot on the lake's inner bank,
+// reached along the garden path, with a dog lying beside the bench sitter. office-scene.js builds the page's island at load; it only needs React for h().
 loadI18n('vi')
 globalThis.React ??= { createElement: () => null }
 const scene = loadWeb('office-scene')
@@ -14,7 +14,7 @@ const { ISLAND, IDLE_SPOTS, ACT_TXT, DOG_PLACES, W, H, WALL, FLOOR_Z, TH } = sce
 const { bfs, startCell } = loadWeb('office-util')
 const Dog = loadDogLogic()
 const K = (x, y) => x + ',' + y
-const { rest, bridge } = ISLAND
+const { rest } = ISLAND
 const spot = act => IDLE_SPOTS.find(s => s.act === act)
 
 test('the bench and the fishing spot are idle spots out at the rest corner', () => {
@@ -34,7 +34,7 @@ test('the bench and the fishing spot are idle spots out at the rest corner', () 
   assert.ok(ACT_TXT.bench && ACT_TXT.fish && ACT_TXT.bench !== 'office.act.bench' && ACT_TXT.fish !== 'office.act.fish')
 })
 
-test('an agent going to the rest corner crosses the bridge', () => {
+test('an agent walks to the rest corner over the lawn, never through water or rock', () => {
   const south = scene.STAIRS.find(s => s.side === 'south')
   for (const s of [spot('bench'), spot('fish')]) {
     assert.ok(s, 'no rest corner spot')
@@ -42,11 +42,10 @@ test('an agent going to the rest corner crosses the bridge', () => {
     for (const from of [[south.x, H], [1, 2]]) {
       const route = bfs(from, s.tile)
       assert.ok(route.length > 0, `no way from ${from} to ${s.act}`)
-      assert.ok(route.some(c => bridge.cells.has(K(...c))), `the way from ${from} to ${s.act} skips the bridge`)
       for (const c of route) {
         const k = K(...c)
-        if (ISLAND.river.cells.has(k)) assert.ok(bridge.cells.has(k), `walks through the river at ${k}`)
         assert.ok(!ISLAND.pond.cells.has(k), `walks through the lake at ${k}`)
+        assert.ok(!ISLAND.mountain.pool.cells.has(k) && !ISLAND.mountain.cells.has(k), `walks over the mountain or its pool at ${k}`)
       }
     }
   }
@@ -60,29 +59,30 @@ test('an agent at the rest corner walks back from where it is, not from inside t
   assert.deepEqual(startCell(5.5, 3.5), [5, 3])
 })
 
-test('dogs now roam the far bank, the rest corner and the back lawn, never water, the mountain or the bench', () => {
+test('dogs roam the lake shore, the rest corner and the back lawn, never water, the mountain or the bench', () => {
   const { roam } = DOG_PLACES
-  const pondOrRiver = k => ISLAND.pond.cells.has(k) || (ISLAND.river.cells.has(k) && !bridge.cells.has(k))
+  const water = k => ISLAND.pond.cells.has(k) || ISLAND.mountain.pool.cells.has(k)
   for (const k of roam) {
-    assert.ok(!pondOrRiver(k), `dogs roam the water at ${k}`)
+    assert.ok(!water(k), `dogs roam the water at ${k}`)
     assert.ok(!ISLAND.mountain.cells.has(k), `dogs roam the mountain at ${k}`)
   }
   assert.ok(!roam.has(K(rest.bench.x, rest.bench.y)), 'dogs walk over the bench')
   assert.ok(DOG_PLACES.clear.has(K(rest.fish.x, rest.fish.y)), 'a dog may settle on the fishing spot')
-  for (const k of bridge.cells) assert.ok(roam.has(k), `dogs cannot cross the bridge at ${k}`)
   const cells = [...roam].map(k => k.split(',').map(Number))
-  assert.ok(cells.some(([x, y]) => x < 0 && y >= H), 'no dog on the far bank')
+  const byLake = ([x, y]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => ISLAND.pond.cells.has(K(x + a, y + b)))
+  assert.ok(cells.some(byLake), 'no dog on the lake shore')
+  assert.ok(cells.some(([x, y]) => Math.hypot(x - rest.bench.x, y - rest.bench.y) <= 2), 'no dog by the rest corner')
   assert.ok(cells.some(([x, y]) => y < -4), 'no dog on the back lawn')
   // every one of these is reachable from the front lawn
   const front = [23, H + 4]
-  for (const c of [cells.find(([x, y]) => x < 0 && y >= H), cells.find(([x, y]) => y < -4)])
+  for (const c of [cells.find(byLake), cells.find(([x, y]) => y < -4)])
     assert.ok(Dog.path(roam, front, c).length > 0, `${c} cannot be reached`)
 })
 
 test('no dog stands in the strip right behind the office walls, where they would hide it', () => {
   // A dog behind a wall is drawn before the walls (scene.behindWalls), so they hide it. Its feet are 16 px up the
-  // screen per tile behind the wall, so within `reach` tiles the wall face covers it: it would vanish there (the far
-  // bank beside the river too: the left wall covers the whole strip out to the island's edge).
+  // screen per tile behind the wall, so within `reach` tiles the wall face covers it: it would vanish there (the left
+  // wall covers the whole strip beside it out to the island's edge).
   const reach = Math.floor((WALL + 3 + FLOOR_Z) / (2 * TH))
   assert.equal(reach, 4)
   assert.equal(scene.WALL_REACH, reach)
@@ -95,8 +95,8 @@ test('no dog stands in the strip right behind the office walls, where they would
 })
 
 test('nothing tall baked into the island stands in front of a roaming dog', () => {
-  // The mountain is part of the island picture under every sprite (trees, bushes, lamps, the bench and the bridge are
-  // sorted with the dogs). No dog stands up to as many rows behind a mountain cell as the stone there rises: at
+  // The mountain is part of the island picture under every sprite (trees, bushes, lamps and the bench are sorted
+  // with the dogs). No dog stands up to as many rows behind a mountain cell as the stone there rises: at
   // least the two rows of its foot, and behind the peaks themselves as far as they rise (8 px a row).
   const tall = [...ISLAND.mountain.cells].map(k => k.split(',').map(Number))
   const peaks = ISLAND.mountain.peaks.map(p => [p.x, p.y, Math.floor(p.h / TH)])
@@ -144,7 +144,8 @@ test('a dog lies down beside the bench while someone sits there', () => {
 test('someone only walking to the bench is not yet company; an angler just gets a greeting', () => {
   let seed = 5
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
-  const walker = { id: 'w', x: -3.5, y: 19.5, act: 'bench', at: false }
+  // on the garden path down to the rest corner
+  const walker = { id: 'w', x: rest.fish.x + 0.5, y: H + 1.5, act: 'bench', at: false }
   const angler = { id: 'f', x: spot('fish').pt[0], y: spot('fish').pt[1], act: 'fish', at: true }
   const w = { ...DOG_PLACES, agents: [walker, angler], hour: 10, snow: 0, now: 0, rand }
   const dogs = Dog.create(w)

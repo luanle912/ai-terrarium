@@ -2,7 +2,7 @@
 // two-peak mountain, the wooden bridge, the lamp posts (unlit; web/island-life.js lights them), bushes, mushrooms,
 // rocks and the stone bench of the rest corner. Every function draws in the scene's logical px through P (the lawn
 // level projection) and takes its colours through C(colour, snowAmount), which applies the island's light and snow.
-import { DECK_OVER, deckZ, hash, N4, WATER_Z } from './island-land.js';
+import { hash, N4, WATER_Z } from './island-land.js';
 
 // Colour helpers for '#rrggbb' strings, shared by the island modules (web/sky-island.js re-exports them).
 export const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -333,6 +333,10 @@ function drawGap(pt, P, C, gap) {
 const WOOD = { plank: '#b98149', plank2: '#a8733f', side: '#7a4f2b', dark: '#5a3920', rail: '#8e5d33' };
 // The wooden bridge over the river: an arched deck of planks across the stream, a railing either side on three posts.
 // part 'back' is the far railing and the deck, 'front' the near railing, so whoever crosses walks between the two.
+// The deck runs a quarter tile onto either bank and arches low over the water: its height above the lawn at t (0..1
+// along it). The island has no bridge since its second version; Task B removes this drawing.
+const DECK_OVER = 0.25,
+  deckZ = t => 3 + 3 * Math.sin(Math.PI * t);
 export function drawBridge(pt, P, C, bridge, part) {
   const along = bridge.dir === 'x',
     a0 = (along ? bridge.x : bridge.y) - DECK_OVER,
@@ -378,7 +382,7 @@ export function drawBridge(pt, P, C, bridge, part) {
 // hook, the others glass lamps on an iron pole.
 export const LAMP_Z = 15;
 function lampHead(island, l) {
-  const lantern = [...island.bridge.cells].some(k => {
+  const lantern = [...(island.bridge?.cells || [])].some(k => {
     const [bx, by] = k.split(',').map(Number);
     return Math.abs(bx - l.x) <= 1 && Math.abs(by - l.y) <= 1;
   });

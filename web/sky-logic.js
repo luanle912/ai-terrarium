@@ -54,8 +54,9 @@ function canCross(a, b, W, H, st) {
       : o[1] === H - 1 && l[1] === H && o[0] === l[0] && l[0] >= s.x && l[0] < s.x + s.len,
   );
 }
-// Lawn cells agents can stand on: not the mountain, not the river (except across the bridge), not the lake (except
-// the bathing spots), not under a tree, bush, mushroom, rock or lamp post. Flowers are stepped over.
+// Lawn cells agents can stand on: not the mountain or the pool at its foot, not the lake (except the bathing spots;
+// the pavilion's stepping stones are scenery), not under a tree, bush, mushroom, rock or lamp post. Flowers are
+// stepped over.
 function lawnWalk(island, W, H) {
   const out = new Set(),
     blocked = new Set(island.decor.filter(d => d.kind !== 'flower').map(d => key(d.x, d.y))),
@@ -64,7 +65,7 @@ function lawnWalk(island, W, H) {
   for (const c of island.list) {
     const k = key(c.x, c.y);
     if (inRect(c.x, c.y, W, H) || blocked.has(k) || island.mountain.cells.has(k)) continue;
-    if (island.river.cells.has(k) && !island.bridge.cells.has(k)) continue;
+    if (island.mountain.pool.cells.has(k)) continue;
     if (island.pond.cells.has(k) && !bath.has(k)) continue;
     out.add(k);
   }
