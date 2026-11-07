@@ -13,6 +13,7 @@ import './bubble-logic.js';
 import './world-logic.js';
 import './island-art.js';
 import './sky-render.js';
+import './island-lake-life.js';
 import './island-life.js';
 import './dog-logic.js';
 import './dog-sprites.js';
