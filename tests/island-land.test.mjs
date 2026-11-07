@@ -149,8 +149,8 @@ test('there is no river or bridge', () => {
   }
   // the left strip beside the office is plain lawn again
   for (let y = 0; y < H; y++) for (let x = -3; x < -1; x++) if (has(x, y)) assert.ok(walk.has(K(x, y)) || island.decor.some((d) => d.x === x && d.y === y), `${x},${y} is not lawn`)
-  // the drawing code reads the bridge height of whoever stands anywhere: nothing lifts anyone now
-  assert.equal(loadWeb('island-land').bridgeZ(undefined, 3.5, 20.5), 0)
+  // nothing lifts anyone now: the bridge height the drawing code used to ask for is gone
+  assert.equal(loadWeb('island-land').bridgeZ, undefined)
 })
 
 test('the lake sits at the bottom point and feeds the main fall there', () => {

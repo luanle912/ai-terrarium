@@ -1,12 +1,11 @@
-// Baking the island: the lawn, its underside and outline, the mountain, river and lake beds and the low decor in one
-// picture, and the things that stand up off the lawn (bushes, lamps, the bench, the bridge's two halves) as
-// small sprites the scene sorts with the people and dogs. The pieces' drawing lives in web/island-art.js.
+// Baking the island: the lawn, its underside and outline, the mountain, the lake and the pool, the stepping stones,
+// lotus and low decor in one picture, and the things that stand up off the lawn (bushes, lamps, the bench, the
+// pavilion) as small sprites the scene sorts with the people and dogs. The pieces' drawing lives in
+// web/island-art.js, web/island-art-mountain.js and web/island-art-lake.js.
 import {
   drawBench,
-  drawBridge,
   drawBush,
   drawLamp,
-  drawMountain,
   drawMushroom,
   drawRock,
   drawUnderside,
@@ -16,6 +15,8 @@ import {
   shoreFace,
   toHex,
 } from './island-art.js';
+import { drawMountain } from './island-art-mountain.js';
+import { drawLakeDecor, drawPavilion, drawWater, PAVILION_EXT } from './island-art-lake.js';
 import { hash, WATER_Z } from './island-land.js';
 export { hash, hex, mix, toHex, WATER_Z };
 // Night pulls every island colour toward the same deep blue the office uses after dark.
@@ -51,10 +52,10 @@ function bakeTools(frame, env) {
   return { P, C };
 }
 
-// The island as one image the size of the scene canvas. The land (lawn, underside, river and lake beds, mountain) is
-// painted first on its own canvas so it can be ringed with the 1 px outline; the paths, rim stones and low decor
-// (rocks, mushrooms, flowers) go on top. Whatever stands up off the lawn is left to renderProps. Moving water, falls
-// and lamp light are drawn every frame over this image.
+// The island as one image the size of the scene canvas. The land (underside, lawn, lake and pool, mountain) is
+// painted first on its own canvas so it can be ringed with the 1 px outline; the stepping stones, lotus, paths and low
+// decor (rocks, mushrooms, flowers) go on top. Whatever stands up off the lawn is left to renderProps. Moving water,
+// falls and lamp light are drawn every frame over this image.
 export function renderIsland(island, frame, k, env) {
   const { LW, LH, OX, OY } = frame;
   const canvas = () => {
@@ -70,31 +71,19 @@ export function renderIsland(island, frame, k, env) {
   const { P, C } = bakeTools(frame, env);
   const lp = painter(lctx, P),
     pt = painter(ctx, P);
-  const key = (x, y) => x + ',' + y,
-    has = (x, y) => island.cells.has(key(x, y)),
-    inPond = (x, y) => island.pond.cells.has(key(x, y)),
-    // the first island's river is gone (island.river is undefined now); Task B redraws the water
-    wet = (x, y) => inPond(x, y) || !!island.river?.cells.has(key(x, y));
-  drawUnderside(lp, P, C, island);
+  const has = (x, y) => island.cells.has(x + ',' + y),
+    f = island.waterfall;
+  drawUnderside(lp, P, C, island, frame);
+  // checker grass on every tile (the water is painted over it), the soil layer and the grass lip along the shore; under
+  // the main fall's lip only the soil
   for (const c of island.list) {
-    const { x, y } = c;
-    // the top: a river or lake bed sunk WATER_Z below the grass (earth banks on its far sides), else checker grass
-    if (wet(x, y)) {
-      if (!wet(x - 1, y)) lp.poly([P(x, y, 0), P(x, y + 1, 0), P(x, y + 1, WATER_Z), P(x, y, WATER_Z)], C('#6f4a32'));
-      if (!wet(x, y - 1)) lp.poly([P(x, y, 0), P(x + 1, y, 0), P(x + 1, y, WATER_Z), P(x, y, WATER_Z)], C('#5f3f2a'));
-      const deep = wet(x - 1, y) && wet(x, y - 1) && wet(x + 1, y) && wet(x, y + 1);
-      lp.poly(
-        [P(x, y, WATER_Z), P(x + 1, y, WATER_Z), P(x + 1, y + 1, WATER_Z), P(x, y + 1, WATER_Z)],
-        C(deep ? '#3b8fcf' : '#4aa3df', 0.6),
-      );
-    } else {
-      const grass = (x + y) % 2 ? '#5eae4a' : '#5aa847';
-      lp.poly([P(x, y, 0), P(x + 1, y, 0), P(x + 1, y + 1, 0), P(x, y + 1, 0)], C(grass, 0.85));
-    }
-    // the soil layer and the grass lip along the shore
-    if (!has(x, y + 1)) shoreFace(lp, P, C, x, y, 'y');
+    const { x, y } = c,
+      grass = (x + y) % 2 ? '#5eae4a' : '#5aa847';
+    lp.poly([P(x, y, 0), P(x + 1, y, 0), P(x + 1, y + 1, 0), P(x, y + 1, 0)], C(grass, 0.85));
+    if (!has(x, y + 1)) shoreFace(lp, P, C, x, y, 'y', x === f.x && y === f.y);
     if (!has(x + 1, y)) shoreFace(lp, P, C, x, y, 'x');
   }
+  drawWater(lp, P, C, island);
   drawMountain(lp, P, C, island, env.snow);
   // The 1 px outline: the land's silhouette pushed out a pixel each way and filled with the outline colour, straight
   // onto the still empty island image, then the land itself on top, so only the ring outside it shows.
@@ -117,36 +106,7 @@ export function renderIsland(island, frame, k, env) {
     ctx.restore();
     land.width = land.height = 0; // let the browser drop it now rather than at the next collection
   }
-  // A ring of rim stones around the lake, open where the river runs in and where the water spills over the shore
-  // into the waterfall.
-  {
-    const f = island.waterfall,
-      R = 0.13,
-      stones = [];
-    for (const k of island.pond.cells) {
-      const [x, y] = k.split(',').map(Number);
-      if (!wet(x - 1, y)) stones.push([x - R, y, R * 2, 1]);
-      if (!wet(x, y - 1)) stones.push([x, y - R, 1, R * 2]);
-      if (!wet(x + 1, y)) stones.push([x + 1 - R, y, R * 2, 1]);
-      if (!wet(x, y + 1) && !(x === f.x && y === f.y)) stones.push([x, y + 1 - R, 1, R * 2]);
-    }
-    stones.sort((a, b) => a[0] + a[2] / 2 + a[1] + a[3] / 2 - (b[0] + b[2] / 2 + b[1] + b[3] / 2));
-    for (const [sx, sy, w, hh] of stones) {
-      // each edge is laid as two stones with a small gap, so the rim reads as stonework
-      const along = w > hh,
-        n = 2;
-      for (let i = 0; i < n; i++) {
-        const a = i / n + 0.02,
-          b = (i + 1) / n - 0.02,
-          x0 = along ? sx + w * a : sx,
-          x1 = along ? sx + w * b : sx + w,
-          y0 = along ? sy : sy + hh * a,
-          y1 = along ? sy + hh : sy + hh * b;
-        const top = C(hash(x0 * 7, y0 * 7, 8) > 0.5 ? '#c9c3b8' : '#b8b1a5', 0.8);
-        pt.box(x0, x1, y0, y1, 0, 2.5, top, mix(top, '#000000', 0.22), mix(top, '#000000', 0.38));
-      }
-    }
-  }
+  drawLakeDecor(pt, P, C, island);
   // Garden paths (SkyLogic.lawnPaths): a faint worn strip in the grass where feet go, and flat stepping stones on it
   // that sit 1 px proud of the grass.
   if (island.paths) {
@@ -193,11 +153,10 @@ export function renderIsland(island, frame, k, env) {
 }
 
 // Everything that stands up off the lawn, each baked into its own small sprite at the island image's resolution and
-// light: [{ x, y, z, img, dx, dy, lamp }]. (x, y) is its tile, z its depth among the scene's sorted sprites (x + y
-// of the point that decides what it hides), dx, dy where the sprite goes in canvas px, lamp the lamp's index or -1.
-// Trees are left out: the scene draws them itself (as event trees in a season or on a holiday). The bridge comes in
-// two halves, the far railing with the deck and the near railing, so whoever crosses it is drawn between them;
-// someone behind a lamp post, a bush or the bench is hidden by it.
+// light: [{ x, y, z, img, dx, dy, lamp, lantern }]. (x, y) is its tile, z its depth among the scene's sorted sprites
+// (x + y of the point that decides what it hides), dx, dy where the sprite goes in canvas px, lamp the lamp's index or
+// -1, lantern true for the pavilion. Trees are left out: the scene draws them itself (as event trees in a season or on
+// a holiday). Someone behind a lamp post, a bush, the bench or the pavilion is hidden by it.
 export function renderProps(island, frame, k, env) {
   const { P, C } = bakeTools(frame, env),
     out = [];
@@ -214,15 +173,12 @@ export function renderProps(island, frame, k, env) {
     draw(painter(g, P), g);
     out.push({ x, y, z, img, dx, dy, lamp });
   };
-  const { bridge, rest } = island;
-  // the first island's bridge: gone from the island data now (island.bridge is undefined), so nothing is drawn
-  if (bridge) {
-    const bx = bridge.dir === 'x' ? bridge.len : 0,
-      by = bridge.dir === 'x' ? 0 : bridge.len,
-      span = [16 * (bridge.len + 2), 26, 16 * (bridge.len + 2), 18];
-    // a walker on the deck stands at least a quarter tile in from its ends and half a tile in from either railing
-    add(bridge.x, bridge.y, bridge.x + bridge.y - 0.2, span, pt => drawBridge(pt, P, C, bridge, 'back'));
-    add(bridge.x, bridge.y, bridge.x + bx + bridge.y + by + 0.8, span, pt => drawBridge(pt, P, C, bridge, 'front'));
+  const { pavilion, rest } = island;
+  // the pavilion stands in the lake on its pillar; its lantern glows right after it is drawn (web/office-draw.js)
+  if (pavilion) {
+    const { x, y } = pavilion.pillar;
+    add(x, y, x + y + 1, PAVILION_EXT, pt => drawPavilion(pt, P, C, island));
+    out[out.length - 1].lantern = true;
   }
   island.lamps.forEach((l, i) => add(l.x, l.y, l.x + l.y + 1, [9, 25, 8, 3], pt => drawLamp(pt, P, C, island, l), i));
   add(rest.bench.x, rest.bench.y, rest.bench.x + rest.bench.y + 1, [13, 15, 13, 8], pt =>

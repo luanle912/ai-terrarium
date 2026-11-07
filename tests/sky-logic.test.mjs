@@ -64,6 +64,19 @@ test('the mountain never shrinks the office by more than 10%', () => {
   assert.ok(f.FH > flat.FH, 'the frame still grows toward the mountain as far as it may')
 })
 
+test('the bigger mountain never shrinks the office by more than 10%', () => {
+  // the second island's main peak stands half again as tall as the first island's (68 px)
+  const main = island.mountain.peaks.find((p) => p.main)
+  assert.ok(main.h >= 1.4 * 68, `the main peak is ${main.h} px`)
+  const flat = SkyLogic.sceneFrame({ ...island, mountain: null }, FRAME),
+    f = SkyLogic.sceneFrame(island, FRAME)
+  // on a wide stage, a phone and a tall window alike
+  for (const [w, h] of [[1280, 720], [1920, 1080], [390, 700], [800, 1200]]) {
+    const fitIn = (fr) => Math.min(w / fr.LW, h / fr.FH)
+    assert.ok(fitIn(f) >= 0.9 * fitIn(flat), `${w}x${h}: the office at ${fitIn(f) / fitIn(flat)} of its size`)
+  }
+})
+
 // ---- weather ----
 
 // Small seeded generator so the statistics below are repeatable.

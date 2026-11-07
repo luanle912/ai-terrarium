@@ -1,8 +1,10 @@
-// The static pieces of the office island that web/sky-island.js bakes into the island image: the cone underside, the
-// two-peak mountain, the wooden bridge, the lamp posts (unlit; web/island-life.js lights them), bushes, mushrooms,
-// rocks and the stone bench of the rest corner. Every function draws in the scene's logical px through P (the lawn
-// level projection) and takes its colours through C(colour, snowAmount), which applies the island's light and snow.
-import { hash, N4, WATER_Z } from './island-land.js';
+// The static pieces of the office island that web/sky-island.js bakes into the island image: the pixel cone
+// underside, the shore, the lamp posts (unlit; web/island-life.js lights them), bushes, mushrooms, rocks and the stone
+// bench of the rest corner, plus the colour and pixel helpers the other art modules share (the mountain is in
+// web/island-art-mountain.js, the lake, the pool and the pavilion in web/island-art-lake.js). Every function draws in
+// the scene's logical px through P (the lawn level projection) and takes its colours through C(colour, snowAmount),
+// which applies the island's light and snow.
+import { hash, N4 } from './island-land.js';
 
 // Colour helpers for '#rrggbb' strings, shared by the island modules (web/sky-island.js re-exports them).
 export const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -20,6 +22,8 @@ export const mix = (a, b, p) => {
     B = hex(b);
   return toHex(A.map((v, i) => v * (1 - p) + B[i] * p));
 };
+export const OUTLINE = '#2b2350';
+export const STONE = { light: '#aeacba', mid: '#8b8999', dark: '#6a687b', deep: '#545268' };
 
 // Painting helpers bound to one context and projection: a filled polygon of island points, an axis-aligned box
 // standing on the lawn (top, the lit y + 1 face and the shaded x + 1 face) and a pixel shape from rows of widths.
@@ -50,27 +54,153 @@ export function painter(ctx, P) {
   return { ctx, poly, box, rows };
 }
 
-// ---- the underside: one cone of earth under the lawn ----
+// ---- pixel layers ----
+// The cone, the mountain, the water and the pavilion are painted pixel by pixel at the scene's own size (one logical
+// px is one pixel) on a canvas of their own, then stamped up to the bake's scale unsmoothed: they keep hard pixel
+// edges and pixels as big as the rest of the scene's at every zoom.
+export function pixelLayer(w, h) {
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.ceil(w));
+  cv.height = Math.max(1, Math.ceil(h));
+  const g = cv.getContext('2d'),
+    img = g.createImageData(cv.width, cv.height),
+    d = img.data,
+    W = cv.width;
+  const set = (x, y, c) => {
+    if (x < 0 || y < 0 || x >= W || y >= cv.height) return;
+    const i = (y * W + x) * 4;
+    d[i] = c[0];
+    d[i + 1] = c[1];
+    d[i + 2] = c[2];
+    d[i + 3] = 255;
+  };
+  const flush = () => g.putImageData(img, 0, 0);
+  return { cv, g, img, set, flush, w: W, h: cv.height };
+}
+// Draws a pixel layer (or any small canvas) onto ctx at (x, y) logical px without smoothing.
+export function stamp(ctx, cv, x = 0, y = 0) {
+  const s = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(cv, x, y);
+  ctx.imageSmoothingEnabled = s;
+}
+// A 1 px ring of colour round whatever is drawn on the canvas (the pixel art outline).
+export function outlinePx(cv, colour) {
+  const g = cv.getContext('2d'),
+    W = cv.width,
+    H = cv.height,
+    img = g.getImageData(0, 0, W, H),
+    d = img.data,
+    c = hex(colour),
+    solid = (x, y) => x >= 0 && y >= 0 && x < W && y < H && d[(y * W + x) * 4 + 3] > 127,
+    ring = [];
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) if (!solid(x, y) && N4.some(([a, b]) => solid(x + a, y + b))) ring.push(y * W + x);
+  for (const i of ring) {
+    d[i * 4] = c[0];
+    d[i * 4 + 1] = c[1];
+    d[i * 4 + 2] = c[2];
+    d[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+}
+// A polygon filled with whole pixels (the ones whose centre is inside), no anti-aliasing: on a pixel layer.
+export function fillPx(g, pts, colour) {
+  let y0 = Infinity,
+    y1 = -Infinity;
+  for (const p of pts) {
+    y0 = Math.min(y0, p[1]);
+    y1 = Math.max(y1, p[1]);
+  }
+  g.fillStyle = colour;
+  for (let y = Math.floor(y0); y < Math.ceil(y1); y++) {
+    const c = y + 0.5,
+      xs = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i],
+        b = pts[(i + 1) % pts.length];
+      if (a[1] <= c !== b[1] <= c) xs.push(a[0] + ((c - a[1]) / (b[1] - a[1])) * (b[0] - a[0]));
+    }
+    xs.sort((p, q) => p - q);
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      const xa = Math.round(xs[i]),
+        xb = Math.round(xs[i + 1]);
+      if (xb > xa) g.fillRect(xa, y, xb - xa, 1);
+    }
+  }
+}
+// A 1 px line between two points (Bresenham), for posts, struts and strings.
+export function linePx(g, a, b, colour) {
+  let x0 = Math.round(a[0]),
+    y0 = Math.round(a[1]);
+  const x1 = Math.round(b[0]),
+    y1 = Math.round(b[1]),
+    dx = Math.abs(x1 - x0),
+    dy = -Math.abs(y1 - y0),
+    sx = x0 < x1 ? 1 : -1,
+    sy = y0 < y1 ? 1 : -1;
+  let e = dx + dy;
+  g.fillStyle = colour;
+  for (;;) {
+    g.fillRect(x0, y0, 1, 1);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * e;
+    if (e2 >= dy) {
+      e += dy;
+      x0 += sx;
+    }
+    if (e2 <= dx) {
+      e += dx;
+      y0 += sy;
+    }
+  }
+}
+// The 2x2 ordered dither: 0, 0.5, 0.75, 0.25 over a pixel's (x, y) parity, for stepped colour bands that blend.
+export const bayer = (x, y) => [0, 0.5, 0.75, 0.25][(x & 1) + ((y & 1) << 1)];
+// Light colours for a pixel layer, worked out once per bake: rgb(colour, snow) is C's colour as [r, g, b].
+export function rgbOf(C) {
+  const memo = new Map();
+  return (c, s = 0) => {
+    const k = c + s;
+    if (!memo.has(k)) memo.set(k, hex(C(c, s)));
+    return memo.get(k);
+  };
+}
+
+// ---- the underside: one cone of earth under the lawn, in pixels ----
 // A smooth surface through the grid corners (each one as deep as the four columns round it, the shore ones just under
-// the soil layer), two triangles a tile. Faces on the front-left are lit, on the front-right shaded, and the ridge
-// between them down the front lighter still; the earth darkens in steps of STRATUM px toward the tip, a few
-// broken ledges run across it and two grey boulders show near the tip. Along the shore the 4 px soil layer shows
-// under the grass, and the grass hangs over it in a wavy lip.
+// the soil layer) gives every pixel of the cone its depth; the pixels are then coloured, not the faces. The
+// front-left half is lit, the front-right shaded and a 2 px seam down the front ridge lighter still; the earth darkens
+// a step every STRATUM px toward the tip, each step blended in over a few rows with the 2x2 dither; broken ledges run
+// across it (a light lip, an outline and a shadow under it); the lower edge comes down in STEP-row terraces; two
+// boulders show near the tip and a few small rocks hang under it. Along the shore the 4 px soil layer shows under the
+// grass, and the grass hangs over it in a wavy lip (shoreFace).
 const CONE = { left: '#a97b50', right: '#7c5537', ridge: '#bd8f60', deep: '#3f2b26' },
   SOIL = { left: '#74492b', right: '#58371f' },
   LIP = { left: '#4f9c40', right: '#3f8535', edge: '#356f2d' },
-  STONE = { light: '#aeacba', mid: '#8b8999', dark: '#6a687b', deep: '#545268' },
-  STRATUM = 26,
+  STRATUM = 52,
+  STEP = 5,
   SOIL_Z = 4,
-  LEDGES = [34, 70, 112, 160, 216, 280, 350];
+  LEDGES = [40, 92, 150, 214, 284, 360, 440],
+  LEDGE = '#3a2a35';
 // How far the grass hangs over the soil at a point of the shore: 1-4 px in long, soft waves.
 const lipAt = (u, v) => 2.4 + 1.1 * Math.sin(u * 1.7 + v * 0.9) + 0.5 * Math.sin(u * 4.1 - v * 2.3);
-const coneTone = (side, z) => mix(side, CONE.deep, Math.min(0.62, Math.floor(-z / STRATUM) * 0.065));
-export function drawUnderside(pt, P, C, island) {
+// The camera looks down along -(1, 1, 1) in px: a face turned away from it is hidden behind the cone's front.
+const seen = n => n[0] + n[1] + n[2] > 0;
+// The upward normal of a flat face through three points, in px (a tile is 16 px across).
+export function normalOf(a, b, c) {
+  const u = [(b[0] - a[0]) * 16, (b[1] - a[1]) * 16, b[2] - a[2]],
+    v = [(c[0] - a[0]) * 16, (c[1] - a[1]) * 16, c[2] - a[2]];
+  const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]],
+    l = Math.hypot(...n) * Math.sign(n[2] || 1) || 1;
+  return n.map(q => q / l);
+}
+// The cone's depth (px below the lawn) at every pixel it covers: a Float32Array over the layer, NaN where it is not.
+function coneDepths(P, island, W, H) {
   const key = (x, y) => x + ',' + y,
     dep = (x, y) => island.depth.get(key(x, y)),
     corners = new Map(),
-    { cx, cy } = island.shape;
+    z = new Float32Array(W * H).fill(NaN);
   const corner = (x, y) => {
     const k = key(x, y);
     if (!corners.has(k)) {
@@ -79,7 +209,28 @@ export function drawUnderside(pt, P, C, island) {
     }
     return corners.get(k);
   };
-  const tris = [];
+  const tri = t => {
+    // fill the triangle's pixels (centres inside), keeping the point nearest the camera (the highest z)
+    const s = t.map(v => P(...v)),
+      x0 = Math.max(0, Math.floor(Math.min(s[0][0], s[1][0], s[2][0]))),
+      x1 = Math.min(W - 1, Math.ceil(Math.max(s[0][0], s[1][0], s[2][0]))),
+      y0 = Math.max(0, Math.floor(Math.min(s[0][1], s[1][1], s[2][1]))),
+      y1 = Math.min(H - 1, Math.ceil(Math.max(s[0][1], s[1][1], s[2][1]))),
+      den = (s[1][1] - s[2][1]) * (s[0][0] - s[2][0]) + (s[2][0] - s[1][0]) * (s[0][1] - s[2][1]);
+    if (!den) return;
+    for (let y = y0; y <= y1; y++)
+      for (let x = x0; x <= x1; x++) {
+        const px = x + 0.5,
+          py = y + 0.5,
+          a = ((s[1][1] - s[2][1]) * (px - s[2][0]) + (s[2][0] - s[1][0]) * (py - s[2][1])) / den,
+          b = ((s[2][1] - s[0][1]) * (px - s[2][0]) + (s[0][0] - s[2][0]) * (py - s[2][1])) / den,
+          c = 1 - a - b;
+        if (a < -1e-6 || b < -1e-6 || c < -1e-6) continue;
+        const v = a * t[0][2] + b * t[1][2] + c * t[2][2],
+          i = y * W + x;
+        if (!(z[i] >= v)) z[i] = v;
+      }
+  };
   for (const { x, y } of island.list) {
     const A = corner(x, y),
       B = corner(x + 1, y),
@@ -88,70 +239,78 @@ export function drawUnderside(pt, P, C, island) {
     for (const t of [
       [A, B, D],
       [B, Cc, D],
-    ]) {
-      const n = normalOf(...t).map(q => -q); // the underside faces down
-      if (n[0] + n[1] + n[2] > 0) tris.push(t);
-    }
+    ])
+      if (seen(normalOf(...t).map(q => -q))) tri(t); // the underside faces down
   }
-  // Painted three times through a clip: the lit colour left of the ridge (the screen's vertical through the
-  // island's centre), the shaded one right of it, and a 2 px light seam down the ridge itself.
-  const axis = P(cx, cy)[0],
-    ctx = pt.ctx;
-  for (const [x0, x1, side] of [
-    [-1e4, axis, CONE.left],
-    [axis, 1e4, CONE.right],
-    [axis - 1, axis + 1, CONE.ridge],
-  ]) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x0, -1e4, x1 - x0, 2e4);
-    ctx.clip();
-    for (const t of tris) {
-      const z = (t[0][2] + t[1][2] + t[2][2]) / 3,
-        grain = hash(Math.floor(t[0][0] / 2), Math.floor(t[0][1] / 2), 3) > 0.5 ? 0.03 : 0;
-      pt.poly(
-        t.map(v => P(...v)),
-        C(mix(coneTone(side, z), '#000000', grain)),
-        true,
-      );
-      // ledges: where a ledge's depth crosses this face, a light line with a dark one under it, on some stretches
-      for (const L of LEDGES) {
-        const hits = [];
-        for (let i = 0; i < 3; i++) {
-          const a = t[i],
-            b = t[(i + 1) % 3];
-          if ((a[2] + L) * (b[2] + L) < 0) hits.push(lerp3(a, b, (-L - a[2]) / (b[2] - a[2])));
+  return z;
+}
+export function drawUnderside(pt, P, C, island, frame) {
+  const { LW, LH } = frame,
+    W = Math.ceil(LW),
+    H = Math.ceil(LH),
+    z = coneDepths(P, island, W, H),
+    L = pixelLayer(W, H),
+    rgb = rgbOf(C),
+    axis = Math.round(P(island.shape.cx, island.shape.cy)[0]),
+    on = (x, y) => x >= 0 && y >= 0 && x < W && y < H && z[y * W + x] === z[y * W + x],
+    tones = new Map();
+  // the earth of one side at one depth step, a little darker each step down
+  const tone0 = (side, band) => mix(side, CONE.deep, Math.min(0.66, band * 0.09));
+  const tone = (side, band) => {
+    const k = side + band;
+    if (!tones.has(k)) tones.set(k, rgb(tone0(side, band)));
+    return tones.get(k);
+  };
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) {
+      // the terraced lower edge: a pixel shows only if the bottom row of its STEP-row band does too
+      if (!on(x, y) || !on(x, Math.min(H - 1, Math.floor(y / STEP) * STEP + STEP - 1))) continue;
+      const d = -z[y * W + x],
+        side = Math.abs(x - axis) <= 1 ? CONE.ridge : x < axis ? CONE.left : CONE.right,
+        f = d / STRATUM,
+        band = Math.floor(f) + (f - Math.floor(f) > 0.7 + 0.3 * bayer(x, y) ? 1 : 0);
+      let c = tone(side, band);
+      // ledges on some stretches, where a column's depth crosses one: two light rows of lip above the crossing, the
+      // outline on it and two rows of shadow under it
+      for (const Lz of LEDGES) {
+        if (Math.abs(d - Lz) > 60 || hash(Math.floor((x + Lz * 3) / 17), Lz, 51) < 0.4) continue;
+        for (let t = -2; t <= 2; t++) {
+          const a = y + t - 1,
+            b = y + t;
+          if (!on(x, a) || !on(x, b) || !(-z[a * W + x] < Lz && -z[b * W + x] >= Lz)) continue;
+          const band = Math.floor(Lz / STRATUM);
+          c = t > 0 ? rgb(mix(tone0(side, band), '#ffffff', 0.25)) : t === 0 ? rgb(LEDGE) : tone(side, band + 3);
+          break;
         }
-        if (hits.length !== 2 || hash(Math.floor((t[0][0] - t[0][1]) / 4), L, 51) < 0.5) continue;
-        const [p, q] = hits.map(v => P(...v)),
-          line = (dy, c) =>
-            pt.poly(
-              [
-                [p[0], p[1] + dy],
-                [q[0], q[1] + dy],
-                [q[0], q[1] + dy + 1],
-                [p[0], p[1] + dy + 1],
-              ],
-              c,
-            );
-        line(0, C(mix(coneTone(side, -L), '#ffffff', 0.2)));
-        line(1, C(mix(coneTone(side, -L), '#000000', 0.28)));
       }
+      // grain: a darker pixel here and there, a pebble now and then
+      const gr = hash(x, y, 53);
+      if (gr > 0.985) c = rgb(STONE.mid);
+      else if (gr > 0.9) c = tone(side, band + 1);
+      L.set(x, y, c);
     }
-    ctx.restore();
-  }
-  // two boulders: just above the tip, and on the lit side a little higher up
+  L.flush();
+  stamp(pt.ctx, L.cv);
+  // two boulders: just above the tip, and on the lit side a little higher up; small rocks hang under the tip
   const tip = island.list.reduce((a, b) => (b.d > a.d ? b : a));
   const [tx, ty] = P(tip.x + 0.5, tip.y + 0.5, -tip.d);
   boulder(pt, C, tx, ty - 12, 2);
   boulder(pt, C, tx - 34, ty - 58, 1);
+  for (const [dx, dy, s] of [
+    [-3, 9, 1],
+    [5, 17, 0],
+    [-1, 25, 0],
+  ])
+    boulder(pt, C, tx + dx, ty + dy, s);
 }
 // The soil layer and the grass lip on one shore face of a lawn tile: plane 'y' (its y + 1 edge) or 'x' (x + 1).
-export function shoreFace(pt, P, C, x, y, plane) {
+// bare: soil only (under the lip the main fall spills over).
+export function shoreFace(pt, P, C, x, y, plane, bare) {
   const lit = plane === 'y',
     at = (t, z) => (lit ? P(x + t, y + 1, z) : P(x + 1, y + t, z)),
     side = lit ? 'left' : 'right';
   pt.poly([at(0, 0), at(1, 0), at(1, -SOIL_Z), at(0, -SOIL_Z)], C(SOIL[side]), true);
+  if (bare) return;
   // the grass lip hangs 1-4 px in waves that run on along the shore from tile to tile
   const wave = [];
   for (let i = 0; i <= 4; i++) {
@@ -162,232 +321,30 @@ export function shoreFace(pt, P, C, x, y, plane) {
   pt.poly([...wave, ...wave.map(([a, b]) => [a, b + 1]).reverse()], C(LIP.edge, 0.6));
 }
 
-// ---- the mountain ----
-// Each peak is a rocky cone of flat faces: a ring of SIDES points on the lawn, a smaller ring turned half a step at
-// MID of its height, and the tip. The radii waver from point to point, so the faces catch the light differently; the
-// lawn ring is pulled in wherever the way out to it would leave the mountain's tiles (the river gorge, the shore), so
-// the stone never spans the water or overhangs the edge. Points are [x, y, z]: x and y in tiles, z in px. Cached per
-// island.
-// The rock of the gap between the peaks (island.mountain.gap), where the falls pour out, stands behind both of them.
-const SIDES = 9,
-  MID = 0.45,
-  shapes = new WeakMap();
-function mountainShape(island) {
-  const m = island.mountain;
-  if (!m) return null;
-  if (shapes.has(m)) return shapes.get(m);
-  const inM = (x, y) => m.cells.has(Math.floor(x) + ',' + Math.floor(y));
-  const cones = m.peaks
-    .map((p, j) => {
-      const x = p.x + 0.5,
-        y = p.y + 0.5,
-        R = p.R,
-        tip = [x + (hash(j, 1, 60) - 0.5) * 0.4, y + (hash(j, 2, 60) - 0.5) * 0.4, p.h],
-        base = [],
-        radii = [],
-        mid = [];
-      for (let i = 0; i < SIDES; i++) {
-        const a = ((i + 0.3 * j) / SIDES) * Math.PI * 2,
-          // whether the ray out to r leaves the mountain anywhere (it must not jump the river to the other bank)
-          leaves = r => {
-            for (let s = 0.25; s < r + 0.01; s += 0.25) if (!inM(x + Math.cos(a) * s, y + Math.sin(a) * s)) return true;
-            return false;
-          };
-        let r = R * (0.82 + 0.3 * hash(i, j, 61));
-        while (r > 1 && leaves(r)) r -= 0.25;
-        radii.push(r);
-        base.push([x + Math.cos(a) * r, y + Math.sin(a) * r, 0]);
-      }
-      // the middle ring stays well inside the lawn ring, even where that was pulled in
-      for (let i = 0; i < SIDES; i++) {
-        const b = ((i + 0.5 + 0.3 * j) / SIDES) * Math.PI * 2,
-          rm = Math.min(R * (0.32 + 0.17 * hash(i, j, 62)), 0.62 * Math.min(radii[i], radii[(i + 1) % SIDES]));
-        mid.push([x + Math.cos(b) * rm, y + Math.sin(b) * rm, p.h * MID * (0.85 + 0.3 * hash(i, j, 64))]);
-      }
-      // the faces, each [a, b, c, tier, i]: two per side from the lawn ring to the middle ring, one from it to the tip
-      const faces = [];
-      for (let i = 0; i < SIDES; i++) {
-        const n = (i + 1) % SIDES;
-        faces.push([base[i], base[n], mid[i], 0, i], [base[n], mid[n], mid[i], 0, i], [mid[i], mid[n], tip, 1, i]);
-      }
-      return { x, y, h: p.h, tip, base, mid, faces };
-    })
-    .sort((a, b) => a.x + a.y - (b.x + b.y));
-  shapes.set(m, cones);
-  return cones;
-}
-// The light comes from the front-left and above: faces turned toward y + 1 are lit, toward x + 1 shaded.
-const LIGHT = (() => {
-  const v = [-0.35, 0.8, 0.5],
-    n = Math.hypot(...v);
-  return v.map(c => c / n);
-})();
-// The upward normal of a flat face through three points, in px (a tile is 16 px across).
-function normalOf(a, b, c) {
-  const u = [(b[0] - a[0]) * 16, (b[1] - a[1]) * 16, b[2] - a[2]],
-    v = [(c[0] - a[0]) * 16, (c[1] - a[1]) * 16, c[2] - a[2]];
-  const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]],
-    l = Math.hypot(...n) * Math.sign(n[2] || 1) || 1;
-  return n.map(q => q / l);
-}
-const tone = n => {
-  const b = n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2];
-  return b > 0.74 ? 0 : b > 0.5 ? 1 : b > 0.26 ? 2 : 3;
+// ---- the pavilion's lantern ----
+// The pavilion on one pillar in the lake (web/island-art-lake.js draws it): heights in px above the lawn. Its lantern
+// hangs under the front corner of the lower roof's eaves; web/island-life.js glows there after dark.
+export const PAVILION = {
+  // heights in px above the lawn: the pillar's top, the platform's, the eaves and tops of the two roofs
+  z: { floor: 18, deck: 20, eave: 35, roof: 41, eave2: 44, roof2: 50 },
+  // half-widths in tiles: the pillar, the platform, the hall, the roofs' eaves and tops, the small upper hall
+  r: { pillar: 0.16, deck: 0.66, hall: 0.44, eave: 0.7, top: 0.32, upper: 0.26, eave2: 0.5, top2: 0.08 },
+  // the lantern: this far out toward the front corner (x and y, tiles) and this high (px, its middle)
+  lantern: { out: 0.6, z: 30 },
 };
-// The camera looks down along -(1, 1, 1) in px: a face turned away from it is hidden behind the cone's front.
-const seen = n => n[0] + n[1] + n[2] > 0;
-const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-// The cones, the back one first. Every face is stone in one of three tones by the way it turns to the light (the
-// lower ring is never in the lightest one); grass climbs the foot in a wavy skirt, snow covers the top when the
-// island is snowed on, and a light seam runs down the front ridges where a lit face meets a shaded one. The rock of
-// the gap the falls pour out of goes in among them by depth.
-export function drawMountain(pt, P, C, island, snow) {
-  const cones = mountainShape(island);
-  if (!cones) return;
-  const gap = island.mountain.gap;
-  let rock = false;
-  const stone = [STONE.light, STONE.mid, STONE.dark, STONE.deep],
-    grass = ['#62b24e', '#55a344', '#47903b', '#3c7d33'],
-    snowy = ['#f6f9fb', '#e6eef7', '#d3e0f0', '#c4d4ea'],
-    face = (pts, col) =>
-      pt.poly(
-        pts.map(v => P(...v)),
-        col,
-        true,
-      );
-  for (const c of cones) {
-    if (!rock && c.x + c.y > gap.x + gap.y) {
-      drawGap(pt, P, C, gap);
-      rock = true;
-    }
-    const faces = c.faces
-      .map(f => ({ f, n: normalOf(f[0], f[1], f[2]) }))
-      .filter(({ n }) => seen(n))
-      .sort((a, b) => a.f[0][0] + a.f[0][1] - (b.f[0][0] + b.f[0][1]));
-    for (const { f, n } of faces) {
-      const t = tone(n);
-      face(f.slice(0, 3), C(stone[f[3] ? t : Math.max(1, t)], 0.2));
-    }
-    // the grass skirt on the lower faces and the snow cap on the upper ones, side by side round the cone
-    for (let i = 0; i < SIDES; i++) {
-      const j = (i + 1) % SIDES,
-        n = normalOf(c.base[i], c.base[j], c.mid[i]),
-        un = normalOf(c.mid[i], c.mid[j], c.tip);
-      if (seen(n)) {
-        // the skirt reaches 5-13 px up a full-size peak, less up a small one
-        const up = (k, s) => lerp3(c.base[k], c.mid[k], (s * Math.min(1, c.h / 50)) / c.mid[k][2]),
-          sm = 3 + 6 * hash(i, c.h, 66),
-          middle = lerp3(up(i, sm), up(j, sm), 0.5);
-        face(
-          [
-            c.base[i],
-            lerp3(c.base[i], c.base[j], 0.5),
-            c.base[j],
-            up(j, 5 + 8 * hash(j, c.h, 63)),
-            middle,
-            up(i, 5 + 8 * hash(i, c.h, 63)),
-          ],
-          C(grass[tone(n)], 0.85),
-        );
-      }
-      if (snow > 0.05 && seen(un)) {
-        const line = k => lerp3(c.mid[k], c.tip, 0.28 + 0.14 * hash(k, c.h, 65)),
-          dip = lerp3(line(i), line(j), 0.5);
-        dip[2] -= 3;
-        face([line(i), dip, line(j), c.tip], C(mix(stone[tone(un)], snowy[tone(un)], Math.min(1, snow * 1.3))));
-      }
-    }
-    // a light seam down the front ridges, from the tip to the middle ring
-    for (let i = 0; i < SIDES; i++) {
-      const p = (i + SIDES - 1) % SIDES,
-        a = normalOf(c.mid[p], c.mid[i], c.tip),
-        b = normalOf(c.mid[i], c.mid[(i + 1) % SIDES], c.tip);
-      if (!seen(a) || !seen(b) || tone(a) >= tone(b) || c.mid[i][0] + c.mid[i][1] < c.x + c.y) continue;
-      const q = P(...c.mid[i]),
-        r = P(...c.tip);
-      pt.poly([q, [q[0] + 1, q[1]], [r[0] + 1, r[1]], r], C(mix(STONE.light, '#ffffff', 0.3), 0.5));
-    }
-  }
-  if (!rock) drawGap(pt, P, C, gap);
-}
-// The rock of the gap between the peaks: a craggy saddle across the back of the river's head, just behind the water
-// sheet, with a notch at the sheet's top (gap.z px up) where the water spills, crags either side sloping down into the
-// peaks' flanks, and a dark wet streak behind the water, so the falls always have stone behind them.
-function drawGap(pt, P, C, gap) {
-  const x0 = gap.x - gap.w,
-    x1 = gap.x + gap.w,
-    Y = gap.y - 0.04,
-    back = gap.y - 0.6,
-    t = gap.z,
-    xs = [x0 - 1.3, x0 - 0.9, x0 - 0.4, x0 - 0.08, x0, x1, x1 + 0.08, x1 + 0.4, x1 + 1.3, x1 + 2],
-    zs = [0, 3, t - 3, t + 3, t, t, t + 3, t + 1, t - 2, t - 8],
-    front = xs.map((x, i) => P(x, Y, zs[i])),
-    rear = xs.map((x, i) => P(x, back, zs[i] - 1));
-  pt.poly([P(xs[0], Y, WATER_Z), ...front, P(xs[xs.length - 1], Y, WATER_Z)], C(STONE.mid, 0.15), true);
-  pt.poly([P(xs[4], Y, WATER_Z), front[4], front[5], P(xs[5], Y, WATER_Z)], C(STONE.deep));
-  for (let i = 0; i < xs.length - 1; i++)
-    pt.poly([front[i], front[i + 1], rear[i + 1], rear[i]], C(i === 4 ? STONE.dark : STONE.light, 0.6), true);
+// Where the pavilion's lantern hangs, in island coordinates: x, y in tiles, z px above the lawn (the middle of the
+// lantern), or null on an island without a pavilion.
+export function pavilionLantern(island) {
+  const p = island.pavilion,
+    l = PAVILION.lantern;
+  return p ? { x: p.x + l.out, y: p.y + l.out, z: l.z } : null;
 }
 
-// ---- the bridge, the lamps, the bench ----
-const WOOD = { plank: '#b98149', plank2: '#a8733f', side: '#7a4f2b', dark: '#5a3920', rail: '#8e5d33' };
-// The wooden bridge over the river: an arched deck of planks across the stream, a railing either side on three posts.
-// part 'back' is the far railing and the deck, 'front' the near railing, so whoever crosses walks between the two.
-// The deck runs a quarter tile onto either bank and arches low over the water: its height above the lawn at t (0..1
-// along it). The island has no bridge since its second version; Task B removes this drawing.
-const DECK_OVER = 0.25,
-  deckZ = t => 3 + 3 * Math.sin(Math.PI * t);
-export function drawBridge(pt, P, C, bridge, part) {
-  const along = bridge.dir === 'x',
-    a0 = (along ? bridge.x : bridge.y) - DECK_OVER,
-    a1 = (along ? bridge.x : bridge.y) + bridge.len + DECK_OVER,
-    w0 = (along ? bridge.y : bridge.x) + 0.14,
-    w1 = (along ? bridge.y : bridge.x) + 0.86,
-    Q = (a, w, z) => (along ? P(a, w, z) : P(w, a, z)),
-    N = 10;
-  const rail = w => {
-    // posts at both ends and the middle, a rail along the post tops following the arch
-    for (const t of [0.04, 0.5, 0.96]) {
-      const a = a0 + (a1 - a0) * t,
-        z = deckZ(t);
-      pt.poly([Q(a - 0.04, w, z), Q(a + 0.04, w, z), Q(a + 0.04, w, z + 8), Q(a - 0.04, w, z + 8)], C(WOOD.dark));
-    }
-    for (let i = 0; i < N; i++) {
-      const ta = i / N,
-        tb = (i + 1) / N,
-        a = a0 + (a1 - a0) * ta,
-        b = a0 + (a1 - a0) * tb;
-      pt.poly(
-        [Q(a, w, deckZ(ta) + 7), Q(b, w, deckZ(tb) + 7), Q(b, w, deckZ(tb) + 5.6), Q(a, w, deckZ(ta) + 5.6)],
-        C(WOOD.rail, 0.5),
-      );
-    }
-  };
-  if (part === 'front') return rail(w1);
-  rail(w0);
-  for (let i = 0; i < N; i++) {
-    const ta = i / N,
-      tb = (i + 1) / N,
-      a = a0 + (a1 - a0) * ta + 0.01,
-      b = a0 + (a1 - a0) * tb - 0.01,
-      za = deckZ(ta),
-      zb = deckZ(tb);
-    // beam side under the deck edge, then the plank
-    pt.poly([Q(a, w1, za), Q(b, w1, zb), Q(b, w1, zb - 2), Q(a, w1, za - 2)], C(WOOD.side));
-    pt.poly([Q(a, w0, za), Q(b, w0, zb), Q(b, w1, zb), Q(a, w1, za)], C(i % 2 ? WOOD.plank : WOOD.plank2, 0.5));
-  }
-}
+// ---- the lamps, the bench ----
+const WOOD = { dark: '#5a3920' };
 // Where a lamp's light hangs, in island coordinates (x, y in tiles, z in px above the lawn): LAMP_Z over its tile's
-// centre (web/island-life.js glows there). The lamps at the ends of the bridge are lanterns hung from a wooden post's
-// hook, the others glass lamps on an iron pole.
+// centre (web/island-life.js glows there).
 export const LAMP_Z = 15;
-function lampHead(island, l) {
-  const lantern = [...(island.bridge?.cells || [])].some(k => {
-    const [bx, by] = k.split(',').map(Number);
-    return Math.abs(bx - l.x) <= 1 && Math.abs(by - l.y) <= 1;
-  });
-  return { x: l.x + 0.5, y: l.y + 0.5, z: LAMP_Z, lantern };
-}
 // Pixel sprites drawn from strings, one per row; a character not in the palette is left clear.
 function sprite(pt, x, y, rows, pal) {
   rows.forEach((r, j) => {
@@ -398,44 +355,27 @@ function sprite(pt, x, y, rows, pal) {
       }
   });
 }
-// Lamp sprites, bottom row on the lawn; the glass's middle row sits LAMP_Z px up, in column `at`.
+// The lamp sprite, bottom row on the lawn; the glass's middle row sits LAMP_Z px up, in column `at`.
 const POLE_LAMP = {
-    at: 3,
-    rows: [
-      '..kkk..',
-      '.kkkkk.',
-      '.kgggk.',
-      '.kgggk.',
-      '.kgGgk.',
-      '.kgggk.',
-      '.kkkkk.',
-      '..kpk..',
-      ...Array(10).fill('...p...'),
-      '..kkk..',
-      '.kkkkk.',
-    ],
-  },
-  LANTERN = {
-    at: 6,
-    rows: [
-      'wwwwwww..',
-      'Wd....k..',
-      'Wd...kkk.',
-      'Wd..kkkkk',
-      'Wd..kgggk',
-      'Wd..kgGgk',
-      'Wd..kgggk',
-      'Wd..kkkkk',
-      'Wd...kkk.',
-      ...Array(11).fill('Wd.......'),
-      'dd.......',
-    ],
-  };
-// A lamp post with its lamp unlit (the glow is drawn after dark by web/island-life.js).
+  at: 3,
+  rows: [
+    '..kkk..',
+    '.kkkkk.',
+    '.kgggk.',
+    '.kgggk.',
+    '.kgGgk.',
+    '.kgggk.',
+    '.kkkkk.',
+    '..kpk..',
+    ...Array(10).fill('...p...'),
+    '..kkk..',
+    '.kkkkk.',
+  ],
+};
+// A lamp post with its glass lamp unlit (the glow is drawn after dark by web/island-life.js).
 export function drawLamp(pt, P, C, island, l) {
-  const h = lampHead(island, l),
-    s = h.lantern ? LANTERN : POLE_LAMP,
-    [bx, by] = P(h.x, h.y, 0),
+  const s = POLE_LAMP,
+    [bx, by] = P(l.x + 0.5, l.y + 0.5, 0),
     X = Math.round(bx),
     Y = Math.round(by),
     glass = s.rows.findIndex(r => r.includes('G'));
@@ -445,8 +385,6 @@ export function drawLamp(pt, P, C, island, l) {
     p: C('#4c4a5c'),
     g: C('#d9cfa4'),
     G: C('#e6dcb2'),
-    w: C(WOOD.dark, 0.5),
-    W: C(WOOD.side),
     d: C(WOOD.dark),
   });
 }
@@ -475,7 +413,7 @@ export function drawBench(pt, P, C, b) {
 // A pixel blob: the union of ellipses [dx, dy, rx, ry] (px, round the point (x, y)), each pixel coloured by
 // pick(u, v, i, j) where u, v run -1..1 across the blob's box, ringed with a 1 px outline. Drawn pixel by pixel, so
 // it stays crisp; blobs are small (a bush is about a hundred pixels).
-function blob(pt, x, y, ellipses, pick, outline) {
+export function blob(pt, x, y, ellipses, pick, outline) {
   let x0 = Infinity,
     x1 = -Infinity,
     y0 = Infinity,
@@ -491,21 +429,25 @@ function blob(pt, x, y, ellipses, pick, outline) {
   const X = Math.round(x),
     Y = Math.round(y),
     ctx = pt.ctx;
-  ctx.fillStyle = outline;
-  for (let j = y0 - 1; j <= y1; j++)
-    for (let i = x0 - 1; i <= x1; i++)
-      if (!inside(i, j) && N4.some(([a, b]) => inside(i + a, j + b))) ctx.fillRect(X + i, Y + j, 1, 1);
+  if (outline) {
+    ctx.fillStyle = outline;
+    for (let j = y0 - 1; j <= y1; j++)
+      for (let i = x0 - 1; i <= x1; i++)
+        if (!inside(i, j) && N4.some(([a, b]) => inside(i + a, j + b))) ctx.fillRect(X + i, Y + j, 1, 1);
+  }
   for (let j = y0; j < y1; j++)
     for (let i = x0; i < x1; i++)
       if (inside(i, j)) {
-        ctx.fillStyle = pick(((i + 0.5 - x0) / (x1 - x0)) * 2 - 1, ((j + 0.5 - y0) / (y1 - y0)) * 2 - 1, i, j);
+        const c = pick(((i + 0.5 - x0) / (x1 - x0)) * 2 - 1, ((j + 0.5 - y0) / (y1 - y0)) * 2 - 1, i, j);
+        if (!c) continue;
+        ctx.fillStyle = c;
         ctx.fillRect(X + i, Y + j, 1, 1);
       }
 }
 // Three tones lit from the upper left: light toward it, dark away from it, mid between.
-const lit3 = (light, mid, dark) => (u, v) => (u + v < -0.55 ? light : u + v > 0.45 ? dark : mid);
+export const lit3 = (light, mid, dark) => (u, v) => (u + v < -0.55 ? light : u + v > 0.45 ? dark : mid);
 // A grey boulder sitting at (sx, sy) px (the middle of its foot), size 0..2: three stone tones and the outline.
-function boulder(pt, C, sx, sy, s) {
+export function boulder(pt, C, sx, sy, s) {
   const w = 3 + s * 1.5,
     h = 2.2 + s;
   blob(
@@ -517,7 +459,7 @@ function boulder(pt, C, sx, sy, s) {
       [w * 0.45, h * 0.3, w * 0.6, h * 0.75],
     ],
     lit3(C(STONE.light, 0.9), C(STONE.mid, 0.3), C(STONE.dark, 0.2)),
-    C('#2b2350'),
+    C(OUTLINE),
   );
 }
 // A round bush of two or three leafy clumps with a dark outline, lit from the upper left; some carry red berries.
@@ -557,14 +499,14 @@ export function drawMushroom(pt, P, C, d) {
     );
   const one = (x, y, s) => {
     pt.rows(Math.round(x) - 2 - s, Math.round(y), [[0, 5 + 2 * s]], 'rgba(0,0,0,0.18)');
-    blob(pt, x, y - 1.5 - s, [[0, 0, 1.2, 1.5 + s * 0.5]], () => C('#efe6d2'), C('#2b2350'));
+    blob(pt, x, y - 1.5 - s, [[0, 0, 1.2, 1.5 + s * 0.5]], () => C('#efe6d2'), C(OUTLINE));
     blob(
       pt,
       x,
       y - 3.5 - 2 * s,
       [[0, 0, 2.5 + s, 1.6 + s * 0.4]],
       (u, v, i, j) => (red && v < 0.2 && (i + j * 2 + 9) % 3 === 0 ? C('#ffffff') : cap(u, v)),
-      C('#2b2350'),
+      C(OUTLINE),
     );
   };
   one(px - 1, py, 1);

@@ -3,7 +3,7 @@ import { DogLogic } from './dog-logic.js';
 import { DogSprites } from './dog-sprites.js';
 import { SmokeLogic } from './smoke-logic.js';
 import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW } from './office-scene.js';
-import { bridgeZ, WATER_Z } from './island-land.js';
+import { WATER_Z } from './island-land.js';
 import { LOOK, PERSON } from './office-people.js';
 import { ICON, ST, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
@@ -539,7 +539,7 @@ mixin(
         p = DogLogic.pose(d, t),
         f = DogSprites.frame(d.breed, p.frame),
         img = this.dogSprite(d.breed, p.frame, dfB, snB);
-      let [sx, sy] = PG(d.x, d.y, bridgeZ(ISLAND.bridge, d.x, d.y));
+      let [sx, sy] = PG(d.x, d.y);
       sx = Math.round(sx);
       sy = Math.round(sy);
       const top = sy - f.h - p.dy,
