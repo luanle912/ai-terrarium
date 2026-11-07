@@ -33,7 +33,11 @@ Mùa theo tháng của máy người xem (Bắc bán cầu): **xuân** tháng 3�
 - **Thu:** gió thoảng thường trực (lá và dây leo nghiêng theo một hướng, đổi hướng chậm); mưa/bão làm gió mạnh hơn như hiện
   nay.
 - **Xuân, hạ:** thời tiết như hiện nay.
-- Hồ vịt mùa đông vẫn là nước (không đóng băng), vịt vẫn bơi. *(Em tự quyết.)*
+- **Mùa đông mặt hồ đóng băng** (anh Kiệt: "mùa đông thì không có câu cá, vịt, cá vì mặt hồ đóng băng nhé"): hồ vịt và hồ
+  chân núi phủ băng (mặt băng xanh nhạt, vết nứt và tuyết đọng thành mảng, viền đá như cũ); **không có vịt, không có bóng
+  cá, bèo và sen ẩn đi; không ai câu cá** (chỗ câu cá không được chọn trong mùa đông; ghế đá vẫn ngồi được); không có chỗ
+  tắm. Thác chính 6h và thác trên núi **đóng băng thành cột băng** (không chảy, không bọt). Chó không uống nước ở hồ mùa đông.
+  Khi đổi sang mùa khác (hoặc xem trước mùa khác), vịt, cá, sen, bèo và nước chảy trở lại.
 
 ## 4. Ngày lễ
 
