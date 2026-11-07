@@ -49,10 +49,15 @@ function drawFall(ctx, island, PG, t, env) {
       Y = Math.round(oy + (p.x + p.y) * TH - p.z);
     ctx.globalAlpha = p.a * (kind === 'snow' ? 0.9 : 1);
     ctx.fillStyle = cols[p.c];
-    // a leaf or a petal tumbles: flat, then edge on; a snowflake is a dot, a few of them bigger
+    // a leaf or a petal tumbles: flat, then edge on; a snowflake is a dot, a third of them bigger. A flat leaf is a
+    // little three-px blade with a nub on top, edge on a short stroke.
     if (kind === 'snow') ctx.fillRect(X, Y, p.c ? 1 : 2, p.c ? 1 : 2);
-    else if (kind === 'leaves') ctx.fillRect(X, Y, p.flip ? 2 : 1, p.flip ? 1 : 2);
-    else ctx.fillRect(X, Y, p.flip ? 2 : 1, 1);
+    else if (kind === 'leaves') {
+      if (p.flip) {
+        ctx.fillRect(X - 1, Y, 3, 1);
+        ctx.fillRect(X, Y - 1, 1, 1);
+      } else ctx.fillRect(X, Y - 1, 1, 2);
+    } else ctx.fillRect(X, Y, p.flip ? 2 : 1, 1);
   }
   ctx.globalAlpha = 1;
 }

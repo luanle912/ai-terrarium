@@ -90,7 +90,9 @@ export function drawSeasonTree(pt, P, C, d, kind) {
     }
   trunk(pt, C, x, y, 11);
   const [l, m, k] = TONES[kind] || TONES.fresh,
-    tones = lit3(C(l, 0.6), C(m, 0.45), C(k, 0.35));
+    tones = lit3(C(l, 0.25), C(m, 0.15), C(k, 0.1)),
+    // snow settles as a cap on the canopy's top, so a snowy tree keeps its own colour underneath
+    cap = C(l, 0.95);
   // spring: three or four pale blossom clusters on the canopy; autumn: light flecks where the sun catches it
   const flowers = [];
   if (kind === 'fresh')
@@ -107,7 +109,7 @@ export function drawSeasonTree(pt, P, C, d, kind) {
         if (r <= 1 || (r === 2 && hash(i, j, 162) > 0.5)) return C(BLOSSOM[(i + j) & 1]);
       }
       if (kind === 'gold' && u + v < 0 && hash(i, j, d.x * 13 + d.y) > 0.9) return C('#ffd98a');
-      return tones(u, v);
+      return v < -0.5 || u + v < -0.85 ? cap : tones(u, v);
     },
     C(OUTLINE),
   );

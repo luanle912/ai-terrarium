@@ -71,7 +71,7 @@ const breeze = t => Math.sin(t * 0.035 + 0.8 * Math.sin(t * 0.011));
 // A fixed number of particles per kind (FALL_N). Each falls from its own height to the lawn over LIFE seconds, again
 // and again, starting at its own phase: some leave the trees' canopies, the rest come down out of the sky over the
 // island. Positions come from time alone, so nothing is stored or allocated per frame.
-const FALL_N = { petals: 16, leaves: 72, snow: 90 };
+const FALL_N = { petals: 30, leaves: 200, snow: 200 };
 const LIFE = { petals: 11, leaves: 7.5, snow: 12 };
 const MAX_N = Math.max(...Object.values(FALL_N));
 const seedsOf = new WeakMap();
