@@ -1,4 +1,4 @@
-// The static pieces of the office island that web/sky-island.js bakes into the island image: the pixel cone
+// The static pieces of the office island that web/sky-island.js bakes into the island image: the stone block
 // underside, the shore, the lamp posts (unlit; web/island-life.js lights them), bushes, mushrooms, rocks and the stone
 // bench of the rest corner, plus the colour and pixel helpers the other art modules share (the mountain is in
 // web/mountain-art.js, the lake and the pavilion in web/island-art-lake.js). Every function draws in
@@ -57,7 +57,7 @@ export function painter(ctx, P) {
 }
 
 // ---- pixel layers ----
-// The cone, the water and the pavilion are painted pixel by pixel at the scene's own size (one logical
+// The water and the pavilion are painted pixel by pixel at the scene's own size (one logical
 // px is one pixel) on a canvas of their own, then stamped up to the bake's scale unsmoothed: they keep hard pixel
 // edges and pixels as big as the rest of the scene's at every zoom.
 export function pixelLayer(w, h) {
@@ -169,141 +169,60 @@ export function rgbOf(C) {
   };
 }
 
-// ---- the underside: one cone of earth under the lawn, in pixels ----
-// A smooth surface through the grid corners (each one as deep as the four columns round it, the shore ones just under
-// the soil layer) gives every pixel of the cone its depth; the pixels are then coloured, not the faces. The
-// front-left half is lit, the front-right shaded and a 2 px seam down the front ridge lighter still; the earth darkens
-// a step every STRATUM px toward the tip, each step blended in over a few rows with the 2x2 dither; broken ledges run
-// across it (a light lip, an outline and a shadow under it); the lower edge comes down in STEP-row terraces; two
-// boulders show near the tip and a few small rocks hang under it. Along the shore the 4 px soil layer shows under the
-// grass, and the grass hangs over it in a wavy lip (shoreFace).
-const CONE = { left: '#a97b50', right: '#7c5537', ridge: '#bd8f60', deep: '#3f2b26' },
+// ---- the underside: stacked grey stone columns under the lawn ----
+// As on the first island (spec 11.11): every tile hangs a column of grey stone as deep as the cone's depth there (deep
+// under the middle, short toward the shore), so the underside still narrows to a point, but in steps of stone blocks.
+// A column shows its y + 1 face (lit) and its x + 1 face (shaded) wherever it hangs lower than its neighbour in front;
+// each face is laid in blocks BLOCK px high, staggered from column to column, each block a little lighter or darker
+// than the next, with a dark joint under it. The stone turns a deeper grey past DEEP_Z px down. Only a thin layer of
+// soil (SOIL_Z px) shows, right under the grass along the shore, where the grass hangs over it in a wavy lip
+// (shoreFace). Painted in whole pixels (centres inside), back to front, on a layer of its own.
+const STONE_TOP = '#7a7a84',
+  STONE_DEEP = '#5f6070',
   SOIL = { left: '#74492b', right: '#58371f' },
   LIP = { left: '#4f9c40', right: '#3f8535', edge: '#356f2d' },
-  STRATUM = 52,
-  STEP = 5,
   SOIL_Z = 4,
-  LEDGES = [40, 92, 150, 214, 284, 360, 440],
-  LEDGE = '#3a2a35';
+  BLOCK = 10,
+  DEEP_Z = 60;
 // How far the grass hangs over the soil at a point of the shore: 1-4 px in long, soft waves.
 const lipAt = (u, v) => 2.4 + 1.1 * Math.sin(u * 1.7 + v * 0.9) + 0.5 * Math.sin(u * 4.1 - v * 2.3);
-// The camera looks down along -(1, 1, 1) in px: a face turned away from it is hidden behind the cone's front.
-const seen = n => n[0] + n[1] + n[2] > 0;
-// The upward normal of a flat face through three points, in px (a tile is 16 px across).
-export function normalOf(a, b, c) {
-  const u = [(b[0] - a[0]) * 16, (b[1] - a[1]) * 16, b[2] - a[2]],
-    v = [(c[0] - a[0]) * 16, (c[1] - a[1]) * 16, c[2] - a[2]];
-  const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]],
-    l = Math.hypot(...n) * Math.sign(n[2] || 1) || 1;
-  return n.map(q => q / l);
-}
-// The cone's depth (px below the lawn) at every pixel it covers: a Float32Array over the layer, NaN where it is not.
-function coneDepths(P, island, W, H) {
-  const key = (x, y) => x + ',' + y,
-    dep = (x, y) => island.depth.get(key(x, y)),
-    corners = new Map(),
-    z = new Float32Array(W * H).fill(NaN);
-  const corner = (x, y) => {
-    const k = key(x, y);
-    if (!corners.has(k)) {
-      const round = [dep(x - 1, y - 1), dep(x, y - 1), dep(x - 1, y), dep(x, y)];
-      corners.set(k, [x, y, round.includes(undefined) ? -SOIL_Z : -round.reduce((a, b) => a + b) / 4]);
-    }
-    return corners.get(k);
-  };
-  const tri = t => {
-    // fill the triangle's pixels (centres inside), keeping the point nearest the camera (the highest z)
-    const s = t.map(v => P(...v)),
-      x0 = Math.max(0, Math.floor(Math.min(s[0][0], s[1][0], s[2][0]))),
-      x1 = Math.min(W - 1, Math.ceil(Math.max(s[0][0], s[1][0], s[2][0]))),
-      y0 = Math.max(0, Math.floor(Math.min(s[0][1], s[1][1], s[2][1]))),
-      y1 = Math.min(H - 1, Math.ceil(Math.max(s[0][1], s[1][1], s[2][1]))),
-      den = (s[1][1] - s[2][1]) * (s[0][0] - s[2][0]) + (s[2][0] - s[1][0]) * (s[0][1] - s[2][1]);
-    if (!den) return;
-    for (let y = y0; y <= y1; y++)
-      for (let x = x0; x <= x1; x++) {
-        const px = x + 0.5,
-          py = y + 0.5,
-          a = ((s[1][1] - s[2][1]) * (px - s[2][0]) + (s[2][0] - s[1][0]) * (py - s[2][1])) / den,
-          b = ((s[2][1] - s[0][1]) * (px - s[2][0]) + (s[0][0] - s[2][0]) * (py - s[2][1])) / den,
-          c = 1 - a - b;
-        if (a < -1e-6 || b < -1e-6 || c < -1e-6) continue;
-        const v = a * t[0][2] + b * t[1][2] + c * t[2][2],
-          i = y * W + x;
-        if (!(z[i] >= v)) z[i] = v;
-      }
-  };
-  for (const { x, y } of island.list) {
-    const A = corner(x, y),
-      B = corner(x + 1, y),
-      Cc = corner(x + 1, y + 1),
-      D = corner(x, y + 1);
-    for (const t of [
-      [A, B, D],
-      [B, Cc, D],
-    ])
-      if (seen(normalOf(...t).map(q => -q))) tri(t); // the underside faces down
-  }
-  return z;
-}
 export function drawUnderside(pt, P, C, island, frame) {
-  const { LW, LH } = frame,
-    W = Math.ceil(LW),
-    H = Math.ceil(LH),
-    z = coneDepths(P, island, W, H),
-    L = pixelLayer(W, H),
-    rgb = rgbOf(C),
-    axis = Math.round(P(island.shape.cx, island.shape.cy)[0]),
-    on = (x, y) => x >= 0 && y >= 0 && x < W && y < H && z[y * W + x] === z[y * W + x],
+  const cv = document.createElement('canvas');
+  cv.width = Math.ceil(frame.LW);
+  cv.height = Math.ceil(frame.LH);
+  const g = cv.getContext('2d'),
+    dep = (x, y) => island.depth.get(x + ',' + y),
     tones = new Map();
-  // the earth of one side at one depth step, a little darker each step down
-  const tone0 = (side, band) => mix(side, CONE.deep, Math.min(0.66, band * 0.09));
-  const tone = (side, band) => {
-    const k = side + band;
-    if (!tones.has(k)) tones.set(k, rgb(tone0(side, band)));
+  // a block's stone: its band's grey, lighter or darker by up to 8 %, shaded on the x + 1 face; its joint darker still
+  const tone = (deep, j, lit) => {
+    const k = deep + ',' + j + ',' + lit;
+    if (!tones.has(k)) {
+      const base = mix(deep ? STONE_DEEP : STONE_TOP, j > 0 ? '#ffffff' : '#000000', Math.abs(j) / 100),
+        face = lit ? base : mix(base, '#000000', 0.3);
+      tones.set(k, [C(face), C(mix(face, '#000000', 0.28))]);
+    }
     return tones.get(k);
   };
-  for (let y = 0; y < H; y++)
-    for (let x = 0; x < W; x++) {
-      // the terraced lower edge: a pixel shows only if the bottom row of its STEP-row band does too
-      if (!on(x, y) || !on(x, Math.min(H - 1, Math.floor(y / STEP) * STEP + STEP - 1))) continue;
-      const d = -z[y * W + x],
-        side = Math.abs(x - axis) <= 1 ? CONE.ridge : x < axis ? CONE.left : CONE.right,
-        f = d / STRATUM,
-        band = Math.floor(f) + (f - Math.floor(f) > 0.7 + 0.3 * bayer(x, y) ? 1 : 0);
-      let c = tone(side, band);
-      // ledges on some stretches, where a column's depth crosses one: two light rows of lip above the crossing, the
-      // outline on it and two rows of shadow under it
-      for (const Lz of LEDGES) {
-        if (Math.abs(d - Lz) > 60 || hash(Math.floor((x + Lz * 3) / 17), Lz, 51) < 0.4) continue;
-        for (let t = -2; t <= 2; t++) {
-          const a = y + t - 1,
-            b = y + t;
-          if (!on(x, a) || !on(x, b) || !(-z[a * W + x] < Lz && -z[b * W + x] >= Lz)) continue;
-          const band = Math.floor(Lz / STRATUM);
-          c = t > 0 ? rgb(mix(tone0(side, band), '#ffffff', 0.25)) : t === 0 ? rgb(LEDGE) : tone(side, band + 3);
-          break;
-        }
+  for (const { x, y, d } of island.list) {
+    const stagger = Math.floor(hash(x, y, 54) * BLOCK);
+    for (const lit of [true, false]) {
+      const front = lit ? dep(x, y + 1) : dep(x + 1, y),
+        top = front === undefined ? -SOIL_Z : -front;
+      if (top <= -d) continue;
+      const at = (t, z) => (lit ? P(x + t, y + 1, z) : P(x + 1, y + t, z));
+      // blocks between joints at stagger + n BLOCK px down from the lawn, clipped to this face
+      for (let n = Math.floor((-top - stagger) / BLOCK); stagger + n * BLOCK < d; n++) {
+        const z0 = Math.min(top, -(stagger + n * BLOCK)),
+          z1 = Math.max(-d, -(stagger + (n + 1) * BLOCK));
+        if (z0 <= z1) continue;
+        const j = Math.round((hash(x * 3 + (lit ? 1 : 0), y, 60 + n) - 0.5) * 16),
+          [stone, joint] = tone(-z1 > DEEP_Z, j, lit);
+        fillPx(g, [at(0, z0), at(1, z0), at(1, z1), at(0, z1)], stone);
+        linePx(g, at(0, z1), at(1, z1), joint);
       }
-      // grain: a darker pixel here and there, a pebble now and then
-      const gr = hash(x, y, 53);
-      if (gr > 0.985) c = rgb(STONE.mid);
-      else if (gr > 0.9) c = tone(side, band + 1);
-      L.set(x, y, c);
     }
-  L.flush();
-  stamp(pt.ctx, L.cv);
-  // two boulders: just above the tip, and on the lit side a little higher up; small rocks hang under the tip
-  const tip = island.list.reduce((a, b) => (b.d > a.d ? b : a));
-  const [tx, ty] = P(tip.x + 0.5, tip.y + 0.5, -tip.d);
-  boulder(pt, C, tx, ty - 12, 2);
-  boulder(pt, C, tx - 34, ty - 58, 1);
-  for (const [dx, dy, s] of [
-    [-3, 9, 1],
-    [5, 17, 0],
-    [-1, 25, 0],
-  ])
-    boulder(pt, C, tx + dx, ty + dy, s);
+  }
+  stamp(pt.ctx, cv);
 }
 // The soil layer and the grass lip on one shore face of a lawn tile: plane 'y' (its y + 1 edge) or 'x' (x + 1).
 // bare: soil only (under the lip the main fall spills over).
