@@ -23,7 +23,7 @@ function currentSeason({ date, choice, preview, now }) {
 //   key     trees    grass tint {color, mix: 0..1 blend}  flowers  fruit  fall      wind  minSnow  frozen
 //   spring  fresh    #9be36b  0.20                        2.0      yes    petals    0.05  0        no
 //   summer  green    none     0                           1.0      no     none      0     0        no
-//   autumn  gold     #d9b84a  0.30                        0.5      no     leaves    0.35  0        no
+//   autumn  gold     #e2b43c  0.45                        0.5      no     leaves    0.35  0        no
 //   winter  bare     #f2f7ff  0.35                        0        no     snow      0     0.65     yes
 // flowers: density multiplier on the lawn; wind: steady drift of leaves and vines (0..1, summer has none);
 // minSnow: snow cover (0..1) that stays all season; frozen: lakes iced over, falls frozen, no ducks or fish.
@@ -50,7 +50,7 @@ const LOOKS = {
   },
   autumn: {
     trees: 'gold',
-    grass: { color: '#d9b84a', mix: 0.3 },
+    grass: { color: '#e2b43c', mix: 0.45 },
     flowers: 0.5,
     fruit: false,
     fall: 'leaves',
@@ -102,6 +102,14 @@ function seasonLabel(key, holidayKey) {
   const holiday = SeasonTree.SEASONS[holidayKey];
   return holiday && holiday.type !== 'season' && holiday.type !== 'none' ? name + ' · ' + holiday.label : name;
 }
+// The header chip: the season shown (a preview or the Settings choice included) in the season's colour, or, while a
+// holiday tree is up, "Season · Holiday" in the holiday's colour.
+const ACCENT = { spring: '#f7a8c4', summer: '#46a758', autumn: '#e0703a', winter: '#9fd3ff' };
+function seasonChip(key, holidayKey) {
+  const holiday = SeasonTree.SEASONS[holidayKey],
+    on = holiday && holiday.type !== 'season' && holiday.type !== 'none';
+  return { label: seasonLabel(key, holidayKey), accent: on ? holiday.accent : ACCENT[key] || ACCENT.summer };
+}
 // Settings dropdown entry for "follow the date".
 const autoLabel = () => tr('season.auto');
 
@@ -125,5 +133,6 @@ export const SeasonLogic = {
   loadSeasonChoice,
   saveSeasonChoice,
   seasonLabel,
+  seasonChip,
   autoLabel,
 };

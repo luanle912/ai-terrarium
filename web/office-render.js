@@ -1,5 +1,5 @@
 import { tr } from './i18n.js';
-import { SeasonTree } from './season-tree.js';
+import { SeasonLogic } from './season-logic.js';
 import { BubbleLogic } from './bubble-logic.js';
 import { ACT_TXT, FH, LH, LW, P, PA, h } from './office-scene.js';
 import { ST, fmtK } from './office-util.js';
@@ -98,7 +98,8 @@ mixin(
         ls = live,
         others = isLive && this.state.asOthers;
       const cnt = k => this.agents.filter(a => !a.leaving && k.includes(a.status)).length;
-      const seasonInfo = SeasonTree && this.treeOn ? SeasonTree.SEASONS[this.seasonKey] : null;
+      // the season shown, a preview or the Settings choice included; the holiday's name while its trees are up
+      const seasonInfo = SeasonLogic.seasonChip(this.seasonNow(), this.treeOn ? this.season : null);
       const summary = [
         [tr('summary.working'), ['working'], '#3e8ed0'],
         [tr('summary.thinking'), ['thinking'], '#5b8def'],
