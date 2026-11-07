@@ -19,7 +19,7 @@ function currentSeason({ date, choice, preview, now }) {
   return { key: seasonOf(date), previewing: false };
 }
 
-// The season table. Summer is the standard: what the island looked like before seasons, so it changes nothing.
+// The season table. Summer is the standard: no grass tint, no falling, the usual flowers (its trees are deep green).
 //   key     trees    grass tint {color, mix: 0..1 blend}  flowers  fruit  fall      wind  minSnow  frozen
 //   spring  fresh    #9be36b  0.20                        2.0      yes    petals    0.05  0        no
 //   summer  green    none     0                           1.0      no     none      0     0        no
