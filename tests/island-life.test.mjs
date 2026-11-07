@@ -241,8 +241,12 @@ test('ducks, fish and duckweed reuse the same arrays and objects every call', ()
   assert.equal(L.weed(island, 2), w1)
 })
 
-test('the pavilion lantern height is one named constant, about 28 px above the water', () => {
-  assert.ok(L.LANTERN_Z >= 20 && L.LANTERN_Z <= 36)
+test('the pavilion lantern glows where the art hangs it, and is drawn after the pavilion sprite', () => {
+  const { pavilionLantern } = loadWeb('island-art')
+  const at = pavilionLantern(island)
+  assert.ok(Math.hypot(at.x - island.pavilion.x, at.y - island.pavilion.y) < 1.5, 'beside the pavilion')
+  assert.ok(at.z >= 20 && at.z <= 40, 'under the eaves')
+  assert.equal(typeof IslandLife.drawLanternLight, 'function', 'office-draw.js calls it right after the pavilion sprite')
 })
 
 test('ducks dive at their own times, never all together when the page opens', () => {

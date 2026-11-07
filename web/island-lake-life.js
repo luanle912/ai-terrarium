@@ -13,7 +13,6 @@ const TW = 16,
 const K = (x, y) => Math.floor(x) + ',' + Math.floor(y);
 // The pavilion's lantern hangs under the eaves of its lower roof, this many px above the water. The one number to
 // change when the pavilion's art (web/island-art.js) settles where its eaves are.
-const LANTERN_Z = 28;
 
 // ---- per-island setup, once ----
 // Fish paths: ellipses in tile axes on open water. Every point of a path, and its body a third of a tile either side,
@@ -377,12 +376,12 @@ function drawLanternWater(ctx, g, island, glow, t) {
   }
   ctx.globalAlpha = 1;
 }
-// The lantern itself and its halo, LANTERN_Z px above the water over the pillar. halo is a soft sprite (40 x 40).
-function drawLanternLight(ctx, g, island, glow, halo) {
+// The lantern itself and its halo at `at` ({x, y} in tiles, z px above the lawn; pavilionLantern in island-art.js).
+// halo is a soft sprite (40 x 40).
+function drawLanternLight(ctx, g, at, glow, halo) {
   if (glow <= 0.01) return;
-  const p = island.pavilion,
-    X = sx(g, p.x, p.y),
-    Y = sy(g, p.x, p.y, WATER_Z + LANTERN_Z);
+  const X = sx(g, at.x, at.y),
+    Y = sy(g, at.x, at.y, at.z);
   ctx.globalAlpha = glow;
   ctx.drawImage(halo, X - 20, Y - 20);
   ctx.fillStyle = '#ffe7a3';
@@ -391,7 +390,6 @@ function drawLanternLight(ctx, g, island, glow, halo) {
 }
 
 export const IslandLakeLife = {
-  LANTERN_Z,
   ducks,
   fish,
   weed,
