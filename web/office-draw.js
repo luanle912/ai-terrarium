@@ -4,6 +4,7 @@ import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { SkyRender } from './sky-render.js';
 import { IslandLife } from './island-life.js';
+import { PropUse } from './prop-use.js';
 import {
   DESKS,
   FH,
@@ -558,10 +559,13 @@ mixin(
       });
       if (SeasonTree) this.seasonKey = SeasonTree.seasonFor(new Date());
       {
-        const OD = OfficeDecor;
+        const OD = OfficeDecor,
+          lit = this.propLit || PropUse.DARK;
         DESKS.forEach((d, i) => {
           const owner = this.agents.find(a => a.desk === i && !a.leaving && !a.parent);
-          OD.deskWorkstation(ctx, P, d, owner, t, () => this.drawPerson(G, owner)).forEach(it => items.push(it));
+          OD.deskWorkstation(ctx, P, d, owner, t, () => this.drawPerson(G, owner), lit[i]).forEach(it =>
+            items.push(it),
+          );
         });
       }
       {
