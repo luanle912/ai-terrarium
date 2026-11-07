@@ -2,6 +2,7 @@
 // mixins that complete ClaudeOffice, IslandScene borrowing its methods) happen in the same order, then mounts.
 import './i18n.js';
 import './season-tree.js';
+import './season-logic.js';
 import './office-decor.js';
 import './pantry-items.js';
 import './island-grid.js';
