@@ -49,12 +49,17 @@ function setup(island) {
       ...island.lotus.map(l => K(l.x, l.y)),
     ]);
   const clear = (x, y, r) => {
+    const q = r * 0.7; // the diagonals too, so a path never shaves a bank's corner
     for (const [a, b] of [
       [0, 0],
       [-r, 0],
       [r, 0],
       [0, -r],
       [0, r],
+      [q, q],
+      [q, -q],
+      [-q, q],
+      [-q, -q],
     ])
       if (!lake.has(K(x + a, y + b)) || blocked.has(K(x + a, y + b))) return false;
     return true;
@@ -110,9 +115,9 @@ function setup(island) {
         out: { x: 0, y: 0, hx: 1, hy: 0, a: 1 },
       });
     }
-  // duckweed: how far each home may drift each way before it would reach a bank
+  // duckweed: how far each home may drift each way before it would reach a bank, a lotus leaf or the stones
   const weed = island.duckweed.map((h, i) => {
-    const room = (a, b) => (lake.has(K(h.x + a, h.y + b)) ? WEED_OPEN : WEED_BANK);
+    const room = (a, b) => (lake.has(K(h.x + a, h.y + b)) && !blocked.has(K(h.x + a, h.y + b)) ? WEED_OPEN : WEED_BANK);
     return {
       x: h.x + 0.5,
       y: h.y + 0.5,
@@ -326,7 +331,7 @@ function drawDucks(ctx, g, list, df, t) {
     }
     ctx.globalAlpha = 1;
     if (d.dive >= 0.7) {
-      // under: only rings where it went down
+      // under: only rings, following it as it swims on
       ctx.fillStyle = P.wake;
       ctx.globalAlpha = 0.5;
       ring(ctx, X, Y, 2 + ((t * 3 + i) % 3 | 0));
