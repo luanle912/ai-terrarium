@@ -102,7 +102,8 @@ function layout(zone, wall) {
     const v = vanities[room],
       y = v.basins[i % 2],
       x = v.x1 + 0.45;
-    return { tile: [Math.floor(x), Math.floor(y)], pt: [x, y] };
+    // prop: the basin's tap runs while someone washes there (web/prop-use.js)
+    return { tile: [Math.floor(x), Math.floor(y)], pt: [x, y], prop: 'basin-' + room + (i % 2) };
   };
   const spots = stalls.map((s, i) => {
     const n = stalls.filter((o, j) => j < i && o.room === s.room).length,
