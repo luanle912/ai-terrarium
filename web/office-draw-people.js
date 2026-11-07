@@ -75,6 +75,19 @@ mixin(
         L();
         R(sx + 4, by - 11, 1, 3, shD);
         R(sx + 4, by - 8, 2, 1, sk);
+      } else if (act === 'arcade') {
+        // both hands forward on the control panel, the near one working the stick
+        R(sx - 5, by - 12, 1, 4, shD);
+        R(sx - 5, by - 13, 1, 1, sk);
+        R(sx + 4, by - 12 - ph, 1, 4, shD);
+        R(sx + 4, by - 13 - ph, 1, 1, sk);
+      } else if (act === 'foosball') {
+        // hands low on the rods, pushing and pulling in turn
+        const p = Math.floor(t * 3) % 2;
+        R(sx - 6 + p, by - 10, 2, 1, shD);
+        R(sx - 7 + p, by - 10, 1, 1, sk);
+        R(sx + 5 - p, by - 10, 2, 1, shD);
+        R(sx + 7 - p, by - 10, 1, 1, sk);
       } else if (act === 'stretch') {
         const p = Math.floor(t * 1.5) % 2;
         R(sx - 6, by - 17 + p * 2, 2, 7, sh);

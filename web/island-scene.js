@@ -40,6 +40,7 @@ export const SCENE_METHODS = [
   'restroomItems',
   'restroomPaint',
   'stepDogs',
+  'stepProps',
   'dogSprite',
   'drawDog',
 ];
@@ -101,6 +102,7 @@ export class IslandScene {
     this.doneSweep(Date.now());
     this.agents.forEach(a => this.updateAgent(a, dt));
     this.stepDogs(dt);
+    this.stepProps(dt);
     if (this.agents.some(a => a.gone)) {
       const gone = this.agents.filter(a => a.gone);
       gone.forEach(a => this.goneSids.set(a.sid, a.leftWhy || 'missing'));

@@ -31,11 +31,24 @@ F.desk = (K, t, o) => {
   box(0.97, 0.2, 0.06, 0.06, 12.8, 17, '#4a5066');
   box(0.52, 0.12, 0.96, 0.1, 16, 31, '#1a1c24', '#23262f', '#14161c');
   SCREEN(K, t, o.screen || 'code');
+  // How far the workstation is on (o.lit, web/prop-use.js): the screen fades up as the owner sits down; after they get
+  // up it is already 'off' and a dimming afterglow fades out. The keyboard is backlit and its keys flash only while on.
+  const on = o.lit == null ? (o.screen === 'off' ? 0 : 1) : o.lit,
+    ctx = K.ctx;
+  if (on < 1 && o.screen !== 'off') alpha(1 - on, () => faceL(0.57, 1.43, 0.22, 17.2, 30, '#08090d'));
+  else if (on > 0 && o.screen === 'off') alpha(0.5 * on, () => faceL(0.57, 1.43, 0.22, 17.2, 30, '#2a3a55'));
   box(0.62, 0.48, 0.66, 0.2, 12, 12.8, '#2b2f3c');
+  if (on > 0) {
+    const g = ctx.globalAlpha;
+    ctx.globalAlpha = g * 0.45 * on;
+    poly([P(0.6, 0.46, 12.81), P(1.3, 0.46, 12.81), P(1.3, 0.7, 12.81), P(0.6, 0.7, 12.81)], SG || '#5ef2ff');
+    ctx.globalAlpha = g;
+  }
+  const lit = on > 0.5 && o.screen !== 'off';
   for (let i = 0; i < 8; i++)
     for (let r = 0; r < 2; r++) {
       const [kx, ky] = P(0.67 + i * 0.075, 0.52 + r * 0.07, 12.8);
-      rect(kx, ky, 1, 1, (Math.floor(t * 10) + i * 3 + r) % 11 === 0 ? '#ffffff' : '#5d6578');
+      rect(kx, ky, 1, 1, !lit ? '#3e4352' : (Math.floor(t * 10) + i * 3 + r) % 11 === 0 ? '#ffffff' : '#8a93ad');
     }
   box(1.36, 0.46, 0.36, 0.3, 12, 12.3, '#3e4a6b');
   box(1.48, 0.55, 0.09, 0.12, 12.3, 13.4, '#e6e9ef');

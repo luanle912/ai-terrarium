@@ -396,6 +396,7 @@ export class ClaudeOffice extends React.Component {
     if (!this.state.paused) {
       this.agents.forEach(a => this.updateAgent(a, dt));
       this.stepDogs(dt);
+      this.stepProps(dt);
       if (this.agents.some(a => a.gone)) {
         const goneA = this.agents.filter(a => a.gone);
         goneA.forEach(a => this.goneSids.set(a.sid, a.leftWhy || 'missing'));

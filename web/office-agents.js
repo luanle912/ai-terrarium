@@ -3,6 +3,7 @@ import { WorldLogic } from './world-logic.js';
 import { DogLogic } from './dog-logic.js';
 import { PeopleLogic } from './people-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
+import { PropUse } from './prop-use.js';
 import { DEPT_PAL, DESKS, DOOR, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
 import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
@@ -566,6 +567,17 @@ mixin(
         a.wcT = (a.wcT || 0) + dt * this.speed;
         a.wcIn = RestroomLogic.visit(a.wcT) === 'inside';
       }
+    }
+
+    // Which props are in use (web/prop-use.js) and how lit each one is, stepped with the simulation: two arrays per
+    // scene, made once, so the draw reads this.propLit[PropUse.ID.x] with nothing allocated per frame.
+    stepProps(dt) {
+      if (!this.propLit) {
+        this.propOn = new Uint8Array(PropUse.N);
+        this.propLit = new Float32Array(PropUse.N);
+      }
+      PropUse.mark(this.propOn, this.agents, IDLE_SPOTS);
+      PropUse.ease(this.propLit, this.propOn, dt);
     }
 
     stepDogs(dt) {

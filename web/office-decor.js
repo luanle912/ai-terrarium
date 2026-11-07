@@ -115,7 +115,8 @@ const SCREEN_MAP = {
   talking: 'code',
   reading: 'read',
 };
-function deskWorkstation(ctx, PF, d, owner, t, drawPersonFn) {
+// lit (0..1, web/prop-use.js): how far the desk is "on"; it eases up as the owner sits down and down as they leave.
+function deskWorkstation(ctx, PF, d, owner, t, drawPersonFn, lit) {
   const seated = owner && owner.seated && !owner.sleeping;
   const empty = !seated;
   const push = empty ? [0.62, 1.05] : [0.52, 1.05];
@@ -130,7 +131,7 @@ function deskWorkstation(ctx, PF, d, owner, t, drawPersonFn) {
     z: z0 + 1.5,
     f: () => {
       const K = kit(ctx, ...PF(d.gx, d.gy));
-      F.desk(K, t, { screen: scr, noMug: scr === 'term' });
+      F.desk(K, t, { screen: scr, noMug: scr === 'term', lit });
       F.chair(kit(ctx, ...PF(d.gx + push[0], d.gy + push[1])));
       if (!empty) {
         drawPersonFn();
