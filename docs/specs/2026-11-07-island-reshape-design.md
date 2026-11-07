@@ -265,3 +265,17 @@ nó cứ bẩn bẩn". Đáy đảo vẽ lại theo kiểu đảo cũ:
 - Dây leo/rễ thòng dưới mép giữ nguyên; viền `#3B2F4A` theo mục 11.10. Vẫn nướng một lần như phần tĩnh khác.
 - Tham khảo cách vẽ của đảo cũ: `git show 28c466c:web/sky-island.js` (`renderIsland`, phần underside và `BANDS`), bỏ các dải
   đất nâu dày của nó.
+
+### 11.12. Quay lại núi hai đỉnh low-poly của bản đầu (2026-11-08, thay 11.10 phần núi)
+
+Anh Kiệt xem núi tuyết bản C trong game: "ủa sao thành này rồi, anh thấy bản cũ đang oke mà", và chọn quay lại **núi hai đỉnh
+low-poly** — anh nói rõ "cái bản gần nhất ấy": đúng như ảnh anh chụp trước khi gộp Task B/E (trạng thái nhánh ở commit
+`6442885`: art núi low-poly của bản 1 vẽ trên dữ liệu núi to hơn của Task A, đỉnh chính `h` 102, đỉnh phụ 58): hai đỉnh xám
+mặt phẳng, đỉnh chính cao hơn, chân phủ cỏ, **thác chảy ra từ khe giữa hai đỉnh**.
+
+- Không còn sông, nên thác núi đổ vào **hồ nhỏ viền đá ở chân núi** (giữ hồ chân núi của bản C: elip có viền đá, bọt ở chỗ
+  thác chạm nước); hồ không nối đi đâu.
+- Bỏ sprite núi tuyết bản C và thác trong khe của nó. Giữ từ bản C: viền `#3B2F4A` cả đảo, mặt trời 2 vòng phẳng; cụm thông
+  quanh chân núi giữ nếu hợp với núi low-poly (người làm quyết, ghi rõ).
+- Giữ nguyên: đảo lục giác nhiễu, hồ chùa ở 6h, đáy khối đá (11.11), vịt/cá/sen.
+- Núi đặt ở bãi sau như các bản trước; ô chân núi và hồ không đi được; quy tắc khung 10 % giữ.
