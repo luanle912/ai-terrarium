@@ -182,28 +182,29 @@ for (let x = 22; x <= 25; x++) {
   BLOCK.add(x + ',3');
 }
 for (let x = 23; x <= 25; x++) BLOCK.add(x + ',5');
+// `prop` names the device the spot uses (web/prop-use.js): it lights up or moves only while someone is there.
 export const IDLE_SPOTS = [
   // kitchen wall: fridge, espresso, grinder, sink, microwave, drinkfridge
-  { act: 'fridge', tile: [21, 1], pt: [20.8, 1.0], front: false },
-  { act: 'coffee', tile: [21, 1], pt: [21.7, 1.0], front: false },
-  { act: 'coffee', tile: [22, 1], pt: [22.5, 1.0], front: false },
-  { act: 'water', tile: [23, 1], pt: [23.4, 1.0], front: false },
-  { act: 'microwave', tile: [24, 1], pt: [24.9, 1.0], front: false },
-  { act: 'snack', tile: [25, 1], pt: [25.2, 1.0], front: false },
+  { act: 'fridge', tile: [21, 1], pt: [20.8, 1.0], front: false, prop: 'fridge' },
+  { act: 'coffee', tile: [21, 1], pt: [21.7, 1.0], front: false, prop: 'espresso' },
+  { act: 'coffee', tile: [22, 1], pt: [22.5, 1.0], front: false, prop: 'grinder' },
+  { act: 'water', tile: [23, 1], pt: [23.4, 1.0], front: false, prop: 'sink' },
+  { act: 'microwave', tile: [24, 1], pt: [24.9, 1.0], front: false, prop: 'microwave' },
+  { act: 'snack', tile: [25, 1], pt: [25.2, 1.0], front: false, prop: 'drinkfridge' },
   // island bar stools (4 stools facing kitchen)
-  { act: 'table', tile: [21, 4], pt: [22.1, 3.95], stool: 2, front: false },
-  { act: 'table', tile: [22, 4], pt: [22.9, 3.95], stool: 2, front: false },
-  { act: 'table', tile: [23, 4], pt: [23.7, 3.95], stool: 2, front: false },
-  { act: 'table', tile: [24, 4], pt: [24.5, 3.95], stool: 2, front: false },
+  { act: 'table', tile: [21, 4], pt: [22.1, 3.95], stool: 2, front: false, prop: 'island' },
+  { act: 'table', tile: [22, 4], pt: [22.9, 3.95], stool: 2, front: false, prop: 'island' },
+  { act: 'table', tile: [23, 4], pt: [23.7, 3.95], stool: 2, front: false, prop: 'island' },
+  { act: 'table', tile: [24, 4], pt: [24.5, 3.95], stool: 2, front: false, prop: 'island' },
   // booth cafe tables (3 tables with chairs)
-  { act: 'meal', tile: [22, 10], pt: [22.1, 10.2], stool: 1, front: false },
-  { act: 'meal', tile: [22, 11], pt: [22.1, 11.4], stool: 1, front: false },
-  { act: 'meal', tile: [22, 12], pt: [22.1, 12.6], stool: 1, front: false },
-  // game corner: arcades and foosball
-  { act: 'sky', tile: [25, 11], pt: [25.1, 10.5], front: false },
-  { act: 'sky', tile: [26, 11], pt: [25.9, 10.5], front: false },
-  { act: 'stretch', tile: [24, 13], pt: [24.6, 12.0], front: true },
-  { act: 'stretch', tile: [25, 13], pt: [25.4, 12.3], front: true },
+  { act: 'meal', tile: [22, 10], pt: [22.1, 10.2], stool: 1, front: false, prop: 'cafe0' },
+  { act: 'meal', tile: [22, 11], pt: [22.1, 11.4], stool: 1, front: false, prop: 'cafe1' },
+  { act: 'meal', tile: [22, 12], pt: [22.1, 12.6], stool: 1, front: false, prop: 'cafe2' },
+  // game corner: playing the two arcades and the foosball table (one player at each end)
+  { act: 'arcade', tile: [25, 11], pt: [25.1, 10.5], front: false, prop: 'arcade0' },
+  { act: 'arcade', tile: [26, 11], pt: [25.9, 10.5], front: false, prop: 'arcade1' },
+  { act: 'foosball', tile: [24, 13], pt: [24.6, 12.0], front: true, prop: 'foosball' },
+  { act: 'foosball', tile: [25, 13], pt: [25.4, 12.3], front: true, prop: 'foosball' },
   // lounge: coffeetable, armchair, sofa area
   { act: 'phone', tile: [24, 8], pt: [23.5, 7.3], front: true },
   { act: 'phone', tile: [26, 8], pt: [26.0, 7.3], front: true },
@@ -230,7 +231,8 @@ export const IDLE_SPOTS = [
 export const ACT_TXT = {
   table: tr('office.act.table'),
   meal: tr('office.act.meal'),
-  sky: tr('office.act.sky'),
+  arcade: tr('office.act.arcade'),
+  foosball: tr('office.act.foosball'),
   coffee: tr('office.act.coffee'),
   fridge: tr('office.act.fridge'),
   water: tr('office.act.water'),
