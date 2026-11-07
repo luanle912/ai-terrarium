@@ -207,8 +207,8 @@ cầu vồng, cây theo mùa thành cụm, đảo bay nhỏ ở nền; góc ngh�
 ### 11.7. Hình đảo gần lục giác (bổ sung 2026-11-08)
 
 - Anh Kiệt: "cho gần gần hình lục giác nhé, tránh tròn quá hoặc vuông quá". Mặt đảo trên màn hình là **lục giác**, góc bo
-  nhẹ và mép lượn sóng nhẹ như bản 1 (không tròn như squircle, không vuông như hình thoi). Hướng đặt lục giác (nhọn trên/dưới
-  hay bằng trên/dưới): **chờ anh chọn** (bản phác H1/H2).
+  nhẹ và mép lượn sóng nhẹ như bản 1 (không tròn như squircle, không vuông như hình thoi). Hướng đặt: **H1 — nhọn trên, nhọn dưới** (anh
+  chọn): cắt hai góc trái, phải của hình thoi; còn mũi ở 6h, thác chính đổ đúng mũi đó.
 - Văn phòng vẫn ở giữa; khoảng cỏ hẹp nhất quanh khối văn phòng vẫn khoảng 4 ô; hồ và thác chính ở 6h.
 
 ### 11.8. Hồ lớn có chùa một cột (bổ sung 2026-11-08)
@@ -224,3 +224,9 @@ cầu vồng, cây theo mùa thành cụm, đảo bay nhỏ ở nền; góc ngh�
 - Góc nghỉ (ghế đá, câu cá) ở bờ hồ; chỗ tắm của nhân vật có thể bỏ nếu không hợp với hồ có chùa (người làm quyết, nói rõ
   trong báo cáo); chó uống nước ở bờ.
 - Nhân vật không đi ra chùa (là cảnh), trừ khi có lối đá rõ ràng; đợt này để là cảnh.
+
+### 11.9. Kiểu núi đã chọn (2026-11-08)
+
+- Anh chọn **B — đỉnh nhọn có gờ đá**: hai đỉnh nhọn như núi thật, mặt đá tô pixel ba sắc độ (mặt trái vừa, mặt phải tối,
+  mặt hướng lên sáng), cắt ngang bằng các **gờ đá dày có bóng ở dưới** để đọc ra khối, tuyết đọng trên các gờ cao và đỉnh,
+  chân núi phủ cỏ leo lên theo gờ thấp. Viền tím than quanh khối núi. Không dùng khối hộp xếp tầng.
