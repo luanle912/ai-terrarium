@@ -150,3 +150,56 @@ nhẹ, đổi theo ngày/đêm, mùa và thời tiết như game đã làm.
   đêm hiện có (`night()`, `SNOW`).
 - Cách vẽ nước, sương, chim, đom đóm, dây leo, cầu vồng (số khung, tốc độ), miễn chậm và nhẹ.
 - Cách nhân vật dùng góc nghỉ (ngồi ghế, câu cá: thời lượng, tần suất) miễn hợp với cách các chỗ rảnh rỗi khác đang làm.
+
+---
+
+## 11. Bản 2 (2026-11-08, sau khi anh Kiệt xem bản dựng đầu)
+
+Anh xem ảnh bản dựng đầu và yêu cầu: "phần chóp đáy làm pixel nhé, phần núi làm to hơn với dạng 2,5D anh thấy nó như 2D,
+remove sông đi — xấu, trả lại hồ về vị trí 6h nhé". Về thác núi và cầu khi bỏ sông, anh chọn: **thác núi đổ vào một vũng
+nhỏ ở chân núi, bỏ cầu, góc nghỉ dời ra cạnh hồ ở vị trí 6h.** Mục này thay các phần tương ứng ở mục 3–6; phần còn lại
+giữ nguyên.
+
+### 11.1. Bỏ sông và cầu
+
+- Không còn sông chạy dọc dải trái, không còn cầu gỗ và hai đèn ở hai đầu cầu. Dải cỏ bên trái văn phòng trở lại là cỏ.
+- Vì dải trái không còn chở sông, viền cỏ trở lại **4 ô** như bản mẫu anh duyệt (`SQUARE_MARGIN = 4`; lý do nới lên 5 ở bản 1
+  không còn). Văn phòng to lại như bản mẫu.
+
+### 11.2. Hồ ở vị trí 6h
+
+- "6h" là góc dưới cùng của đảo trên màn hình (góc trước, nơi `x + y` lớn nhất), như hồ của đảo cũ trước kế hoạch này.
+- Hồ tròn mềm (không mấu một ô), cạnh mép trước; **thác chính** đổ khỏi mép đảo ngay dưới hồ, thẳng xuống dưới góc 6h, có bọt
+  và tan thành sương.
+- **Góc nghỉ** (ghế đá, chỗ câu cá) ở bờ hồ phía trong đảo, đi tới bằng lối đá từ cầu thang nam; chó nằm cạnh như bản 1.
+- Chỗ tắm của nhân vật và chỗ uống nước của chó ở bờ hồ này.
+
+### 11.3. Núi to hơn, dạng 2,5D
+
+- Anh thấy núi "như 2D": các mặt tam giác phẳng, viền mảnh, không có khối. Núi mới phải đọc ra **khối ba chiều nhìn
+  isometric** như văn phòng và đảo: đỉnh chính và đỉnh phụ là các khối đá có **mặt trên sáng, mặt trái trung bình, mặt phải
+  tối** (cùng hướng sáng với văn phòng), có **bậc/gờ đá** xếp tầng, vài tảng đá rời ở chân, cỏ phủ chân núi leo lên theo
+  bậc, tuyết phủ mặt trên các bậc cao khi `env.snow`.
+- **To hơn bản 1:** đỉnh chính cao khoảng gấp rưỡi bản 1 trên màn hình, chân núi rộng hơn (chiếm phần lớn bãi sau phía
+  trái), đỉnh phụ thấp hơn rõ rệt; vẫn ở bãi sau (`y ≤ -3`) và không che chữ, bubble, nhân vật trong văn phòng.
+- Khung nhìn: quy tắc mục 3.1 vẫn giữ (văn phòng không nhỏ đi quá 10 % vì núi); đỉnh núi được phép chạy ra ngoài cạnh trên.
+- Vẽ bằng pixel art như phần còn lại (khối pixel, outline 1 px `#2b2350`, bảng màu xám đá ba sắc độ + rêu), không dùng
+  polygon mượt có pha màu.
+
+### 11.4. Thác núi đổ vào vũng nhỏ
+
+- Thác chảy ra từ khe giữa hai đỉnh (như bản 1), rơi xuống một **vũng nhỏ** (khoảng 2×2 tới 3×3 ô) có viền đá ở chân núi,
+  bọt trắng nơi thác chạm nước. Vũng không nối đi đâu.
+- Nhân vật và chó không đi vào vũng; chó có thể uống ở mép vũng nếu tới được.
+
+### 11.5. Đáy đảo dạng pixel
+
+- Khối nón đáy (mục 4) giữ hình và độ sâu, nhưng **vẽ bằng pixel**: mép nón là bậc thang pixel (không có cạnh chéo mượt),
+  các dải màu đất/đá chuyển bằng bậc và dither 2×2, gờ ngang và tảng đá là cụm pixel có outline, chóp nón kết thúc bằng vài
+  khối đá nhỏ treo lơ lửng.
+- Kích thước "pixel" của đáy bằng kích thước pixel của phần còn lại của cảnh ở cùng zoom (đáy không trông mịn hơn mặt đảo).
+
+### 11.6. Những gì giữ nguyên từ bản 1
+
+Đảo vuông, văn phòng giữa, outline, đất nâu, cỏ caro; sương, đèn dọc lối đá (trừ hai đèn cầu), chim, đom đóm, dây leo,
+cầu vồng, cây theo mùa thành cụm, đảo bay nhỏ ở nền; góc nghỉ (dời chỗ); núi đổi theo mùa/thời tiết.
