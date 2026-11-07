@@ -321,10 +321,15 @@ export const PAVILION = {
 };
 // Where the pavilion's lantern hangs, in island coordinates: x, y in tiles, z px above the lawn (the middle of the
 // lantern), or null on an island without a pavilion.
+// Worked out once per island (it is read every frame).
+const lanterns = new WeakMap();
 export function pavilionLantern(island) {
-  const p = island.pavilion,
-    l = PAVILION.lantern;
-  return p ? { x: p.x + l.out, y: p.y + l.out, z: l.z } : null;
+  if (!lanterns.has(island)) {
+    const p = island.pavilion,
+      l = PAVILION.lantern;
+    lanterns.set(island, p ? { x: p.x + l.out, y: p.y + l.out, z: l.z } : null);
+  }
+  return lanterns.get(island);
 }
 
 // ---- the lamps, the bench ----

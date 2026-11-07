@@ -238,6 +238,9 @@ test('lotus, duckweed and duck lanes stay on open water', () => {
     off(l.x, l.y, 'lotus')
     assert.ok(['pink', 'white', null].includes(l.flower), `lotus flower ${l.flower}`)
     assert.ok(!leaves.has(K(l.x, l.y)), `two lotus leaves on ${l.x},${l.y}`)
+    // a leaf right behind the pavilion on screen would peek out over its roof
+    const behind = l.x + l.y < pillar.x + pillar.y && Math.abs(l.x - l.y - (pillar.x - pillar.y)) <= 1
+    assert.ok(!behind, `the lotus leaf at ${l.x},${l.y} shows over the pavilion's roof`)
     leaves.add(K(l.x, l.y))
   }
   for (const c of ['pink', 'white']) assert.ok(island.lotus.some((l) => l.flower === c), `no ${c} lotus flower`)
@@ -259,6 +262,10 @@ test('lotus, duckweed and duck lanes stay on open water', () => {
         off(x, y, 'a duck lane')
         assert.ok(!leaves.has(K(x, y)), `a duck lane runs through the lotus at ${x},${y}`)
         assert.ok(cheb([x, y], [pillar.x, pillar.y]) >= 2, `a duck lane runs under the pavilion at ${x},${y}`)
+        // ... and never right behind it on screen, where a duck would show between its roofs
+        const px = ax + ((bx - ax) * s) / 8, py = ay + ((by - ay) * s) / 8
+        const back = pillar.x + pillar.y + 1 - (px + py)
+        assert.ok(!(Math.abs(px - py - (pillar.x - pillar.y)) < 2.2 && back > 0 && back < 7), `a duck lane runs behind the pavilion at ${px},${py}`)
         for (const [a, b] of N4) assert.ok(lake.has(K(x + a, y + b)), `a duck lane runs along the bank at ${x},${y}`)
       }
     }
