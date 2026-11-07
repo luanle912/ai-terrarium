@@ -63,11 +63,13 @@ mixin(
       this.seasonPreview = SeasonLogic.startSeasonPreview(key, Date.now());
       this.setState({ seasonPreviewAt: Date.now() });
     }
-    // The header's season chip: open Settings and scroll to the Season section.
+    // The header's season chip: open Settings and scroll the panel (only the panel, never the stage under it) to the
+    // Season section.
     openSeasonSettings() {
       this.setState({ showSettings: true }, () => {
-        const el = document.getElementById('season-section');
-        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+        const el = document.getElementById('season-section'),
+          panel = el && el.closest('.settings-panel');
+        if (panel) panel.scrollTop = Math.max(0, el.offsetTop - 8);
       });
     }
     // The ⚙ settings panel of the local page.

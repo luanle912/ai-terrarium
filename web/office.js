@@ -78,6 +78,12 @@ export class ClaudeOffice extends React.Component {
     this.setStage = el => {
       this.stageEl = el;
     };
+    // The stage clips the scene (overflow hidden) but the browser can still scroll it, e.g. to bring a focused control
+    // into view; it would slide the island and leave a band of bare page under the sky. The stage never scrolls.
+    this.onStageScroll = () => {
+      const st = this.stageEl;
+      if (st && (st.scrollTop || st.scrollLeft)) st.scrollTop = st.scrollLeft = 0;
+    };
     this.setBack = el => {
       this.backCanvas = el;
     };
@@ -229,11 +235,14 @@ export class ClaudeOffice extends React.Component {
       st.addEventListener('pointermove', this.onDrag);
       st.addEventListener('pointerup', this.onUp);
       st.addEventListener('pointercancel', this.onUp);
-      // A resized window changes the fitted layout; pull the view back inside the new limits.
+      st.addEventListener('scroll', this.onStageScroll);
+      // A resized window changes the fitted layout; pull the view back inside the new limits, and repaint the sky at
+      // the new size before the browser shows it (no stretched or short sky for a frame).
       if (window.ResizeObserver) {
         this.ro = new ResizeObserver(() => {
           const b = this.camBox();
           if (b) this.setCam(CameraLogic.clamp(this.cam, b));
+          this.drawSky(performance.now() / 1000);
         });
         this.ro.observe(st);
       }
@@ -297,6 +306,7 @@ export class ClaudeOffice extends React.Component {
       st.removeEventListener('pointermove', this.onDrag);
       st.removeEventListener('pointerup', this.onUp);
       st.removeEventListener('pointercancel', this.onUp);
+      st.removeEventListener('scroll', this.onStageScroll);
     }
     this.ro && this.ro.disconnect();
     clearTimeout(this.kTimer);
