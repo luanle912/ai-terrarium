@@ -1,10 +1,10 @@
 // The lake at the bottom point as pixel art: soft rounded water (not the tile grid's steps) sunk WATER_Z below the
-// grass, a far bank wall with a light waterline, and a raised ring of cobbles round it (the lake at the mountain's
-// foot is web/mountain-art.js's); the lip where the lake spills into the main fall runs right out to the shore. On
-// the water: the stepping stones out to the pavilion and the lotus pads and flowers. The one-pillar pavilion itself
-// (a stone pillar, a bracketed wooden platform with a small railing, a square hall and two tiers of curved roof,
-// inspired by Hanoi's One Pillar Pagoda) is a sprite the scene sorts with the people. Moving water, ducks, fish and
-// the lantern's glow are web/island-life.js's. lakeField is pure (tests/island-art.test.mjs).
+// grass, a far bank wall with a light waterline, and a raised ring of cobbles round it (the pool at the mountain's
+// foot is web/island-art-mountain.js's); the lip where the lake spills into the main fall runs right out to the
+// shore. On the water: the stepping stones out to the pavilion and the lotus pads and flowers. The one-pillar
+// pavilion itself (a stone pillar, a bracketed wooden platform with a small railing, a square hall and two tiers of
+// curved roof, inspired by Hanoi's One Pillar Pagoda) is a sprite the scene sorts with the people. Moving water,
+// ducks, fish and the lantern's glow are web/island-life.js's. lakeField is pure (tests/island-art.test.mjs).
 import { WATER_Z, hash } from './island-land.js';
 import {
   bayer,

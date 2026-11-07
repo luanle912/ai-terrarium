@@ -1,7 +1,7 @@
-// Baking the island: the lawn, its underside and outline, the lake and the lake at the mountain's foot, the stepping
-// stones, lotus and low decor in one picture, and the things that stand up off the lawn (bushes, pines, lamps, the
-// bench, the pavilion, the mountain) as sprites the scene sorts with the people and dogs. The pieces' drawing lives
-// in web/island-art.js, web/mountain-art.js and web/island-art-lake.js.
+// Baking the island: the lawn, its underside and outline, the lake, the mountain and the pool at its foot, the
+// stepping stones, lotus and low decor in one picture, and the things that stand up off the lawn (bushes, lamps, the
+// bench, the pavilion) as sprites the scene sorts with the people and dogs. The pieces' drawing lives in
+// web/island-art.js, web/island-art-mountain.js and web/island-art-lake.js.
 import {
   drawBench,
   drawBush,
@@ -15,10 +15,9 @@ import {
   OUTLINE,
   painter,
   shoreFace,
-  stamp,
   toHex,
 } from './island-art.js';
-import { MountainArt } from './mountain-art.js';
+import { drawMountain, drawPool } from './island-art-mountain.js';
 import { drawLakeDecor, drawPavilion, drawWater, PAVILION_EXT } from './island-art-lake.js';
 import { hash, WATER_Z } from './island-land.js';
 export { hash, hex, mix, toHex, WATER_Z };
@@ -55,10 +54,10 @@ function bakeTools(frame, env) {
   return { P, C };
 }
 
-// The island as one image the size of the scene canvas. The land (underside, lawn, lake) is painted first on its own
-// canvas so it can be ringed with the 1 px outline; the mountain's foot lake, the stepping stones, lotus, paths and
-// low decor (rocks, mushrooms, flowers) go on top. Whatever stands up off the lawn is left to renderProps and
-// renderMountain. Moving water, falls and lamp light are drawn every frame over this image.
+// The island as one image the size of the scene canvas. The land (underside, lawn, lake, mountain) is painted first on
+// its own canvas so it can be ringed with the 1 px outline; the pool at the mountain's foot, the stepping stones,
+// lotus, paths and low decor (rocks, mushrooms, flowers) go on top. Whatever stands up off the lawn is left to
+// renderProps. Moving water, falls and lamp light are drawn every frame over this image.
 export function renderIsland(island, frame, k, env) {
   const { LW, LH, OX, OY } = frame;
   const canvas = () => {
@@ -87,6 +86,7 @@ export function renderIsland(island, frame, k, env) {
     if (!has(x + 1, y)) shoreFace(lp, P, C, x, y, 'x');
   }
   drawWater(lp, P, C, island);
+  drawMountain(lp, P, C, island, env.snow);
   // The 1 px outline: the land's silhouette pushed out a pixel each way and filled with the outline colour, straight
   // onto the still empty island image, then the land itself on top, so only the ring outside it shows.
   {
@@ -108,12 +108,8 @@ export function renderIsland(island, frame, k, env) {
     ctx.restore();
     land.width = land.height = 0; // let the browser drop it now rather than at the next collection
   }
-  // the small lake at the mountain's foot, in its stone rim (the mountain, sorted with everyone, stands over its back)
-  if (island.mountain) {
-    const lk = MountainArt.lake(env),
-      [fx, fy] = P(island.mountain.foot.x, island.mountain.foot.y, 0);
-    stamp(ctx, lk.canvas, Math.round(fx) - lk.ax, Math.round(fy) - lk.ay);
-  }
+  // the small pool the mountain fall drops into, in its stone rim, against the rock of the gap
+  drawPool(pt, P, C, island);
   drawLakeDecor(pt, P, C, island);
   // Garden paths (SkyLogic.lawnPaths): a faint worn strip in the grass where feet go, and flat stepping stones on it
   // that sit 1 px proud of the grass.
@@ -168,9 +164,9 @@ export function renderIsland(island, frame, k, env) {
 export function renderProps(island, frame, k, env) {
   const { P, C } = bakeTools(frame, env),
     out = [];
-  // ext: [left, up, right, down] px round the point at (default: (x + 0.5, y + 0.5)) on the lawn
-  const add = (x, y, z, ext, draw, lamp = -1, at = [x + 0.5, y + 0.5]) => {
-    const [ax, ay] = P(at[0], at[1], 0),
+  // ext: [left, up, right, down] px round the point (x + 0.5, y + 0.5) on the lawn
+  const add = (x, y, z, ext, draw, lamp = -1) => {
+    const [ax, ay] = P(x + 0.5, y + 0.5, 0),
       dx = Math.floor((ax - ext[0]) * k),
       dy = Math.floor((ay - ext[1]) * k),
       img = document.createElement('canvas');
@@ -194,46 +190,5 @@ export function renderProps(island, frame, k, env) {
   );
   for (const d of island.decor)
     if (d.kind === 'bush') add(d.x, d.y, d.x + d.y + 0.5, [11, 15, 11, 4], pt => drawBush(pt, P, C, d));
-    else if (d.kind === 'pine') {
-      const pine = (pt, g) => {
-        const [px, py] = P(d.at[0], d.at[1], 0);
-        MountainArt.drawPine(g, Math.round(px), Math.round(py), d.size, C);
-      };
-      add(d.x, d.y, d.z, [8, 20, 8, 2], pine, -1, d.at);
-    }
   return out;
-}
-
-// The mountain as a sprite at the island image's resolution and light, cut into columns 8 px wide: each column sorts
-// at the x + y of the foot's front edge in it (the least over its width), so whoever stands in front of the foot in
-// that column is drawn over it and whoever is behind is hidden by it (one sprite sorted at F would hide what stands in
-// front of its far edges, which lie up to 5 rows further back). Returns { img, dx, dy, w, h, cols: [{ z, a, b }]
-// (device px, a..b across), falls: [4], foam: [2] } (the moving frames: { img, dx, dy, w, h }), or null.
-export function renderMountain(island, frame, k, env) {
-  const m = island.mountain;
-  if (!m) return null;
-  const { P } = bakeTools(frame, env),
-    [X, Y] = P(m.foot.x, m.foot.y, 0).map(Math.round),
-    up = art => {
-      const dx = Math.floor((X - art.ax) * k),
-        dy = Math.floor((Y - art.ay) * k),
-        img = document.createElement('canvas');
-      img.width = Math.ceil((X - art.ax + art.canvas.width) * k) - dx;
-      img.height = Math.ceil((Y - art.ay + art.canvas.height) * k) - dy;
-      const g = img.getContext('2d');
-      g.setTransform(k, 0, 0, k, -dx, -dy);
-      stamp(g, art.canvas, X - art.ax, Y - art.ay);
-      return { img, dx, dy, w: img.width, h: img.height };
-    };
-  const out = up(MountainArt.sprite(env, m.foot)),
-    moving = MountainArt.falls(env),
-    edge = c => Math.min(c + 2 * m.foot.y, 2 * m.foot.x - c),
-    c0 = m.foot.x - m.foot.y,
-    cols = [];
-  for (let u = Math.floor(-out.w / k / 8) * 8 - 8; u < out.w / k; u += 8) {
-    const a = Math.max(out.dx, Math.round((X + u) * k)),
-      b = Math.min(out.dx + out.w, Math.round((X + u + 8) * k));
-    if (b > a) cols.push({ z: Math.min(edge(c0 + u / 16), edge(c0 + (u + 8) / 16)), a, b });
-  }
-  return { ...out, cols, falls: moving.frames.map(up), foam: moving.foam.map(up) };
 }

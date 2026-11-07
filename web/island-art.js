@@ -1,7 +1,7 @@
 // The static pieces of the office island that web/sky-island.js bakes into the island image: the stone block
 // underside, the shore, the lamp posts (unlit; web/island-life.js lights them), bushes, mushrooms, rocks and the stone
-// bench of the rest corner, plus the colour and pixel helpers the other art modules share (the mountain is in
-// web/mountain-art.js, the lake and the pavilion in web/island-art-lake.js). Every function draws in
+// bench of the rest corner, plus the colour and pixel helpers the other art modules share (the mountain and its pool
+// are in web/island-art-mountain.js, the lake and the pavilion in web/island-art-lake.js). Every function draws in
 // the scene's logical px through P (the lawn level projection) and takes its colours through C(colour, snowAmount),
 // which applies the island's light and snow.
 import { hash, N4 } from './island-land.js';
@@ -412,7 +412,7 @@ export function drawBush(pt, P, C, d) {
 // A mushroom or two: a red cap with white spots or a brown one on a cream stem, with the outline.
 export function drawMushroom(pt, P, C, d) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
-    red = d.red || hash(d.x, d.y, 45) > 0.4,
+    red = hash(d.x, d.y, 45) > 0.4,
     cap = lit3(
       C(red ? '#ef6a5c' : '#c08a5c', 0.6),
       C(red ? '#d6453a' : '#a8724a', 0.6),

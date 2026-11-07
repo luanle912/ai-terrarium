@@ -1,6 +1,5 @@
 // What moves or glows on the island, drawn every frame over the baked island image (web/sky-island.js renderIsland):
-// glints and slow rings on the lake and the main waterfall with foam (the mountain's falls and foam are frames of
-// web/mountain-art.js, stepped by web/office-draw.js),
+// glints and slow rings on the lake and the pool, the mountain fall into the pool and the main waterfall with foam,
 // mist round the cone tip and where the main fall drops, lamp light after dark, a flock of birds now and then by day,
 // fireflies round the lotus at night, vines and roots swaying under the rim, and a rainbow over the main fall for a
 // while after rain. The lake's ducks, fish shadows, duckweed and the pavilion's lantern are in web/island-lake-life.js.
@@ -132,6 +131,7 @@ const state = { lastRainAt: -Infinity },
 // Where things are, in scene px, worked out once per island (PG is the island projection, fixed for the page).
 const GEO = new WeakMap();
 const LAKE_GLINTS = 26,
+  POOL_GLINTS = 4,
   RIPPLES = 10,
   FALL_STREAKS = 9,
   VINES = 18;
@@ -141,7 +141,8 @@ function geometry(island, PG) {
   const o = PG(0, 0, 0),
     has = (x, y) => island.cells.has(x + ',' + y),
     g = { PG, ox: o[0], oy: o[1] };
-  // lake: glints on a spread of its open tiles (not under the lotus, the pillar or its stones), rings on others
+  // lake: glints on a spread of its open tiles (not under the lotus, the pillar or its stones), rings on others; the
+  // pool under the mountain fall has a few glints of its own
   const tilesOf = set => [...set].map(k => k.split(',').map(Number)).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
   const lake = tilesOf(island.pond.cells),
     pav = island.pavilion,
@@ -158,6 +159,7 @@ function geometry(island, PG) {
     });
   g.glints = pick(open, LAKE_GLINTS, 5);
   g.ripples = pick(open, RIPPLES, 6);
+  g.poolGlints = pick(tilesOf(island.mountain.pool.cells), POOL_GLINTS, 7).map(l => ({ ...l, y: l.y + 0.3 }));
   // main fall: a sheet in the plane of the lake's front lip (y = f.y + 1), from the water down past the cone
   const f = island.waterfall;
   g.fall = {
@@ -170,6 +172,9 @@ function geometry(island, PG) {
     grad: null,
   };
   g.fallStreaks = Array.from({ length: FALL_STREAKS }, (_, i) => ({ u: 0.08 + 0.84 * ((i * 0.37) % 1), ph: i * 0.11 }));
+  // mountain falls: out of the gap between the peaks (island.mountain.gap), down the rock into the pool at its foot
+  const gap = island.mountain.gap;
+  g.mfall = { Y: gap.y, xa: gap.x - gap.w, xb: gap.x + gap.w, top: gap.z, bot: WATER_Z, q: -1, grad: null };
   // cone tip: the deepest column
   const tip = island.list.reduce((a, c) => (c.d > a.d ? c : a));
   g.tip = { x: o[0] + (tip.x - tip.y) * TW, y: o[1] + (tip.x + tip.y + 1) * TH + tip.d };
@@ -356,6 +361,7 @@ function drawWater(ctx, g, P, t, df, rain) {
   const dim = 0.25 + 0.45 * df;
   ctx.fillStyle = P.glint;
   glints(ctx, g, g.glints, t, dim * 0.8);
+  glints(ctx, g, g.poolGlints, t, dim * 0.7);
   // in calm weather a slow ring now and then (two at a time, 9 s each), many quick ones in the rain
   for (let i = 0; i < 2; i++) {
     const c = t / 9 + i / 2,
@@ -377,6 +383,48 @@ function drawWater(ctx, g, P, t, df, rain) {
       ctx.globalAlpha = rain * dim * (1 - p) * 0.9;
       ring(ctx, Math.round(sx(g, l.x + l.dx, l.y + 0.3)), Math.round(sy(g, l.x + l.dx, l.y + 0.3, WATER_Z)), rr);
     }
+  ctx.globalAlpha = 1;
+}
+function drawMountainFall(ctx, g, P, t, flow, fp) {
+  const m = g.mfall,
+    wide = (flow - 1) * 0.12;
+  // the gradients are made again only when the light moves a step
+  if (m.q !== P.q) {
+    m.q = P.q;
+    m.grad = ctx.createLinearGradient(0, sy(g, m.xa, m.Y, m.top), 0, sy(g, m.xa, m.Y, m.bot));
+    m.grad.addColorStop(0, P.foam);
+    m.grad.addColorStop(0.15, P.mfall);
+    m.grad.addColorStop(1, P.current);
+  }
+  ctx.fillStyle = m.grad;
+  ctx.globalAlpha = 0.9;
+  quadY(ctx, g, m.Y, m.xa - wide, m.xb + wide, m.top, m.bot);
+  ctx.fillStyle = P.foam;
+  for (let i = 0; i < 4; i++) {
+    const p = (fp * 0.7 + i * 0.25) % 1,
+      z = m.top - (m.top - m.bot) * p,
+      u = m.xa + 0.12 + (m.xb - m.xa - 0.3) * ((i * 0.43) % 1);
+    ctx.globalAlpha = 0.6 * (1 - p);
+    quadY(ctx, g, m.Y, u, u + 0.08, z, z - 6);
+  }
+  // foam where it lands in the pool, and rings spreading out from it
+  const n = Math.round(4 + 3 * (flow - 1));
+  for (let i = 0; i < n; i++) {
+    const p = (t * 0.9 + i / n) % 1,
+      x = m.xa - 0.15 + (m.xb - m.xa + 0.3) * ((i * 0.618) % 1),
+      y = m.Y + 0.15 + 0.5 * p;
+    ctx.globalAlpha = 0.85 * (1 - p);
+    const s = 1 + (p < 0.5 ? 1 : 0);
+    ctx.fillRect(Math.round(sx(g, x, y)), Math.round(sy(g, x, y, m.bot + 1)), s + 1, s);
+  }
+  const mx = (m.xa + m.xb) / 2,
+    X = Math.round(sx(g, mx, m.Y + 0.45)),
+    Y = Math.round(sy(g, mx, m.Y + 0.45, m.bot));
+  for (let i = 0; i < 2; i++) {
+    const p = (t * 0.45 + i / 2) % 1;
+    ctx.globalAlpha = 0.45 * (1 - p);
+    ring(ctx, X, Y, 3 + Math.floor(p * 6));
+  }
   ctx.globalAlpha = 1;
 }
 function drawVines(ctx, g, P, wp, wind, still) {
@@ -587,6 +635,7 @@ function drawLife(ctx, island, PG, t, env) {
   L.drawWeed(ctx, g, L.weed(island, tw), df);
   L.drawDucks(ctx, g, L.ducks(island, t, df, still), df, tw);
   L.drawLanternWater(ctx, g, island, glow, tw);
+  drawMountainFall(ctx, g, P, tw, flow, fp);
   drawVines(ctx, g, P, ph.wind, wind, still);
   drawMainFall(ctx, g, P, tw, flow, fp);
   const smooth = ctx.imageSmoothingEnabled;

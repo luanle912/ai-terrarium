@@ -1,7 +1,6 @@
 // Pure logic for the sky island (no DOM, no canvas). The page and tests/sky-logic.test.mjs both run this block.
 import { tr } from './i18n.js';
 import { IslandLand, key, N4 } from './island-land.js';
-import { peakRise } from './mountain-shape.js';
 // The island's land (shape, underside, spots, pond, paths, decor) lives in web/island-land.js; re-exported below.
 const { buildIsland, annexLand, outdoorSpots, stairs, STAIR_RUN, lawnPaths } = IslandLand;
 const WATERFALL_LEN = 140,
@@ -55,9 +54,9 @@ function canCross(a, b, W, H, st) {
       : o[1] === H - 1 && l[1] === H && o[0] === l[0] && l[0] >= s.x && l[0] < s.x + s.len,
   );
 }
-// Lawn cells agents can stand on: not the mountain's foot, the lawn it hides or the lake at its foot, not the lake
-// (except the bathing spots; the pavilion's stepping stones are scenery), not under a tree, bush, mushroom, rock, pine
-// or lamp post. Flowers are stepped over.
+// Lawn cells agents can stand on: not the mountain or the pool at its foot, not the lake (except the bathing spots;
+// the pavilion's stepping stones are scenery), not under a tree, bush, mushroom, rock or lamp post. Flowers are
+// stepped over.
 function lawnWalk(island, W, H) {
   const out = new Set(),
     blocked = new Set(island.decor.filter(d => d.kind !== 'flower').map(d => key(d.x, d.y))),
@@ -65,8 +64,8 @@ function lawnWalk(island, W, H) {
   for (const l of island.lamps) blocked.add(key(l.x, l.y));
   for (const c of island.list) {
     const k = key(c.x, c.y);
-    const m = island.mountain;
-    if (inRect(c.x, c.y, W, H) || blocked.has(k) || m.cells.has(k) || m.hidden.has(k) || m.lake.cells.has(k)) continue;
+    if (inRect(c.x, c.y, W, H) || blocked.has(k) || island.mountain.cells.has(k)) continue;
+    if (island.mountain.pool.cells.has(k)) continue;
     if (island.pond.cells.has(k) && !bath.has(k)) continue;
     out.add(k);
   }
@@ -85,9 +84,8 @@ function groundZ(x, y, W, H, st, floorZ) {
 
 // Logical scene size and origin that fit the whole island: its top, underside, trees, waterfall and mountain.
 // FH is the height the view is fitted to: the island top plus a little underside; the rest may run off the bottom.
-// The mountain's peak (peakRise px above its foot's front corner) may make the scene taller, but by at most a
-// ninth of FH (so the office keeps at least 90 % of its size whatever the stage's shape); a peak beyond that runs off
-// the top.
+// The mountain's peaks may make the scene taller, but by at most a ninth of FH (so the office keeps at least 90 % of
+// its size whatever the stage's shape); a peak beyond that runs off the top.
 const FOCUS_UNDER = 40,
   PEAK_ROOM = 12; // px of sky kept over a peak, so birds crossing the top corner fly clear of it
 function sceneFrame(island, { W, H, TW, TH, WALL, pad }) {
@@ -123,8 +121,7 @@ function sceneFrame(island, { W, H, TW, TH, WALL, pad }) {
   take(f.x + 0.5, f.y + 1, -1 - WATERFALL_LEN);
   const flatTop = Math.floor(minY),
     flatFH = Math.ceil(topY + FOCUS_UNDER) - flatTop + 2 * pad;
-  const m = island.mountain;
-  if (m) take(m.foot.x, m.foot.y, peakRise(m.scale) + PEAK_ROOM);
+  if (island.mountain) for (const p of island.mountain.peaks) take(p.x + 0.5, p.y + 0.5, p.h + PEAK_ROOM);
   minX = Math.floor(minX);
   minY = Math.max(Math.floor(minY), flatTop - Math.floor(flatFH / 9));
   maxX = Math.ceil(maxX);
