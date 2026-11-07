@@ -6,13 +6,12 @@
 // return the same arrays and objects every time.
 import { hash, WATER_Z } from './island-grid.js';
 import { night } from './sky-island.js';
+import { pavilionLantern } from './island-art.js';
 
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const TW = 16,
   TH = 8;
 const K = (x, y) => Math.floor(x) + ',' + Math.floor(y);
-// The pavilion's lantern hangs under the eaves of its lower roof, this many px above the water. The one number to
-// change when the pavilion's art (web/island-art.js) settles where its eaves are.
 
 // ---- per-island setup, once ----
 // Fish paths: ellipses in tile axes on open water. Every point of a path, and its body a third of a tile either side,
@@ -235,12 +234,22 @@ function palette(df) {
     shade: night('#cdd5e2', d),
     beak: night('#f2a33a', d),
     eye: '#3B2F4A',
+    line: night('#3B2F4A', d),
     wake: night('#e8f6ff', d),
     fish: '#16284a',
     weed: night('#86c24e', d),
     weedDark: night('#5c9a3a', d),
   };
   return PAL;
+}
+// A duck's shape in one colour: a body 9 px long with a rounded back, its tail up behind, its head up front (tucked
+// onto its back asleep).
+function duckShape(ctx, X, Y, f, asleep) {
+  part(ctx, X, Y, f, -5, -3, 9, 3);
+  part(ctx, X, Y, f, -6, -4, 2, 1);
+  part(ctx, X, Y, f, -4, -4, 9, 1);
+  if (asleep) part(ctx, X, Y, f, 0, -5, 3, 2);
+  else part(ctx, X, Y, f, 2, -8, 3, 4);
 }
 // A rect mirrored about the duck's middle when it faces left.
 function part(ctx, X, Y, face, dx, dy, w, h) {
@@ -337,25 +346,24 @@ function drawDucks(ctx, g, list, df, t) {
       ctx.globalAlpha = 1;
       continue;
     }
-    const sink = d.dive > 0.1 ? 1 : 0;
+    const sink = d.dive > 0.1 ? 1 : 0,
+      y = Y + sink;
+    // the island's outline round the duck first (its shape pushed a pixel each way), so it reads on bright water
+    ctx.fillStyle = P.line;
+    duckShape(ctx, X - 1, y, f, d.asleep);
+    duckShape(ctx, X + 1, y, f, d.asleep);
+    duckShape(ctx, X, y - 1, f, d.asleep);
     ctx.fillStyle = P.feather;
-    part(ctx, X, Y + sink, f, -4, -3, 7, 3);
-    part(ctx, X, Y + sink, f, -5, -4, 2, 1);
-    if (d.asleep) {
-      // head tucked onto the back, eyes shut
-      part(ctx, X, Y, f, -1, -5, 3, 2);
-      ctx.fillStyle = P.shade;
-      part(ctx, X, Y, f, -4, -1, 7, 1);
-      ctx.fillStyle = P.beak;
-      part(ctx, X, Y, f, 2, -4, 1, 1);
-    } else {
-      part(ctx, X, Y + sink, f, 1, -6, 3, 3);
-      ctx.fillStyle = P.shade;
-      part(ctx, X, Y + sink, f, -4, -1, 7, 1);
-      ctx.fillStyle = P.beak;
-      part(ctx, X, Y + sink, f, 4, -5, 2, 1);
+    duckShape(ctx, X, y, f, d.asleep);
+    ctx.fillStyle = P.shade;
+    part(ctx, X, y, f, -5, -1, 9, 1);
+    part(ctx, X, y, f, -3, -3, 4, 1); // the folded wing
+    ctx.fillStyle = P.beak;
+    if (d.asleep) part(ctx, X, y, f, 2, -4, 1, 1);
+    else {
+      part(ctx, X, y, f, 5, -6, 2, 1);
       ctx.fillStyle = P.eye;
-      part(ctx, X, Y + sink, f, 3, -5, 1, 1);
+      part(ctx, X, y, f, 3, -7, 1, 1);
     }
   }
   ctx.globalAlpha = 1;
@@ -363,10 +371,10 @@ function drawDucks(ctx, g, list, df, t) {
 // The lantern's warm light on the water in front of the pillar: a few wavering dashes (drawn with the lake, under the
 // pavilion).
 function drawLanternWater(ctx, g, island, glow, t) {
-  if (glow <= 0.01) return;
-  const p = island.pavilion,
-    X = Math.round(sx(g, p.x, p.y)),
-    Y = Math.round(sy(g, p.x, p.y, WATER_Z));
+  const l = pavilionLantern(island);
+  if (glow <= 0.01 || !l) return;
+  const X = Math.round(sx(g, l.x, l.y)),
+    Y = Math.round(sy(g, l.x, l.y, WATER_Z)) - 4;
   ctx.fillStyle = '#ffd37a';
   for (let i = 0; i < 3; i++) {
     const w = 5 - i,

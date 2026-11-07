@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 
 import { loadWeb } from './web.mjs'
 
@@ -246,7 +247,10 @@ test('the pavilion lantern glows where the art hangs it, and is drawn after the 
   const at = pavilionLantern(island)
   assert.ok(Math.hypot(at.x - island.pavilion.x, at.y - island.pavilion.y) < 1.5, 'beside the pavilion')
   assert.ok(at.z >= 20 && at.z <= 40, 'under the eaves')
-  assert.equal(typeof IslandLife.drawLanternLight, 'function', 'office-draw.js calls it right after the pavilion sprite')
+  assert.equal(typeof IslandLife.drawLanternLight, 'function')
+  // office-draw.js glows it from inside the pavilion sprite's own stamp, right after the sprite is drawn
+  const src = readFileSync(new URL('../web/office-draw.js', import.meta.url), 'utf8')
+  assert.match(src, /drawImage\(p\.img[^]*?if \(p\.lantern[^\n]*drawLanternLight\(/, 'not drawn after the pavilion sprite')
 })
 
 test('ducks dive at their own times, never all together when the page opens', () => {

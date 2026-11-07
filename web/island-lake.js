@@ -134,8 +134,8 @@ function pavilionOf(lake, baths) {
   return { x: px + 0.5, y: py + 0.5, pillar: { x: px, y: py }, path };
 }
 
-// Lotus leaves gather round the pillar's foot (never on it, its stones or right under the hall's eaves) and in a few
-// clumps by the banks; about half carry a flower, pink more often than white.
+// Lotus leaves gather round the pillar's foot (never on it, its stones, right under the hall's eaves or just behind
+// it on screen) and in a few clumps by the banks; about half carry a flower, pink more often than white.
 const LOTUS_CLUMPS = 3;
 function lotusOf(lake, pav) {
   const { pillar } = pav,
@@ -151,7 +151,9 @@ function lotusOf(lake, pav) {
     lake.has(key(x, y)) &&
     !stones.has(key(x, y)) &&
     !used.has(key(x, y)) &&
-    Math.max(Math.abs(x - pillar.x), Math.abs(y - pillar.y)) >= 2;
+    Math.max(Math.abs(x - pillar.x), Math.abs(y - pillar.y)) >= 2 &&
+    // not right behind the pavilion on screen, where a leaf would peek out over its roof
+    !(x + y < pillar.x + pillar.y && Math.abs(x - y - (pillar.x - pillar.y)) <= 1);
   for (let y = pillar.y - 3; y <= pillar.y + 3; y++)
     for (let x = pillar.x - 3; x <= pillar.x + 3; x++)
       if (open(x, y) && Math.max(Math.abs(x - pillar.x), Math.abs(y - pillar.y)) === 2 && hash(x, y, 60) < 0.5)
@@ -214,6 +216,10 @@ function duckLanes(lake, pav, lotus) {
     const cx = Math.floor(x),
       cy = Math.floor(y);
     if (Math.max(Math.abs(cx - pillar.x), Math.abs(cy - pillar.y)) <= 1) return false;
+    // nor right behind the pavilion on screen, where a duck would show between its roofs
+    const across = x - y - (pillar.x - pillar.y),
+      back = pillar.x + pillar.y + 1 - (x + y);
+    if (Math.abs(across) < 2.2 && back > 0 && back < 7) return false;
     if (stones.has(key(cx, cy)) || leaves.has(key(cx, cy))) return false;
     for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) if (!lake.has(key(cx + a, cy + b))) return false;
     return true;
