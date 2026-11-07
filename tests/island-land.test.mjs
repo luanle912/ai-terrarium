@@ -11,12 +11,17 @@ const island = IslandLand.buildIsland({ W, H })
 const has = (x, y) => island.cells.has(x + ',' + y)
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 const neighbours = (x, y) => N4.filter(([a, b]) => has(x + a, y + b)).length
+const K = (x, y) => x + ',' + y
+const at = (k) => k.split(',').map(Number)
+const tiles = [...island.cells].map(at)
+// The first island's lake, before the reshape to version 2: the new one is about twice as big.
+const V1_LAKE = 60
 
 test('the page sees the same island builder through SkyLogic', () => {
   assert.equal(SkyLogic.buildIsland, IslandLand.buildIsland)
-  assert.equal(IslandLand.SQUARE_MARGIN, 5)
-  assert.equal(IslandLand.SQUIRCLE_P, 5)
-  assert.deepEqual(IslandLand.centre(W, H), { cx: (W + 10) / 2, cy: H / 2, R: (W + 10) / 2 + 5 })
+  assert.equal(IslandLand.SQUARE_MARGIN, 4)
+  assert.equal(IslandLand.HEX_CUT, 4)
+  assert.deepEqual(IslandLand.centre(W, H), { cx: (W + 10) / 2, cy: H / 2, R: (W + 11) / 2 + 4, K: (W + 11) / 2 + (H + 1) / 2 + 4 })
   assert.deepEqual(island.shape, IslandLand.centre(W, H))
 })
 
@@ -24,24 +29,54 @@ test('island is deterministic', () => {
   const again = IslandLand.buildIsland({ W, H })
   assert.deepEqual(again.list, island.list)
   assert.deepEqual(again.decor, island.decor)
+  for (const f of ['pavilion', 'lotus', 'duckweed', 'ducks', 'rest', 'lamps', 'waterfall']) assert.deepEqual(again[f], island[f], f)
 })
 
-test('the island is a square centred on the office block', () => {
-  const { minX, maxX, minY, maxY } = island.bounds
-  assert.ok(Math.abs(maxX - minX - (maxY - minY)) <= 2, `bounds are ${maxX - minX} × ${maxY - minY}`)
-  const mx = (minX + maxX) / 2, my = (minY + maxY) / 2
-  assert.ok(Math.hypot(mx - (W + 10) / 2, my - H / 2) <= 1, `bounds centre ${mx},${my}`)
-  // The left strip carries the river (2 tiles) and a bank either side, so it is wider than the mockup's 2-3 tiles.
-  const left = island.list.filter((c) => c.y === 7 && c.x < -1).length
-  assert.ok(left >= 3 && left <= 5, `${left} grass tiles left of the office on row 7`)
-  for (let y = 0; y < H; y++) {
-    const strip = island.list.filter((c) => c.y === y && c.x < 0).length
-    assert.ok(strip >= 3, `row ${y} has only ${strip} tiles beside the left wall: no room for the river and a bank`)
+test('the island is a hexagon pointing up and down', () => {
+  // rows across the screen are x + y; columns down it are x - y
+  const byRow = new Map(), byCol = new Map()
+  for (const [x, y] of tiles) {
+    byRow.set(x + y, (byRow.get(x + y) || 0) + 1)
+    byCol.set(x - y, (byCol.get(x - y) || 0) + 1)
   }
+  const rows = [...byRow.keys()], cols = [...byCol.keys()]
+  for (const r of [Math.min(...rows), Math.max(...rows)]) {
+    const n = byRow.get(r)
+    assert.ok(n >= 1 && n <= 3, `the point at row x + y = ${r} is ${n} tiles wide`)
+  }
+  // the left and right sides run straight up and down the screen: a long run of tiles in the outermost column
+  for (const c of [Math.min(...cols), Math.max(...cols)]) {
+    const n = byCol.get(c)
+    assert.ok(n >= 6, `the upright edge at x - y = ${c} is only ${n} tiles long`)
+  }
+  // ... and they are about as far from the middle on either side
+  const { cx, cy } = island.shape
+  const mid = cx - cy
+  assert.ok(Math.abs(Math.max(...cols) - mid - (mid - Math.min(...cols))) <= 2, 'the upright edges are lopsided')
+  // a hexagon, not a diamond: the cut takes the left and right points well inside the square's
+  const { R } = island.shape
+  assert.ok(Math.max(...cols) - Math.min(...cols) < 4 * R - 20, 'the left and right points are not cut off')
 })
 
 test('the island contains the whole office block', () => {
   for (let y = -1; y <= H; y++) for (let x = -1; x <= W + 10; x++) assert.ok(has(x, y), `office block cell ${x},${y}`)
+})
+
+test('the narrowest lawn around the office block is about four tiles', () => {
+  // steps from off the island to each tile (1 on the shore), so a block tile at d has d - 1 lawn tiles outside it
+  const { minX, maxX, minY, maxY } = island.bounds
+  const dist = new Map(), q = []
+  for (let y = minY - 1; y <= maxY; y++) for (let x = minX - 1; x <= maxX; x++) if (!has(x, y)) { dist.set(K(x, y), 0); q.push([x, y]) }
+  for (let i = 0; i < q.length; i++) {
+    const [x, y] = q[i]
+    for (const [a, b] of N4) {
+      const k = K(x + a, y + b)
+      if (has(x + a, y + b) && !dist.has(k)) { dist.set(k, dist.get(K(x, y)) + 1); q.push([x + a, y + b]) }
+    }
+  }
+  let least = Infinity
+  for (let y = -1; y <= H; y++) for (let x = -1; x <= W + 10; x++) least = Math.min(least, dist.get(K(x, y)) - 1)
+  assert.ok(least >= 3 && least <= 5, `the narrowest lawn is ${least} tiles`)
 })
 
 test('shore has no one-tile spikes or notches', () => {
@@ -76,12 +111,12 @@ test('the cone falls off outward without steps', () => {
     }
 })
 
-// ---- mountain, river, lake, bridge, rest corner, lamps, decor ----
+// ---- mountain, pool, lake, pavilion, rest corner, lamps, decor ----
 
-const K = (x, y) => x + ',' + y
-const at = (k) => k.split(',').map(Number)
 const walk = SkyLogic.lawnWalk(island, W, H)
 const southFoot = [22, H]
+const lake = island.pond.cells
+const pool = island.mountain.pool?.cells ?? new Set()
 // Every cell reachable from `from` stepping (4 ways) only on `cells`.
 const reach = (cells, from) => {
   const seen = new Set([K(...from)]), q = [from]
@@ -94,27 +129,119 @@ const reach = (cells, from) => {
   }
   return seen
 }
-// Breadth-first route from `from` to `to` over `cells`, or null.
-const route = (cells, from, to) => {
-  const prev = new Map([[K(...from), null]]), q = [from]
-  for (let i = 0; i < q.length; i++) {
-    const [x, y] = q[i]
-    if (x === to[0] && y === to[1]) break
-    for (const [a, b] of N4) {
-      const k = K(x + a, y + b)
-      if (cells.has(k) && !prev.has(k)) { prev.set(k, K(x, y)); q.push([x + a, y + b]) }
+const connected = (cells) => cells.size > 0 && reach(cells, at(cells.values().next().value)).size === cells.size
+const cheb = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]))
+
+test('there is no river or bridge', () => {
+  assert.equal(island.river, undefined)
+  assert.equal(island.bridge, undefined)
+  // the only water: the lake and the pool under the mountain falls, apart (the pool runs nowhere)
+  for (const k of pool) {
+    assert.ok(!lake.has(k), `${k} is both lake and pool`)
+    const [x, y] = at(k)
+    for (const [a, b] of N4) assert.ok(!lake.has(K(x + a, y + b)), `the pool at ${k} runs into the lake`)
+  }
+  // the left strip beside the office is plain lawn again
+  for (let y = 0; y < H; y++) for (let x = -3; x < -1; x++) if (has(x, y)) assert.ok(walk.has(K(x, y)) || island.decor.some((d) => d.x === x && d.y === y), `${x},${y} is not lawn`)
+  // the drawing code reads the bridge height of whoever stands anywhere: nothing lifts anyone now
+  assert.equal(loadWeb('island-land').bridgeZ(undefined, 3.5, 20.5), 0)
+})
+
+test('the lake sits at the bottom point and feeds the main fall there', () => {
+  assert.ok(lake.size >= 2 * V1_LAKE, `the lake is ${lake.size} tiles, the first island's was ${V1_LAKE}`)
+  assert.ok(connected(lake), 'the lake is one body of water')
+  const low = Math.max(...tiles.map(([x, y]) => x + y))
+  const points = tiles.filter(([x, y]) => x + y === low)
+  for (const p of points) assert.ok([...lake].some((k) => cheb(at(k), p) <= 2), `the bottom point ${p} is far from the lake`)
+  const { x, y } = island.waterfall
+  assert.equal(x + y, low, `the waterfall at ${x},${y} is not on the bottom point`)
+  assert.ok(lake.has(K(x, y)) && !has(x, y + 1), `the waterfall at ${x},${y} is not lake on the front shore`)
+  // the lake keeps a bank of lawn all round, except at the lip by the fall
+  for (const k of lake) {
+    const [lx, ly] = at(k)
+    assert.ok(!(lx >= -1 && lx <= W && ly >= -1 && ly <= H), `lake tile ${k} touches the office`)
+    assert.ok(!island.spots.some((s) => lx >= s.x && lx < s.x + s.w && ly >= s.y && ly < s.y + s.h), `lake tile ${k} is on a reserved spot`)
+    if (N4.some(([a, b]) => !has(lx + a, ly + b))) assert.ok(cheb([lx, ly], [x, y]) <= 3, `lake tile ${k} opens onto the shore away from the fall`)
+  }
+  assert.equal(island.pond.spots.length, 2)
+  for (const s of island.pond.spots) assert.ok(lake.has(K(s.x, s.y)) && walk.has(K(s.x, s.y)), `bathing spot ${s.x},${s.y}`)
+})
+
+test('the lake is rounded: no one-tile spurs or notches', () => {
+  const wet = (x, y) => N4.filter(([a, b]) => lake.has(K(x + a, y + b))).length
+  for (const k of lake) {
+    const [x, y] = at(k)
+    assert.ok(wet(x, y) >= 2, `lake tile ${k} is a spur`)
+    for (const [a, b] of N4) if (has(x + a, y + b) && !lake.has(K(x + a, y + b))) assert.ok(wet(x + a, y + b) <= 2, `lawn tile ${x + a},${y + b} is a notch in the lake`)
+  }
+})
+
+test('the pavilion stands on one pillar inside the lake', () => {
+  const { pillar, path, x, y } = island.pavilion
+  assert.deepEqual([x, y], [pillar.x + 0.5, pillar.y + 0.5], 'the hall is not over its pillar')
+  for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) assert.ok(lake.has(K(pillar.x + a, pillar.y + b)), `the pillar is within 2 tiles of the bank (${pillar.x + a},${pillar.y + b})`)
+  assert.ok(path.length >= 1)
+  const land = (p) => has(p.x, p.y) && !lake.has(K(p.x, p.y))
+  assert.ok(N4.some(([a, b]) => land({ x: path[0].x + a, y: path[0].y + b })), 'the stones do not start at the bank')
+  const last = path[path.length - 1]
+  assert.equal(Math.abs(last.x - pillar.x) + Math.abs(last.y - pillar.y), 1, 'the stones do not reach the pillar')
+  for (let i = 0; i < path.length; i++) {
+    const p = path[i]
+    assert.ok(lake.has(K(p.x, p.y)), `stone ${p.x},${p.y} is not in the lake`)
+    assert.ok(!(p.x === pillar.x && p.y === pillar.y), 'a stone on the pillar')
+    assert.ok(!walk.has(K(p.x, p.y)), `stone ${p.x},${p.y} is walkable: the pavilion is scenery`)
+    if (i) assert.equal(Math.abs(p.x - path[i - 1].x) + Math.abs(p.y - path[i - 1].y), 1, `the stones break at ${p.x},${p.y}`)
+  }
+  assert.ok(!walk.has(K(pillar.x, pillar.y)))
+})
+
+test('lotus, duckweed and duck lanes stay on open water', () => {
+  const { pillar, path } = island.pavilion
+  const stones = new Set(path.map((p) => K(p.x, p.y)))
+  const off = (x, y, what) => {
+    const k = K(x, y)
+    assert.ok(lake.has(k), `${what} at ${k} is not on the lake`)
+    assert.ok(!(x === pillar.x && y === pillar.y) && !stones.has(k), `${what} at ${k} is on the pavilion or its stones`)
+  }
+  const leaves = new Set()
+  assert.ok(island.lotus.length >= 6, `only ${island.lotus.length} lotus leaves`)
+  for (const l of island.lotus) {
+    off(l.x, l.y, 'lotus')
+    assert.ok(['pink', 'white', null].includes(l.flower), `lotus flower ${l.flower}`)
+    assert.ok(!leaves.has(K(l.x, l.y)), `two lotus leaves on ${l.x},${l.y}`)
+    leaves.add(K(l.x, l.y))
+  }
+  for (const c of ['pink', 'white']) assert.ok(island.lotus.some((l) => l.flower === c), `no ${c} lotus flower`)
+  assert.ok(island.lotus.some((l) => cheb([l.x, l.y], [pillar.x, pillar.y]) <= 3), 'no lotus round the pillar')
+  assert.ok(island.duckweed.length >= 4, `only ${island.duckweed.length} tiles of duckweed`)
+  for (const d of island.duckweed) {
+    off(d.x, d.y, 'duckweed')
+    assert.ok(!leaves.has(K(d.x, d.y)), `duckweed on the lotus at ${d.x},${d.y}`)
+  }
+  const { lanes } = island.ducks
+  assert.ok(lanes.length >= 2 && lanes.length <= 3, `${lanes.length} duck lanes`)
+  for (const lane of lanes) {
+    assert.ok(lane.length >= 4, 'a lane of fewer than four points')
+    // the whole loop, last point back to the first: on water a tile clear of the bank, off the hall and the lotus
+    for (let i = 0; i < lane.length; i++) {
+      const [ax, ay] = lane[i], [bx, by] = lane[(i + 1) % lane.length]
+      for (let s = 0; s <= 8; s++) {
+        const x = Math.floor(ax + ((bx - ax) * s) / 8), y = Math.floor(ay + ((by - ay) * s) / 8)
+        off(x, y, 'a duck lane')
+        assert.ok(!leaves.has(K(x, y)), `a duck lane runs through the lotus at ${x},${y}`)
+        assert.ok(cheb([x, y], [pillar.x, pillar.y]) >= 2, `a duck lane runs under the pavilion at ${x},${y}`)
+        for (const [a, b] of N4) assert.ok(lake.has(K(x + a, y + b)), `a duck lane runs along the bank at ${x},${y}`)
+      }
     }
   }
-  if (!prev.has(K(...to))) return null
-  const out = []
-  for (let k = K(...to); k; k = prev.get(k)) out.unshift(k)
-  return out
-}
-const connected = (cells) => cells.size > 0 && reach(cells, at(cells.values().next().value)).size === cells.size
+  for (let i = 0; i < lanes.length; i++)
+    for (let j = i + 1; j < lanes.length; j++)
+      for (const p of lanes[i]) for (const q of lanes[j]) assert.ok(Math.hypot(p[0] - q[0], p[1] - q[1]) >= 1, 'two duck lanes cross')
+})
 
-test('the mountain stands on the back lawn with two peaks', () => {
+test('the mountain has two pointed peaks, the main one about half again as tall as before, and a pool at the foot of the fall', () => {
   const { cells, peaks, gap } = island.mountain
-  assert.ok(cells.size >= 40, `only ${cells.size} mountain tiles`)
+  assert.ok(cells.size >= 80, `only ${cells.size} mountain tiles`)
   for (const k of cells) {
     assert.ok(island.cells.has(k), `mountain tile ${k} is off the island`)
     assert.ok(at(k)[1] <= -3, `mountain tile ${k} is less than 3 tiles behind the back wall`)
@@ -123,127 +250,94 @@ test('the mountain stands on the back lawn with two peaks', () => {
   const main = peaks.filter((p) => p.main)
   assert.equal(main.length, 1, 'exactly one main peak')
   const side = peaks.find((p) => !p.main)
-  assert.ok(main[0].h > side.h, 'the main peak is the taller')
+  // the first island's main peak stood 68 px tall
+  assert.ok(main[0].h >= 1.4 * 68 && main[0].h <= 1.6 * 68, `the main peak is ${main[0].h} px tall`)
+  assert.ok(side.h <= 0.7 * main[0].h, 'the lower peak is not clearly lower')
   // ... and reads so on screen: its tip stands higher up the screen ((x + y) * 8 - h px) than the lower peak's
   const tipY = (p) => (p.x + p.y + 1) * 8 - p.h
   assert.ok(tipY(main[0]) <= tipY(side) - 8, `main tip at ${tipY(main[0])} px, the lower one at ${tipY(side)} px`)
-  for (const p of peaks) assert.ok(cells.has(K(p.x, p.y)), `peak ${p.x},${p.y} is not on the mountain`)
-  // Between: along the ridge from one peak to the other, the gap lies strictly inside and close to it.
-  const [a, b] = peaks, vx = b.x - a.x, vy = b.y - a.y
-  const t = ((gap.x - a.x) * vx + (gap.y - a.y) * vy) / (vx * vx + vy * vy)
-  const off = Math.abs((gap.x - a.x) * vy - (gap.y - a.y) * vx) / Math.hypot(vx, vy)
-  assert.ok(t > 0 && t < 1 && off <= 2, `gap ${gap.x},${gap.y} is not between the peaks (t ${t.toFixed(2)}, ${off.toFixed(2)} off)`)
-  // toward small x: the top corner on screen
+  for (const p of peaks) assert.ok(cells.has(K(p.x, p.y)) && p.R > 0, `peak ${p.x},${p.y} is not on the mountain`)
+  // toward small x: the top point on screen
   const mx = [...cells].reduce((s, k) => s + at(k)[0], 0) / cells.size
   assert.ok(mx < (W + 10) / 2 - 5, `the mountain's middle is at x ${mx.toFixed(1)}`)
-})
-
-test('the river runs from the mountain gap down the left strip into the lake', () => {
-  const { cells, line } = island.river
-  assert.ok(connected(cells), 'the river is one stream')
-  for (const k of cells) {
-    const [x, y] = at(k)
-    assert.ok(has(x, y), `river tile ${k} is off the island`)
-    assert.ok(x < 0 || y > H, `river tile ${k} is neither in the left strip nor on the front lawn`)
-    assert.ok(!island.pond.cells.has(k) && !island.mountain.cells.has(k), `river tile ${k} is also lake or mountain`)
+  // The falls pour out between the peaks on screen ((x - y) * 16 px across) ...
+  const sx = (x, y) => (x - y) * TW
+  const tips = peaks.map((p) => sx(p.x + 0.5, p.y + 0.5)).sort((a, b) => a - b)
+  const src = sx(gap.x, gap.y)
+  assert.ok(src > tips[0] + TW && src < tips[1] - TW, `the falls at ${src} px, the peaks at ${tips} px`)
+  assert.ok(gap.z > 0 && gap.z < Math.min(...peaks.map((p) => p.h)), 'the falls start below the lower peak')
+  // ... into a small square pool, 2x2 to 3x3, at the back of which they land, rock behind it
+  const ps = [...pool].map(at)
+  const xs = ps.map(([x]) => x), ys = ps.map(([, y]) => y)
+  const w = Math.max(...xs) - Math.min(...xs) + 1, h = Math.max(...ys) - Math.min(...ys) + 1
+  assert.ok(w >= 2 && w <= 3 && h >= 2 && h <= 3 && pool.size === w * h, `the pool is ${pool.size} tiles, ${w} x ${h}`)
+  assert.equal(gap.y, Math.min(...ys), 'the falls stand at the back edge of the pool')
+  for (const x of [gap.x - gap.w, gap.x + gap.w]) assert.ok(pool.has(K(Math.floor(x), gap.y)), `fall edge ${x} is not over the pool`)
+  for (const [x, y] of ps) {
+    assert.ok(has(x, y) && !cells.has(K(x, y)) && !walk.has(K(x, y)), `pool tile ${x},${y}`)
+    if (y === gap.y) assert.ok(cells.has(K(x, y - 1)), `no rock behind the pool at ${x},${y}`)
   }
-  const { gap } = island.mountain
-  const [hx, hy] = line[0].map(Math.floor)
-  const head = [...cells].map(at).filter(([, y]) => y === hy)
-  assert.ok(head.length && head.every(([x]) => Math.abs(x - hx) <= 1), `the line starts at ${line[0]}, off the river head`)
-  assert.ok(head.some(([x, y]) => Math.max(Math.abs(x - gap.x), Math.abs(y - gap.y)) <= 2), 'the river head is not under the gap')
-  const [ex, ey] = line[line.length - 1]
-  assert.ok(island.pond.cells.has(K(Math.floor(ex), Math.floor(ey))) || island.pond.cells.has(K(Math.floor(ex) - 1, Math.floor(ey))),
-    `the line ends at ${ex},${ey}, not at the lake`)
-  const last = Math.max(...[...cells].map((k) => at(k)[1]))
-  const mouth = [...cells].map(at).filter(([, y]) => y === last)
-  assert.ok(mouth.some(([x, y]) => island.pond.cells.has(K(x, y + 1))), 'the river does not flow into the lake')
-  // two tiles wide on every row, with a bank on each side
-  const rows = new Map()
-  for (const k of cells) { const [x, y] = at(k); rows.set(y, [...(rows.get(y) || []), x]) }
-  for (const [y, xs] of rows) {
-    assert.equal(xs.length, 2, `row ${y} of the river is ${xs.length} tiles wide`)
-    if (y < 0 || y > H) continue
-    assert.ok(has(Math.min(...xs) - 1, y) && has(Math.max(...xs) + 1, y), `row ${y} of the river has no bank`)
-  }
-})
-
-test('the lake is on the front lawn and feeds the main waterfall on the front shore', () => {
-  const { cells, spots } = island.pond
-  assert.ok(cells.size >= 20, `the lake is only ${cells.size} tiles`)
-  assert.ok(connected(cells), 'the lake is one body of water')
-  for (const k of cells) assert.ok(at(k)[1] > H, `lake tile ${k} is not on the front lawn`)
-  const mx = [...cells].reduce((s, k) => s + at(k)[0], 0) / cells.size
-  assert.ok(mx < W / 3, `the lake is not on the left of the front lawn (middle x ${mx.toFixed(1)})`)
-  const { x, y } = island.waterfall
-  assert.ok(has(x, y) && (!has(x, y + 1) || !has(x + 1, y)), `the waterfall at ${x},${y} is not on the shore`)
-  assert.ok(cells.has(K(x, y)) || N4.some(([a, b]) => cells.has(K(x + a, y + b))), 'the waterfall is not by the lake')
-  assert.equal(spots.length, 2)
-  for (const s of spots) assert.ok(cells.has(K(s.x, s.y)) && walk.has(K(s.x, s.y)), `bathing spot ${s.x},${s.y}`)
-})
-
-test('the lake is a rounded pond: no one-tile spurs or notches, open only to the front shore', () => {
-  const { cells } = island.pond
-  const wet = (x, y) => N4.filter(([a, b]) => cells.has(K(x + a, y + b))).length
-  for (const k of cells) {
-    const [x, y] = at(k)
-    assert.ok(wet(x, y) >= 2, `lake tile ${k} is a spur`)
-    for (const [a, b] of [[-1, 0], [1, 0], [0, -1]]) assert.ok(has(x + a, y + b), `lake tile ${k} opens onto the shore`)
-    for (const [a, b] of N4) {
-      const n = K(x + a, y + b)
-      if (has(x + a, y + b) && !cells.has(n) && !island.river.cells.has(n)) assert.ok(wet(x + a, y + b) <= 2, `lawn tile ${n} is a notch in the lake`)
+  // its stone rim: every tile round it
+  const rim = new Set(island.mountain.pool.rim.map((r) => K(r.x, r.y)))
+  for (const [x, y] of ps)
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+      const k = K(x + a, y + b)
+      if (has(x + a, y + b) && !pool.has(k)) assert.ok(rim.has(k), `${k} is round the pool but not on its rim`)
     }
+  for (const r of island.mountain.pool.rim) assert.ok(!pool.has(K(r.x, r.y)) && ps.some((p) => cheb(p, [r.x, r.y]) === 1), `rim ${r.x},${r.y}`)
+  // open to the lawn in front, so someone can walk up to its rim
+  assert.ok(island.mountain.pool.rim.some((r) => reach(walk, southFoot).has(K(r.x, r.y))), 'nobody can reach the pool')
+})
+
+test('everything outdoors is reachable and nobody walks into water or the mountain', () => {
+  const seen = reach(walk, southFoot)
+  const lost = [...walk].filter((k) => !seen.has(k))
+  assert.deepEqual(lost, [], 'lawn tiles nobody can reach')
+  const bath = new Set(island.pond.spots.map((s) => K(s.x, s.y)))
+  for (const k of walk) {
+    assert.ok(!island.mountain.cells.has(k) && !pool.has(k), `${k} is on the mountain or in the pool`)
+    assert.ok(!lake.has(k) || bath.has(k), `${k} is in the lake`)
   }
+  const back = [...seen].filter((k) => at(k)[1] <= -3)
+  assert.ok(back.length > 50, `only ${back.length} back-lawn tiles reachable`)
+  const { bench, fish } = island.rest
+  for (const p of [bench, fish, ...island.pond.spots]) assert.ok(seen.has(K(p.x, p.y)), `${p.x},${p.y} cannot be reached`)
+  for (const s of island.spots) assert.ok([...seen].some((k) => { const [x, y] = at(k); return x >= s.x - 1 && x <= s.x + s.w && y >= s.y - 1 && y <= s.y + s.h }), `nobody reaches ${s.id}`)
+  // the dogs too: office-scene.js builds their places from the page's island at load; it only needs React for h()
+  globalThis.React ??= { createElement: () => null }
+  const { DOG_PLACES, ISLAND } = loadWeb('office-scene')
+  const { roam, den, drink, clear } = DOG_PLACES
+  for (const k of roam) {
+    assert.ok(!ISLAND.pond.cells.has(k) && !ISLAND.mountain.pool.cells.has(k), `dogs roam the water at ${k}`)
+    assert.ok(!ISLAND.mountain.cells.has(k), `dogs roam the mountain at ${k}`)
+  }
+  assert.ok(drink.filter((d) => ISLAND.pond.cells.has(K(d.tx, d.ty))).length >= 2, 'nowhere to drink at the lake')
+  for (const d of drink) {
+    const water = ISLAND.pond.cells.has(K(d.tx, d.ty)) || ISLAND.mountain.pool.cells.has(K(d.tx, d.ty))
+    assert.ok(water && roam.has(K(d.x, d.y)), `drink spot ${d.x},${d.y}`)
+  }
+  assert.equal(den.length, 3)
+  for (const [x, y] of den) assert.ok(roam.has(K(x, y)) && !clear.has(K(x, y)), `den cell ${x},${y} is not a quiet roam cell`)
 })
 
-test('the only way across the river is the bridge', () => {
-  const { bridge, rest } = island
-  assert.equal(bridge.cells.size, bridge.len)
-  for (const k of bridge.cells) assert.ok(island.river.cells.has(k) && walk.has(k), `bridge deck ${k} does not span the river`)
-  assert.ok(['x', 'y'].includes(bridge.dir))
-  assert.ok(bridge.cells.has(K(bridge.x, bridge.y)))
-  const path = route(walk, southFoot, [rest.bench.x, rest.bench.y])
-  assert.ok(path, 'no way from the south stairs to the rest bench')
-  assert.ok(path.some((k) => bridge.cells.has(k)), 'the way to the rest bench skips the bridge')
-  const noBridge = new Set([...walk].filter((k) => !bridge.cells.has(k)))
-  assert.ok(!reach(noBridge, southFoot).has(K(rest.bench.x, rest.bench.y)), 'the rest corner is reachable without the bridge')
-  assert.ok(!reach(noBridge, southFoot).has(K(rest.fish.x, rest.fish.y)), 'the fishing spot is reachable without the bridge')
-  // near the river mouth: no more than 4 rows of river below the bridge
-  const last = Math.max(...[...island.river.cells].map((k) => at(k)[1]))
-  assert.ok(last - bridge.y <= 4, `the bridge is ${last - bridge.y} rows above the river mouth`)
-})
-
-test('the rest corner sits on the far bank by the lake', () => {
+test('the rest corner sits on the lake\'s inner bank', () => {
   const { bench, fish } = island.rest
   for (const p of [bench, fish]) assert.ok(walk.has(K(p.x, p.y)), `rest spot ${p.x},${p.y} is not walkable`)
-  assert.ok(N4.some(([a, b]) => island.pond.cells.has(K(fish.x + a, fish.y + b))), 'the fishing spot is not at the water')
+  assert.ok(lake.has(K(fish.x + 1, fish.y)), 'the angler does not face the lake (+x)')
   assert.ok(Math.hypot(bench.x - fish.x, bench.y - fish.y) <= 3, 'the bench is far from the fishing spot')
-  const riverX = Math.min(...[...island.river.cells].map((k) => at(k)[0]))
-  assert.ok(bench.x < riverX && fish.x < riverX, 'the rest corner is not across the river')
+  // inner: nearer the office than the pavilion is, up the screen from it
+  const { pillar } = island.pavilion
+  assert.ok(fish.x + fish.y < pillar.x + pillar.y && bench.x + bench.y < pillar.x + pillar.y, 'the rest corner is not on the inner bank')
 })
 
-test('the back lawn is reachable on foot', () => {
-  const seen = reach(walk, southFoot)
-  const back = [...seen].filter((k) => at(k)[1] <= -3 && !island.mountain.cells.has(k))
-  assert.ok(back.length > 50, `only ${back.length} back-lawn tiles reachable`)
-  // the far bank's lane runs on up to the foot of the mountain
-  const far = [...seen].filter((k) => at(k)[1] <= -3 && at(k)[0] < Math.min(...[...island.river.cells].map((c) => at(c)[0])))
-  assert.ok(far.length > 0, 'the far bank does not reach the back lawn')
-  for (const k of [...island.mountain.cells, ...island.river.cells]) if (!island.bridge.cells.has(k)) assert.ok(!walk.has(k), `${k} is walkable`)
-})
-
-test('lamps stand at each end of the bridge and beside the stone path', () => {
-  const { lamps, bridge, paths } = island
+test('lamps stand beside the stone path, none by a bridge', () => {
+  const { lamps, paths } = island
   assert.ok(lamps.length >= 3)
-  const ends = bridge.dir === 'x'
-    ? [[bridge.x - 1, bridge.y], [bridge.x + bridge.len, bridge.y]]
-    : [[bridge.x, bridge.y - 1], [bridge.x, bridge.y + bridge.len]]
-  for (const [x, y] of ends) assert.ok(lamps.some((l) => Math.max(Math.abs(l.x - x), Math.abs(l.y - y)) === 1), `no lamp at the bridge end ${x},${y}`)
   for (const l of lamps) {
     const k = K(l.x, l.y)
     assert.ok(has(l.x, l.y), `lamp ${k} is off the island`)
     assert.ok(!paths.cells.has(k) && !walk.has(k), `lamp ${k} stands in the way`)
-    assert.ok(!island.pond.cells.has(k) && !island.river.cells.has(k), `lamp ${k} is in the water`)
+    assert.ok(!lake.has(k) && !pool.has(k), `lamp ${k} is in the water`)
     let near = false
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) near ||= paths.cells.has(K(l.x + a, l.y + b))
     assert.ok(near, `lamp ${k} is not beside the path`)
@@ -258,14 +352,14 @@ test('trees grow in clumps', () => {
     assert.ok(near >= 2, `tree at ${t.x},${t.y} stands alone (${near} others within 2 tiles)`)
   }
   for (const kind of ['tree', 'rock', 'flower', 'bush', 'mushroom']) assert.ok(island.decor.some((d) => d.kind === kind), `no ${kind}`)
-  // a garden, not a carpet: the island is about 2.5 times the old one, which had 64 pieces
+  // a garden, not a carpet
   assert.ok(island.decor.length <= 180, `${island.decor.length} pieces of decor`)
 })
 
-test('decor keeps off paths, the bridge, water, the mountain, the rest corner and the lamps', () => {
+test('decor keeps off paths, water, the mountain, the pool, the rest corner and the lamps', () => {
   const { rest } = island
-  const off = new Set([...island.paths.cells, ...island.bridge.cells, ...island.river.cells, ...island.pond.cells,
-    ...island.mountain.cells, K(rest.bench.x, rest.bench.y), K(rest.fish.x, rest.fish.y), ...island.lamps.map((l) => K(l.x, l.y))])
+  const off = new Set([...island.paths.cells, ...lake, ...pool, ...island.mountain.cells,
+    K(rest.bench.x, rest.bench.y), K(rest.fish.x, rest.fish.y), ...island.lamps.map((l) => K(l.x, l.y))])
   const seen = new Set()
   for (const d of island.decor) {
     const k = K(d.x, d.y)
@@ -273,46 +367,4 @@ test('decor keeps off paths, the bridge, water, the mountain, the rest corner an
     assert.ok(!seen.has(k), `two pieces of decor on ${k}`)
     seen.add(k)
   }
-})
-
-test('the office dogs keep off the water and the mountain, drink at the lake and sleep on their lawn', () => {
-  // office-scene.js builds the dogs' places from the page's island at load; it only needs React for h().
-  globalThis.React ??= { createElement: () => null }
-  const { DOG_PLACES, ISLAND } = loadWeb('office-scene')
-  const { roam, den, drink, clear } = DOG_PLACES
-  for (const k of roam) {
-    assert.ok(!ISLAND.pond.cells.has(k) && !(ISLAND.river.cells.has(k) && !ISLAND.bridge.cells.has(k)), `dogs roam the water at ${k}`)
-    assert.ok(!ISLAND.mountain.cells.has(k), `dogs roam the mountain at ${k}`)
-  }
-  assert.ok(drink.length >= 2, 'nowhere to drink')
-  for (const d of drink) assert.ok(ISLAND.pond.cells.has(K(d.tx, d.ty)) && roam.has(K(d.x, d.y)), `drink spot ${d.x},${d.y}`)
-  assert.equal(den.length, 3)
-  for (const [x, y] of den) assert.ok(roam.has(K(x, y)) && !clear.has(K(x, y)), `den cell ${x},${y} is not a quiet roam cell`)
-})
-
-test('the mountain falls pour out of the gap between the two peaks, down into the river head', () => {
-  const { gap, peaks } = island.mountain
-  const head = Math.min(...[...island.river.cells].map((k) => at(k)[1]))
-  assert.equal(gap.y, head, 'the falls stand at the back edge of the river head row')
-  for (const x of [gap.x - gap.w, gap.x + gap.w]) assert.ok(island.river.cells.has(K(Math.floor(x), head)), `fall edge ${x} is not over the river`)
-  assert.ok(gap.z > 0 && gap.z < Math.min(...peaks.map((p) => p.h)), 'the falls start below the lower peak')
-  // On screen ((x - y) * 16 px across), the source sits between the two peaks' tips, and it lies behind both of them
-  // (smaller x + y), so it shows in the notch between them rather than in front of either.
-  const sx = (x, y) => (x - y) * TW
-  const tips = peaks.map((p) => sx(p.x + 0.5, p.y + 0.5)).sort((a, b) => a - b)
-  const src = sx(gap.x, gap.y)
-  assert.ok(src > tips[0] + TW && src < tips[1] - TW, `the falls at ${src} px, the peaks at ${tips} px`)
-  for (const p of peaks) assert.ok(gap.x + gap.y < p.x + 0.5 + p.y + 0.5, `the falls are not behind the peak at ${p.x},${p.y}`)
-})
-
-test('the bridge deck lifts whoever crosses it, and nobody off it', () => {
-  const { bridgeZ, deckZ, DECK_OVER } = loadWeb('island-land')
-  const b = island.bridge
-  assert.equal(b.dir, 'x')
-  const mid = b.x + b.len / 2
-  assert.equal(bridgeZ(b, mid, b.y + 0.5), deckZ(0.5))
-  assert.equal(deckZ(0.5), 6)
-  assert.ok(bridgeZ(b, b.x - DECK_OVER + 0.05, b.y + 0.5) > 3, 'the deck starts a quarter tile onto the bank')
-  for (const [x, y] of [[b.x - 1, b.y + 0.5], [b.x + b.len + 0.5, b.y + 0.5], [mid, b.y - 0.2], [mid, b.y + 1.2]])
-    assert.equal(bridgeZ(b, x, y), 0, `${x},${y} is off the bridge`)
 })

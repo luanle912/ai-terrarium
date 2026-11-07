@@ -4,6 +4,8 @@ import './i18n.js';
 import './season-tree.js';
 import './office-decor.js';
 import './pantry-items.js';
+import './island-grid.js';
+import './island-lake.js';
 import './island-land.js';
 import './sky-logic.js';
 import './camera-logic.js';

@@ -73,7 +73,8 @@ export function renderIsland(island, frame, k, env) {
   const key = (x, y) => x + ',' + y,
     has = (x, y) => island.cells.has(key(x, y)),
     inPond = (x, y) => island.pond.cells.has(key(x, y)),
-    wet = (x, y) => inPond(x, y) || island.river.cells.has(key(x, y));
+    // the first island's river is gone (island.river is undefined now); Task B redraws the water
+    wet = (x, y) => inPond(x, y) || !!island.river?.cells.has(key(x, y));
   drawUnderside(lp, P, C, island);
   for (const c of island.list) {
     const { x, y } = c;
@@ -213,13 +214,16 @@ export function renderProps(island, frame, k, env) {
     draw(painter(g, P), g);
     out.push({ x, y, z, img, dx, dy, lamp });
   };
-  const { bridge, rest } = island,
-    bx = bridge.dir === 'x' ? bridge.len : 0,
-    by = bridge.dir === 'x' ? 0 : bridge.len,
-    span = [16 * (bridge.len + 2), 26, 16 * (bridge.len + 2), 18];
-  // a walker on the deck stands at least a quarter tile in from its ends and half a tile in from either railing
-  add(bridge.x, bridge.y, bridge.x + bridge.y - 0.2, span, pt => drawBridge(pt, P, C, bridge, 'back'));
-  add(bridge.x, bridge.y, bridge.x + bx + bridge.y + by + 0.8, span, pt => drawBridge(pt, P, C, bridge, 'front'));
+  const { bridge, rest } = island;
+  // the first island's bridge: gone from the island data now (island.bridge is undefined), so nothing is drawn
+  if (bridge) {
+    const bx = bridge.dir === 'x' ? bridge.len : 0,
+      by = bridge.dir === 'x' ? 0 : bridge.len,
+      span = [16 * (bridge.len + 2), 26, 16 * (bridge.len + 2), 18];
+    // a walker on the deck stands at least a quarter tile in from its ends and half a tile in from either railing
+    add(bridge.x, bridge.y, bridge.x + bridge.y - 0.2, span, pt => drawBridge(pt, P, C, bridge, 'back'));
+    add(bridge.x, bridge.y, bridge.x + bx + bridge.y + by + 0.8, span, pt => drawBridge(pt, P, C, bridge, 'front'));
+  }
   island.lamps.forEach((l, i) => add(l.x, l.y, l.x + l.y + 1, [9, 25, 8, 3], pt => drawLamp(pt, P, C, island, l), i));
   add(rest.bench.x, rest.bench.y, rest.bench.x + rest.bench.y + 1, [13, 15, 13, 8], pt =>
     drawBench(pt, P, C, rest.bench),

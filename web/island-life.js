@@ -139,18 +139,18 @@ function geometry(island, PG) {
   const o = PG(0, 0, 0),
     has = (x, y) => island.cells.has(x + ',' + y),
     g = { PG, ox: o[0], oy: o[1] };
-  // river: its two columns from the head row to the mouth
+  // river: its two columns from the head row to the mouth (none since the island's second version: no streaks)
   let rx0 = Infinity,
     ry0 = Infinity,
     ry1 = -Infinity;
-  for (const k of island.river.cells) {
+  for (const k of island.river?.cells || []) {
     const [x, y] = k.split(',').map(Number);
     rx0 = Math.min(rx0, x);
     ry0 = Math.min(ry0, y);
     ry1 = Math.max(ry1, y);
   }
   g.river = { x0: rx0, y0: ry0, len: ry1 + 1 - ry0 + 1 }; // runs on one tile into the lake
-  g.streaks = Array.from({ length: RIVER_STREAKS }, (_, i) => ({
+  g.streaks = Array.from({ length: island.river ? RIVER_STREAKS : 0 }, (_, i) => ({
     x: rx0 + 0.25 + 1.5 * ((i * 0.618 + hash(i, 1, 41) * 0.3) % 1),
     ph: hash(i, 2, 41),
     sp: 0.85 + 0.3 * hash(i, 3, 41),

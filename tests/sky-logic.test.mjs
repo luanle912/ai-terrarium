@@ -313,11 +313,12 @@ test('agents leave the office only by the stairs', () => {
   assert.equal(SkyLogic.canCross([W, 10], [W + 1, 10], W, H, stairs), true)
 })
 
-test('the lawn walk avoids water, the mountain, decor and lamps but reaches the bathing spots and crosses the bridge', () => {
+test('the lawn walk avoids water, the mountain, its pool, decor and lamps but reaches the bathing spots', () => {
   const walk = SkyLogic.lawnWalk(island, W, H)
   for (const s of island.pond.spots) assert.ok(walk.has(s.x + ',' + s.y))
   for (const k of island.pond.cells) if (!island.pond.spots.some((s) => s.x + ',' + s.y === k)) assert.ok(!walk.has(k), `water cell ${k} is walkable`)
-  for (const k of island.river.cells) assert.equal(walk.has(k), island.bridge.cells.has(k), `river cell ${k}`)
+  for (const k of island.mountain.pool.cells) assert.ok(!walk.has(k), `pool cell ${k} is walkable`)
+  for (const p of island.pavilion.path) assert.ok(!walk.has(p.x + ',' + p.y), `the pavilion's stone at ${p.x},${p.y} is walkable`)
   for (const k of island.mountain.cells) assert.ok(!walk.has(k), `mountain cell ${k} is walkable`)
   for (const l of island.lamps) assert.ok(!walk.has(l.x + ',' + l.y), `lamp at ${l.x},${l.y} is walkable`)
   for (const d of island.decor) if (d.kind !== 'flower') assert.ok(!walk.has(d.x + ',' + d.y), `${d.kind} at ${d.x},${d.y} is walkable`)
@@ -361,38 +362,36 @@ test('garden paths lie on walkable lawn, off the water and the reserved spots', 
   for (const d of island.decor) assert.ok(!island.paths.cells.has(d.x + ',' + d.y), `${d.kind} at ${d.x},${d.y} sits on the path`)
 })
 
-test('garden paths join both stairs to the lake, the bridge and the rest corner, and the east stairs to the smoking corner, never into the restroom block', () => {
+test('garden paths join both stairs to the lake and the rest corner, and the east stairs to the smoking corner, never into the restroom block', () => {
   const cells = island.paths.cells
   const bath = island.pond.spots.reduce((a, b) => (b.y < a.y ? b : a))
   const entry = [bath.x, bath.y - 1]
   assert.ok(cells.has(entry + ''), 'the path ends right next to a bathing spot')
   assert.ok(reachWithin(cells, [W, 8], entry), 'east stairs → lake')
   assert.ok(reachWithin(cells, [23, H], entry), 'south stairs → lake')
-  assert.equal(island.paths.lines.length, 6, 'a leg from each flight of stairs and one joining them, one to the smoking corner, two on to the rest corner')
+  assert.equal(island.paths.lines.length, 4, 'a leg from each flight of stairs, one to the smoking corner, one on to the rest corner')
   const smoke = island.spots.find((s) => s.id === 'east-front')
   assert.ok(reachWithin(cells, [W, 7], [smoke.x - 1, smoke.y + smoke.h - 1]), 'east stairs → smoking corner entrance')
   for (const k of cells) assert.ok(!inSpotId('east-back', ...k.split(',').map(Number)), `path cell ${k} runs into the restroom block`)
-  // stones up to the bridge, its deck across, stones on to the rest corner
-  const { bridge, rest } = island
-  const over = new Set([...cells, ...bridge.cells])
-  const [nearEnd, farEnd] = [[bridge.x + bridge.len, bridge.y], [bridge.x - 1, bridge.y]]
-  assert.ok(cells.has(nearEnd + '') && cells.has(farEnd + ''), 'the path does not meet both ends of the bridge')
-  for (const k of bridge.cells) assert.ok(!cells.has(k), `stepping stones on the bridge deck at ${k}`)
+  // stones on to the rest corner by the lake
+  const { rest } = island
   const restEnd = [rest.fish.x, rest.fish.y - 1]
   assert.ok(cells.has(restEnd + ''), 'the path does not end beside the fishing spot')
   assert.ok(Math.abs(rest.bench.x - restEnd[0]) + Math.abs(rest.bench.y - restEnd[1]) <= 2, 'the bench is off the end of the path')
-  assert.ok(reachWithin(over, [23, H], restEnd), 'south stairs → bridge → rest corner')
+  assert.ok(reachWithin(cells, [23, H], restEnd), 'south stairs → rest corner')
+  assert.ok(reachWithin(cells, [W, 8], restEnd), 'east stairs → rest corner')
 })
 
 test('garden paths keep the big lawn in front of the office whole', () => {
-  // Off the row along the plinth front, the path only runs west of the reserved south-left spot (to the lake and the
-  // bridge) or down the east side to the stairs there; the open lawn between stays whole.
-  const spot = island.spots.find((s) => s.id === 'south-left')
+  // Off the row along the plinth front, the path only runs east of the south stairs (down to the lake and the rest
+  // corner by it); the open lawn west of them stays whole.
+  const south = stairs.find((s) => s.side === 'south')
+  const last = Math.max(island.rest.fish.y, ...island.pond.spots.map((s) => s.y))
   for (const k of island.paths.cells) {
     const [x, y] = k.split(',').map(Number)
     if (y <= H + 1) continue
-    assert.ok(x <= spot.x + spot.w + 1, `path cell ${k} cuts into the front lawn`)
-    assert.ok(y <= island.pond.spots[0].y, `path cell ${k} wanders past the lake`)
+    assert.ok(x >= south.x + south.len, `path cell ${k} cuts into the front lawn`)
+    assert.ok(y <= last, `path cell ${k} wanders past the lake`)
   }
 })
 
@@ -412,7 +411,7 @@ test('stepping stones keep off the reserved spots, the pond and the office', () 
       const at = `stone at ${st.x.toFixed(2)},${st.y.toFixed(2)} reaches ${x.toFixed(2)},${y.toFixed(2)}`
       for (const s of island.spots) assert.ok(!(x > s.x && x < s.x + s.w && y > s.y && y < s.y + s.h), `${at}, inside spot ${s.id}`)
       assert.ok(!island.pond.cells.has(Math.floor(x) + ',' + Math.floor(y)), `${at}, in the pond`)
-      assert.ok(!island.river.cells.has(Math.floor(x) + ',' + Math.floor(y)), `${at}, in the river or on the bridge`)
+      assert.ok(!island.mountain.pool.cells.has(Math.floor(x) + ',' + Math.floor(y)), `${at}, in the pool`)
       assert.ok(!inOffice(x, y), `${at}, on the office floor`)
       assert.ok(has(Math.floor(x), Math.floor(y)), `${at}, off the island`)
     }
@@ -482,17 +481,16 @@ test('agents walking out to the pond keep to the garden path', () => {
   }
 })
 
-test('agents walking out to the rest corner keep to the garden path and cross the bridge', () => {
+test('agents walking out to the rest corner keep to the garden path', () => {
   const walk = SkyLogic.lawnWalk(island, W, H)
-  const cells = island.paths.cells, deck = island.bridge.cells
+  const cells = island.paths.cells
   const step = (a, b) => SkyLogic.canCross(a, b, W, H, stairs) && !inOffice(b[0], b[1]) && walk.has(b + '')
   const cost = (c) => (cells.has(c + '') ? 1 : SkyLogic.GRASS_COST)
   const { bench, fish } = island.rest
   for (const from of [[W, 8], [23, H]]) {
     const route = SkyLogic.cheapestPath(from, [fish.x, fish.y], step, cost)
     assert.ok(route.length > 0, `no way from ${from} to the fishing spot`)
-    assert.ok(route.some((c) => deck.has(c + '')), `from ${from} the walk skips the bridge`)
-    for (const c of route.slice(0, -1)) assert.ok(cells.has(c + '') || deck.has(c + ''), `from ${from} the walk leaves the path at ${c}`)
+    for (const c of route.slice(0, -1)) assert.ok(cells.has(c + ''), `from ${from} the walk leaves the path at ${c}`)
     assert.ok(SkyLogic.cheapestPath(from, [bench.x, bench.y], step, cost).length > 0, `no way from ${from} to the bench`)
   }
 })

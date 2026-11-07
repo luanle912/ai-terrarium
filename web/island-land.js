@@ -1,21 +1,11 @@
-// The office island's land (no DOM, no canvas): its squircle shape, the cone-shaped underside, the outdoor spots,
-// the mountain, river, lake (`pond`) and waterfall, the bridge, the rest corner, the lamps, the garden paths and the
-// decor. Nothing here is drawn (web/sky-island.js does that). Pure and deterministic: every position comes from the
-// grid and hash(), so the island looks the same on every machine. web/sky-logic.js re-exports it as SkyLogic.
-export const key = (x, y) => x + ',' + y;
-export const N4 = [
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
-];
-// Per-cell noise from the cell position alone, so the island looks the same on every machine.
-export const hash = (x, y, s) => {
-  const v = Math.sin(x * 127.1 + y * 311.7 + s * 74.7) * 43758.5453;
-  return v - Math.floor(v);
-};
-// The lake's and the river's water surface sits this far below the grass (px).
-export const WATER_Z = -3;
+// The office island's land (no DOM, no canvas): its hexagon shape, the cone-shaped underside, the outdoor spots,
+// the mountain and the pool at its foot, the lake at the bottom point (web/island-lake.js), the rest corner, the
+// lamps, the garden paths and the decor. Nothing here is drawn (web/sky-island.js does that). Pure and
+// deterministic: every position comes from the grid and hash(), so the island looks the same on every machine.
+// web/sky-logic.js re-exports it as SkyLogic.
+import { key, pos, N4, hash } from './island-grid.js';
+import { lakeOf } from './island-lake.js';
+export { key, N4, hash, WATER_Z } from './island-grid.js';
 
 // east-back runs along the pantry's east side, flush with the office's back wall, and holds the restroom block (raised
 // to the office floor); east-front, right beside the block's east side, holds the smoking corner; south-left is free.
@@ -25,7 +15,7 @@ const outdoorSpots = (W, H) => [
   { id: 'east-back', x: W, y: 0, w: 6, h: 7 },
 ];
 // Land the restroom block (rows -1..0, flush with the office's back wall) and the smoking corner (rows 3..10) stand
-// on. The square island already covers it; it is still added so they never stand off the land whatever the shape.
+// on. The island already covers it; it is still added so they never stand off the land whatever the shape.
 // Rows are [y, first x, last x], relative to the office (x from W, y from 0).
 const ANNEX_LAND = [
   [-1, 2, 4],
@@ -41,23 +31,39 @@ const ANNEX_LAND = [
 ];
 const annexLand = W => ANNEX_LAND.flatMap(([y, a, b]) => Array.from({ length: b - a + 1 }, (_, i) => [W + a + i, y]));
 
-// The island is a squircle (power SQUIRCLE_P) around the whole office block: the office (W x H) plus the restroom
-// block and smoking corner on its east side, x from -1 to W + 10 and y from -1 to H. Its radius leaves SQUARE_MARGIN
-// grass tiles beside the block's long sides, so the lawn in front of and behind the office is about 15 tiles deep.
-const SQUARE_MARGIN = 5,
-  SQUIRCLE_P = 5;
-const centre = (W, H) => ({ cx: (W + 10) / 2, cy: H / 2, R: (W + 10) / 2 + SQUARE_MARGIN });
-// A few long, low waves along the shore: bays and headlands, never one-tile bumps.
-const shoreWave = a => 0.035 * Math.sin(a * 3 + 0.6) + 0.025 * Math.sin(a * 5 + 2.1) + 0.015 * Math.sin(a * 7 + 4.0);
-// Normalised squircle distance of a tile centre: 0 at the island's centre, 1 on its shore (the wavy shore when
-// `wavy`, else the plain squircle).
-function squircleN(x, y, { cx, cy, R }, wavy) {
-  const px = (x + 0.5 - cx) / R,
-    py = (y + 0.5 - cy) / R;
-  const n = Math.pow(Math.abs(px) ** SQUIRCLE_P + Math.abs(py) ** SQUIRCLE_P, 1 / SQUIRCLE_P);
-  return wavy ? n / (1 + shoreWave(Math.atan2(py, px))) : n;
+// The island is a hexagon pointing up and down on screen around the whole office block: the office (W x H) plus the
+// restroom block and smoking corner on its east side, x from -1 to W + 10 and y from -1 to H. It starts as a square
+// of tiles, |dx| <= R and |dy| <= R from the block's middle (a diamond on screen, its points at the top, bottom,
+// left and right), with SQUARE_MARGIN grass tiles beside the block's long sides, so the lawn in front of and behind
+// the office is about 15 tiles deep. The left and right points are cut off along |dx - dy| <= K, which runs straight
+// up and down the screen, HEX_CUT tiles past the block's corners. The top and bottom points stay.
+const SQUARE_MARGIN = 4,
+  HEX_CUT = 4;
+const centre = (W, H) => {
+  const half = (W + 11) / 2; // from the block's middle to its end tiles' middles, along x
+  return { cx: (W + 10) / 2, cy: H / 2, R: half + SQUARE_MARGIN, K: half + (H + 1) / 2 + HEX_CUT };
+};
+// A few long, low waves along the shore: bays and headlands, never one-tile bumps (in tiles at the shore).
+const shoreWave = a => 0.5 * Math.sin(a * 3 + 0.6) + 0.35 * Math.sin(a * 5 + 2.1) + 0.2 * Math.sin(a * 7 + 4.0);
+// How far (in tiles) a tile centre lies outside the hexagon: <= 0.5 is land. The three edges blend over about a tile
+// (a soft maximum), so the corners turn softly instead of stepping. The waves run along the square's four sides and
+// fade out toward the cuts, so the two upright edges stay straight on screen.
+const SOFT = 0.7;
+function hexOut(x, y, { cx, cy, R, K }, wavy) {
+  const dx = x + 0.5 - cx,
+    dy = y + 0.5 - cy,
+    a = Math.abs(dx) - R,
+    b = Math.abs(dy) - R,
+    c = Math.abs(dx - dy) - K;
+  const f = SOFT * Math.log(Math.exp(a / SOFT) + Math.exp(b / SOFT) + Math.exp(c / SOFT));
+  return wavy ? f - shoreWave(Math.atan2(dy, dx)) * Math.min(1, Math.max(0, -c / 6)) : f;
 }
-const pos = k => k.split(',').map(Number);
+// The hexagon's own distance from the middle, 0 there and 1 on its edges, for the underside.
+const hexN = (x, y, { cx, cy, R, K }) => {
+  const dx = x + 0.5 - cx,
+    dy = y + 0.5 - cy;
+  return Math.max(Math.abs(dx) / R, Math.abs(dy) / R, Math.abs(dx - dy) / K);
+};
 // Distance of every cell to the shore in steps (0 on the shore).
 function shoreOf(set) {
   const count = (x, y) => N4.filter(([a, b]) => set.has(key(x + a, y + b))).length,
@@ -87,14 +93,14 @@ function shoreOf(set) {
 function buildIsland({ W, H }) {
   const shape = centre(W, H),
     { cx, cy, R } = shape,
-    x0 = Math.floor(cx - R - 2),
-    x1 = Math.ceil(cx + R + 2),
-    y0 = Math.floor(cy - R - 2),
-    y1 = Math.ceil(cy + R + 2);
+    x0 = Math.floor(cx - R - 3),
+    x1 = Math.ceil(cx + R + 3),
+    y0 = Math.floor(cy - R - 3),
+    y1 = Math.ceil(cy + R + 3);
   const cells = new Set();
   for (let y = y0; y < y1; y++)
     for (let x = x0; x < x1; x++)
-      if (squircleN(x, y, shape, true) <= 1 || (x >= -1 && x <= W && y >= -1 && y <= H)) cells.add(key(x, y));
+      if (hexOut(x, y, shape, true) <= 0.5 || (x >= -1 && x <= W + 10 && y >= -1 && y <= H)) cells.add(key(x, y));
   for (const [x, y] of annexLand(W)) cells.add(key(x, y));
   let minX = Infinity,
     maxX = -Infinity,
@@ -108,14 +114,14 @@ function buildIsland({ W, H }) {
     maxY = Math.max(maxY, y + 1);
   }
   // The underside is one cone: its tip, under the middle, hangs about a third of the island's screen width
-  // ((x - y) * 16 px per tile) below the grass, and it rises evenly to the shore. The depth follows the plain squircle
+  // ((x - y) * 16 px per tile) below the grass, and it rises evenly to the shore. The depth follows the plain hexagon
   // (the shore's waves would make it rise along the shore) and its noise stays under 2 px, so it never steps.
   const maxD = Math.round(((maxX - minY - (minX - maxY)) * 16) / 3),
     shore = shoreOf(cells);
   const list = [...cells]
     .map(k => {
       const [x, y] = pos(k),
-        n = Math.min(1, squircleN(x, y, shape, false));
+        n = Math.min(1, hexN(x, y, shape));
       return { x, y, shore: shore.get(k), d: 8 + (maxD - 8) * (1 - n) ** 1.6 + hash(x, y, 1) * 2 };
     })
     .sort((a, b) => a.x + a.y - (b.x + b.y) || a.x - b.x);
@@ -123,18 +129,11 @@ function buildIsland({ W, H }) {
   const inSpot = (x, y) => spots.some(s => x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h);
   const nearOffice = (x, y) => x >= -1 && x <= W && y >= -1 && y <= H;
   const free = (x, y) => cells.has(key(x, y)) && !nearOffice(x, y) && !inSpot(x, y);
-  const { river, pond, waterfall } = waters(cells, H, free);
-  const mountain = mountainOf(cells, river.cells);
-  const bridge = bridgeOf(H);
-  // The rest corner: a fishing spot on the far bank facing the lake right at the river mouth, the bench just upstream.
-  const mouth = river.line[river.line.length - 1][1];
-  const rest = {
-    bench: { x: RIVER_X - 2, y: mouth - 2 },
-    fish: { x: RIVER_X - 1, y: mouth },
-  };
-  const paths = lawnPaths(W, H, stairs(W, H), { bath: pond.spots, bridge, rest });
-  const lamps = lampsOf(H, bridge);
-  const decor = decorOf({ cells, free, river, pond, mountain, bridge, rest, paths, lamps });
+  const { pond, waterfall, pavilion, lotus, duckweed, ducks, rest } = lakeOf({ cells, shape, free });
+  const mountain = mountainOf(cells);
+  const paths = lawnPaths(W, H, stairs(W, H), { bath: pond.spots, rest });
+  const lamps = lampsOf(H, paths, pond.spots);
+  const decor = decorOf({ cells, free, pond, mountain, rest, paths, lamps });
   return {
     cells,
     list,
@@ -144,174 +143,94 @@ function buildIsland({ W, H }) {
     decor,
     waterfall,
     pond,
+    pavilion,
+    lotus,
+    duckweed,
+    ducks,
     paths,
     shape,
     mountain,
-    river,
-    bridge,
     rest,
     lamps,
   };
 }
 
-// ---- the landscape around the office ----
+// ---- the mountain ----
 // Coordinates are the office's (W x H at the origin): x < 0 is the strip beside the left wall, y < 0 the back lawn,
-// y > H the front lawn. A two-peak mountain stands on the back lawn toward small x (the top corner on screen); its
-// falls pour out of the gap between the peaks into a river two tiles wide that runs down the left strip, past the
-// office, into a lake on the left of the front lawn, and the lake spills over the front shore as the main waterfall.
-// Mountain, river and lake together cut the far bank off from the rest of the island, so a wooden bridge near the
-// river mouth is the only way over; the rest corner (a bench and a fishing spot) waits on the far bank by the lake, and
-// the far bank runs on up to the foot of the mountain. The near bank (x = -1, under the left wall) is plain grass.
-const RIVER_X = -3, // the river's two columns are RIVER_X and RIVER_X + 1, leaving one tile of bank either side
-  RIVER_HEAD = -11; // its first row, at the foot of the falls
-// Peaks in tiles, their height above the lawn in px and their foot's radius in tiles. They stand either side of the
-// river's head on screen, a little nearer the viewer than it: the lower one on the far bank, the main one on the back
-// lawn, so the river's head lies in the notch between them. The main one is half as tall again, and its tip sits well
-// above the lower peak's on screen.
+// y > H the front lawn. A two-peak mountain stands on the back lawn toward small x (the top point on screen). Its
+// falls pour out of the gap between the peaks down into a small pool at its foot, which runs nowhere. Peaks are in
+// tiles, their height above the lawn in px and their foot's radius in tiles; the main one is half as tall again as
+// the first island's (68 px) and its tip sits well above the lower peak's on screen.
 const PEAKS = [
-    { x: -4, y: -9, h: 44, R: 3, main: false },
-    { x: 1, y: -13, h: 68, R: 3.9, main: true },
+    { x: -4, y: -6, h: 58, R: 3.6, main: false },
+    { x: 2, y: -12, h: 102, R: 5, main: true },
   ],
-  MOUNTAIN_R = 4.5,
-  // The gap: the notch between the peaks the mountain falls pour out of, at the back of the river's head row, between
-  // its two columns, GAP_Z px up; the sheet of water is GAP_W tiles either side of it (web/island-art.js draws the rock
-  // of the notch, web/island-life.js the water).
-  GAP_Z = 18,
+  // the saddle between the peaks: tiles this close to the line between them are rock too
+  SADDLE_R = 2.5,
+  // The pool: POOL.w x POOL.h tiles at the foot of the notch between the peaks, in a cove of the rock open toward the
+  // front lawn. The gap the falls pour out of sits over the middle of its back edge, GAP_Z px up; the sheet of water
+  // is GAP_W tiles either side of it (web/island-art.js draws the rock of the notch, web/island-life.js the water).
+  POOL = { x: 0, y: -8, w: 2, h: 2 },
+  GAP_Z = 26,
   GAP_W = 0.45;
-// The lake: a rounded pond of tiles on the front lawn (a superellipse of power p, so its sides run straight and its
-// corners turn softly instead of stepping like a plus), reaching the front shore (centre y relative to H).
-const LAKE = { cx: 0, dy: 12, rx: 4.2, ry: 4.6, p: 2.4 };
-// The bridge's row, relative to H: two rows above the river mouth, one tile clear of the reserved south-left spot.
-const BRIDGE_DY = 4;
 
-function waters(cells, H, free) {
-  const lake = new Set(),
-    cy = H + LAKE.dy,
-    // water may stand on free lawn with land behind it and to either side: it opens only toward the front shore
-    wettable = (x, y) => free(x, y) && N4.every(([a, b]) => b > 0 || cells.has(key(x + a, y + b)));
-  for (const k of cells) {
-    const [x, y] = pos(k);
-    const n = Math.abs((x + 0.5 - LAKE.cx) / LAKE.rx) ** LAKE.p + Math.abs((y + 0.5 - cy) / LAKE.ry) ** LAKE.p;
-    if (n <= 1 && wettable(x, y)) lake.add(k);
-  }
-  smoothLake(lake, wettable);
-  // The river runs down its two columns until either reaches the lake; the other column's last tiles join the lake,
-  // so the mouth opens two tiles wide.
-  let end = RIVER_HEAD;
-  while (!lake.has(key(RIVER_X, end + 1)) && !lake.has(key(RIVER_X + 1, end + 1))) end++;
-  for (const x of [RIVER_X, RIVER_X + 1])
-    for (let y = end + 1; !lake.has(key(x, y)) && cells.has(key(x, y)); y++) lake.add(key(x, y));
-  const riverCells = new Set(),
-    line = [];
-  for (let y = RIVER_HEAD; y <= end; y++) {
-    riverCells.add(key(RIVER_X, y));
-    riverCells.add(key(RIVER_X + 1, y));
-    line.push([RIVER_X + 1, y + 0.5]);
-  }
-  line.push([RIVER_X + 1, end + 1]);
-  // The main waterfall pours over the lake's front lip: the lake tile on the front shore nearest the lake's middle.
-  const lip = [...lake]
-    .map(pos)
-    .filter(([x, y]) => !cells.has(key(x, y + 1)))
-    .sort((a, b) => Math.abs(a[0] + 0.5 - LAKE.cx) - Math.abs(b[0] + 0.5 - LAKE.cx) || a[0] - b[0])[0];
-  // Agents bathe at the east bank, where the garden path arrives from the north: the eastmost lake tile with plain
-  // lawn north of it, and the lake tile beside it.
-  const bank = (x, y) => cells.has(key(x, y)) && !lake.has(key(x, y)) && !riverCells.has(key(x, y));
-  const [bx, by] = [...lake]
-    .map(pos)
-    .filter(([x, y]) => bank(x, y - 1))
-    .sort((a, b) => b[0] - a[0] || a[1] - b[1])[0];
-  const next = [
-    [bx, by + 1],
-    [bx - 1, by],
-    [bx - 1, by + 1],
-  ].find(([x, y]) => lake.has(key(x, y)));
-  return {
-    river: { cells: riverCells, line },
-    pond: { cells: lake, spots: [{ x: bx, y: by }, ...(next ? [{ x: next[0], y: next[1] }] : [])] },
-    waterfall: { x: lip[0], y: lip[1] },
-  };
-}
-
-// Round off the lake's rim the way the shore is kept free of one-tile bumps: a water tile with at most one water
-// neighbour (a spur) dries up and a free tile with three or more (a notch) fills in, until nothing changes.
-function smoothLake(lake, wettable) {
-  const wet = (x, y) => N4.filter(([a, b]) => lake.has(key(x + a, y + b))).length;
-  for (let changed = true; changed; ) {
-    changed = false;
-    for (const k of [...lake]) {
-      const [x, y] = pos(k);
-      if (wet(x, y) <= 1) {
-        lake.delete(k);
-        changed = true;
-      }
-    }
-    for (const k of [...lake]) {
-      const [x, y] = pos(k);
-      for (const [a, b] of N4)
-        if (!lake.has(key(x + a, y + b)) && wettable(x + a, y + b) && wet(x + a, y + b) >= 3) {
-          lake.add(key(x + a, y + b));
-          changed = true;
-        }
-    }
-  }
-}
-
-// The mountain covers the tiles within MOUNTAIN_R of the ridge between its peaks, plus every tile of the left strip
-// behind the river head, so nobody walks round the river's source; the river's own gorge is left open.
-function mountainOf(cells, river) {
+// The mountain covers both peaks' feet, the saddle between them and everything behind them out to the shore (so
+// nobody walks where the peaks would hide them), on the back lawn at least 3 rows behind the office; the pool is cut
+// out of it.
+function mountainOf(cells) {
   const [a, b] = PEAKS,
+    ax = a.x + 0.5,
+    ay = a.y + 0.5,
     vx = b.x - a.x,
     vy = b.y - a.y;
   const toRidge = (x, y) => {
-    const t = Math.max(0, Math.min(1, ((x - a.x) * vx + (y - a.y) * vy) / (vx * vx + vy * vy)));
-    return Math.hypot(x - a.x - t * vx, y - a.y - t * vy);
+    const t = Math.max(0, Math.min(1, ((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy)));
+    return Math.hypot(x - ax - t * vx, y - ay - t * vy);
   };
+  const pool = new Set();
+  for (let y = POOL.y; y < POOL.y + POOL.h; y++) for (let x = POOL.x; x < POOL.x + POOL.w; x++) pool.add(key(x, y));
+  // behind the ridge: nearer the top of the screen than the line through both peaks' middles, within their span
+  const ridgeD = Math.max(a.x + a.y, b.x + b.y) + 1,
+    s0 = a.x - a.y - a.R,
+    s1 = b.x - b.y + b.R;
   const out = new Set();
   for (const k of cells) {
-    const [x, y] = pos(k);
-    if (y > -3 || river.has(k)) continue;
-    if (toRidge(x, y) <= MOUNTAIN_R || (x <= RIVER_X + 2 && y < RIVER_HEAD)) out.add(k);
+    const [x, y] = pos(k),
+      mx = x + 0.5,
+      my = y + 0.5;
+    if (y > -3 || pool.has(k)) continue;
+    const foot = PEAKS.some(p => Math.hypot(mx - p.x - 0.5, my - p.y - 0.5) <= p.R);
+    const behind = mx + my < ridgeD && x - y >= s0 && x - y <= s1;
+    if (foot || behind || toRidge(mx, my) <= SADDLE_R) out.add(k);
   }
+  // the pool's rim: the lawn and rock tiles round it
+  const rim = [];
+  for (let y = POOL.y - 1; y <= POOL.y + POOL.h; y++)
+    for (let x = POOL.x - 1; x <= POOL.x + POOL.w; x++)
+      if (!pool.has(key(x, y)) && cells.has(key(x, y))) rim.push({ x, y });
   return {
     cells: out,
     peaks: PEAKS.map(p => ({ ...p })),
-    // where the falls start: x across the middle of the river's head row, y its back edge (the falls are a sheet in the
+    // where the falls start: x across the middle of the pool's back row, y its back edge (the falls are a sheet in the
     // plane y = gap.y, gap.w tiles either side of x), z px up
-    gap: { x: RIVER_X + 1, y: RIVER_HEAD, z: GAP_Z, w: GAP_W },
+    gap: { x: POOL.x + POOL.w / 2, y: POOL.y, z: GAP_Z, w: GAP_W },
+    pool: { cells: pool, rim },
   };
 }
 
-const bridgeOf = H => {
-  const y = H + BRIDGE_DY;
-  return { cells: new Set([key(RIVER_X, y), key(RIVER_X + 1, y)]), x: RIVER_X, y, dir: 'x', len: 2 };
+// The first island's bridge is gone; the people and dogs it lifted now always stand on the lawn. Kept until the
+// drawing code (web/office-draw-people.js) stops asking: 0 everywhere.
+export const bridgeZ = () => 0;
+// Lamp posts beside the stone path: at the path's corner below the south stairs, beside the east stairs' leg, and
+// on the way down to the lake, each a tile off the stones.
+const lampsOf = (H, paths, baths) => {
+  const bath = baths.reduce((a, b) => (b.y < a.y ? b : a));
+  return [
+    { x: 25, y: H + 2 },
+    { x: 28, y: H - 2 },
+    { x: bath.x + 1, y: bath.y - 2 },
+  ].filter(l => !paths.cells.has(key(l.x, l.y)));
 };
-// The bridge deck runs a quarter tile onto either bank and arches low over the water: its height above the lawn at t
-// (0..1 along it).
-export const DECK_OVER = 0.25;
-export const deckZ = t => 3 + 3 * Math.sin(Math.PI * t);
-// How far the deck lifts someone standing at (x, y) (tile coordinates, a tile's middle at +0.5): 0 off the bridge.
-export function bridgeZ(bridge, x, y) {
-  const along = bridge.dir === 'x',
-    a = along ? x : y,
-    w = along ? y : x,
-    a0 = (along ? bridge.x : bridge.y) - DECK_OVER,
-    a1 = (along ? bridge.x : bridge.y) + bridge.len + DECK_OVER,
-    w0 = along ? bridge.y : bridge.x;
-  if (w < w0 || w > w0 + 1 || a <= a0 || a >= a1) return 0;
-  return deckZ((a - a0) / (a1 - a0));
-}
-// Lamp posts: one at each end of the bridge, on its upstream side, and a few beside the stone path.
-const LAMPS_ALONG = [
-  [16, 2],
-  [11, 3],
-  [1, 3],
-];
-const lampsOf = (H, bridge) => [
-  { x: bridge.x - 1, y: bridge.y - 1 },
-  { x: bridge.x + bridge.len, y: bridge.y - 1 },
-  ...LAMPS_ALONG.map(([x, dy]) => ({ x, y: H + dy })),
-];
 
 // Trees grow in groves of 3-6 around a few hand-placed centres, bushes and a mushroom or two in their shade; rocks and
 // flowers gather in their own small patches. Sparse on purpose: a few groves read as a garden, a carpet as clutter.
@@ -326,30 +245,30 @@ const GROVES = [
   [36, 11],
   [14, 24],
   [24, 27],
-  [31, 21],
+  [7, 21],
   [19, 19],
 ];
 const ROCKS = [
-  [8, -5],
+  [9, -5],
   [26, -3],
-  [34, 26],
-  [9, 23],
+  [27, 25],
+  [9, 26],
   [40, 5],
 ];
 const FLOWERS = [
-  [6, -9],
+  [8, -9],
   [26, -10],
-  [34, -12],
+  [20, -14],
   [33, -3],
   [40, 14],
   [11, 20],
   [20, 24],
-  [28, 18],
-  [36, 23],
+  [24, 18],
+  [3, 18],
   [16, 28],
 ];
-function decorOf({ cells, free, river, pond, mountain, bridge, rest, paths, lamps }) {
-  const taken = new Set([...river.cells, ...pond.cells, ...mountain.cells, ...bridge.cells, ...paths.cells]);
+function decorOf({ cells, free, pond, mountain, rest, paths, lamps }) {
+  const taken = new Set([...pond.cells, ...mountain.cells, ...mountain.pool.cells, ...paths.cells]);
   for (const p of [rest.bench, rest.fish, ...lamps]) taken.add(key(p.x, p.y));
   const open = (x, y) => free(x, y) && !taken.has(key(x, y));
   const roomy = (x, y) =>
@@ -392,33 +311,29 @@ function decorOf({ cells, free, river, pond, mountain, bridge, rest, paths, lamp
 }
 
 // ---- garden paths ----
-// Stepping-stone paths laid where agents really walk (desire lines). From the foot of the south stairs one runs along
-// the plinth front, round the reserved south-left spot and on to the lake's bathing spots; the east stairs join it,
-// and a branch leads to the bridge and, past it, to the rest corner (the bridge deck is its own walk, no stones).
-// Another runs along the front of the restroom block to the smoking corner (the block itself is reached across the
-// pantry floor, not from the lawn). They run one tile clear of the plinth front, so the big front lawn stays whole.
+// Stepping-stone paths laid where agents really walk (desire lines). From the foot of the east stairs one runs down
+// beside the pantry, along the plinth front and down to the bathing spots at the lake's north tip; the south stairs
+// join it on the plinth front, and a branch leads down to the rest corner on the lake's inner bank. Another runs along
+// the front of the restroom block to the smoking corner (the block itself is reached across the pantry floor, not
+// from the lawn). They run one tile clear of the plinth front and east of the south stairs, so the big front lawn
+// stays whole.
 // Each leg is a list of waypoints that share a row or a column; `cells` are the tiles they cover (agents prefer
 // them), `lines` the same legs in world coordinates for drawing, starting just past the bottom step instead of at the
 // tile centre under it (a leg that branches off another starts at a tile centre).
-function lawnPaths(W, H, st, { bath: baths, bridge, rest }) {
+function lawnPaths(W, H, st, { bath: baths, rest }) {
   const e = st.find(s => s.side === 'east'),
-    s = st.find(s => s.side === 'south'),
-    free = outdoorSpots(W, H).find(o => o.id === 'south-left');
+    s = st.find(s => s.side === 'south');
   const bath = baths.reduce((a, b) => (b.y < a.y ? b : a)),
     row = H + 1,
     sx = s.x + s.len - 1,
-    turn = free.x + free.w + 1,
-    by = bridge.y;
+    end = [rest.fish.x, rest.fish.y - 1];
   const legs = [
     {
       at: 'south',
       pts: [
         [sx, H],
         [sx, row],
-        [turn, row],
-        [turn, by],
-        [bath.x, by],
-        [bath.x, bath.y - 1],
+        [e.x, row],
       ],
     },
     {
@@ -426,14 +341,8 @@ function lawnPaths(W, H, st, { bath: baths, bridge, rest }) {
       pts: [
         [e.x, e.y + e.len - 1],
         [e.x, row],
-      ],
-    },
-    // joining the east stairs' leg to the south one along the plinth front (a T, so neither leg's end is cut short)
-    {
-      at: null,
-      pts: [
-        [e.x, row],
-        [sx, row],
+        [bath.x, row],
+        [bath.x, bath.y - 1],
       ],
     },
     // along the front of the restroom block to the smoking corner's entrance beside it
@@ -444,20 +353,10 @@ function lawnPaths(W, H, st, { bath: baths, bridge, rest }) {
         [W + 5, e.y],
       ],
     },
-    // on from the lake path to the near end of the bridge, then from its far end to the rest corner
+    // off the lake path to the rest corner
     {
       at: null,
-      pts: [
-        [bath.x, by],
-        [bridge.x + bridge.len, by],
-      ],
-    },
-    {
-      at: null,
-      pts: [
-        [bridge.x - 1, by],
-        [bridge.x - 1, rest.fish.y - 1],
-      ],
+      pts: [[end[0], row], end],
     },
   ];
   const cells = new Set();
@@ -569,7 +468,7 @@ const STAIR_RUN = 0.6;
 export const IslandLand = {
   buildIsland,
   SQUARE_MARGIN,
-  SQUIRCLE_P,
+  HEX_CUT,
   centre,
   annexLand,
   outdoorSpots,
