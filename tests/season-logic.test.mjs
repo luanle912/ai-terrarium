@@ -68,3 +68,20 @@ test('seasonLabel shows the season, plus the holiday when one is active', () => 
   assert.equal(SeasonLogic.seasonLabel('autumn', 'autumn'), plain)
   assert.equal(SeasonLogic.seasonLabel('autumn'), plain)
 })
+
+test('the header chip names the season shown, in its own colour, or the holiday in the holiday colour', () => {
+  const accents = new Set()
+  for (const k of SeasonLogic.KEYS) {
+    const c = SeasonLogic.seasonChip(k, 'default')
+    assert.equal(c.label, SeasonLogic.seasonLabel(k))
+    assert.match(c.accent, /^#[0-9a-f]{6}$/)
+    accents.add(c.accent)
+  }
+  assert.equal(accents.size, 4, 'each season its own colour')
+  // a forced or previewed winter during an autumn holiday still says winter first
+  const w = SeasonLogic.seasonChip('winter', 'midautumn')
+  assert.ok(w.label.startsWith(SeasonLogic.seasonLabel('winter') + ' · '), w.label)
+  assert.notEqual(w.accent, SeasonLogic.seasonChip('winter').accent)
+  // the plain season entries of the holiday-tree table are not holidays
+  assert.deepEqual(SeasonLogic.seasonChip('spring', 'autumn'), SeasonLogic.seasonChip('spring'))
+})
