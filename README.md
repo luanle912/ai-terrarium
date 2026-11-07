@@ -56,7 +56,7 @@ Open your browser → **http://localhost:4317** — that's it.
 
 | | Feature | Description |
 |---|---------|-------------|
-| 🏝️ | **Sky island** | The office sits in the middle of a square island with a cone of earth underneath: a two-peak mountain behind it, falls into a river that runs past the office under a wooden bridge to a lake, a waterfall over the edge into the clouds, lamps, groves, a rest corner with a bench and a fishing spot, and small floating islands in the distance |
+| 🏝️ | **Sky island** | The office sits in the middle of a hexagon island with a wavy shore and stacked stone blocks underneath: two low-poly peaks behind it with a fall into a small pool, a big lake at the bottom point with a one-pillar pavilion, lotus, duckweed, ducks and fish, a waterfall over the edge into the clouds, lamps, groves, a rest corner with a bench and a fishing spot by the lake, and small floating islands in the distance |
 | 🌅 | **Day/night cycle** | Smooth lighting with cosine interpolation based on your local clock — warm dawn and dusk, stars and moon at night, desk lamps glow after dark |
 | 🌦️ | **Weather** | Clear, cloudy, rain, storm, snow and fog — random every 20–40 min, or synced to the real weather of a city you choose via Open-Meteo. Rain runs down the windows, storms darken the office with lightning, snow whitens the lawn and the peaks, and a rainbow follows the rain |
 | 🎄 | **Seasonal events** | Vietnamese holidays and seasons get their own event tree on the lawn — Tết mai blossoms, Christmas tree with blinking lights, Halloween pumpkins, cherry blossoms in spring, and more |
@@ -90,8 +90,8 @@ Open your browser → **http://localhost:4317** — that's it.
 | 🍳 | **Modern kitchen** | A full pantry with fridge, espresso machine, grinder, sink, dishwasher, microwave, drinks cooler and sorted bins along the back wall |
 | 🪑 | **Break seating** | A wooden bench with tables, a sky-view bar with high stools, and a bar-height island — agents on a break heat food, snack, or watch the clouds |
 | 🚬 | **Smoking corner** | A paved corner on the east lawn with a bench under a vine-covered pergola, an ash bin, a planted screen toward the pantry, and a light at the entrance |
-| 🛤️ | **Lawn paths** | Stepping-stone paths run from both flights of stairs to the lake, over the bridge to the rest corner, and to the smoking corner; agents follow them instead of cutting across the grass |
-| 🏊 | **Lake bathing, bench and fishing** | Idle agents can walk down to the lake and bathe — shown up to the shoulders with ripples around them — or cross the bridge to sit on the stone bench or fish |
+| 🛤️ | **Lawn paths** | Stepping-stone paths run from both flights of stairs down to the lake and the rest corner on its bank, and to the smoking corner; agents follow them instead of cutting across the grass |
+| 🏊 | **Lake bathing, bench and fishing** | Idle agents can walk down to the lake and bathe — shown up to the shoulders with ripples around them — or sit on the stone bench by the lake or fish |
 
 ### Interaction & Display
 
