@@ -117,12 +117,13 @@ test('the cone falls off outward without steps', () => {
     }
 })
 
-// ---- mountain, pool, lake, pavilion, rest corner, lamps, decor ----
+// ---- mountain, its foot lake, lake, pavilion, rest corner, lamps, decor ----
 
 const walk = SkyLogic.lawnWalk(island, W, H)
 const southFoot = [22, H]
 const lake = island.pond.cells
-const pool = island.mountain.pool?.cells ?? new Set()
+const pool = island.mountain.lake.cells
+const hidden = island.mountain.hidden
 // Every cell reachable from `from` stepping (4 ways) only on `cells`.
 const reach = (cells, from) => {
   const seen = new Set([K(...from)]), q = [from]
@@ -141,11 +142,11 @@ const cheb = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]))
 test('there is no river or bridge', () => {
   assert.equal(island.river, undefined)
   assert.equal(island.bridge, undefined)
-  // the only water: the lake and the pool under the mountain falls, apart (the pool runs nowhere)
+  // the only water: the lake and the lake at the mountain's foot, apart (the foot lake runs nowhere)
   for (const k of pool) {
-    assert.ok(!lake.has(k), `${k} is both lake and pool`)
+    assert.ok(!lake.has(k), `${k} is in both lakes`)
     const [x, y] = at(k)
-    for (const [a, b] of N4) assert.ok(!lake.has(K(x + a, y + b)), `the pool at ${k} runs into the lake`)
+    for (const [a, b] of N4) assert.ok(!lake.has(K(x + a, y + b)), `the foot lake at ${k} runs into the lake`)
   }
   // the left strip beside the office is plain lawn again
   for (let y = 0; y < H; y++) for (let x = -3; x < -1; x++) if (has(x, y)) assert.ok(walk.has(K(x, y)) || island.decor.some((d) => d.x === x && d.y === y), `${x},${y} is not lawn`)
@@ -245,54 +246,64 @@ test('lotus, duckweed and duck lanes stay on open water', () => {
       for (const p of lanes[i]) for (const q of lanes[j]) assert.ok(Math.hypot(p[0] - q[0], p[1] - q[1]) >= 1, 'two duck lanes cross')
 })
 
-test('the mountain has two pointed peaks, the main one about half again as tall as before, and a pool at the foot of the fall', () => {
-  const { cells, peaks, gap } = island.mountain
-  assert.ok(cells.size >= 80, `only ${cells.size} mountain tiles`)
+test('the mountain is one peak on the back lawn with a lake at its foot', () => {
+  const m = island.mountain
+  assert.deepEqual(Object.keys(m).sort(), ['cells', 'foot', 'hidden', 'lake', 'scale'])
+  assert.equal(m.scale, 1.4)
+  const { cells, foot } = m
+  // the foot: a 5 x 5 square of tiles (a diamond on screen) whose front corner is foot
+  assert.equal(cells.size, 25)
+  for (let y = foot.y - 5; y < foot.y; y++)
+    for (let x = foot.x - 5; x < foot.x; x++) assert.ok(cells.has(K(x, y)), `${x},${y} is not under the mountain`)
   for (const k of cells) {
     assert.ok(island.cells.has(k), `mountain tile ${k} is off the island`)
     assert.ok(at(k)[1] <= -3, `mountain tile ${k} is less than 3 tiles behind the back wall`)
+    assert.ok(!walk.has(k), `mountain tile ${k} is walkable`)
   }
-  assert.equal(peaks.length, 2)
-  const main = peaks.filter((p) => p.main)
-  assert.equal(main.length, 1, 'exactly one main peak')
-  const side = peaks.find((p) => !p.main)
-  // the first island's main peak stood 68 px tall
-  assert.ok(main[0].h >= 1.4 * 68 && main[0].h <= 1.6 * 68, `the main peak is ${main[0].h} px tall`)
-  assert.ok(side.h <= 0.7 * main[0].h, 'the lower peak is not clearly lower')
-  // ... and reads so on screen: its tip stands higher up the screen ((x + y) * 8 - h px) than the lower peak's
-  const tipY = (p) => (p.x + p.y + 1) * 8 - p.h
-  assert.ok(tipY(main[0]) <= tipY(side) - 8, `main tip at ${tipY(main[0])} px, the lower one at ${tipY(side)} px`)
-  for (const p of peaks) assert.ok(cells.has(K(p.x, p.y)) && p.R > 0, `peak ${p.x},${p.y} is not on the mountain`)
-  // toward small x: the top point on screen
+  // on the back lawn toward small x (the top point on screen), as the two peaks were
   const mx = [...cells].reduce((s, k) => s + at(k)[0], 0) / cells.size
   assert.ok(mx < (W + 10) / 2 - 5, `the mountain's middle is at x ${mx.toFixed(1)}`)
-  // The falls pour out between the peaks on screen ((x - y) * 16 px across) ...
-  const sx = (x, y) => (x - y) * TW
-  const tips = peaks.map((p) => sx(p.x + 0.5, p.y + 0.5)).sort((a, b) => a - b)
-  const src = sx(gap.x, gap.y)
-  assert.ok(src > tips[0] + TW && src < tips[1] - TW, `the falls at ${src} px, the peaks at ${tips} px`)
-  assert.ok(gap.z > 0 && gap.z < Math.min(...peaks.map((p) => p.h)), 'the falls start below the lower peak')
-  // ... into a small square pool, 2x2 to 3x3, at the back of which they land, rock behind it
-  const ps = [...pool].map(at)
-  const xs = ps.map(([x]) => x), ys = ps.map(([, y]) => y)
-  const w = Math.max(...xs) - Math.min(...xs) + 1, h = Math.max(...ys) - Math.min(...ys) + 1
-  assert.ok(w >= 2 && w <= 3 && h >= 2 && h <= 3 && pool.size === w * h, `the pool is ${pool.size} tiles, ${w} x ${h}`)
-  assert.equal(gap.y, Math.min(...ys), 'the falls stand at the back edge of the pool')
-  for (const x of [gap.x - gap.w, gap.x + gap.w]) assert.ok(pool.has(K(Math.floor(x), gap.y)), `fall edge ${x} is not over the pool`)
-  for (const [x, y] of ps) {
-    assert.ok(has(x, y) && !cells.has(K(x, y)) && !walk.has(K(x, y)), `pool tile ${x},${y}`)
-    if (y === gap.y) assert.ok(cells.has(K(x, y - 1)), `no rock behind the pool at ${x},${y}`)
+  // the tiles it hides (their middle inside its outline on screen) are nobody's to walk on
+  for (const k of hidden) assert.ok(!walk.has(k) && !cells.has(k), `hidden tile ${k}`)
+  // the lake at its foot: in front of the left face, every tile's middle inside the brief's stone rim (ellipse round
+  // (-20, 24), 15 x 7.5, x 1.4 from F at (0, 27)), none of it walkable, not under the mountain
+  assert.ok(pool.size >= 1 && pool.size <= 4, `the foot lake is ${pool.size} tiles`)
+  const s = m.scale, c = [-20 * s, (24 - 27) * s]
+  for (const k of pool) {
+    const [x, y] = at(k)
+    const u = (x - y - (foot.x - foot.y)) * TW, v = (x + y + 1 - (foot.x + foot.y)) * 8
+    assert.ok(((u - c[0]) / (15 * s)) ** 2 + ((v - c[1]) / (7.5 * s)) ** 2 <= 1, `foot lake tile ${k} is outside the rim`)
+    assert.ok(!cells.has(k) && !walk.has(k) && !hidden.has(k), `foot lake tile ${k}`)
+    assert.ok(u < 0, `foot lake tile ${k} is not in front of the left face`)
   }
-  // its stone rim: every tile round it
-  const rim = new Set(island.mountain.pool.rim.map((r) => K(r.x, r.y)))
-  for (const [x, y] of ps)
-    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
-      const k = K(x + a, y + b)
-      if (has(x + a, y + b) && !pool.has(k)) assert.ok(rim.has(k), `${k} is round the pool but not on its rim`)
-    }
-  for (const r of island.mountain.pool.rim) assert.ok(!pool.has(K(r.x, r.y)) && ps.some((p) => cheb(p, [r.x, r.y]) === 1), `rim ${r.x},${r.y}`)
-  // open to the lawn in front, so someone can walk up to its rim
-  assert.ok(island.mountain.pool.rim.some((r) => reach(walk, southFoot).has(K(r.x, r.y))), 'nobody can reach the pool')
+  // its rim: the tiles round it; someone can walk up to it
+  const rim = new Set(m.lake.rim.map((r) => K(r.x, r.y)))
+  for (const r of m.lake.rim) assert.ok(!pool.has(K(r.x, r.y)) && [...pool].some((p) => cheb(at(p), [r.x, r.y]) === 1), `rim ${r.x},${r.y}`)
+  assert.ok([...rim].some((k) => reach(walk, southFoot).has(k)), 'nobody can reach the foot lake')
+})
+
+test('pines stand in two clumps on the mountain\'s grassy foot, with mushrooms and flowers by its lake', () => {
+  const pines = island.decor.filter((d) => d.kind === 'pine')
+  const { foot } = island.mountain
+  // left of the foot's front corner on screen, and right of it
+  const side = (d) => Math.sign(d.at[0] - d.at[1] - (foot.x - foot.y))
+  const left = pines.filter((d) => side(d) < 0), right = pines.filter((d) => side(d) > 0)
+  assert.ok(left.length >= 4 && left.length <= 6, `${left.length} pines in the left clump`)
+  assert.ok(right.length >= 5 && right.length <= 7, `${right.length} pines in the right clump`)
+  assert.deepEqual([...new Set(pines.map((d) => d.size))].sort(), [0, 1, 2], 'three sizes of pine')
+  for (const d of pines) {
+    assert.deepEqual([d.x, d.y], [Math.floor(d.at[0]), Math.floor(d.at[1])])
+    assert.ok(has(d.x, d.y) && !pool.has(K(d.x, d.y)) && !hidden.has(K(d.x, d.y)), `pine at ${d.x},${d.y}`)
+    assert.ok(d.z >= d.at[0] + d.at[1], `pine at ${d.x},${d.y} sorts behind its own foot`)
+  }
+  const near = (d) => [...pool].some((k) => cheb(at(k), [d.x, d.y]) <= 3)
+  const red = island.decor.filter((d) => d.kind === 'mushroom' && d.red && near(d))
+  assert.ok(red.length >= 2 && red.length <= 3, `${red.length} red mushrooms by the foot lake`)
+  const flowers = island.decor.filter((d) => d.kind === 'flower' && d.colour && near(d))
+  assert.ok(flowers.length >= 3, 'no flowers by the foot lake')
+  for (const f of flowers) assert.ok(['#FF7AA8', '#FFD84A', '#FFFFFF'].includes(f.colour), `flower ${f.colour}`)
+  assert.ok(island.decor.some((d) => d.kind === 'bush' && near(d)), 'no bush by the foot lake')
+  assert.ok(island.decor.some((d) => d.kind === 'rock' && near(d)), 'no rock by the foot lake')
 })
 
 test('everything outdoors is reachable and nobody walks into water or the mountain', () => {
@@ -301,7 +312,7 @@ test('everything outdoors is reachable and nobody walks into water or the mounta
   assert.deepEqual(lost, [], 'lawn tiles nobody can reach')
   const bath = new Set(island.pond.spots.map((s) => K(s.x, s.y)))
   for (const k of walk) {
-    assert.ok(!island.mountain.cells.has(k) && !pool.has(k), `${k} is on the mountain or in the pool`)
+    assert.ok(!island.mountain.cells.has(k) && !pool.has(k) && !hidden.has(k), `${k} is on the mountain, behind it or in its lake`)
     assert.ok(!lake.has(k) || bath.has(k), `${k} is in the lake`)
   }
   const back = [...seen].filter((k) => at(k)[1] <= -3)
@@ -314,12 +325,12 @@ test('everything outdoors is reachable and nobody walks into water or the mounta
   const { DOG_PLACES, ISLAND } = loadWeb('office-scene')
   const { roam, den, drink, clear } = DOG_PLACES
   for (const k of roam) {
-    assert.ok(!ISLAND.pond.cells.has(k) && !ISLAND.mountain.pool.cells.has(k), `dogs roam the water at ${k}`)
+    assert.ok(!ISLAND.pond.cells.has(k) && !ISLAND.mountain.lake.cells.has(k), `dogs roam the water at ${k}`)
     assert.ok(!ISLAND.mountain.cells.has(k), `dogs roam the mountain at ${k}`)
   }
   assert.ok(drink.filter((d) => ISLAND.pond.cells.has(K(d.tx, d.ty))).length >= 2, 'nowhere to drink at the lake')
   for (const d of drink) {
-    const water = ISLAND.pond.cells.has(K(d.tx, d.ty)) || ISLAND.mountain.pool.cells.has(K(d.tx, d.ty))
+    const water = ISLAND.pond.cells.has(K(d.tx, d.ty)) || ISLAND.mountain.lake.cells.has(K(d.tx, d.ty))
     assert.ok(water && roam.has(K(d.x, d.y)), `drink spot ${d.x},${d.y}`)
   }
   assert.equal(den.length, 3)
@@ -357,19 +368,22 @@ test('trees grow in clumps', () => {
     const near = trees.filter((o) => o !== t && Math.max(Math.abs(o.x - t.x), Math.abs(o.y - t.y)) <= 2).length
     assert.ok(near >= 2, `tree at ${t.x},${t.y} stands alone (${near} others within 2 tiles)`)
   }
-  for (const kind of ['tree', 'rock', 'flower', 'bush', 'mushroom']) assert.ok(island.decor.some((d) => d.kind === kind), `no ${kind}`)
+  for (const kind of ['tree', 'rock', 'flower', 'bush', 'mushroom', 'pine']) assert.ok(island.decor.some((d) => d.kind === kind), `no ${kind}`)
   // a garden, not a carpet
   assert.ok(island.decor.length <= 180, `${island.decor.length} pieces of decor`)
 })
 
-test('decor keeps off paths, water, the mountain, the pool, the rest corner and the lamps', () => {
+test('decor keeps off paths, water, the mountain, its lake, the rest corner and the lamps', () => {
   const { rest } = island
-  const off = new Set([...island.paths.cells, ...lake, ...pool, ...island.mountain.cells,
+  const off = new Set([...island.paths.cells, ...lake, ...pool, ...hidden,
     K(rest.bench.x, rest.bench.y), K(rest.fish.x, rest.fish.y), ...island.lamps.map((l) => K(l.x, l.y))])
-  const seen = new Set()
+  const seen = new Set(island.decor.filter((d) => d.kind === 'pine').map((d) => K(d.x, d.y)))
   for (const d of island.decor) {
     const k = K(d.x, d.y)
     assert.ok(!off.has(k), `${d.kind} at ${k} is in the way`)
+    // pines stand several to a tile, some on the mountain's grassy foot; nothing else is on it
+    if (d.kind === 'pine') continue
+    assert.ok(!island.mountain.cells.has(k), `${d.kind} at ${k} is on the mountain`)
     assert.ok(!seen.has(k), `two pieces of decor on ${k}`)
     seen.add(k)
   }

@@ -1,7 +1,7 @@
 // The static pieces of the office island that web/sky-island.js bakes into the island image: the pixel cone
 // underside, the shore, the lamp posts (unlit; web/island-life.js lights them), bushes, mushrooms, rocks and the stone
 // bench of the rest corner, plus the colour and pixel helpers the other art modules share (the mountain is in
-// web/island-art-mountain.js, the lake, the pool and the pavilion in web/island-art-lake.js). Every function draws in
+// web/mountain-art.js, the lake and the pavilion in web/island-art-lake.js). Every function draws in
 // the scene's logical px through P (the lawn level projection) and takes its colours through C(colour, snowAmount),
 // which applies the island's light and snow.
 import { hash, N4 } from './island-land.js';
@@ -22,7 +22,9 @@ export const mix = (a, b, p) => {
     B = hex(b);
   return toHex(A.map((v, i) => v * (1 - p) + B[i] * p));
 };
-export const OUTLINE = '#2b2350';
+export const OUTLINE = '#3B2F4A';
+// Night pulls every island colour toward the same deep blue the office uses after dark.
+export const night = (c, df) => mix(c, '#0d1322', (1 - df) * 0.6);
 export const STONE = { light: '#aeacba', mid: '#8b8999', dark: '#6a687b', deep: '#545268' };
 
 // Painting helpers bound to one context and projection: a filled polygon of island points, an axis-aligned box
@@ -55,7 +57,7 @@ export function painter(ctx, P) {
 }
 
 // ---- pixel layers ----
-// The cone, the mountain, the water and the pavilion are painted pixel by pixel at the scene's own size (one logical
+// The cone, the water and the pavilion are painted pixel by pixel at the scene's own size (one logical
 // px is one pixel) on a canvas of their own, then stamped up to the bake's scale unsmoothed: they keep hard pixel
 // edges and pixels as big as the rest of the scene's at every zoom.
 export function pixelLayer(w, h) {
@@ -491,7 +493,7 @@ export function drawBush(pt, P, C, d) {
 // A mushroom or two: a red cap with white spots or a brown one on a cream stem, with the outline.
 export function drawMushroom(pt, P, C, d) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
-    red = hash(d.x, d.y, 45) > 0.4,
+    red = d.red || hash(d.x, d.y, 45) > 0.4,
     cap = lit3(
       C(red ? '#ef6a5c' : '#c08a5c', 0.6),
       C(red ? '#d6453a' : '#a8724a', 0.6),

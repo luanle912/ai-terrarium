@@ -12,7 +12,7 @@ import './camera-logic.js';
 import './bubble-logic.js';
 import './world-logic.js';
 import './island-art.js';
-import './island-art-mountain.js';
+import './mountain-art.js';
 import './island-art-lake.js';
 import './sky-render.js';
 import './island-lake-life.js';

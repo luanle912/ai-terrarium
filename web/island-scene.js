@@ -26,6 +26,7 @@ export const SCENE_METHODS = [
   'updateAgent',
   'draw',
   'drawEventTree',
+  'mountainCols',
   'drawSeg',
   'drawPlanter',
   'pantryItems',
