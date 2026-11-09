@@ -295,11 +295,11 @@ test('revoke-self revokes only the calling device', async () => {
     const login = await devLogin(h.url, 'ann@newera.inc', 'Ann');
     const d1 = await pairDevice(h.url, login, 'One');
     const d2 = await pairDevice(h.url, login, 'Two');
-    assert.equal((await pub(h, d1.token)).status, 204);
+    assert.equal((await pub(h, d1.token)).status, 200);
     const r = await postJson(h.url, '/api/device/revoke-self', {}, { authorization: 'Bearer ' + d1.token });
     assert.equal(r.status, 204);
     assert.equal((await pub(h, d1.token)).status, 401);
-    assert.equal((await pub(h, d2.token)).status, 204);
+    assert.equal((await pub(h, d2.token)).status, 200);
     const a = audits(h, 'device_revoked');
     assert.equal(a.length, 1); assert.equal(a[0].actor_id, null); assert.match(a[0].target, new RegExp('device:' + d1.device_id));
     // already revoked and unknown tokens -> 401
@@ -315,7 +315,7 @@ test('revoke-self ignores cookies', async () => {
     const d1 = await pairDevice(h.url, login, 'One');
     const r = await postJson(h.url, '/api/device/revoke-self', {}, { cookie: login.cookie });
     assert.equal(r.status, 401);
-    assert.equal((await pub(h, d1.token)).status, 204);
+    assert.equal((await pub(h, d1.token)).status, 200);
   } finally { await h.close(); }
 });
 

@@ -1,5 +1,5 @@
 import { tr } from './i18n.js';
-import { SeasonTree } from './season-tree.js';
+import { SeasonLogic } from './season-logic.js';
 import { BubbleLogic } from './bubble-logic.js';
 import { ACT_TXT, FH, LH, LW, P, PA, h } from './office-scene.js';
 import { ST, fmtK } from './office-util.js';
@@ -70,9 +70,17 @@ mixin(
           return a.parent ? tr('bubble.subEntering') : tr('bubble.newSession');
         case 'idle':
           return (
-            ({ bath: '💦 ', smoke: '🚬 ', wc: '🚻 ', sky: '☁️ ', microwave: '🍱 ', meal: '🍪 ', snack: '🍪 ' }[
-              a.actNow
-            ] || '☕ ') + (ACT_TXT[a.actNow] || tr('bubble.pantryBreak'))
+            ({
+              bath: '💦 ',
+              bench: '🪑 ',
+              fish: '🎣 ',
+              smoke: '🚬 ',
+              wc: '🚻 ',
+              sky: '☁️ ',
+              microwave: '🍱 ',
+              meal: '🍪 ',
+              snack: '🍪 ',
+            }[a.actNow] || '☕ ') + (ACT_TXT[a.actNow] || tr('bubble.pantryBreak'))
           );
         case 'leaving':
           return tr('bubble.leaving');
@@ -90,7 +98,8 @@ mixin(
         ls = live,
         others = isLive && this.state.asOthers;
       const cnt = k => this.agents.filter(a => !a.leaving && k.includes(a.status)).length;
-      const seasonInfo = SeasonTree && this.treeOn ? SeasonTree.SEASONS[this.seasonKey] : null;
+      // the season shown, a preview or the Settings choice included; the holiday's name while its trees are up
+      const seasonInfo = SeasonLogic.seasonChip(this.seasonNow(), this.treeOn ? this.season : null);
       const summary = [
         [tr('summary.working'), ['working'], '#3e8ed0'],
         [tr('summary.thinking'), ['thinking'], '#5b8def'],

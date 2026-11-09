@@ -96,6 +96,7 @@ function routes(ctx) {
           isNew: isNewDevice(d, now),
           send: revoked ? 'revoked' : online ? (w.private ? 'private' : 'sending') : 'offline',
           share: w ? w.share : null,
+          lastAt: w ? w.lastAt : null,
         };
       });
       sendJson(res, 200, { island: island ? { id: island.id, name: island.name, color: island.color } : null, colors: ISLAND_COLORS, devices });
