@@ -184,6 +184,17 @@ export const cwdKey = s => {
   return last || null;
 };
 
+// The cell an agent standing at (x, y) paths from. Out on the lawn in front of or beside the office (the far bank
+// by the lake included) or in the restroom block it is where they stand; anywhere else (e.g. just in through the door,
+// which is out on the near bank behind the left wall) it is the nearest office cell.
+export function startCell(x, y) {
+  const fx = Math.floor(x),
+    fy = Math.floor(y),
+    fk = fx + ',' + fy;
+  if ((LAWN_WALK.has(fk) || WC.floorSet.has(fk)) && fy >= 0 && (fx >= 0 || fy >= H)) return [fx, fy];
+  return [Math.min(W - 1, Math.max(0, fx)), Math.min(H - 1, Math.max(0, fy))];
+}
+
 export function bfs(from, to) {
   // Office floor cells avoid furniture; lawn cells come from the island's walkable set; the two only meet at the
   // stairs. Out on the lawn grass costs more than the garden path, so agents keep to the path unless it is a long way

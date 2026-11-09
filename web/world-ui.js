@@ -6,11 +6,13 @@
 import { I18n, tr } from './i18n.js';
 import { WorldLogic } from './world-logic.js';
 import { SkyRender } from './sky-render.js';
+import { SeasonLogic } from './season-logic.js';
 import { h } from './office-scene.js';
-export const VIEW_KEY = 'ai-terrarium.view';
+export const VIEW_KEY = 'ai-terrarium.view',
+  DEVICE_KEY = 'ai-terrarium.thisDevice';
 export const OFF_MS = 250,
-  OFFLINE_ALPHA = 0.65,
-  ME_PROBE_MS = 10000;
+  ME_PROBE_MS = 10000,
+  LINK_DIM = 0.55;
 export const KIND_LABEL = new Map([
   ['shell', tr('world.kind.shell')],
   ['edit', tr('world.kind.edit')],
@@ -39,6 +41,17 @@ export const clip = (s, n) => {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 };
 export const validSlot = s => Number.isInteger(s) && s >= 0 && s < WorldLogic.SLOTS;
+// "4 giây trước", "3 phút trước", "2 giờ trước" (WorldLogic.agoParts picks the unit), and a clock time.
+export const agoText = ms => {
+  const { unit, n } = WorldLogic.agoParts(ms);
+  if (unit === 'h') return tr('world.ago.h', { n: String(n) });
+  if (unit === 'm') return tr('world.ago.m', { n: String(n) });
+  return tr('world.ago.s', { n: String(n) });
+};
+export const hhmmss = ms => new Date(ms).toTimeString().slice(0, 8);
+export const hhmm = ms => new Date(ms).toTimeString().slice(0, 5);
+// An island that is not sending: offline, or waking (the hub restarted and its machine has not sent again yet).
+export const dimmed = m => m.online === false || m.waking === true;
 // How many sessions of an island are at work, and whether one waits for approval or for another session.
 export const tally = sc => {
   let busy = 0,
@@ -170,41 +183,71 @@ export const outline = (g, col, dashed) => {
       if (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1)) g.fillRect(x, y, 1, 1);
     }
 };
-export const tree = (g, x, y, df) => {
+// A small island tree in the season's colours (SeasonLogic look.trees): green, fresh with a blossom, gold, or bare
+// twigs with snow on them.
+const MINI_TREE = {
+  green: ['#3e9a45', '#57b85a'],
+  fresh: ['#7cc95a', '#a8e27c'],
+  gold: ['#e0703a', '#f2b134'],
+};
+export const tree = (g, x, y, df, kind = 'green') => {
   const N = SkyRender.night,
-    leaf = N('#3e9a45', df);
+    wood = N('#6b4a2a', df);
   px1(g, 'rgba(0,0,0,0.2)', x - 3, y, 6, 1);
-  px1(g, N('#6b4a2a', df), x, y - 3, 1, 3);
+  px1(g, wood, x, y - 3, 1, 3);
+  if (kind === 'bare') {
+    px1(g, wood, x, y - 7, 1, 4);
+    px1(g, wood, x - 2, y - 7, 1, 2);
+    px1(g, wood, x - 1, y - 5, 1, 1);
+    px1(g, wood, x + 2, y - 8, 1, 2);
+    px1(g, wood, x + 1, y - 6, 1, 1);
+    const snow = N('#f4f8fc', df);
+    px1(g, snow, x - 2, y - 8, 1, 1);
+    px1(g, snow, x, y - 8, 1, 1);
+    px1(g, snow, x + 2, y - 9, 1, 1);
+    return;
+  }
+  const [l, t] = MINI_TREE[kind] || MINI_TREE.green,
+    leaf = N(l, df);
   px1(g, leaf, x - 2, y - 7, 5, 4);
   px1(g, SkyRender.mix(leaf, '#000000', 0.18), x + 1, y - 7, 2, 4);
-  px1(g, N('#57b85a', df), x - 1, y - 8, 3, 1);
+  px1(g, N(t, df), x - 1, y - 8, 3, 1);
+  if (kind === 'fresh') px1(g, N('#fde6ef', df), x - 1, y - 6, 1, 1);
 };
-export function paintIsland(g, color, df, lit, mine) {
+export function paintIsland(g, color, df, lit, mine, season) {
   const N = SkyRender.night,
     M = SkyRender.mix,
     { cx, cy, hw } = ISL,
-    b = BLD;
+    b = BLD,
+    look = SeasonLogic.look(season),
+    // the lawn leans to the season's grass tint and, in winter, lies under its snow (as on the full island)
+    gr = look.grass,
+    lawn = c => M(gr.color ? M(c, gr.color, gr.mix) : c, '#eef3f7', look.minSnow),
+    snowy = look.minSnow > 0;
   // underside: two rows of grass edge, three of earth, then stone, deepest (and a little ragged) at the front corner
   faceCols(cx, cy, hw, (x, y0, left, i) => {
     const d = 2 + Math.round(9 * Math.pow(1 - (i - 1) / hw, 1.2)) + (i > 3 && i < hw - 4 && hash(x, 1) > 0.6 ? 1 : 0);
     for (let j = 0; j < d; j++) {
-      const base = j < 2 ? (left ? '#3f7f33' : '#356c2b') : j < 5 ? '#8a5a36' : j < 9 ? '#7a7a84' : '#5f6070';
+      const base = j < 2 ? lawn(left ? '#3f7f33' : '#356c2b') : j < 5 ? '#8a5a36' : j < 9 ? '#7a7a84' : '#5f6070';
       px1(g, N(j < 2 ? base : M(base, '#000000', left ? 0.12 : 0.3), df), x, y0 + 1 + j);
     }
   });
-  diamond(g, cx, cy, hw, N('#5fae4b', df), N('#7cc65f', df));
-  for (const [fx, fy, fc] of [
-    [-14, 9, GOLD],
-    [9, 12, '#ff8fab'],
-    [-30, 2, '#ffffff'],
-    [27, 2, GOLD],
-    [-6, -9, '#ffffff'],
-    [-20, 8, '#ff8fab'],
-  ])
-    px1(g, N(fc, df), cx + fx, cy + fy);
+  diamond(g, cx, cy, hw, N(lawn('#5fae4b'), df), N(lawn('#7cc65f'), df));
+  // flowers on the lawn, none under the snow; in autumn a few fallen leaves instead of the pink ones
+  for (const [fx, fy, fc] of snowy
+    ? []
+    : [
+        [-14, 9, GOLD],
+        [9, 12, '#ff8fab'],
+        [-30, 2, '#ffffff'],
+        [27, 2, GOLD],
+        [-6, -9, '#ffffff'],
+        [-20, 8, '#ff8fab'],
+      ])
+    px1(g, N(look.trees === 'gold' && fc === '#ff8fab' ? '#e0703a' : fc, df), cx + fx, cy + fy);
   // the path runs from the door, square to the office's right face
   for (let k = 0; k < 6; k++) px1(g, N(k % 2 ? '#bdb6aa' : '#c9c3b8', df), b.cx + 8 + 2 * k, b.cy + 4 + k, 2, 1);
-  tree(g, cx - 24, cy + 1, df);
+  tree(g, cx - 24, cy + 1, df, look.trees);
   const wall = N('#efe9dc', df),
     roof = N(color, df),
     glass = N('#33415e', df);
@@ -224,7 +267,8 @@ export function paintIsland(g, color, df, lit, mine) {
       for (let j = 4; j < 7; j++) px1(g, wi < lit ? GOLD : M(glass, '#000000', left ? 0 : 0.2), x, y0 + 1 + j);
     if (!left && (i === 7 || i === 8)) for (let j = 8; j < b.h; j++) px1(g, N('#5c4330', df), x, y0 + 1 + j);
   });
-  diamond(g, b.cx, b.cy - b.h, b.hw, roof, M(roof, '#ffffff', 0.3));
+  // in winter the roof wears the snow, its colour left at the rim
+  diamond(g, b.cx, b.cy - b.h, b.hw, snowy ? N('#eef3f7', df) : roof, M(roof, '#ffffff', 0.3));
   if (mine) {
     const y = b.cy - b.h - 10;
     px1(g, '#3b4058', b.cx, y, 1, 10);
@@ -232,7 +276,7 @@ export function paintIsland(g, color, df, lit, mine) {
     px1(g, GOLD, b.cx + 1, y + 1, 3, 1);
     px1(g, GOLD, b.cx + 1, y + 2, 2, 1);
   }
-  tree(g, cx + 21, cy + 8, df);
+  tree(g, cx + 21, cy + 8, df, look.trees);
   // lighter at night, so islands keep their edge on a dark sky
   outline(g, SkyRender.mix(OUTLINE, '#3a4766', 1 - df), false);
 }
@@ -322,8 +366,6 @@ export const field = (label, val, key) =>
 // user (per IP when signed out), shared with everything else the page asks.
 export const ME_EVERY_MS = 30000,
   ME_JITTER = 0.2,
-  STALL_MS = 10000,
-  MAX_STALLS = 2,
   REMOVE_WAIT_MS = 5000,
   PROBE_MS = 8000,
   RETRY_CAP_S = 60,

@@ -4,18 +4,16 @@ import { WorldLogic } from './world-logic.js';
 import { ClaudeOffice } from './office.js';
 import { IslandScene } from './island-scene.js';
 import {
+  DEVICE_KEY,
   HEX_ID,
-  MAX_STALLS,
   ME_EVERY_MS,
   ME_JITTER,
   ME_PROBE_MS,
   NAME_ERR,
   REMOVE_WAIT_MS,
-  STALL_MS,
   VIEW_KEY,
   isJson,
   okColor,
-  probeConfig,
   releaseCanvas,
   validSlot,
 } from './world-ui.js';
@@ -26,11 +24,7 @@ Object.assign(ClaudeOffice.prototype, {
       const v = this.storage && this.storage.getItem(VIEW_KEY);
       if (v === 'mine' || v === 'all') view = v;
     } catch (_) {}
-    if (this.world) {
-      clearTimeout(this.world.meTimer);
-      clearTimeout(this.world.waitTimer);
-      clearTimeout(this.world.probeTimer);
-    } // "Thử lại" starts a fresh world
+    if (this.world) this.stopWorld(this.world); // the hub now serves another account: start afresh
     this.world = {
       me: cfg.me,
       csrf: typeof cfg.csrf === 'string' ? cfg.csrf : '',
@@ -46,13 +40,18 @@ Object.assign(ClaudeOffice.prototype, {
       sh: 0,
       sky: null,
       dead: false,
-      errAt: 0,
+      link: WorldLogic.linkStart(),
+      linkTimer: null,
+      linkDue: 0,
+      linkSeq: 0,
       mine: null,
       meErr: false,
       meSeq: 0,
       draft: null,
       confirm: null,
       probe: WorldLogic.meProbeState(),
+      legend: false,
+      thisDevice: this.thisDeviceId(),
     };
     this.setState({ sel: null, selIsland: null, live: 'off' });
     // The pointer handlers bound at mount drive the local camera; the world has none of it (no drag, no zoom).
@@ -80,58 +79,16 @@ Object.assign(ClaudeOffice.prototype, {
       this.worldSpacer = el;
     };
     if (!this.onWorldHover) this.onWorldHover = e => this.worldHover(e);
-    const w = this.world,
-      parse = e => {
-        try {
-          const d = JSON.parse(e.data);
-          return d && typeof d === 'object' ? d : null;
-        } catch (_) {
-          return null;
-        }
-      };
-    const es = new EventSource('/api/world/stream');
-    w.es = es;
-    es.onopen = () => {
-      if (!w.dead) {
-        w.conn = 'ok';
-        w.errAt = 0;
-        this.worldStalls = 0;
-      }
-    };
-    // A dropped connection retries by itself; a refused one (401/403 signed out or banned, 429/503 too many streams)
-    // closes for good. Retrying that keeps failing for STALL_MS also ends the stream, so a stopped hub is told apart.
-    es.onerror = () => {
-      if (w.dead) return;
-      if (es.readyState === EventSource.CLOSED) return this.worldEnded(true);
-      const now = performance.now();
-      if (!w.errAt) w.errAt = now;
-      if (now - w.errAt >= STALL_MS) this.worldEnded(false);
-      else w.conn = 'error';
-    };
-    es.addEventListener('world', e => {
-      const d = parse(e);
-      if (d) this.worldMeta(d);
-    });
-    es.addEventListener('island', e => {
-      const d = parse(e);
-      if (!d || typeof d.id !== 'string' || w.dead) return;
-      if (w.metaSeen && !w.islands.some(i => i.id === d.id)) return; // not (or no longer) in the world list
-      let sc = w.scenes.get(d.id);
-      if (!sc) {
-        sc = new IslandScene(this, d.id);
-        w.scenes.set(d.id, sc);
-      }
-      sc.sync(Array.isArray(d.sessions) ? d.sessions.filter(s => s && typeof s.id === 'string') : []);
-    });
-    es.addEventListener('remove', e => {
-      const d = parse(e);
-      if (!d || typeof d.id !== 'string' || w.dead) return;
-      const sc = w.scenes.get(d.id);
-      if (sc) releaseCanvas(sc);
-      w.scenes.delete(d.id);
-      w.islands = w.islands.filter(i => i.id !== d.id);
-      this.dropGone();
-    });
+    const w = this.world;
+    this.openWorldStream(w);
+    // Watchdog: a stream that stays silent PING_STALE_MS after the hub's first named ping froze (a proxy kept the
+    // socket open). Reopen it the way a drop does (marked stale, so a hub that keeps answering with silence is
+    // reopened less and less often); the scene stays as it is.
+    w.watch = setInterval(() => {
+      if (this.world !== w || w.dead || !w.es) return;
+      if (!WorldLogic.streamStale({ pingSeen: w.pingSeen, lastEventAt: w.lastEventAt, now: performance.now() })) return;
+      this.relink({ type: 'error', stale: true });
+    }, 5000);
     // "Của tôi" polls only while the tab is visible, and refreshes once when it becomes visible again.
     const tick = () => {
       if (this.world !== w) return;
@@ -143,9 +100,16 @@ Object.assign(ClaudeOffice.prototype, {
       this.onWorldVisible = () => {
         const x = this.world;
         if (x && !x.dead && x.view === 'mine' && document.visibilityState === 'visible') this.loadMe();
-        if (x && !x.dead && document.visibilityState === 'visible') this.meProbe([], false);
+        if (x && !x.dead && document.visibilityState === 'visible') {
+          this.meProbe([], false);
+          this.relink({ type: 'visible' });
+        }
       };
       document.addEventListener('visibilitychange', this.onWorldVisible);
+    }
+    if (!this.onWorldOnline) {
+      this.onWorldOnline = () => this.relink({ type: 'online' });
+      window.addEventListener('online', this.onWorldOnline);
     }
     // Phones (<= 480 px) fold the "Máy mới" notices into one line and use a 16 px name field (no zoom on focus).
     if (!this.phoneMq && window.matchMedia) {
@@ -170,8 +134,12 @@ Object.assign(ClaudeOffice.prototype, {
           settings: !!this.state.showSettings,
           confirm: !!x.confirm,
           mod: e.ctrlKey || e.metaKey || e.altKey,
+          legend: !!x.legend,
         });
-        if (act === 'confirm') {
+        if (act === 'legend') {
+          this.setLegend(false);
+          if (this.legendBtn) this.legendBtn.focus();
+        } else if (act === 'confirm') {
           if (x.confirm.busy) return;
           clearTimeout(x.confirm.timer);
           x.confirm = null;
@@ -180,6 +148,26 @@ Object.assign(ClaudeOffice.prototype, {
       };
       window.addEventListener('keydown', this.onWorldKey);
     }
+  },
+  // Which of my devices is this computer: the local page's "Máy này" chip opens the hub at #this-device=<16 hex>. Read
+  // once, kept for this tab in sessionStorage (so a reload still knows) and taken out of the address bar.
+  thisDeviceId() {
+    let id = null;
+    const m = /^#this-device=([0-9a-f]{16})$/.exec(location.hash || '');
+    if (m) {
+      id = m[1];
+      try {
+        sessionStorage.setItem(DEVICE_KEY, id);
+      } catch (_) {}
+      try {
+        history.replaceState(history.state, '', location.pathname + location.search);
+      } catch (_) {}
+    } else
+      try {
+        const v = sessionStorage.getItem(DEVICE_KEY);
+        if (typeof v === 'string' && HEX_ID.test(v)) id = v;
+      } catch (_) {}
+    return id;
   },
   // Asks /api/me when an unseen island may be mine (WorldLogic.meProbeStep), with one trailing call when throttled.
   meProbe(ids, first) {
@@ -224,6 +212,11 @@ Object.assign(ClaudeOffice.prototype, {
       i => i && typeof i.id === 'string' && validSlot(i.slot),
     );
     w.viewers = Number.isFinite(d.viewers) ? d.viewers : 0;
+    // The hub's clock when it built this frame, and ours when it arrived: island ages are counted from these
+    // (WorldLogic.freshness), so a wrong clock on this computer does not age or freshen islands. An older hub sends no
+    // `now`: ages are then unknown and islands look as their online flag says.
+    w.hubNow = Number.isFinite(d.now) ? d.now : null;
+    w.recvAt = performance.now();
     w.capacity = Number.isInteger(d.capacity) && d.capacity > 0 ? d.capacity : WorldLogic.SLOTS;
     // Without an island of my own, an island never seen before may be mine (just paired on another tab): ask
     // /api/me, at most once every ME_PROBE_MS, so the centre turns from "chỗ của bạn" into my island by itself.
@@ -247,80 +240,6 @@ Object.assign(ClaudeOffice.prototype, {
     w.mineSig = sig;
     w.metaSeen = true;
     if (changed && w.view === 'mine' && document.visibilityState === 'visible') this.loadMe();
-  },
-  // The stream is gone (refused: closed by the hub's answer; else it kept failing): drop everything shown and ask
-  // /api/config why. Signed out → reload (the hub sends the login page); still world mode → the hub refused the
-  // stream (too many tabs) or, for a stalled one, came back; no answer → unreachable. Both get "Thử lại".
-  // A stalled stream is restarted by itself at most MAX_STALLS times in a row without an onopen; then the page
-  // stops and offers "Thử lại". 429 from /api/config (the hub's request limit) is 'busy', with "Thử lại" held
-  // until its Retry-After.
-  worldEnded(refused) {
-    const w = this.world;
-    if (w.dead) return;
-    w.dead = true;
-    w.es && w.es.close();
-    for (const sc of w.scenes.values()) releaseCanvas(sc);
-    w.scenes.clear();
-    w.islands = [];
-    w.viewers = 0;
-    w.hover = null;
-    if (w.confirm) clearTimeout(w.confirm.timer);
-    w.confirm = null;
-    this.setState({ sel: null, selIsland: null });
-    probeConfig().then(x => {
-      if (this.world !== w) return;
-      if (x.kind === 'signedout') return location.reload();
-      if (x.kind === 'other') {
-        w.conn = 'ended';
-        this.forceUpdate();
-        return location.reload();
-      }
-      if (x.kind === 'world' && !refused) {
-        if ((this.worldStalls || 0) < MAX_STALLS) {
-          this.worldStalls = (this.worldStalls || 0) + 1;
-          return this.startWorld(x.cfg);
-        }
-        w.conn = 'unreachable';
-        return this.forceUpdate();
-      }
-      this.worldStopped(w, x);
-    });
-  },
-  // Shows why the world stays down: refused (the hub answers but would not stream), busy or unreachable.
-  worldStopped(w, x) {
-    clearTimeout(w.waitTimer);
-    w.retryAt = 0;
-    w.conn = x.kind === 'world' ? 'refused' : x.kind === 'busy' ? 'busy' : 'unreachable';
-    if (x.kind === 'busy' && x.retryS > 0) {
-      w.retryAt = performance.now() + x.retryS * 1000;
-      const count = () => {
-        if (this.world !== w) return;
-        this.forceUpdate();
-        if (performance.now() < w.retryAt)
-          w.waitTimer = setTimeout(count, Math.min(1000, w.retryAt - performance.now() + 20));
-        else w.retryAt = 0;
-      };
-      w.waitTimer = setTimeout(count, 1000);
-    }
-    this.forceUpdate();
-  },
-  retryWorld() {
-    const w = this.world;
-    if (w.retrying || (w.retryAt && performance.now() < w.retryAt)) return;
-    w.retrying = true;
-    w.es && w.es.close();
-    this.forceUpdate();
-    probeConfig().then(x => {
-      if (this.world !== w) return;
-      w.retrying = false;
-      if (x.kind === 'signedout') return location.reload();
-      if (x.kind === 'world') {
-        this.worldStalls = 0;
-        return this.startWorld(x.cfg);
-      }
-      if (x.kind === 'busy' || x.kind === 'down') return this.worldStopped(w, x);
-      this.forceUpdate();
-    }); // still failing: keep the state, the button works again
   },
   // ---- "Của tôi": my island, colours and devices from GET /api/me ----
   loadMe() {

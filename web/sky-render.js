@@ -1,5 +1,6 @@
-// Drawing for the sky island: the island itself (pre-rendered once per resolution), trees and the waterfall.
-import { drawPond, drawTree, drawWaterfall, hash, mix, night, renderIsland } from './sky-island.js';
+// Drawing for the sky island: the island (pre-rendered once per resolution and light), its standing props, trees,
+// the sky behind it and the weather in front of it.
+import { hash, mix, night, renderIsland, renderProps } from './sky-island.js';
 import {
   BAND_W,
   BAND_X0,
@@ -16,6 +17,21 @@ import {
   snapColor,
   visibleX,
 } from './sky-mist.js';
+// The far islands, [x / width, y / horizon, size, kind]: in the open sky above the square island's two back edges,
+// clear of the office and the mountain on a wide stage and well above the island on a phone. The world's overview of
+// 8 islands (env.overview) keeps them low in the gaps between its rows, clear of the islands and their labels.
+const FAR_ISLANDS = [
+    [0.13, 0.5, 0.8, 'tree'],
+    [0.3, 0.3, 0.5, 'plain'],
+    [0.88, 0.42, 0.7, 'rock'],
+  ],
+  FAR_OVERVIEW = [
+    [0.07, 0.84, 0.8, 'tree'],
+    [0.2, 0.7, 0.5, 'plain'],
+    [0.93, 0.78, 0.7, 'rock'],
+  ];
+// The sun's halo: [radius, alpha] of each flat ring, the wide faint one first.
+const SUN_HALO = [36, 0.14, 20, 0.28];
 function drawBack(ctx, w, h, t, env) {
   const { df, hour, fx, col, view } = env,
     hy = h * 0.5,
@@ -65,11 +81,14 @@ function drawBack(ctx, w, h, t, env) {
       sx = w * (0.12 + 0.76 * p),
       sy = hy * (0.9 - 0.75 * Math.sin(Math.PI * p)),
       a = df * (1 - fx.cloud * 0.75);
-    const sg = ctx.createRadialGradient(sx, sy, 2, sx, sy, 80 * S);
-    sg.addColorStop(0, 'rgba(255,248,215,' + 0.85 * a + ')');
-    sg.addColorStop(1, 'rgba(255,248,215,0)');
-    ctx.fillStyle = sg;
-    ctx.fillRect(sx - 80 * S, sy - 80 * S, 160 * S, 160 * S);
+    // its halo: two flat rings of the same pale yellow, each at one fixed alpha (no gradient)
+    ctx.fillStyle = '#fff8d7';
+    for (let i = 0; i < SUN_HALO.length; i += 2) {
+      ctx.globalAlpha = SUN_HALO[i + 1] * a;
+      ctx.beginPath();
+      ctx.arc(sx, sy, SUN_HALO[i] * S, 0, 7);
+      ctx.fill();
+    }
     ctx.globalAlpha = a;
     ctx.fillStyle = '#fffbe0';
     ctx.beginPath();
@@ -99,12 +118,11 @@ function drawBack(ctx, w, h, t, env) {
     );
   }
   inView(ctx, layerView(view, 0.2), () => {
-    [
-      [0.07, 0.97, 0.8],
-      [0.24, 1.01, 0.55],
-      [0.78, 0.98, 0.7],
-      [0.93, 1.02, 0.45],
-    ].forEach(([fx_, fy, sc], i) => farIsland(ctx, w * fx_, hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S, sc * S, col));
+    const far = env.overview ? FAR_OVERVIEW : FAR_ISLANDS;
+    for (let i = 0; i < far.length; i++) {
+      const [fx_, fy, sc, kind] = far[i];
+      farIsland(ctx, w * fx_, hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S, sc * S, col, kind);
+    }
     // Wider than the stage so a pan never shows where the horizon haze ends.
     const hb = ctx.createLinearGradient(0, hy - 18 * S, 0, hy + 18 * S);
     hb.addColorStop(0, rgba(col.haze, 0));
@@ -347,9 +365,7 @@ export const SkyRender = {
   mix,
   night,
   renderIsland,
-  drawWaterfall,
-  drawPond,
-  drawTree,
+  renderProps,
   drawBack,
   drawFront,
   drawCurtains,

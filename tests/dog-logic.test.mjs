@@ -37,16 +37,19 @@ function simulate(dogs, w, seconds, each) {
 
 // ---- where dogs may go ----
 
-test('dogs roam only the front and side lawn: never the office, the strip behind it, water or the reserved area', () => {
+test('dogs roam the lawn all round the office: never the office, the strip right behind its walls, water or the reserved area', () => {
   for (const k of roam) {
     const [x, y] = k.split(',').map(Number)
     assert.ok(x >= W || y >= H, `${k} is in the office or behind it`)
-    assert.ok(x >= 0 && y >= 0, `${k} is behind the office walls`)
+    // within 4 tiles behind a wall a dog would be drawn over it (the walls go down before the sorted sprites)
+    if (x < 0 && x >= -4) assert.ok(y - x < -1 || y - x > H + 1, `${k} is right behind the left wall`)
+    if (y < 0 && y >= -4) assert.ok(x - y < -1 || x - y > W + 1, `${k} is right behind the back wall`)
     assert.ok(!pond.has(k), `${k} is water`)
     assert.ok(!(x >= W + 1 && x < W + 4 && y >= 0 && y < 3), `${k} is in the reserved area`)
     assert.ok(walk.has(k))
   }
   assert.ok(roam.has(key(3, H + 2)) && roam.has(key(W + 3, 4)))
+  assert.ok(roam.has(key(-2, H + 2)) && roam.has(key(W + 1, -2)), 'the lawn beside the walls, out of their way, is the dogs\' too')
 })
 
 test('over a long day no dog ever sets foot in the reserved area', () => {

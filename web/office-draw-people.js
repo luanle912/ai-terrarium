@@ -2,7 +2,8 @@ import { SkyRender } from './sky-render.js';
 import { DogLogic } from './dog-logic.js';
 import { DogSprites } from './dog-sprites.js';
 import { SmokeLogic } from './smoke-logic.js';
-import { DESKS, P, PA, PG } from './office-scene.js';
+import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW } from './office-scene.js';
+import { WATER_Z } from './island-land.js';
 import { LOOK, PERSON } from './office-people.js';
 import { ICON, ST, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
@@ -69,6 +70,24 @@ mixin(
           R(sx + 4, by - 7, 1, 1, sk);
           R(sx + 5, by - 8, 2, 1, '#f3efe2');
         }
+      } else if (act === 'fish') {
+        // the near hand rests at the waist, the far one holds the rod butt out toward the lake
+        L();
+        R(sx + 4, by - 11, 1, 3, shD);
+        R(sx + 4, by - 8, 2, 1, sk);
+      } else if (act === 'arcade') {
+        // both hands forward on the control panel, the near one working the stick
+        R(sx - 5, by - 12, 1, 4, shD);
+        R(sx - 5, by - 13, 1, 1, sk);
+        R(sx + 4, by - 12 - ph, 1, 4, shD);
+        R(sx + 4, by - 13 - ph, 1, 1, sk);
+      } else if (act === 'foosball') {
+        // hands low on the rods, pushing and pulling in turn
+        const p = Math.floor(t * 3) % 2;
+        R(sx - 6 + p, by - 10, 2, 1, shD);
+        R(sx - 7 + p, by - 10, 1, 1, sk);
+        R(sx + 5 - p, by - 10, 2, 1, shD);
+        R(sx + 7 - p, by - 10, 1, 1, sk);
       } else if (act === 'stretch') {
         const p = Math.floor(t * 1.5) % 2;
         R(sx - 6, by - 17 + p * 2, 2, 7, sh);
@@ -76,6 +95,47 @@ mixin(
         R(sx - 6, by - 18 + p * 2, 2, 1, sk);
         R(sx + 4, by - 18 + (1 - p) * 2, 2, 1, sk);
       } else L();
+    }
+
+    // Fishing at the rest corner: a rod from the hand up and out over the lake, a thin line down to a tiny float on
+    // the lake's surface (WATER_Z under the lawn) a tile and a half out. The float bobs and now and then dips (a
+    // nibble) with a ring spreading round it; with reduced motion it lies still. No allocation: one angler at most,
+    // drawn every frame.
+    drawRod(G, a, sx, by, t) {
+      const { ctx, rect: R } = G,
+        calm = this.env && this.env.reduced,
+        nib = !calm && t % 7 < 0.6,
+        tx = sx + 16,
+        ty = by - 24 + (nib ? 2 : 0),
+        fx = a.x + 1.5,
+        fy = a.y + 0.2,
+        bx = Math.round(OX + (fx - fy) * TW),
+        bob = Math.round(OY + (fx + fy) * TH - WATER_Z) + (calm ? 0 : nib ? 1 : Math.round(Math.sin(t * 2.2) * 0.6));
+      for (let k = 0; k <= 12; k++)
+        R(
+          sx + 5 + Math.round(((tx - sx - 5) * k) / 12),
+          by - 8 + Math.round(((ty - by + 8) * k) / 12),
+          1,
+          1,
+          '#6b4a2b',
+        );
+      ctx.strokeStyle = 'rgba(232,238,245,0.7)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(tx + 0.5, ty + 0.5);
+      ctx.quadraticCurveTo(bx + 1.5, ty + 6, bx + 0.5, bob - 1);
+      ctx.stroke();
+      if (!calm) {
+        const p = (t * 0.45) % 1;
+        ctx.globalAlpha = 0.45 * (1 - p);
+        ctx.strokeStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.ellipse(bx + 0.5, bob + 1, 2 + p * 5, 1 + p * 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      R(bx - 1, bob - 1, 2, 1, '#e5484d');
+      R(bx - 1, bob, 2, 1, '#ffffff');
     }
 
     drawPerson(G, a) {
@@ -382,6 +442,7 @@ mixin(
             ctx.globalAlpha = 1;
           }
         }
+        if (act === 'fish') this.drawRod(G, a, sx, by, tp);
         if (st === 'idle' && !a.moving && a.actNow === 'table') {
           R(sx + 4, by - 9, 2, 3, '#ffffff');
           R(sx + 6, by - 8, 1, 1, '#ffffff');

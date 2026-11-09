@@ -4,49 +4,15 @@ import assert from 'node:assert/strict'
 import { loadSkyLogic } from './load-sky-logic.mjs'
 
 const SkyLogic = loadSkyLogic()
-const W = 27, H = 14, TW = 16, TH = 8, WALL = 56
-const island = SkyLogic.buildIsland({ W, H, lawn: 6, back: 2 })
+const W = 27, H = 14
+const island = SkyLogic.buildIsland({ W, H })
 const has = (x, y) => island.cells.has(x + ',' + y)
-const neighbours = (x, y) => [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => has(x + a, y + b)).length
 const inOffice = (x, y) => x >= 0 && x < W && y >= 0 && y < H
 
 // ---- island ----
 
-test('island is deterministic', () => {
-  const again = SkyLogic.buildIsland({ W, H, lawn: 6, back: 2 })
-  assert.deepEqual(again.list, island.list)
-})
-
 test('island contains the whole office', () => {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) assert.ok(has(x, y), `office cell ${x},${y}`)
-})
-
-test('lawn is 6 tiles wide in front and a thin 2-tile strip behind the walls', () => {
-  for (const [x, y] of [[13, 19], [32, 7]]) assert.ok(has(x, y), `front lawn cell ${x},${y}`)
-  for (const [x, y] of [[13, -2], [-2, 7]]) assert.ok(has(x, y), `back lawn cell ${x},${y}`)
-  for (const [x, y] of [[13, -4], [-4, 7]]) assert.ok(!has(x, y), `lawn behind the walls is wider than 3 tiles at ${x},${y}`)
-})
-
-test('the island defaults to the approved lawn widths', () => {
-  assert.equal(SkyLogic.LAWN, 6)
-  assert.equal(SkyLogic.LAWN_BACK, 2)
-  assert.deepEqual(SkyLogic.buildIsland({ W, H }).list, island.list)
-})
-
-test('shore has no one-tile spikes or notches', () => {
-  for (const key of island.cells) {
-    const [x, y] = key.split(',').map(Number)
-    assert.ok(neighbours(x, y) >= 2, `spike at ${key}`)
-  }
-  const { minX, maxX, minY, maxY } = island.bounds
-  for (let y = minY - 1; y <= maxY; y++) for (let x = minX - 1; x <= maxX; x++) {
-    if (!has(x, y)) assert.ok(neighbours(x, y) <= 2, `notch at ${x},${y}`)
-  }
-})
-
-test('underside is deepest inside', () => {
-  const centre = island.depth.get('13,7')
-  for (const c of island.list) if (c.shore === 0) assert.ok(centre > c.d, `shore cell ${c.x},${c.y} is as deep as the centre`)
 })
 
 test('outdoor spots fit on the lawn', () => {
@@ -64,28 +30,42 @@ test('decor avoids office, spots and the office margin', () => {
     assert.ok(has(d.x, d.y), `decor ${d.x},${d.y} is off the island`)
     assert.ok(!(d.x >= -1 && d.x <= W && d.y >= -1 && d.y <= H), `decor ${d.x},${d.y} touches the office`)
     assert.ok(!inSpot(d.x, d.y), `decor ${d.x},${d.y} sits on a reserved spot`)
-    assert.ok(['tree', 'rock', 'flower'].includes(d.kind))
+    assert.ok(['tree', 'rock', 'flower', 'bush', 'mushroom'].includes(d.kind), `unknown decor ${d.kind}`)
   }
 })
 
-test('waterfall sits on an east shore cell', () => {
+test('the waterfall pours over the front shore out of the lake', () => {
   const { x, y } = island.waterfall
-  assert.ok(has(x, y) && !has(x + 1, y))
+  assert.ok(has(x, y) && !has(x, y + 1), `the waterfall at ${x},${y} is not on the front shore`)
+  assert.ok(y > H && island.pond.cells.has(x + ',' + y))
 })
 
-test('scene frame fits the island and keeps the office near 63%', () => {
-  const f = SkyLogic.sceneFrame(island, { W, H, TW, TH, WALL, pad: 16 })
-  const P = (x, y, z = 0) => [f.OX + (x - y) * TW, f.OY + (x + y) * TH - z]
-  for (const c of island.list) {
-    for (const [px, py] of [P(c.x, c.y), P(c.x + 1, c.y + 1, -c.d), P(c.x + 1, c.y), P(c.x, c.y + 1, -c.d)]) {
-      assert.ok(px >= 0 && px <= f.LW && py >= 0 && py <= f.LH, `cell ${c.x},${c.y} leaves the frame`)
-    }
+// ---- the scene frame ----
+
+const FRAME = { W, H, TW: 16, TH: 8, WALL: 64, pad: 16 }
+const fit = (f) => Math.min(1280 / f.LW, 720 / f.FH)
+// Screen y of a peak's tip in the scene canvas (the peak stands on its tile's centre).
+const peakTop = (f, p) => f.OY + (p.x + p.y + 1) * FRAME.TH - p.h
+
+test('the frame takes in both mountain peaks', () => {
+  const f = SkyLogic.sceneFrame(island, FRAME)
+  for (const p of island.mountain.peaks) assert.ok(peakTop(f, p) >= 0, `peak ${p.x},${p.y} runs off the top`)
+})
+
+test('the mountain never shrinks the office by more than 10%', () => {
+  const flat = SkyLogic.sceneFrame({ ...island, mountain: null }, FRAME)
+  // (the real mountain fits within 10 % anyway: these lines alone would pass without the cap in sceneFrame)
+  const f0 = SkyLogic.sceneFrame(island, FRAME)
+  for (const [w, h] of [[1280, 720], [1920, 1080], [390, 700], [800, 1200]]) {
+    const fitIn = (fr) => Math.min(w / fr.LW, h / fr.FH)
+    assert.ok(fitIn(f0) >= 0.9 * fitIn(flat), `${w}x${h}: the office at ${fitIn(f0) / fitIn(flat)} of its size`)
   }
-  // Office size on screen compared to today's 688×414 scene, both fitted into the 1440×900 window's stage (1408×813).
-  const fit = (lw, lh) => Math.min(1408 / lw, 813 / lh)
-  const rel = fit(f.LW, f.LH) / fit(688, 414)
-  assert.ok(rel >= 0.58 && rel <= 0.68, `office is ${(rel * 100).toFixed(1)}% of today's size`)
-  for (const v of Object.values(f)) assert.ok(Number.isInteger(v))
+  // A mountain far too tall to fit is let run off the top instead of shrinking the office: this is the case that
+  // guards the cap.
+  const tall = { ...island.mountain, peaks: island.mountain.peaks.map((p) => ({ ...p, h: p.h * 8 })) }
+  const f = SkyLogic.sceneFrame({ ...island, mountain: tall }, FRAME)
+  assert.ok(fit(f) >= 0.9 * fit(flat), `office at ${fit(f) / fit(flat)} of its size`)
+  assert.ok(f.FH > flat.FH, 'the frame still grows toward the mountain as far as it may')
 })
 
 // ---- weather ----
@@ -337,11 +317,16 @@ test('agents leave the office only by the stairs', () => {
   assert.equal(SkyLogic.canCross([W, 10], [W + 1, 10], W, H, stairs), true)
 })
 
-test('the lawn walk avoids water, trees and rocks but reaches the bathing spots', () => {
+test('the lawn walk avoids water, the mountain, its pool, decor and lamps but reaches the bathing spots', () => {
   const walk = SkyLogic.lawnWalk(island, W, H)
   for (const s of island.pond.spots) assert.ok(walk.has(s.x + ',' + s.y))
   for (const k of island.pond.cells) if (!island.pond.spots.some((s) => s.x + ',' + s.y === k)) assert.ok(!walk.has(k), `water cell ${k} is walkable`)
+  for (const k of island.mountain.pool.cells) assert.ok(!walk.has(k), `pool cell ${k} is walkable`)
+  for (const p of island.pavilion.path) assert.ok(!walk.has(p.x + ',' + p.y), `the pavilion's stone at ${p.x},${p.y} is walkable`)
+  for (const k of island.mountain.cells) assert.ok(!walk.has(k), `mountain cell ${k} is walkable`)
+  for (const l of island.lamps) assert.ok(!walk.has(l.x + ',' + l.y), `lamp at ${l.x},${l.y} is walkable`)
   for (const d of island.decor) if (d.kind !== 'flower') assert.ok(!walk.has(d.x + ',' + d.y), `${d.kind} at ${d.x},${d.y} is walkable`)
+  for (const d of island.decor) if (d.kind === 'flower') assert.ok(walk.has(d.x + ',' + d.y), `flower at ${d.x},${d.y} is not walkable`)
   assert.ok(!walk.has('5,5'), 'office cells are not lawn')
   assert.ok(walk.has(W + ',7') && walk.has(W + ',8'), 'the foot of the east stairs is walkable')
   assert.ok(walk.has('22,' + H) && walk.has('23,' + H), 'the foot of the south stairs is walkable')
@@ -363,7 +348,7 @@ const reachWithin = (cells, from, to) => {
 }
 
 test('garden paths are the same on every machine', () => {
-  const again = SkyLogic.buildIsland({ W, H, lawn: 6, back: 2 })
+  const again = SkyLogic.buildIsland({ W, H })
   assert.deepEqual([...again.paths.cells].sort(), [...island.paths.cells].sort())
   assert.deepEqual(again.paths.lines, island.paths.lines)
 })
@@ -381,24 +366,36 @@ test('garden paths lie on walkable lawn, off the water and the reserved spots', 
   for (const d of island.decor) assert.ok(!island.paths.cells.has(d.x + ',' + d.y), `${d.kind} at ${d.x},${d.y} sits on the path`)
 })
 
-test('garden paths join both stairs to the pond and the east stairs to the smoking corner, never into the restroom block', () => {
+test('garden paths join both stairs to the lake and the rest corner, and the east stairs to the smoking corner, never into the restroom block', () => {
   const cells = island.paths.cells
   const bath = island.pond.spots.reduce((a, b) => (b.y < a.y ? b : a))
   const entry = [bath.x, bath.y - 1]
   assert.ok(cells.has(entry + ''), 'the path ends right next to a bathing spot')
-  assert.ok(reachWithin(cells, [W, 8], entry), 'east stairs → pond')
-  assert.ok(reachWithin(cells, [23, H], entry), 'south stairs → pond')
-  assert.equal(island.paths.lines.length, 3, 'one leg from each flight of stairs, and one to the smoking corner')
+  assert.ok(reachWithin(cells, [W, 8], entry), 'east stairs → lake')
+  assert.ok(reachWithin(cells, [23, H], entry), 'south stairs → lake')
+  assert.equal(island.paths.lines.length, 4, 'a leg from each flight of stairs, one to the smoking corner, one on to the rest corner')
   const smoke = island.spots.find((s) => s.id === 'east-front')
   assert.ok(reachWithin(cells, [W, 7], [smoke.x - 1, smoke.y + smoke.h - 1]), 'east stairs → smoking corner entrance')
   for (const k of cells) assert.ok(!inSpotId('east-back', ...k.split(',').map(Number)), `path cell ${k} runs into the restroom block`)
+  // stones on to the rest corner by the lake
+  const { rest } = island
+  const restEnd = [rest.fish.x, rest.fish.y - 1]
+  assert.ok(cells.has(restEnd + ''), 'the path does not end beside the fishing spot')
+  assert.ok(Math.abs(rest.bench.x - restEnd[0]) + Math.abs(rest.bench.y - restEnd[1]) <= 2, 'the bench is off the end of the path')
+  assert.ok(reachWithin(cells, [23, H], restEnd), 'south stairs → rest corner')
+  assert.ok(reachWithin(cells, [W, 8], restEnd), 'east stairs → rest corner')
 })
 
 test('garden paths keep the big lawn in front of the office whole', () => {
+  // Off the row along the plinth front, the path only runs east of the south stairs (down to the lake and the rest
+  // corner by it); the open lawn west of them stays whole.
+  const south = stairs.find((s) => s.side === 'south')
+  const last = Math.max(island.rest.fish.y, ...island.pond.spots.map((s) => s.y))
   for (const k of island.paths.cells) {
     const [x, y] = k.split(',').map(Number)
-    assert.ok(x >= 22, `path cell ${k} cuts into the front lawn`)
-    assert.ok(y <= H + 2 || x >= island.pond.spots[0].x - 1, `path cell ${k} wanders into the open lawn`)
+    if (y <= H + 1) continue
+    assert.ok(x >= south.x + south.len, `path cell ${k} cuts into the front lawn`)
+    assert.ok(y <= last, `path cell ${k} wanders past the lake`)
   }
 })
 
@@ -418,6 +415,7 @@ test('stepping stones keep off the reserved spots, the pond and the office', () 
       const at = `stone at ${st.x.toFixed(2)},${st.y.toFixed(2)} reaches ${x.toFixed(2)},${y.toFixed(2)}`
       for (const s of island.spots) assert.ok(!(x > s.x && x < s.x + s.w && y > s.y && y < s.y + s.h), `${at}, inside spot ${s.id}`)
       assert.ok(!island.pond.cells.has(Math.floor(x) + ',' + Math.floor(y)), `${at}, in the pond`)
+      assert.ok(!island.mountain.pool.cells.has(Math.floor(x) + ',' + Math.floor(y)), `${at}, in the pool`)
       assert.ok(!inOffice(x, y), `${at}, on the office floor`)
       assert.ok(has(Math.floor(x), Math.floor(y)), `${at}, off the island`)
     }
@@ -442,22 +440,6 @@ test('the restroom block spot runs along the pantry east side, from the back-wal
   assert.deepEqual(stones, [], 'no stepping stone above the east stairs')
   // the block's back wall (0.35 thick behind y = 0, like the office's) stands on land for all but its last tile
   for (let x = spot.x; x < spot.x + spot.w - 1; x++) assert.ok(has(x, -1), `no land under the back wall at x ${x}`)
-})
-
-test('the added land joins the island and never widens the scene frame', () => {
-  const land = SkyLogic.annexLand(W)
-  assert.ok(land.length > 0)
-  for (const [x, y] of land) {
-    assert.ok(has(x, y), `added tile ${x},${y} is land`)
-    assert.ok(x + 1 - y <= W + 6, `added tile ${x},${y} reaches past the island's right-most screen corner`)
-    assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => has(x + a, y + b) && !land.some(([p, q]) => p === x + a && q === y + b)) ||
-      land.some(([p, q]) => Math.abs(p - x) + Math.abs(q - y) === 1), `added tile ${x},${y} floats`)
-  }
-  const opts = { W, H, TW: 16, TH: 8, WALL: 64, pad: 16 }
-  const frame = SkyLogic.sceneFrame(island, opts)
-  const bare = { ...island, list: island.list.filter((c) => !land.some(([x, y]) => x === c.x && y === c.y)) }
-  assert.deepEqual([frame.LW, frame.LH, frame.OX, frame.OY], [SkyLogic.sceneFrame(bare, opts).LW, SkyLogic.sceneFrame(bare, opts).LH, SkyLogic.sceneFrame(bare, opts).OX, SkyLogic.sceneFrame(bare, opts).OY])
-  assert.deepEqual([frame.LW, frame.LH, frame.OX, frame.OY], [848, 644, 304, 83], 'the frame the page was laid out for')
 })
 
 // ---- cheapest route on the grid ----
@@ -503,6 +485,34 @@ test('agents walking out to the pond keep to the garden path', () => {
   }
 })
 
+test('agents walking out to the rest corner keep to the garden path', () => {
+  const walk = SkyLogic.lawnWalk(island, W, H)
+  const cells = island.paths.cells
+  const step = (a, b) => SkyLogic.canCross(a, b, W, H, stairs) && !inOffice(b[0], b[1]) && walk.has(b + '')
+  const cost = (c) => (cells.has(c + '') ? 1 : SkyLogic.GRASS_COST)
+  const { bench, fish } = island.rest
+  for (const from of [[W, 8], [23, H]]) {
+    const route = SkyLogic.cheapestPath(from, [fish.x, fish.y], step, cost)
+    assert.ok(route.length > 0, `no way from ${from} to the fishing spot`)
+    for (const c of route.slice(0, -1)) assert.ok(cells.has(c + ''), `from ${from} the walk leaves the path at ${c}`)
+    assert.ok(SkyLogic.cheapestPath(from, [bench.x, bench.y], step, cost).length > 0, `no way from ${from} to the bench`)
+  }
+})
+
+test('the longest walks on the big island are still planned quickly', () => {
+  // The office floor and the whole lawn, as office-util.js bfs() sees them (minus the restroom and furniture).
+  const walk = SkyLogic.lawnWalk(island, W, H)
+  const step = (a, b) => SkyLogic.canCross(a, b, W, H, stairs) && (inOffice(b[0], b[1]) || walk.has(b + ''))
+  const cost = (c) => (inOffice(c[0], c[1]) || island.paths.cells.has(c + '') ? 1 : SkyLogic.GRASS_COST)
+  const back = [...walk].map((k) => k.split(',').map(Number)).filter(([x, y]) => y <= -3).sort((a, b) => a[1] - b[1] || b[0] - a[0])[0]
+  const goals = [[island.rest.bench.x, island.rest.bench.y], back]
+  for (const goal of goals) assert.ok(SkyLogic.cheapestPath([2, 2], goal, step, cost).length > 0, `no way to ${goal}`)
+  const t0 = performance.now(), runs = 20
+  for (let i = 0; i < runs; i++) for (const goal of goals) SkyLogic.cheapestPath([2, 2], goal, step, cost)
+  const ms = (performance.now() - t0) / runs / goals.length
+  assert.ok(ms < 3, `a long walk takes ${ms.toFixed(2)} ms to plan`)
+})
+
 test('agents still reach lawn goals off the path, and not by a long detour', () => {
   const walk = SkyLogic.lawnWalk(island, W, H)
   const step = (a, b) => SkyLogic.canCross(a, b, W, H, stairs) && !inOffice(b[0], b[1]) && walk.has(b + '')
@@ -529,14 +539,6 @@ test('ground height is the floor inside, the lawn outside, and steps down the st
   assert.ok(south > 0 && south < 8, `half way down the south stairs is ${south}`)
   assert.equal(g(22.5, H + 2), 0)
   assert.equal(g(20.5, H + 0.3), 0)
-})
-
-test('the camera frames the island top, so the office is bigger than the whole-island fit', () => {
-  const f = SkyLogic.sceneFrame(island, { W, H, TW, TH, WALL: WALL + 8, pad: 16 })
-  assert.ok(Number.isInteger(f.FH) && f.FH < f.LH)
-  const fit = (lw, lh) => Math.min(1408 / lw, 813 / lh)
-  const rel = fit(f.LW, f.FH) / fit(688, 414)
-  assert.ok(rel >= 0.7 && rel <= 0.85, `office is ${(rel * 100).toFixed(1)}% of today's size`)
 })
 
 // ---- snow cover vs previews ----

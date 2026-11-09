@@ -1,0 +1,2 @@
+{"type":"user","sessionId":"00000000-0000-4000-8000-0000000000d1","cwd":"/tmp/demo-project","timestamp":"2026-11-06T00:00:50.000Z","message":{"role":"user","content":"Resumed"}}
+{"type":"assistant","sessionId":"00000000-0000-4000-8000-0000000000d1","cwd":"/tmp/demo-project","timestamp":"2026-11-06T00:00:52.000Z","message":{"model":"claude-new","role":"assistant","stop_reason":"tool_use","usage":{"input_tokens":100,"output_tokens":50},"content":[{"type":"tool_use","id":"tu_ag","name":"Agent","input":{"description":"dig"}}]}}

@@ -16,7 +16,9 @@ Object.assign(ClaudeOffice.prototype, {
       paddingRight: 'max(16px, env(safe-area-inset-right, 0px))',
     };
     const hdrCtl = { padding: '4px 10px', fontSize: 11 };
-    const connCol = w.conn === 'ok' ? '#46a758' : w.conn === 'connecting' || w.conn === 'busy' ? '#f5a524' : '#e5484d';
+    const connCol = { ok: '#46a758', warn: '#f5a524', bad: '#e5484d' }[
+      WorldLogic.chipTone(w.conn, w.link && w.link.phase)
+    ];
     const connText =
       {
         ok: tr('world.conn.ok'),
@@ -149,12 +151,7 @@ Object.assign(ClaudeOffice.prototype, {
             h('span', null, tr('world.header.viewers')),
             h('strong', { style: { color: '#ffffff' } }, w.viewers),
           ),
-          h(
-            'div',
-            { className: 'chip', title: connText },
-            h('span', { style: { width: 8, height: 8, background: connCol, display: 'inline-block' } }),
-            h('span', null, connText),
-          ),
+          this.worldConnChip(connCol, connText),
         ),
         h(
           'div',
@@ -231,6 +228,7 @@ Object.assign(ClaudeOffice.prototype, {
           h('div', { ref: this.setWorldSpacer, style: { width: 1 } }),
         ),
         back,
+        this.worldLinkBand(),
         this.worldPanel(mine),
         showSettings && this.worldSettings(),
       ),
@@ -392,6 +390,7 @@ Object.assign(ClaudeOffice.prototype, {
           ),
         ),
       ),
+      this.seasonSection(),
     );
   },
 });

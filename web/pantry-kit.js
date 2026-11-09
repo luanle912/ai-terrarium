@@ -81,6 +81,13 @@ export function kit(ctx, ox, oy) {
     fn();
     ctx.globalAlpha = o;
   };
+  // fade(a) multiplies the alpha in place and returns the old one to put back (ctx.globalAlpha = old): unlike al it
+  // takes no callback, so a per-frame light overlay allocates nothing.
+  const fade = a => {
+    const o = ctx.globalAlpha;
+    ctx.globalAlpha = o * a;
+    return o;
+  };
   const line = (a, b, c, w = 1) => {
     ctx.strokeStyle = c;
     ctx.lineWidth = w;
@@ -113,7 +120,7 @@ export function kit(ctx, ox, oy) {
     ctx.restore();
   };
   const shadow = (x, y, w, h, a = 0.28) => al(a, () => top(x - 0.04, y - 0.04, w + 0.08, h + 0.08, 0.05, '#000000'));
-  return { ctx, P, poly, top, fL, fR, box, R, ell, cyl, al, line, blob, wallText, shadow };
+  return { ctx, P, poly, top, fL, fR, box, R, ell, cyl, al, fade, line, blob, wallText, shadow };
 }
 
 export const I = {};

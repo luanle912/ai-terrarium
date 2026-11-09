@@ -142,6 +142,34 @@ test('clientIp ignores forwarded headers unless trusted', () => {
   assert.equal(clientIp({ headers: {}, socket: { remoteAddress: '1.2.3.4' } }, true), '1.2.3.4');
 });
 
+test('HUB_TRUST_PROXY=cloudflare uses CF-Connecting-IP', () => {
+  assert.equal(loadConfig({ ...OK, HUB_TRUST_PROXY: 'cloudflare' }).trustProxy, 'cloudflare');
+  const req = { headers: { 'cf-connecting-ip': '203.0.113.7', 'x-forwarded-for': '9.9.9.9, 8.8.8.8' }, socket: { remoteAddress: '127.0.0.1' } };
+  assert.equal(clientIp(req, 'cloudflare'), '203.0.113.7');
+  assert.equal(clientIp({ ...req, headers: { 'cf-connecting-ip': '2001:db8::1' } }, 'cloudflare'), '2001:db8::1');
+  assert.equal(clientIp(req, false), '127.0.0.1');
+});
+
+test('a bad CF-Connecting-IP falls back to X-Forwarded-For', () => {
+  const sock = { remoteAddress: '127.0.0.1' };
+  assert.equal(clientIp({ headers: { 'cf-connecting-ip': 'not-an-ip', 'x-forwarded-for': '9.9.9.9, 8.8.8.8' }, socket: sock }, 'cloudflare'), '8.8.8.8');
+  assert.equal(clientIp({ headers: { 'cf-connecting-ip': '1.2.3.4, 5.6.7.8', 'x-forwarded-for': '8.8.8.8' }, socket: sock }, 'cloudflare'), '8.8.8.8');
+  assert.equal(clientIp({ headers: { 'cf-connecting-ip': '' }, socket: sock }, 'cloudflare'), '127.0.0.1');
+});
+
+test('HUB_TRUST_PROXY=1 ignores CF-Connecting-IP', () => {
+  assert.equal(loadConfig({ ...OK, HUB_TRUST_PROXY: '1' }).trustProxy, 'xff');
+  assert.equal(loadConfig({ ...OK, HUB_TRUST_PROXY: '' }).trustProxy, false);
+  assert.equal(loadConfig({ ...OK, HUB_TRUST_PROXY: '0' }).trustProxy, false, "'0' reads as off, so an old env keeps starting");
+  const req = { headers: { 'cf-connecting-ip': '203.0.113.7', 'x-forwarded-for': '8.8.8.8' }, socket: { remoteAddress: '127.0.0.1' } };
+  assert.equal(clientIp(req, 'xff'), '8.8.8.8');
+  assert.equal(clientIp({ ...req, headers: { 'cf-connecting-ip': '203.0.113.7' } }, 'xff'), '127.0.0.1');
+});
+
+test('HUB_TRUST_PROXY=yes is a config error', () => {
+  assert.throws(() => loadConfig({ ...OK, HUB_TRUST_PROXY: 'yes' }), /HUB_TRUST_PROXY must be 1 or cloudflare/);
+});
+
 test('parseCookies', () => {
   assert.deepEqual(parseCookies('a=1; b=hello%20w; c'), { a: '1', b: 'hello w' });
   assert.deepEqual(parseCookies(undefined), {});
@@ -267,4 +295,11 @@ test('dev login refuses a non-loopback HUB_HOST', () => {
     assert.equal(loadConfig({ ...base, HUB_HOST: h }).devLogin, true, String(h));
   // non-dev hubs may bind anywhere
   assert.equal(loadConfig({ ...OK, HUB_HOST: '0.0.0.0' }).host, '0.0.0.0');
+});
+
+test('HUB_METRICS_TOKEN shorter than 32 characters is a config error', () => {
+  assert.throws(() => loadConfig({ ...OK, HUB_METRICS_TOKEN: 'short' }), /HUB_METRICS_TOKEN/);
+  assert.equal(loadConfig({ ...OK }).metricsToken, null);
+  assert.equal(loadConfig({ ...OK, HUB_METRICS_TOKEN: '' }).metricsToken, null);
+  assert.equal(loadConfig({ ...OK, HUB_METRICS_TOKEN: 'x'.repeat(32) }).metricsToken, 'x'.repeat(32));
 });

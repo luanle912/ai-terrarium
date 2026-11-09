@@ -26,53 +26,29 @@ Object.assign(ClaudeOffice.prototype, {
   worldPanel(mine) {
     const w = this.world,
       { sel, selIsland } = this.state;
-    if (w.dead) {
-      if (w.conn === 'refused' || w.conn === 'busy' || w.conn === 'unreachable') {
-        const [title, text] = {
-          refused: [tr('world.dead.refused.title'), tr('world.dead.refused.text')],
-          busy: [tr('world.conn.busy'), tr('world.dead.busy.text')],
-          unreachable: [tr('world.dead.unreachable.title'), tr('world.dead.unreachable.text')],
-        }[w.conn];
-        const waitS = w.retryAt ? Math.ceil((w.retryAt - performance.now()) / 1000) : 0;
-        return h(
-          'div',
-          { style: PANEL },
-          h('div', { style: TITLE }, title),
-          h('span', { role: 'alert', style: { lineHeight: 1.5 } }, text),
-          h(
-            'button',
-            { className: 'btn btn-accent', disabled: !!w.retrying || waitS > 0, onClick: () => this.retryWorld() },
-            w.retrying
-              ? tr('world.dead.retrying')
-              : waitS > 0
-                ? tr('world.dead.retryIn', { s: waitS })
-                : tr('world.dead.retry'),
-          ),
-        );
-      }
-      if (w.conn === 'ended')
-        return h(
-          'div',
-          { style: PANEL },
-          h('div', { style: TITLE }, tr('world.conn.ended')),
-          h('span', { style: { lineHeight: 1.5 } }, tr('world.dead.ended.text')),
-          h(
-            'a',
-            {
-              href: '/auth/login',
-              className: 'btn btn-accent',
-              style: { textAlign: 'center', textDecoration: 'none' },
-            },
-            tr('world.session.relogin'),
-          ),
-        );
+    // The hub answers but will not stream (refused) or asks to wait (busy): say why and when the page tries again.
+    const p = w.link.phase;
+    if (p === 'refused' || p === 'busy') {
+      const [title, text] =
+        p === 'refused'
+          ? [tr('world.dead.refused.title'), tr('world.dead.refused.text')]
+          : [tr('world.conn.busy'), tr('world.dead.busy.text')];
+      const waitS = this.linkWaitS(),
+        hold = p === 'busy' && waitS > 0;
       return h(
         'div',
         { style: PANEL },
-        h('div', { style: TITLE }, tr('world.stream.lost')),
-        h('span', { style: { color: 'var(--muted)' } }, tr('world.stream.askingHub')),
+        h('div', { style: TITLE }, title),
+        h('span', { role: 'alert', style: { lineHeight: 1.5 } }, text),
+        h('span', { style: MUTED }, tr('world.link.autoRetry', { s: waitS })),
+        h(
+          'button',
+          { className: 'btn btn-accent', disabled: hold, onClick: () => this.relink({ type: 'online' }) },
+          hold ? tr('world.dead.retryIn', { s: waitS }) : tr('world.dead.retry'),
+        ),
       );
     }
+    if (w.dead) return null;
     const close = h(
       'button',
       {
@@ -297,7 +273,8 @@ Object.assign(ClaudeOffice.prototype, {
         leaveLink,
       ]);
     }
-    const devs = w.mine ? w.mine.devices : [],
+    // This computer ("Máy này", from the hub link's #this-device) leads the list.
+    const devs = w.mine ? [...w.mine.devices].sort((a, b) => (b.id === w.thisDevice) - (a.id === w.thisDevice)) : [],
       colors = w.mine ? w.mine.colors : [],
       d = w.draft,
       sending = mine && mine.online !== false;
@@ -502,7 +479,9 @@ Object.assign(ClaudeOffice.prototype, {
               ? devs.map(x => {
                   const [lab, col] = SEND_LABEL.get(x.send) || ['—', '#8b8fa3'],
                     revoked = x.send === 'revoked',
-                    c = asking(x, 'list');
+                    c = asking(x, 'list'),
+                    here = x.id === w.thisDevice,
+                    sent = Number.isFinite(x.lastAt) ? x.lastAt : x.lastUsedAt;
                   return h(
                     'div',
                     { key: x.id, style: { display: 'flex', flexDirection: 'column', gap: 6 } },
@@ -515,15 +494,20 @@ Object.assign(ClaudeOffice.prototype, {
                         { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 } },
                         h(
                           'span',
-                          {
-                            style: {
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              color: '#ffffff',
+                          { style: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 } },
+                          h(
+                            'span',
+                            {
+                              style: {
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                color: '#ffffff',
+                              },
                             },
-                          },
-                          clip(x.name, 40) || '—',
+                            clip(x.name, 40) || '—',
+                          ),
+                          here && h('span', { className: 'sky-here' }, tr('world.mine.thisDevice')),
                         ),
                         h(
                           'span',
@@ -533,6 +517,8 @@ Object.assign(ClaudeOffice.prototype, {
                               ? tr('world.mine.devices.shareSuffix', { level: SHARE_LABEL.get(x.share) })
                               : ''),
                         ),
+                        Number.isFinite(sent) &&
+                          h('span', { style: MUTED }, tr('world.mine.lastSent', { time: when(sent) })),
                       ),
                       !revoked && !c && askRevoke(x, 'list'),
                     ),

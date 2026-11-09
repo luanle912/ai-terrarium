@@ -373,3 +373,347 @@ test('meProbeStep: a hidden tab waits and probes once when visible; having an is
   W.meProbeStep(st, ['a', 'b', 'c'], 7000, { ...o, hasMine: true })
   assert.deepEqual(W.meProbeStep(st, ['a', 'b', 'c'], 30000, o), { fire: false, retryIn: null })
 })
+
+// ---- connection hardening (Task 5): stream watchdog and agents coming back ----
+test('streamStale is never true before the first named ping', () => {
+  assert.equal(W.PING_STALE_MS, 40000)
+  assert.equal(W.streamStale({ pingSeen: false, lastEventAt: 0, now: 10 * 60 * 1000 }), false)
+  assert.equal(W.streamStale({ pingSeen: undefined, lastEventAt: 0, now: 10 * 60 * 1000 }), false)
+})
+
+test('streamStale after 40 s without any event', () => {
+  assert.equal(W.streamStale({ pingSeen: true, lastEventAt: 1000, now: 1000 + 39999 }), false)
+  assert.equal(W.streamStale({ pingSeen: true, lastEventAt: 1000, now: 1000 + 40000 }), true)
+})
+
+test('goneStep: an island that went offline and came back shows its agents again', () => {
+  const { skip, gone } = W.goneStep(new Map([['a', 'missing'], ['b', 'missing']]), new Set(['a', 'b']))
+  assert.equal(skip.size, 0)
+  assert.equal(gone.size, 0)
+})
+
+test('goneStep: a finished sub-agent stays gone while still listed', () => {
+  const { skip, gone } = W.goneStep(new Map([['s', 'done']]), new Set(['s']))
+  assert.deepEqual([...skip], ['s'])
+  assert.deepEqual([...gone], [['s', 'done']])
+})
+
+test('goneStep forgets done sids once they leave the list', () => {
+  const { skip, gone } = W.goneStep(new Map([['s', 'done'], ['t', 'done'], ['m', 'missing']]), new Set(['t']))
+  assert.deepEqual([...skip], ['t'])
+  assert.deepEqual([...gone], [['t', 'done']])
+})
+
+// ---- the viewer's link to the hub (Task 11): reconnect by itself, keep the scene, wipe only after 5 min ----
+const step = (link, ev, now, rand = 0.5) => W.linkStep(link, ev, now, rand)
+
+test('link constants and reconnectDelay', () => {
+  assert.deepEqual(W.RECONNECT_STEPS_MS, [1000, 2000, 4000, 8000, 16000, 30000])
+  assert.equal(W.DOWN_CAP_MS, 60000); assert.equal(W.REFUSED_AFTER, 5)
+  assert.equal(W.WAKE_JUMP_MS, 15000); assert.equal(W.KEEP_STALE_MS, 300000)
+  assert.equal(W.reconnectDelay(0, 0.5), 1000)
+  close(W.reconnectDelay(0, 0), 800); close(W.reconnectDelay(0, 1), 1200)
+  assert.equal(W.reconnectDelay(9, 0.5), 30000)
+  assert.deepEqual(W.linkStart(), { phase: 'live', attempt: 0, closes: 0, staleSince: null, dueAt: null, stale: 0 })
+})
+
+test('a dropped stream reconnects after 1, 2, 4 … 30 s and never wipes before 5 min', () => {
+  let link = W.linkStart(), now = 0
+  const waits = []
+  for (let i = 0; i < 8; i++) {
+    const r = step(link, { type: 'error' }, now)
+    assert.equal(r.link.phase, 'reconnecting'); assert.equal(r.act.probe, true); assert.equal(r.act.wipe, false)
+    assert.equal(r.act.reload, false)
+    waits.push(r.act.connectIn); link = r.link; now += r.act.connectIn
+  }
+  assert.deepEqual(waits, [1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000])
+  assert.equal(link.staleSince, 0)
+  assert.ok(now < W.KEEP_STALE_MS)
+})
+
+test('a restart event waits exactly the hub\'s retryMs', () => {
+  const r = step(W.linkStart(), { type: 'restarting', retryMs: 6000 }, 100)
+  assert.equal(r.link.phase, 'reconnecting'); assert.equal(r.act.connectIn, 6000); assert.equal(r.act.probe, false)
+  assert.equal(step(W.linkStart(), { type: 'restarting', retryMs: 200 }, 0).act.connectIn, 1000)
+  assert.equal(step(W.linkStart(), { type: 'restarting', retryMs: 999999 }, 0).act.connectIn, 60000)
+  assert.equal(step(W.linkStart(), { type: 'restarting', retryMs: 'x' }, 0).act.connectIn, 1000)
+})
+
+test('a 502 during a restart is not refused: the probe says world, so connect again', () => {
+  let r = step(W.linkStart(), { type: 'closed' }, 0)
+  assert.equal(r.link.closes, 1); assert.equal(r.act.probe, true)
+  r = step(r.link, { type: 'probe', kind: 'world' }, 300)
+  assert.equal(r.link.phase, 'reconnecting')
+  assert.equal(r.act.connectIn, 700)  // the connect already planned stays where it was
+  assert.equal(r.act.probe, false)
+})
+
+test('five closes in a row with the hub answering show refused but keep retrying every 60 s', () => {
+  let link = W.linkStart(), now = 0
+  for (let i = 1; i <= 5; i++) {
+    let r = step(link, { type: 'closed' }, now)
+    r = step(r.link, { type: 'probe', kind: 'world' }, now + 10)
+    link = r.link
+    if (i < 5) { assert.equal(link.phase, 'reconnecting', 'close ' + i); assert.ok(r.act.connectIn < W.DOWN_CAP_MS) }
+    else { assert.equal(link.phase, 'refused'); assert.equal(r.act.connectIn, W.DOWN_CAP_MS) }
+    now += 20000
+  }
+  // still refused: the next close probes again and keeps the 60 s rhythm
+  let r = step(link, { type: 'closed' }, now)
+  r = step(r.link, { type: 'probe', kind: 'world' }, now + 10)
+  assert.equal(r.link.phase, 'refused'); assert.equal(r.act.connectIn, W.DOWN_CAP_MS)
+  r = step(r.link, { type: 'open' }, now + 70000)
+  assert.equal(r.link.phase, 'live'); assert.equal(r.link.closes, 0)
+})
+
+test('hub down: retries back off to 60 s at most; online or wake connects at once', () => {
+  let link = W.linkStart(), now = 0, last = 0
+  for (let i = 0; i < 10; i++) {
+    let r = step(link, { type: 'error' }, now)
+    r = step(r.link, { type: 'probe', kind: 'down' }, now + 5)
+    assert.equal(r.link.phase, 'down')
+    assert.ok(r.act.connectIn >= last && r.act.connectIn <= W.DOWN_CAP_MS, String(r.act.connectIn))
+    last = r.act.connectIn; link = r.link; now += r.act.connectIn
+  }
+  assert.equal(last, 30000)
+  for (const type of ['online', 'wake', 'visible']) {
+    const r = step(link, { type }, now)
+    assert.equal(r.act.connectIn, 0, type); assert.equal(r.link.attempt, 0, type); assert.equal(r.link.phase, 'down')
+  }
+  // while live they do nothing
+  for (const type of ['online', 'wake', 'visible']) assert.equal(step(W.linkStart(), { type }, 5).act.connectIn, null, type)
+})
+
+test('scenes are wiped only after 5 min without a connection', () => {
+  let r = step(W.linkStart(), { type: 'error' }, 1000)
+  r = step(r.link, { type: 'probe', kind: 'down' }, 1000 + W.KEEP_STALE_MS - 1)
+  assert.equal(r.act.wipe, false)
+  r = step(r.link, { type: 'error' }, 1000 + W.KEEP_STALE_MS)
+  assert.equal(r.act.wipe, true)
+  assert.equal(r.link.staleSince, 1000)  // the first loss counts, not the latest
+  r = step(r.link, { type: 'open' }, 1000 + W.KEEP_STALE_MS + 5)
+  assert.equal(r.act.wipe, false); assert.equal(r.link.staleSince, null)
+})
+
+test('signed out reloads; a hub no longer in world mode reloads', () => {
+  const r0 = step(W.linkStart(), { type: 'error' }, 0)
+  assert.equal(step(r0.link, { type: 'probe', kind: 'signedout' }, 5).act.reload, true)
+  assert.equal(step(r0.link, { type: 'probe', kind: 'other' }, 5).act.reload, true)
+  // a late probe answer after the stream came back changes nothing
+  const live = step(r0.link, { type: 'open' }, 6).link
+  const r = step(live, { type: 'probe', kind: 'signedout' }, 7)
+  assert.equal(r.act.reload, false); assert.equal(r.link.phase, 'live')
+})
+
+test('busy waits for Retry-After', () => {
+  const r0 = step(W.linkStart(), { type: 'closed' }, 0)
+  const r = step(r0.link, { type: 'probe', kind: 'busy', retryS: 12 }, 5)
+  assert.equal(r.link.phase, 'busy'); assert.equal(r.act.connectIn, 12000)
+  // no Retry-After: back off as for a drop rather than hammer the hub
+  assert.equal(step(r0.link, { type: 'probe', kind: 'busy', retryS: 0 }, 5).act.connectIn, 2000)
+})
+
+test('open resets everything', () => {
+  let link = W.linkStart()
+  for (let i = 0; i < 4; i++) link = step(link, { type: 'closed' }, i).link
+  link = step(link, { type: 'probe', kind: 'down' }, 9).link
+  const r = step(link, { type: 'open' }, 10)
+  assert.deepEqual(r.link, { phase: 'live', attempt: 0, closes: 0, staleSince: null, dueAt: null, stale: 0 })
+  assert.deepEqual(r.act, { connectIn: null, probe: false, reload: false, wipe: false, close: false })
+})
+
+test('a stream that opens but stays silent is reopened later each time until it is heard', () => {
+  let link = W.linkStart(), now = 0
+  const waits = []
+  for (let i = 0; i < 7; i++) {
+    const r = step(link, { type: 'error', stale: true }, now)
+    waits.push(r.act.connectIn); now += r.act.connectIn
+    link = step(r.link, { type: 'open' }, now).link  // the hub accepts the stream, then says nothing for 40 s
+    now += 40000
+  }
+  assert.deepEqual(waits, [2000, 4000, 8000, 16000, 30000, 30000, 30000])
+  link = step(link, { type: 'heard' }, now).link
+  assert.equal(link.stale, 0)
+  assert.equal(step(link, { type: 'error', stale: true }, now).act.connectIn, 2000)
+})
+
+test('waking up in a visible tab reopens a stream that still looks live; a hidden tab does not', () => {
+  const r = step(W.linkStart(), { type: 'wake', visible: true }, 5000)
+  assert.equal(r.act.connectIn, 0)
+  assert.equal(r.act.close, true)
+  assert.equal(r.link.phase, 'reconnecting')
+  assert.equal(r.link.staleSince, 5000)
+  // background tabs throttled to one tick a minute look like a wake: never tear down a healthy stream for that
+  const h = step(W.linkStart(), { type: 'wake', visible: false }, 5000)
+  assert.equal(h.act.connectIn, null); assert.ok(!h.act.close); assert.equal(h.link.phase, 'live')
+})
+
+test('doneDue: only a sub-agent done for more than 3 s is due to leave', () => {
+  const a = { parent: 1, status: 'done', doneAt: 1000 }
+  assert.equal(W.DONE_LEAVE_MS, 3000)
+  assert.equal(W.doneDue(a, 4000), false)
+  assert.equal(W.doneDue(a, 4001), true)
+  assert.equal(W.doneDue({ ...a, parent: null }, 9000), false)
+  assert.equal(W.doneDue({ ...a, status: 'working' }, 9000), false)
+  assert.equal(W.doneDue({ ...a, doneAt: 0 }, 9000), false)
+})
+
+test('leaveGone: a hidden tab frees the desk at once, a visible one lets the person walk out', () => {
+  assert.equal(W.leaveGone('hidden'), true)
+  assert.equal(W.leaveGone('visible'), false)
+})
+
+// ---- "Máy này": what this machine sends (Task 16) ----
+const NOW = 1_800_000_000_000
+
+test('pillView: a healthy publisher is ok with its age', () => {
+  const v = W.pillView({ state: 'sending', lastOkAt: NOW - 4000, lastErr: null, failures: 0, nextRetryAt: null }, NOW)
+  assert.deepEqual(v, { state: 'sending', tone: 'ok', ageMs: 4000, retryInMs: null, err: null, failures: 0 })
+})
+
+test('pillView: an old server without the new fields still shows its state', () => {
+  assert.deepEqual(W.pillView({ state: 'offline' }, NOW),
+    { state: 'offline', tone: 'bad', ageMs: null, retryInMs: null, err: null, failures: 0 })
+  assert.equal(W.pillView({ state: 'sending', lastOkAt: 'x', failures: -2, lastErr: 'boom' }, NOW).ageMs, null)
+  assert.equal(W.pillView({ state: 'sending', failures: -2, lastErr: 'boom' }, NOW).err, null)
+  assert.equal(W.pillView({ state: 'sending', failures: -2 }, NOW).failures, 0)
+  assert.equal(W.pillView(null, NOW), null)
+  assert.equal(W.pillView({}, NOW), null)
+  assert.equal(W.pillView({ state: 'weird' }, NOW).tone, 'muted')
+})
+
+test('pillView: rejected is bad and carries the reason', () => {
+  const v = W.pillView({ state: 'rejected', lastOkAt: NOW - 90_000, failures: 3, nextRetryAt: NOW + 25_000,
+    lastErr: { code: 'rejected:too_many_sessions', at: NOW - 1000, reason: 'too many sessions' } }, NOW)
+  assert.equal(v.tone, 'bad')
+  assert.deepEqual(v.err, { code: 'rejected:too_many_sessions', reason: 'too many sessions' })
+  assert.equal(v.failures, 3)
+  assert.equal(v.retryInMs, 25_000)
+  assert.equal(v.ageMs, 90_000)
+})
+
+test('pillView: a nextRetryAt in the past reads as retrying now', () => {
+  const v = W.pillView({ state: 'offline', nextRetryAt: NOW - 5000, failures: 2,
+    lastErr: { code: 'network:ECONNREFUSED', at: NOW - 6000 } }, NOW)
+  assert.equal(v.retryInMs, 0)
+  assert.deepEqual(v.err, { code: 'network:ECONNREFUSED', reason: null })
+})
+
+test('pillView: the tone of every publisher state', () => {
+  const tone = s => W.pillView({ state: s }, NOW).tone
+  assert.deepEqual(['sending', 'connecting', 'paused', 'standby', 'private', 'off', 'offline', 'rejected', 'revoked']
+    .map(tone), ['ok', 'warn', 'warn', 'muted', 'muted', 'muted', 'bad', 'bad', 'bad'])
+})
+
+test('agoParts picks seconds, minutes or hours', () => {
+  assert.deepEqual(W.agoParts(0), { unit: 's', n: 0 })
+  assert.deepEqual(W.agoParts(59_400), { unit: 's', n: 59 })
+  assert.deepEqual(W.agoParts(60_000), { unit: 'm', n: 1 })
+  assert.deepEqual(W.agoParts(3_599_000), { unit: 'm', n: 59 })
+  assert.deepEqual(W.agoParts(7_300_000), { unit: 'h', n: 2 })
+  assert.deepEqual(W.agoParts(-500), { unit: 's', n: 0 }, 'a clock a little ahead never shows a negative age')
+})
+
+test('deviceLink: the chip opens the hub on this device only for a 16-hex device id', () => {
+  assert.equal(W.deviceLink('https://hub.x/', '0123456789abcdef'), 'https://hub.x/#this-device=0123456789abcdef')
+  assert.equal(W.deviceLink('https://hub.x/', 'nothex'), 'https://hub.x/')
+  assert.equal(W.deviceLink('https://hub.x/', null), 'https://hub.x/')
+})
+
+test('failParts: the retry wait shows only when one is planned and still ahead', () => {
+  const err = { code: 'network:ECONNREFUSED' }
+  assert.deepEqual(W.failParts({ err, retryInMs: 9200, failures: 3 }),
+    [['error', { code: 'network:ECONNREFUSED' }], ['retryIn', { s: '10' }], ['times', { n: '3' }]])
+  assert.deepEqual(W.failParts({ err, retryInMs: 0, failures: 1 }),
+    [['error', { code: 'network:ECONNREFUSED' }], ['retrying', {}], ['times', { n: '1' }]])
+  // paused waits for a sign-in, not a timer: no retry part at all
+  assert.deepEqual(W.failParts({ err, retryInMs: null, failures: 0 }), [['error', { code: 'network:ECONNREFUSED' }]])
+  assert.deepEqual(W.failParts({ err: null, retryInMs: 5000, failures: 2 }), [])
+})
+
+// ---- island freshness and the connection legend (Task 17) ----
+
+test('freshness: live under 45 s, fades to the offline alpha at 90 s', () => {
+  assert.equal(W.FRESH_MS, 45000)
+  assert.equal(W.OFFLINE_AFTER_MS, 90000)
+  assert.equal(W.OFFLINE_ALPHA, 0.65)
+  const hubNow = 1_800_000_000_000, recvAt = 5000
+  const at = age => W.freshness(hubNow - age, hubNow, recvAt, recvAt, true)
+  assert.deepEqual(at(0), { ageMs: 0, alpha: 1, bucket: 'live' })
+  assert.deepEqual(at(44_999), { ageMs: 44_999, alpha: 1, bucket: 'live' })
+  const a45 = at(45_000)
+  assert.equal(a45.bucket, 'aging')
+  close(a45.alpha, 1)
+  const mid = at(67_500)
+  assert.equal(mid.bucket, 'aging')
+  close(mid.alpha, 1 - (1 - 0.65) / 2)
+  const a90 = at(90_000)
+  close(a90.alpha, 0.65)
+  assert.equal(a90.bucket, 'aging', 'offline only after 90 s')
+  assert.deepEqual(at(200_000), { ageMs: 200_000, alpha: 0.65, bucket: 'offline' })
+  // the time since the frame arrived counts too
+  assert.equal(W.freshness(hubNow - 30_000, hubNow, recvAt, recvAt + 70_000, true).bucket, 'offline')
+  // the alpha only falls with age and never below the offline alpha
+  let last = 1
+  for (let ms = 0; ms <= 120_000; ms += 1500) {
+    const f = at(ms)
+    assert.ok(f.alpha <= last + 1e-12 && f.alpha >= 0.65, `alpha at ${ms}`)
+    last = f.alpha
+  }
+})
+
+test("freshness uses the hub clock, not the viewer's", () => {
+  const hubNow = 1_800_000_000_000, lastAt = hubNow - 60_000
+  const viewer = Date.UTC(2026, 10, 6, 3, 0, 0)
+  const a = W.freshness(lastAt, hubNow, viewer, viewer + 2000, true)
+  const skew = 10 * 60_000
+  assert.deepEqual(W.freshness(lastAt, hubNow, viewer + skew, viewer + skew + 2000, true), a)
+  assert.deepEqual(W.freshness(lastAt, hubNow, viewer - skew, viewer - skew + 2000, true), a)
+  assert.equal(a.ageMs, 62_000)
+  assert.equal(a.bucket, 'aging')
+})
+
+test('freshness without lastAt (old hub) is unknown and follows online', () => {
+  assert.deepEqual(W.freshness(undefined, undefined, 0, 0, true), { ageMs: null, alpha: 1, bucket: 'unknown' })
+  assert.deepEqual(W.freshness(null, 1000, 0, 0, undefined), { ageMs: null, alpha: 1, bucket: 'unknown' })
+  assert.deepEqual(W.freshness(null, 1000, 0, 0, false), { ageMs: null, alpha: 0.65, bucket: 'unknown' })
+  assert.deepEqual(W.freshness(900, undefined, 0, 0, false), { ageMs: null, alpha: 0.65, bucket: 'unknown' })
+  assert.deepEqual(W.freshness('900', 1000, 0, 0, true), { ageMs: null, alpha: 1, bucket: 'unknown' })
+})
+
+test('legendRow maps link phases', () => {
+  assert.equal(W.legendRow('live'), null)
+  assert.equal(W.legendRow('reconnecting'), 'reconnecting')
+  assert.equal(W.legendRow('down'), 'down')
+  assert.equal(W.legendRow('refused'), 'down')
+  assert.equal(W.legendRow('busy'), 'down')
+  assert.equal(W.legendRow(undefined), null)
+})
+
+test('escAction closes the legend first', () => {
+  const base = { view: 'one', typing: false, settings: false, confirm: true, legend: true }
+  assert.equal(W.escAction(base), 'legend')
+  assert.equal(W.escAction({ ...base, view: 'all', confirm: false }), 'legend', 'on "Toàn cảnh" too')
+  assert.equal(W.escAction({ ...base, settings: true }), 'legend')
+  assert.equal(W.escAction({ ...base, legend: false }), 'confirm')
+  assert.equal(W.escAction({ ...base, typing: true }), 'none')
+  assert.equal(W.escAction({ ...base, mod: true }), 'none')
+})
+
+test('chipTone agrees with the lit legend row for every link phase', () => {
+  const ROW_TONE = { reconnecting: 'warn', down: 'bad' }
+  for (const phase of ['reconnecting', 'down', 'refused', 'busy'])
+    assert.equal(W.chipTone('error', phase), ROW_TONE[W.legendRow(phase)], phase)
+  assert.equal(W.chipTone('ok', 'live'), 'ok')
+  assert.equal(W.chipTone('connecting', 'live'), 'warn', 'the first connect is on the way')
+  assert.equal(W.chipTone('ended', undefined), 'bad')
+})
+
+test('waking in a visible tab keeps a live stream that has spoken lately (a long-hidden tab, not a sleep)', () => {
+  // Chrome ticks a long-hidden tab about once a minute, so showing it again looks like a wake: keep the stream when an
+  // event arrived within WAKE_QUIET_MS on the wall clock.
+  const keep = step(W.linkStart(), { type: 'wake', visible: true, quietMs: 12000 }, 5000)
+  assert.equal(keep.act.close, false); assert.equal(keep.act.connectIn, null); assert.equal(keep.link.phase, 'live')
+  const slept = step(W.linkStart(), { type: 'wake', visible: true, quietMs: W.WAKE_QUIET_MS + 1 }, 5000)
+  assert.equal(slept.act.close, true); assert.equal(slept.act.connectIn, 0)
+})

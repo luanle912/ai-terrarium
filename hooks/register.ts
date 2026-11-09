@@ -22,6 +22,11 @@ export const register: Register = (on) => {
         for await (const { stream, text } of server) {
           if (stream === 'stderr' && text.trim()) {
             $.ui.log(`claude-office: ${text.trim()}`, { to: 'debug' })
+          } else if (stream === 'stdout') {
+            // The publisher's log lines (tokens are already masked by the server).
+            for (const line of text.split('\n')) {
+              if (line.startsWith('terrarium:')) $.ui.log(`claude-office: ${line.trim()}`, { to: 'debug' })
+            }
           }
         }
         $.ui.status(undefined)

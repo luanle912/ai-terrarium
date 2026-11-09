@@ -37,7 +37,8 @@ Thiếu hoặc sai biến thì hub từ chối khởi động và in ra **mọi*
 | `HUB_PORT` | | `4318` | Cổng hub nghe |
 | `HUB_HOST` | | `127.0.0.1` | Địa chỉ hub nghe. Chỉ đặt `0.0.0.0` khi thật sự cần. Khi bật `HUB_DEV_LOGIN` thì bắt buộc là địa chỉ loopback |
 | `HUB_DB` | | `./data/hub.sqlite` | Đường dẫn file SQLite |
-| `HUB_TRUST_PROXY` | | tắt | `1` khi đứng sau proxy: hub lấy IP người dùng từ mục cuối của `X-Forwarded-For` để giới hạn tần suất. Không bật thì mọi người dùng chung IP của proxy và chung một hạn mức. Không bật khi hub lộ thẳng ra mạng, vì header này giả được |
+| `HUB_TRUST_PROXY` | | tắt | `1` khi đứng sau proxy: hub lấy IP người dùng từ mục cuối của `X-Forwarded-For` để giới hạn tần suất. `cloudflare` khi đứng sau Cloudflare Tunnel: hub lấy `CF-Connecting-IP` (nếu là IP hợp lệ, không thì như `1`). Không bật thì mọi người dùng chung IP của proxy và chung một hạn mức. Không bật khi hub lộ thẳng ra mạng, vì các header này giả được. Giá trị khác `1`/`cloudflare` là lỗi cấu hình |
+| `HUB_METRICS_TOKEN` | | tắt | Token Bearer cho `GET /metrics`, ít nhất 32 ký tự (ví dụ `openssl rand -hex 32`). Để trống thì `/metrics` trả 404. Ngắn hơn 32 ký tự là lỗi cấu hình |
 | `HUB_DEV_LOGIN` | | tắt | `1` bật đăng nhập giả, **chỉ để phát triển trên máy local** |
 
 `HUB_DEV_LOGIN=1` bỏ qua Google và cho đăng nhập bằng một đường dẫn tự gõ email. Hub chỉ cho bật khi `HUB_PUBLIC_URL`
@@ -100,10 +101,26 @@ terrarium.example.com {
 }
 ```
 
-Cloudflare Tunnel: trỏ hostname công khai tới `http://127.0.0.1:4318`.
+Cloudflare Tunnel: trỏ hostname công khai tới `http://127.0.0.1:4318` và đặt `HUB_TRUST_PROXY=cloudflare` để hub lấy IP
+người dùng từ `CF-Connecting-IP`. **Chỉ** dùng `cloudflare` khi origin chỉ đi tới được qua Cloudflare Tunnel (hub nghe ở
+`127.0.0.1`, không mở cổng ra ngoài): nếu origin lộ ra mạng, ai cũng giả được header này.
 
-Luồng SSE (`/api/world/stream`) cần proxy không đệm và không cắt kết nối rảnh quá sớm. Hub gửi dòng `: ping` mỗi
-25 giây nên cấu hình mặc định của hai bên đều chạy được.
+**Khởi động lại êm.** Khi nhận SIGTERM (hoặc SIGINT), hub báo cho từng luồng SSE `event: restarting` kèm `retry:` ngẫu
+nhiên 5–20 giây rồi mới đóng, nên trang người xem quay lại sau khi hub lên lại thay vì gặp 502 của proxy và dừng hẳn.
+Cứ dừng hub bằng `systemctl stop`/`kill` (SIGTERM) như thường; đừng dùng `kill -9`.
+
+Người xem tự kết nối lại sau đúng `retryMs` của hub (5–20 giây, rải đều để 300 luồng không dồn vào một giây) và vẫn giữ cảnh
+đang xem; trang cũ chạy `EventSource` trần cũng chờ theo dòng `retry:` đó. Khung `restarting` được ghi ngay trước khi
+đóng kết nối, nên một proxy có thể làm rơi nó: khi đó người xem rơi về lùi nhịp của chính họ (1, 2, 4, 8, 16 rồi 30 giây).
+Đã đo với 300 luồng: 300/300 có lại luồng sau 20 giây, mỗi người nhận tối đa 18 sự kiện `world` trong 30 giây đầu.
+
+**90 giây đầu sau khi hub lên.** Hub mất bộ nhớ khi khởi động lại, nên một đảo chưa gửi lại gói nào hiện `waking: true`
+trong `world` (vẫn `online: false`) tối đa 90 giây, và trang vẽ nó là "đang chờ máy gửi lại" thay vì offline. Publisher
+của các máy đang chạy gửi lại trong chưa tới 30 giây (nhịp tim) nên đảo đó sáng lại trước hạn; đảo của máy đã tắt hết
+cửa sổ 90 giây thì chuyển thành offline.
+
+Luồng SSE (`/api/world/stream`) cần proxy không đệm và không cắt kết nối rảnh quá sớm. Hub gửi sự kiện `event: ping`
+mỗi 25 giây nên cấu hình mặc định của hai bên đều chạy được.
 
 ## 3b. Owner và nhật ký
 
@@ -136,8 +153,9 @@ sqlite3 hub.sqlite "SELECT datetime(at/1000,'unixepoch') AS time, actor_id, acti
   HSTS khi dùng `https://`.
 - Giới hạn tốc độ (token bucket, trả 429): đăng nhập 30 lần/giờ mỗi IP; bắt đầu ghép thiết bị 10 lần/giờ mỗi IP; gói
   `publish` 4 gói/giây (burst 8) mỗi máy; các route còn lại 120 yêu cầu/phút mỗi IP, trừ file tĩnh `/web/...` (mỗi lần
-  mở trang tải khoảng 40 file). Luồng SSE: 5 luồng đồng thời mỗi người, 300 luồng toàn hub. Sau proxy nhớ bật
-  `HUB_TRUST_PROXY=1`, nếu không mọi người dùng chung một hạn mức.
+  mở trang tải khoảng 40 file). Luồng SSE: 5 luồng đồng thời mỗi người (429 kèm `Retry-After: 10`), 300 luồng toàn hub
+  (503 kèm `Retry-After: 30`). Sau proxy nhớ bật `HUB_TRUST_PROXY=1` (hoặc `cloudflare`), nếu không mọi người dùng chung
+  một hạn mức.
 
 ## 3d. Sức chứa: tối đa 8 đảo
 
@@ -158,6 +176,50 @@ Một hub chứa **tối đa 8 đảo**, mỗi đảo một **chỗ cố định
   đó. Thu hồi máy hay cấm tự động thì **không** trả chỗ: đảo chuyển offline và giữ chỗ.
 - **Tranh chỗ cuối.** Kiểm đủ chỗ và tạo đảo nằm trong một transaction, cộng chỉ mục `UNIQUE` trên `slot`: hai người cùng
   duyệt mã khi chỉ còn một chỗ thì đúng một người được, người kia thấy câu báo đủ chỗ.
+
+## 3e. Nâng cấp lên bản "connection hardening" (đợt 1)
+
+- **Câu trả lời của `POST /api/publish`.** Hub giờ trả `200 {"accepted": true}` khi nhận gói, hoặc `200 {"accepted": false,
+  "reason": "stale_seq", "seq": n}` (hub đang giữ seq mới hơn: publisher nhảy tới `n + 1` và gửi lại) hoặc
+  `{"accepted": false, "reason": "other_instance"}` (một publisher khác trên cùng máy đang gửi: publisher này chuyển sang
+  `standby` và thử lại sau 30 giây). Gói sai vẫn là `400`/`413`; publisher mới hiện `rejected`, ghi lý do vào log và thử lại
+  mỗi 15 giây thay vì coi là đã gửi. Thân gói không đổi, không có khoá mới.
+- **Header `X-Terrarium-Instance`.** Mỗi publisher gửi một mã ngẫu nhiên 16 hex; hub chỉ cho instance mới nhất của một máy
+  gửi. Thiếu header = instance `legacy`.
+- **Luồng `GET /api/world/stream`.** Hub gửi sự kiện có tên `event: ping` mỗi 25 giây (thay cho comment `: ping` cũ) để trang phát
+  hiện luồng treo.
+- **Thứ tự deploy: hub trước, rồi tới plugin; không cần làm cùng lúc.** Hub mới chạy được với mọi publisher cũ (200 thay vì
+  204: publisher cũ coi 200 như 204 và bỏ qua thân, đúng như hôm nay). Publisher mới chạy được với hub cũ (204 được hiểu là
+  đã nhận; không gửi khoá nào hub cũ từ chối). Trang mới trên tiến trình hub cũ không bật canh gác vì thiếu `ping` có tên,
+  và cư xử như trước. Bảng đầy đủ nằm ở mục 9 của `docs/specs/2026-11-06-connection-hardening-design.md`; ma trận
+  cũ/mới được kiểm bằng `tests/compat-matrix.test.mjs` (lấy code cũ từ git `21e9bd8`).
+
+## 3f. Triển khai đợt 2 (khởi động lại êm, ngủ/tỉnh)
+
+- **Kiểm `HUB_TRUST_PROXY` của môi trường thật trước khi deploy.** Chỉ nhận `''` (hoặc `0`), `1` hoặc `cloudflare`; mọi giá trị khác
+  làm hub không khởi động (lỗi `HUB_TRUST_PROXY must be 1 or cloudflare`). Bản cũ lặng lẽ bỏ qua giá trị lạ.
+- **Thứ tự: hub trước, rồi tới plugin** (xem mục 3e). Trang cũ vẫn chạy với hub mới: `retry:` được trình duyệt tôn trọng.
+- **`Retry-After`** của giới hạn luồng (429 mỗi người, 503 toàn hub) dành cho client: `EventSource` của trình duyệt bỏ qua
+  header này (trang chỉ đọc được `Retry-After` của câu trả lời 429 từ `/api/config` rồi chờ đúng thời gian); client tự viết
+  nên đọc và làm theo.
+- **Máy ngủ/tỉnh.** Publisher thấy khoảng trống giữa hai nhịp quá 10 giây thì ghi `terrarium: woke up; resending` và gửi
+  lại ngay; trang thế giới nối lại tức thì khi trình duyệt báo `online` hoặc tab hiện lại, và giữ cảnh tới 5 phút mất kết nối.
+
+## 3g. Theo dõi hub: `/healthz` và `/metrics`
+
+- **`GET /healthz`** (hoặc `HEAD`) dành cho uptime monitor: không cần đăng nhập, trả `200 {ok, uptimeS, db, streams, version}`,
+  hoặc `503 {ok: false, db: "error"}` khi không đọc được SQLite. Nó đi qua giới hạn tần suất chung như mọi route, nên
+  đừng thăm dò dày hơn vài giây một lần. `HEAD /` và `HEAD` các file `/web/*` cũng dùng được; `HEAD /api/world/stream` là 405.
+- **`GET /metrics`** (định dạng Prometheus) chỉ bật khi đặt `HUB_METRICS_TOKEN`; gọi với `Authorization: Bearer <token>`
+  (sai hoặc thiếu: 401). Không có token, email hay tên nào trong đó. Số liệu: `terrarium_uptime_seconds`,
+  `terrarium_streams`, `terrarium_islands_slotted`, `terrarium_islands_online`,
+  `terrarium_publish_total{result="accepted|stale_seq|other_instance|bad_packet|too_large|rate_limited|unauthorized"}`,
+  `terrarium_stream_refused_total{reason="hub_cap|user_cap"}`, `terrarium_http_429_total`,
+  `terrarium_world_broadcasts_total`, `terrarium_frames_written_total`. Bộ đếm về 0 khi hub khởi động lại.
+- Sự kiện `world` có thêm `now` (giờ của hub) và mỗi đảo có `lastAt` (lần cuối nghe được một máy của đảo, `null` nếu hub
+  chưa nghe từ khi khởi động); `/api/me` có `devices[].lastAt` tương tự. Để mỗi lần máy gửi không kéo theo một sự kiện
+  `world`, hub chỉ phát lại `world` vì `lastAt` khi nó sang một nấc 15 giây mới; mỗi khung vẫn mang `lastAt` chính xác,
+  nên người xem thấy `lastAt` của đảo đang online cũ nhất khoảng 16 giây.
 
 ## 4. Sao lưu
 

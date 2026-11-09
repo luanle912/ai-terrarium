@@ -1,8 +1,13 @@
 // Drawing the office furniture: desks with their workstation, planters, glass partitions and the pantry pieces.
 import { PantryItems } from './pantry-items.js';
+import { PropUse } from './prop-use.js';
 import { P, lerpHex, mix } from './office-scene.js';
 import { shade, vacantTheme } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
+// Each pantry piece's prop index (web/prop-use.js), and one options object reused for every piece (drawing is
+// synchronous), so the pieces read o.night and o.use without an object per piece per frame.
+const PROP_OF = PropUse.layoutProps(PantryItems.LAYOUT),
+  PO = { night: false, use: 0 };
 mixin(
   ClaudeOffice,
   class {
@@ -91,7 +96,8 @@ mixin(
       const { ctx, th, t, df } = G,
         PI = PantryItems;
       if (!PI) return;
-      const isNight = df < 0.5;
+      const isNight = df < 0.5,
+        lit = this.propLit || PropUse.DARK;
       const Z = PI.depths(PI.LAYOUT);
       PI.LAYOUT.forEach(([name, rx, ry, rz], i) => {
         const it = PI.I[name];
@@ -105,7 +111,9 @@ mixin(
             const k = PI.kit(ctx, sx, sy - rz);
             if (!it.flat && !it.wall && name !== 'pendant' && rz === 0 && name !== 'planter')
               k.shadow(0, 0, it.size[0], it.size[1], 0.22);
-            it.draw(k, t, { night: isNight });
+            PO.night = isNight;
+            PO.use = PROP_OF[i] >= 0 ? lit[PROP_OF[i]] : 0;
+            it.draw(k, t, PO);
           },
         });
       });

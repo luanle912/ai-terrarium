@@ -4,10 +4,16 @@ import { PantryItems } from './pantry-items.js';
 import { SkyLogic } from './sky-logic.js';
 import { SkyRender } from './sky-render.js';
 import { RestroomLogic } from './restroom-logic.js';
+import { PropUse } from './prop-use.js';
 import { FLOOR_Z, IDLE_SPOTS, P, PG, STAIRS, W, WALL, WC, lerpHex } from './office-scene.js';
 import { RESTROOM_GLYPH, shade } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Drawing the smoking corner and the restroom block.
+// Each room's two basins' prop indices (web/prop-use.js).
+const BASIN = {
+  m: [PropUse.ID['basin-m0'], PropUse.ID['basin-m1']],
+  f: [PropUse.ID['basin-f0'], PropUse.ID['basin-f1']],
+};
 mixin(
   ClaudeOffice,
   class {
@@ -39,7 +45,8 @@ mixin(
         STEEL = '#c9d3e3',
         WOOD = '#a8763e',
         WORK = '#efe9dc';
-      const cap = shade(th.trim, 18),
+      const lit = this.propLit || PropUse.DARK,
+        cap = shade(th.trim, 18),
         glow = df < 0.6 ? 1 - df / 0.6 : 0;
       // stall doors are shut, with a red light, while someone is inside (RestroomLogic.visit 'inside')
       const occupied = new Set();
@@ -405,11 +412,22 @@ mixin(
               fR(v.x1 - 0.02, y + 0.12, y + 0.16, 8.6, 9.6, '#e0b23a');
             }
             box(v.x0 - 0.02, v.y0 - 0.03, w + 0.04, len + 0.06, 12.5, 14, WORK, '#d6cfbf', '#bfb7a6');
-            v.basins.forEach(b => {
+            v.basins.forEach((b, j) => {
               top(v.x0 + 0.12, b - 0.24, w - 0.2, 0.48, 14.02, '#aab4c6');
               top(v.x0 + 0.16, b - 0.19, w - 0.28, 0.38, 14.03, '#6b768c');
               box(v.x0 + 0.03, b - 0.03, 0.06, 0.06, 14, 19, STEEL);
               box(v.x0 + 0.03, b - 0.03, 0.18, 0.05, 18, 19, STEEL);
+              // the tap runs only while someone washes at this basin (web/prop-use.js)
+              const u = lit[BASIN[r][j]];
+              if (u > 0) {
+                const [sx, sy] = K.P(v.x0 + 0.19, b, 18),
+                  g = K.fade(0.8 * u),
+                  sp = Math.floor(t * 8) % 2;
+                R(sx, sy, 1, 4, '#9fd3ff');
+                R(sx, sy + Math.floor(((t * 3) % 1) * 4), 1, 1, '#e8f6ff');
+                R(sx - 1 - sp, sy + 4, 3 + 2 * sp, 1, '#cfe8ff');
+                ctx.globalAlpha = g;
+              }
             });
           },
         });

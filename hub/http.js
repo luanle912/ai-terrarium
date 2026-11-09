@@ -1,4 +1,5 @@
 'use strict';
+const net = require('node:net');
 // HTTP helpers for the hub: body reader with a hard limit (S15), cookie parser, response sender with
 // baseline security headers, client IP (S16), router + one-line request log (S17).
 
@@ -9,8 +10,9 @@ const SECURITY_HEADERS = {
   'Content-Security-Policy': "frame-ancestors 'none'",
 };
 
+// headers: extra response headers the router sends with the error (e.g. Retry-After).
 class HttpError extends Error {
-  constructor(status, message) { super(message || String(status)); this.status = status; }
+  constructor(status, message, headers = {}) { super(message || String(status)); this.status = status; this.headers = headers; }
 }
 
 // Reads the body but never more than `limit` bytes. Rejects with a 413 HttpError the moment the limit is
@@ -63,9 +65,14 @@ function send(res, status, body, headers = {}) {
 const sendJson = (res, status, obj, headers = {}) =>
   send(res, status, JSON.stringify(obj), { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
 
-// Only the LAST X-Forwarded-For entry (the one our own proxy appended) is trusted, and only with trustProxy.
-function clientIp(req, trustProxy) {
-  if (trustProxy) {
+// mode: false = socket address only; true | 'xff' = the LAST X-Forwarded-For entry (the one our own proxy
+// appended); 'cloudflare' = CF-Connecting-IP when it is a valid IP, otherwise as 'xff'.
+function clientIp(req, mode) {
+  if (mode === 'cloudflare') {
+    const cf = String(req.headers['cf-connecting-ip'] || '').trim();
+    if (net.isIP(cf) !== 0) return cf;
+  }
+  if (mode) {
     const xff = req.headers['x-forwarded-for'];
     if (xff) {
       const parts = String(xff).split(',').map((s) => s.trim()).filter(Boolean);
@@ -75,11 +82,12 @@ function clientIp(req, trustProxy) {
   return (req.socket && req.socket.remoteAddress) || 'unknown';
 }
 
-// routes: [{method, path: string | RegExp, handler(req, res, rc)}]; rc = {url, path, query, match}.
-// No match -> 404. A handler error with .status maps to that status, anything else is a bare 500
+// routes: [{method, path: string | RegExp, handler(req, res, rc), head?}]; rc = {url, path, query, match}.
+// HEAD with no route of its own uses the GET route of the same path (Node drops the body), unless that route has
+// head: false (405, Allow: GET). No match -> 404. A handler error with .status maps to that status, anything else is a bare 500
 // (details are never sent to the client or logged). htmlError(status, message) -> {body, headers} renders a page
 // for browsers that navigate into an error (Accept: text/html, outside /api/); everyone else keeps plain text.
-function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, htmlError = null } = {}) {
+function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, htmlError = null, onStatus = null } = {}) {
   return function handle(req, res) {
     const t0 = now();
     if (hsts && typeof res.setHeader === 'function') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
@@ -87,6 +95,7 @@ function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, ht
     let url = null;
     try { url = new URL(req.url, 'http://hub.invalid'); pathname = url.pathname; } catch { /* keep '/' */ }
     res.on('finish', () => {
+      if (onStatus) { try { onStatus(res.statusCode); } catch { /* ignore */ } }
       // S17: time, method, path WITHOUT query, status, duration. Never body/headers/cookies.
       try { log(`${new Date(t0).toISOString()} ${req.method} ${pathname} ${res.statusCode} ${now() - t0}ms`); } catch { /* ignore */ }
       if (req._tooLarge) req.destroy();
@@ -104,17 +113,24 @@ function createRouter(routes, { log = () => {}, now = Date.now, hsts = false, ht
         const ok = e instanceof HttpError && Number.isInteger(e.status) && e.status >= 400 && e.status <= 599;
         const status = ok ? e.status : 500;
         if (status === 500) { try { log(`handler error ${(e && e.name) || 'Error'} ${pathname}`); } catch { /* ignore */ } }
-        const headers = status === 413 ? { Connection: 'close' } : {};
+        const headers = { ...(ok && e.headers ? e.headers : {}), ...(status === 413 ? { Connection: 'close' } : {}) };
         sendError(status, status === 500 ? 'internal error' : (e.message || ''), headers);
       } catch { try { res.destroy(); } catch { /* ignore */ } }
     };
     if (!url) return fail(new HttpError(400, 'bad request'));
     let route = null;
     let match = null;
-    for (const r of routes) {
-      if (r.method !== req.method) continue;
-      if (typeof r.path === 'string') { if (r.path === pathname) { route = r; break; } }
-      else { const m = r.path.exec(pathname); if (m) { route = r; match = m; break; } }
+    const find = (method) => {
+      for (const r of routes) {
+        if (r.method !== method) continue;
+        if (typeof r.path === 'string') { if (r.path === pathname) { route = r; match = null; return; } }
+        else { const m = r.path.exec(pathname); if (m) { route = r; match = m; return; } }
+      }
+    };
+    find(req.method);
+    if (!route && req.method === 'HEAD') {
+      find('GET');
+      if (route && route.head === false) return sendError(405, 'method not allowed', { Allow: 'GET' });
     }
     if (!route) return sendError(404, 'not found');
     try {
