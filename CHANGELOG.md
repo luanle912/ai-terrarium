@@ -20,6 +20,10 @@ The office as your Mac's live wallpaper, with the server started for you, and li
 - **The hub does less per publish and per viewer** — SQL statements are prepared once and reused, an `island` frame identical to the last one sent is not sent again, and the once-a-minute sign-in check looks up each session once however many tabs it has open
 - **The local server uses far less memory** — It reads transcripts a megabyte at a time instead of in one 64 MB piece: about 105 MB instead of 250 MB, with the same sessions
 
+### Fixed
+
+- **A session with shells still running looks busy** — When a turn ends but background shells keep running (Claude Code's "N shells still running", e.g. waiting for a pipeline), the agent no longer goes to rest as if done: it stays at its desk with the terminal on its screen and "Bash · shell nền", until the last shell finishes. An API error that stopped the turn still shows as an error
+
 ## [2.1.0] - 2026-11-09
 
 A new island in four seasons, office devices that wake only when used, and a sturdier link to the world. Deploy the hub before the plugin (either order works with the old side).

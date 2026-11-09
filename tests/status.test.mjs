@@ -509,3 +509,16 @@ test('start times in different shapes never drop a live process', () => {
   assert.equal(alive(1, '2026-11-06T02:55:21Z'), true);
   assert.equal(alive(1, 'Fri Nov 6 02:55:21 2026'), false);
 });
+
+test('registry `shell`: the turn ended but background shells still run, so the session works on a Bash', () => {
+  const st = newState('/x/s9.jsonl', T0);
+  ingest(st, { type: 'assistant', timestamp: new Date(sec(1)).toISOString(), message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'waiting for the pipeline' }] } }, false, T0);
+  assert.equal(statusAt(st, sec(2), { regStatus: 'idle' }).status, 'done');
+  assert.deepEqual(statusAt(st, sec(2), { regStatus: 'shell' }), { status: 'working', tool: 'Bash', detail: 'shell nền', talkingTo: '' });
+  assert.equal(statusAt(st, min(30), { regStatus: 'shell' }).status, 'working', 'long after the turn, while the shells run');
+  assert.equal(statusAt(load('api-error.jsonl'), min(5), { regStatus: 'shell' }).status, 'error', 'an API error still shows');
+  // A live session with no recent transcript.
+  const live = new Map([['s8', { pid: 8, status: 'shell', cwd: '/w/repo', name: 'n', updatedAt: sec(1) }]]);
+  const s = byId(build([], live, sec(2)), 's8');
+  assert.deepEqual([s.status, s.tool, s.detail], ['working', 'Bash', 'shell nền']);
+});
