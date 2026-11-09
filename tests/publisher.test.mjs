@@ -545,7 +545,12 @@ test('a 413 is handled like a 400', async () => {
 
 // --- Task 10: stable room letters, quick recovery, safe leave (L7-L11) ---
 const { createPublicView } = require('../lib/public-view.js');
-const hang = (url, opts) => new Promise((_, rej) => opts.signal.addEventListener('abort', () => rej(opts.signal.reason)));
+// A real hung socket keeps the process alive; AbortSignal.timeout's timer does not, so without the interval node would
+// end the file while the request waits and cancel the remaining tests.
+const hang = (url, opts) => new Promise((_, rej) => {
+  const keep = setInterval(() => {}, 1000);
+  opts.signal.addEventListener('abort', () => { clearInterval(keep); rej(opts.signal.reason); });
+});
 const projSnap = (projects) => ({ sessions: projects.map((p, i) => ({ id: 'id-' + i, project: p, status: 'working', updatedAt: 1 })) });
 const deptsOf = (view, projects) => Object.fromEntries(view(projSnap(projects), { share: 'kin' }).sessions.map((s, i) => [projects[i], s.dept]));
 
