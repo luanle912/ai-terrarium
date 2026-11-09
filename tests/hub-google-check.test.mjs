@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { startDevHub, pairDevice, postJson, makeGoogle, googleLogin } from './hub-helpers.mjs';
+import { startDevHub, pairDevice, postJson, makeGoogle, googleLogin, devLogin } from './hub-helpers.mjs';
 
 const HOUR = 3600 * 1000;
 const sid = (n) => n.toString(16).padStart(12, '0');
@@ -48,7 +48,7 @@ async function setup(email = 'an@newera.inc') {
   h = await startDevHub({ google });
   const login = await googleLogin(h.url, google, email);
   const dev = await pairDevice(h.url, login, 'Laptop');
-  assert.equal((await postJson(h.url, '/api/publish', pkt(), bearer(dev.token))).status, 204);
+  assert.equal((await postJson(h.url, '/api/publish', pkt(), bearer(dev.token))).status, 200);
   const user = h.hub.db.getUserBySub('g:' + email);
   return { h, google, login, dev, user, db: h.hub.db, check: h.hub.ctx.googleCheck };
 }
@@ -64,9 +64,13 @@ test('invalid_grant bans with google_revoked', async () => {
   const viewer = await googleLogin(h.url, google, 'bo@newera.inc');
   const own = await openStream(h.url, login.cookie);
   const other = await openStream(h.url, viewer.cookie);
+  // `world` is batched to one a second (Task 8), so bo's own ban may close `other` before the trailing `world`
+  // goes out: a third viewer without a refresh token (never checked, never banned) watches the island instead.
+  const third = await openStream(h.url, (await devLogin(h.url, 'cu@newera.inc', 'Cu')).cookie);
   try {
     assert.ok(await own.until((e) => e.event === 'world'));
     assert.ok(await other.until((e) => e.event === 'island'));
+    assert.ok(await third.until((e) => e.event === 'island'));
     assert.ok(db.getUserById(user.id).refresh_enc);
     google.calls.length = 0;
     google.onToken = () => ({ status: 400, body: { error: 'invalid_grant' } });
@@ -78,14 +82,14 @@ test('invalid_grant bans with google_revoked', async () => {
     assert.equal(u.ban_reason, 'google_revoked');
     assert.equal(db.sessionTokensForUser(user.id).length, 0);
     assert.equal(await own.waitEnd(), true);
-    assert.ok(await other.until((e) => e.event === 'world' && e.data.islands.some((i) => i.id === dev.island_id && i.online === false)));
-    assert.equal(other.events.some((e) => e.event === 'remove'), false); // a ban keeps the island in its slot
+    assert.ok(await third.until((e) => e.event === 'world' && e.data.islands.some((i) => i.id === dev.island_id && i.online === false)));
+    assert.equal(third.events.some((e) => e.event === 'remove'), false); // a ban keeps the island in its slot
     assert.equal((await postJson(h.url, '/api/publish', pkt(2), bearer(dev.token))).status, 401);
     assert.equal(u.refresh_enc, null);
     assert.ok(revokeCalls(google).length >= 1);
     assert.ok(db.listAudit().some((a) => a.action === 'user_banned' && a.target === `user:${user.id} google_revoked`));
     assert.ok(db.getIslandByUser(user.id), 'the islands row is kept');
-  } finally { own.close(); other.close(); await h.close(); }
+  } finally { own.close(); other.close(); third.close(); await h.close(); }
 });
 
 test('network error and 5xx do not ban; 72 h of errors writes one warning', async () => {

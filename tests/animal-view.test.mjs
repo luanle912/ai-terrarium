@@ -12,7 +12,8 @@ for (const m of ['animal-view-feed', 'animal-view-walkers', 'animal-view-draw', 
 const { AnimalUI: U } = loadWeb('animal-ui')
 const { AnimalWalk: AW } = loadWeb('animal-walk')
 const { AnimalSprites } = loadWeb('animal-sprites')
-const { LH, LW, PA, PG } = loadWeb('office-scene')
+const { LH, LW, PA, PG, ISLAND } = loadWeb('office-scene')
+const { ANIMAL_PLACES } = loadWeb('animal-view-util')
 
 const SPECIES = [
   { id: 'hen', tier: 'common', cond: null }, { id: 'frog', tier: 'rare', cond: 'rain' },
@@ -181,6 +182,16 @@ test('a panel takes focus when it opens and gives it back to the opener when it 
 })
 
 // ---- wiring into the page and the world view ----
+
+test('the page walks animals on the real island: they arrive and leave on its coast, the back lawn included', () => {
+  const land = ISLAND.cells, k = ([x, y]) => x + ',' + y
+  const coast = ([x, y]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => !land.has(k([x + dx, y + dy])))
+  assert.ok(ANIMAL_PLACES.edge.length > 10)
+  for (const c of ANIMAL_PLACES.edge) assert.ok(coast(c), `edge cell ${c} is inland`)
+  assert.ok(ANIMAL_PLACES.edge.some(([x, y]) => x < 0 || y < 0), 'the lawn behind the office has a coast')
+  for (const c of ANIMAL_PLACES.settleList) assert.ok(land.has(k(c)), `settle cell ${c} is off the island`)
+})
+
 
 test('world islands borrow the animal draw helpers and carry no animals', () => {
   const { IslandScene, SCENE_METHODS } = loadWeb('island-scene')

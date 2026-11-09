@@ -2,13 +2,22 @@
 // mixins that complete ClaudeOffice, IslandScene borrowing its methods) happen in the same order, then mounts.
 import './i18n.js';
 import './season-tree.js';
+import './season-logic.js';
 import './office-decor.js';
 import './pantry-items.js';
+import './island-grid.js';
+import './island-lake.js';
+import './island-land.js';
 import './sky-logic.js';
 import './camera-logic.js';
 import './bubble-logic.js';
 import './world-logic.js';
+import './island-art.js';
+import './island-art-mountain.js';
+import './island-art-lake.js';
 import './sky-render.js';
+import './island-lake-life.js';
+import './island-life.js';
 import './dog-logic.js';
 import './animal-walk.js';
 import './dog-sprites.js';
@@ -40,10 +49,13 @@ import './animal-view-panels.js';
 import './island-scene.js';
 import './world-ui.js';
 import './world-local.js';
+import './world-machine.js';
 import './world-state.js';
+import './world-link-ui.js';
 import './world-draw.js';
 import './world-render.js';
 import './world-panel.js';
+import './world-legend.js';
 import { h } from './office-scene.js';
 import { ClaudeOffice } from './office.js';
 

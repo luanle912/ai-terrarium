@@ -22,22 +22,27 @@ export const SCENE_METHODS = [
   'log',
   'byId',
   'leave',
+  'doneSweep',
   'goalFor',
   'updateAgent',
   'draw',
+  'drawEventTree',
   'drawSeg',
   'drawPlanter',
   'pantryItems',
   'drawDesk',
   'actArms',
   'drawPerson',
+  'drawRod',
   'drawSleeper',
   'headPos',
   'hit',
   'smokingItems',
   'restroomItems',
   'restroomPaint',
+  'seasonNow',
   'stepDogs',
+  'stepProps',
   'dogSprite',
   'drawDog',
   'drawAnimal',
@@ -53,7 +58,8 @@ export const SCENE_METHODS = [
   'animalTier',
   'animalLive',
 ];
-// Every island bakes the same ground for a given resolution, light and snow, so one bake per k serves them all.
+// Every island bakes the same ground for a given resolution, light, snow and season, so one bake per k serves them
+// all.
 export const SCENE_ISLAND_CACHE = new Map();
 // Dog sprites depend only on breed, frame and light, so all islands share one cache.
 export const SCENE_DOG_SPRITES = new Map();
@@ -67,7 +73,7 @@ export class IslandScene {
     this.agents = [];
     this.seq = 0;
     this.usedLooks = 0;
-    this.goneSids = new Set();
+    this.goneSids = new Map();
     this.depts = new Map();
     this.firstSnap = true;
     this.seasonKey = 'default';
@@ -98,8 +104,18 @@ export class IslandScene {
   get speed() {
     return this.host.speed;
   }
+  get seasonChoice() {
+    return this.host.seasonChoice;
+  }
+  get seasonPreview() {
+    return this.host.seasonPreview;
+  }
   get snowShown() {
     return this.host.snowShown;
+  }
+  // every island shows the season of the viewer's page
+  seasonNow() {
+    return this.host.seasonNow();
   }
   get islandCache() {
     return SCENE_ISLAND_CACHE.get(this.k);
@@ -116,11 +132,13 @@ export class IslandScene {
     this.syncLive({ sessions });
   }
   frame(dt) {
+    this.doneSweep(Date.now());
     this.agents.forEach(a => this.updateAgent(a, dt));
     this.stepDogs(dt);
+    this.stepProps(dt);
     if (this.agents.some(a => a.gone)) {
       const gone = this.agents.filter(a => a.gone);
-      gone.forEach(a => this.goneSids.add(a.sid));
+      gone.forEach(a => this.goneSids.set(a.sid, a.leftWhy || 'missing'));
       this.agents = this.agents.filter(a => !a.gone);
       const h_ = this.host;
       if (h_.state.selIsland === this.id && gone.some(a => a.id === h_.state.sel)) h_.setState({ sel: null });

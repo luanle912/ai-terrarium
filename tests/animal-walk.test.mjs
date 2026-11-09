@@ -15,7 +15,7 @@ const Sprites = loadAnimalSprites()
 const Rules = createRequire(import.meta.url)('../lib/animals.js')
 
 // The same stand-in island as tests/dog-logic.test.mjs: an office W×H at the origin, lawn all round it, a 2×2 pond
-// and a reserved corner. Its outer rim is x = W+5 and y = H+5 (x < 0 and y < 0 are behind the office walls).
+// and a reserved corner. Its land is the lawn plus the office; its outer rim is x = -2, x = W+5, y = -2 and y = H+5.
 const W = 10, H = 6
 const key = (x, y) => x + ',' + y
 const cellOf = k => k.split(',').map(Number)
@@ -29,7 +29,8 @@ for (let x = 0; x <= W + 3; x++) clear.add(key(x, H + 1))
 for (let y = 0; y <= H + 1; y++) clear.add(key(W, y))
 clear.add(key(13, 7))
 const TREE = [W + 4, H + 3]
-const dogPlaces = { W, H, roam, roamList: [...roam].map(cellOf), clear, den: Dog.denCells(roam, TREE, clear), drink: Dog.drinkSpots(roam, pond, clear) }
+const land = new Set(walk); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) land.add(key(x, y))
+const dogPlaces = { W, H, land, roam, roamList: [...roam].map(cellOf), clear, den: Dog.denCells(roam, TREE, clear), drink: Dog.drinkSpots(roam, pond, clear) }
 const places = Walk.places(dogPlaces)
 const isDen = (x, y) => dogPlaces.den.some(c => c[0] === x && c[1] === y)
 const tile = d => [Math.floor(d.x), Math.floor(d.y)]
@@ -77,8 +78,9 @@ test('a cell the den cuts off from the rest is dropped too', () => {
   assert.deepEqual([...p.roam].sort(), ['25,20', '26,20', '27,20', '28,20', '29,20'])
 })
 
-test('edge cells are the lawn on the outer rim: not by the office, the pond, the reserved corner or behind the walls', () => {
-  const rim = [...places.roam].map(cellOf).filter(([x, y]) => x === W + 5 || y === H + 5)
+test('edge cells are the lawn on the coast: not by the office, the pond, the reserved corner or behind the walls', () => {
+  const rim = [...places.roam].map(cellOf).filter(([x, y]) => x === -2 || x === W + 5 || y === -2 || y === H + 5)
+  assert.ok(rim.some(([x]) => x === -2) && rim.some(([, y]) => y === -2), 'the lawn behind the office has a coast too')
   assert.deepEqual(places.edge.map(c => key(...c)).sort(), rim.map(c => key(...c)).sort())
 })
 
@@ -304,13 +306,15 @@ test('on the real island spawn cells are settle cells, never in the den or on a 
   const DOG_ROAM = Dog.roamCells(LAWN_WALK, { W: RW, H: RH, pond: ISLAND.pond.cells, avoid: ISLAND.spots.filter(s => s.id === 'east-back' || s.id === 'east-front') })
   const DOG_CLEAR = new Set(ISLAND.paths.cells)
   STAIRS.forEach(s => { for (let i = 0; i < s.len; i++) for (let o = 0; o < 2; o++) DOG_CLEAR.add(s.side === 'east' ? (s.x + o) + ',' + (s.y + i) : (s.x + i) + ',' + (s.y + o)) })
-  const DOG_PLACES = { W: RW, H: RH, roam: DOG_ROAM, roamList: [...DOG_ROAM].map(cellOf), clear: DOG_CLEAR, den: Dog.denCells(DOG_ROAM, [33, 8], DOG_CLEAR), drink: Dog.drinkSpots(DOG_ROAM, ISLAND.pond.cells, DOG_CLEAR) }
+  const DOG_PLACES = { W: RW, H: RH, land: ISLAND.cells, roam: DOG_ROAM, roamList: [...DOG_ROAM].map(cellOf), clear: DOG_CLEAR, den: Dog.denCells(DOG_ROAM, [33, 8], DOG_CLEAR), drink: Dog.drinkSpots(DOG_ROAM, ISLAND.pond.cells, DOG_CLEAR) }
   const real = Walk.places(DOG_PLACES), again = Walk.places(DOG_PLACES)
   const den = new Set(DOG_PLACES.den.map(c => key(...c)))
   for (const k of den) assert.ok(!real.roam.has(k))
   const cells = [...real.roam].map(cellOf)
   for (const c of cells) assert.ok(Dog.path(real.roam, cells[0], c).length > 0, `${c} unreachable`)
   assert.ok(real.edge.length > 10)
+  const coast = ([x, y]) => [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => !ISLAND.cells.has(key(x + dx, y + dy)))
+  for (const c of real.edge) assert.ok(coast(c), `edge cell ${c} is not on the coast`)
   for (const id of hexIds(500)) {
     const c = Walk.spawnCell(id, real), k = key(...c)
     assert.ok(real.settle.has(k) && real.roam.has(k), `${id} -> ${k}`)

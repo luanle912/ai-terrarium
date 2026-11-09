@@ -36,9 +36,9 @@ const LEAVE_PACE = 1.5,
 // Same hours as the dogs (22:00–6:00); the owl keeps the opposite ones.
 const asleep = (species, h) => (species === 'owl' ? h >= 6 && h < 18 : D.isNight(h));
 
-// Roam cells facing open sky. The office, the strip behind its walls, water and any lawn left out of roam count as
-// solid, so trees, the pond and the reserved corners are holes the outside flood never reaches.
-function edgeCells(roam, solidSet, W, H) {
+// Roam cells facing open sky: the outside flood runs only over non-land cells, so the office, water, trees and the
+// strip behind the walls are never sky.
+function edgeCells(roam, land, W, H) {
   const cells = [...roam].map(cellOf);
   if (!cells.length) return [];
   const xs = cells.map(c => c[0]),
@@ -47,7 +47,7 @@ function edgeCells(roam, solidSet, W, H) {
     x1 = Math.max(...xs) + 1,
     y0 = Math.min(...ys) - 1,
     y1 = Math.max(...ys) + 1;
-  const solid = (x, y) => solidSet.has(key(x, y)) || x < 0 || y < 0 || (x < W && y < H);
+  const solid = (x, y) => land.has(key(x, y)) || (x >= 0 && y >= 0 && x < W && y < H);
   const inBox = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
   const out = new Set(),
     q = [];
@@ -82,7 +82,8 @@ function places(dp) {
     .filter(k => !clear.has(k))
     .map(cellOf)
     .sort(byYX);
-  const solid = new Set([...dp.roam, ...(dp.drink || []).map(s => key(s.tx, s.ty))]);
+  // Without the island's land (tests), the lawn the dogs know stands in for it.
+  const land = dp.land || new Set([...dp.roam, ...clear, ...(dp.drink || []).map(s => key(s.tx, s.ty))]);
   return {
     W,
     H,
@@ -91,7 +92,7 @@ function places(dp) {
     settle: new Set(settleList.map(c => key(c[0], c[1]))),
     settleList,
     clear,
-    edge: edgeCells(roam, solid, W, H),
+    edge: edgeCells(roam, land, W, H),
   };
 }
 

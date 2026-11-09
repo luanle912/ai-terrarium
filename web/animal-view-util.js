@@ -4,12 +4,12 @@ import { I18n, tr } from './i18n.js';
 import { AnimalSprites } from './animal-sprites.js';
 import { AnimalWalk } from './animal-walk.js';
 import { AnimalUI } from './animal-ui.js';
-import { DOG_PLACES } from './office-scene.js';
+import { DOG_PLACES, ISLAND } from './office-scene.js';
 
 export const U = AnimalUI;
 export const TIER_COLOR = AnimalUI.TIER_COLOR;
 export const KNOWN = new Set(AnimalSprites.SPECIES_IDS);
-export const ANIMAL_PLACES = AnimalWalk.places(DOG_PLACES);
+export const ANIMAL_PLACES = AnimalWalk.places({ ...DOG_PLACES, land: ISLAND.cells });
 const SPECIES_NAME = {
   hen: tr('animal.name.hen'),
   duck: tr('animal.name.duck'),

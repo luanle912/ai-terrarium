@@ -3,8 +3,10 @@ import { WorldLogic } from './world-logic.js';
 import { DogLogic } from './dog-logic.js';
 import { PeopleLogic } from './people-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
-import { DEPT_PAL, DESKS, DOOR, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, WC, colOf } from './office-scene.js';
-import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf } from './office-util.js';
+import { SeasonLogic } from './season-logic.js';
+import { PropUse } from './prop-use.js';
+import { DEPT_PAL, DESKS, DOOR, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
+import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Agents: the simulated office and the live feed, desks and departments, where each agent goes next.
 mixin(
@@ -16,7 +18,7 @@ mixin(
       this.es && this.es.close();
       this.es = null;
       this.agents = [];
-      this.goneSids = new Set();
+      this.goneSids = new Map();
       this.depts = new Map();
       this.firstSnap = true;
       this.stopOthers();
@@ -105,13 +107,13 @@ mixin(
       });
     }
     freeDeskFor(dk) {
-      const used = new Set(this.agents.map(a => a.desk)),
+      const used = new Set(this.agents.filter(a => !a.gone).map(a => a.desk)),
         own = this.colOwners();
       const free = DESKS.map((_, i) => i).filter(i => !used.has(i));
       return free.find(i => own[colOf(i)] === dk) ?? free.find(i => own[colOf(i)] == null) ?? free[0] ?? -1;
     }
     freeDesk() {
-      const used = new Set(this.agents.map(a => a.desk));
+      const used = new Set(this.agents.filter(a => !a.gone).map(a => a.desk));
       for (let i = 0; i < DESKS.length; i++) if (!used.has(i)) return i;
       return -1;
     }
@@ -205,11 +207,17 @@ mixin(
     byId(id) {
       return this.agents.find(a => a.id === id);
     }
-    leave(a) {
+    leave(a, why = 'missing') {
       if (a.leaving) return;
       a.leaving = true;
+      a.leftWhy = why;
       a.status = 'leaving';
       this.log(a, tr('office.log.sessionEnded'));
+      if (WorldLogic.leaveGone(document.visibilityState)) a.gone = true;
+    }
+    // Finished sub-agents walk out 3 s after their 'done' (called from frame and from the hidden-tab timer).
+    doneSweep(now) {
+      for (const a of this.agents) if (WorldLogic.doneDue(a, now)) this.leave(a, 'done');
     }
     setWork(a) {
       a.status = 'working';
@@ -329,22 +337,35 @@ mixin(
       const list = ((snap && snap.sessions) || [])
         .slice()
         .sort((a, b) => (!a.parentId ? 0 : 1) - (!b.parentId ? 0 : 1));
-      const seen = new Set();
+      // Who walked out and why (WorldLogic.goneStep): a finished sub-agent stays out while still listed; one that left
+      // because its session vanished (island offline or private) comes back when listed again.
+      // A hidden tab never runs frame, so agents marked gone there are dropped here, remembering why they left.
+      if (this.agents.some(a => a.gone)) {
+        for (const a of this.agents) if (a.gone) this.goneSids.set(a.sid, a.leftWhy || 'missing');
+        this.agents = this.agents.filter(a => !a.gone);
+      }
+      const listed = new Set(list.map(s => s.id));
+      const { skip, gone } = WorldLogic.goneStep(this.goneSids, listed);
+      // Unlisted agents leave first, so in a hidden tab (where leaving frees the desk at once) a snapshot that swaps
+      // every session still finds desks for the new ones.
+      this.agents.forEach(a => {
+        if (!listed.has(a.sid)) this.leave(a);
+      });
       for (const s of list) {
-        seen.add(s.id);
-        if (this.goneSids.has(s.id)) {
-          seen.add(s.id);
-          continue;
-        }
+        if (skip.has(s.id)) continue;
         let a = this.agents.find(x => x.sid === s.id && !x.leaving);
+        const back = !a && this.agents.find(x => x.sid === s.id && x.leaving && !x.gone);
+        if (back) {
+          // still on the way out: back to the desk
+          if (back.leftWhy !== 'missing') continue;
+          back.leaving = false;
+          back.goalKey = null;
+          a = back;
+        }
         if (!a) {
-          if (this.agents.some(x => x.sid === s.id && x.leaving)) {
-            seen.add(s.id);
-            continue;
-          }
           let par = null;
           if (s.parentId) {
-            par = this.agents.find(x => x.sid === s.parentId && !x.leaving);
+            par = this.agents.find(x => x.sid === s.parentId && !x.leaving && !x.gone);
           }
           a = this.addAgent({ seated: this.firstSnap && !par, parent: par, live: s });
           if (!a) continue;
@@ -358,7 +379,7 @@ mixin(
           }
         }
         if (s.parentId) {
-          const p = this.agents.find(x => x.sid === s.parentId);
+          const p = this.agents.find(x => x.sid === s.parentId && !x.gone);
           if (p) {
             a.parent = p.id;
             if (a.desk !== p.desk) {
@@ -375,7 +396,7 @@ mixin(
         a.cwd = s.cwd || a.cwd;
         a.name = s.name || a.name;
         a.liveHist = s.recent || null;
-        const t = s.waitingOn && this.agents.find(x => x.sid === s.waitingOn);
+        const t = s.waitingOn && this.agents.find(x => x.sid === s.waitingOn && !x.gone);
         a.target = t ? t.id : null;
         if (a.status === 'talking' && s.talkingTo) {
           const tgt = this.agents.find(
@@ -386,13 +407,9 @@ mixin(
         if (a.status === 'waiting' && !a.target) a.status = 'working';
         if (a.parent && s.status === 'done') {
           if (!a.doneAt) a.doneAt = Date.now();
-          else if (Date.now() - a.doneAt > 3000) this.leave(a);
         } else a.doneAt = 0;
       }
-      this.agents.forEach(a => {
-        if (!seen.has(a.sid)) this.leave(a);
-      });
-      for (const sid of this.goneSids) if (!seen.has(sid)) this.goneSids.delete(sid);
+      this.goneSids = gone;
       this.firstSnap = false;
     }
 
@@ -474,8 +491,15 @@ mixin(
           a.wcDone = true;
         }
         // Men use WC NAM and women WC NỮ (RestroomLogic.roomOf); about one idle choice in four is a free stall there.
+        // On the frozen lakes nobody fishes or bathes: whoever is there leaves (SeasonLogic.idleStays).
+        const frozen = SeasonLogic.look(this.seasonNow()).frozen;
+        if (!SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen)) a.idleSpot = null;
         if (a.idleSpot == null || taken.has(a.idleSpot)) {
-          const free = IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i));
+          const free = SeasonLogic.idleOpen(
+            IDLE_SPOTS,
+            IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i)),
+            frozen,
+          );
           a.idleSpot = RestroomLogic.pickIdle(IDLE_SPOTS, free, a.wcDone ? null : RestroomLogic.roomOf(a), Math.random);
         }
         if (a.idleSpot != null) {
@@ -510,16 +534,9 @@ mixin(
         a.actNow = null;
         a.wcIn = false;
         if (!g.keepWc) a.wcT = 0;
-        // Out on the lawn or in the restroom block an agent paths from where it stands; anywhere else (e.g. just in
-        // through the door) it starts inside.
-        const fx = Math.floor(a.x),
-          fy = Math.floor(a.y),
-          fk = fx + ',' + fy;
-        const cur =
-          (LAWN_WALK.has(fk) || WC.floorSet.has(fk)) && fx >= 0 && fy >= 0
-            ? [fx, fy]
-            : [Math.min(W - 1, Math.max(0, fx)), Math.min(H - 1, Math.max(0, fy))];
-        a.path = bfs(cur, g.tile)
+        // Out on the lawn (the rest corner too) or in the restroom block an agent paths from where it stands;
+        // anywhere else (e.g. just in through the door) it starts inside.
+        a.path = bfs(startCell(a.x, a.y), g.tile)
           .map(p => [p[0] + 0.5, p[1] + 0.5])
           .concat([g.pt]);
         if (g.key === 'seat' && a.path.length > 1) a.path.splice(a.path.length - 2, 1);
@@ -562,6 +579,17 @@ mixin(
       }
     }
 
+    // Which props are in use (web/prop-use.js) and how lit each one is, stepped with the simulation: two arrays per
+    // scene, made once, so the draw reads this.propLit[PropUse.ID.x] with nothing allocated per frame.
+    stepProps(dt) {
+      if (!this.propLit) {
+        this.propOn = new Uint8Array(PropUse.N);
+        this.propLit = new Float32Array(PropUse.N);
+      }
+      PropUse.mark(this.propOn, this.agents, IDLE_SPOTS);
+      PropUse.ease(this.propLit, this.propOn, dt);
+    }
+
     stepDogs(dt) {
       const w = this.dogWorld,
         now = new Date();
@@ -569,6 +597,7 @@ mixin(
       w.hour = now.getHours() + now.getMinutes() / 60;
       w.snow = this.snowShown || 0;
       w.calm = !!(this.env && this.env.reduced);
+      w.frozen = SeasonLogic.look(this.seasonNow()).frozen;
       // People out on the lawn (down the stairs, bathing in the pond) are who the dogs run over to greet.
       // `act` is what they are doing, or the idle spot they are walking to, so a smoker is left alone on the way too.
       // People going to or at the restroom are left out altogether: the dogs leave them be.
@@ -581,6 +610,8 @@ mixin(
           act:
             a.actNow ||
             (a.status === 'idle' && a.idleSpot != null && IDLE_SPOTS[a.idleSpot] ? IDLE_SPOTS[a.idleSpot].act : null),
+          // arrived and doing it (the bench sitter gets a dog lying beside the bench, DogLogic 'company')
+          at: !!a.actNow,
         }))
         .filter(a => a.act !== 'wc');
       DogLogic.step(this.dogs, w, dt);

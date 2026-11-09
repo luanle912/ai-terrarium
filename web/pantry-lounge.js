@@ -196,8 +196,10 @@ I.cafetable = {
   group: 'Góc booth',
   size: [1.4, 0.7],
   note: 'Bàn vuông mặt trắng',
+  // o.use: the candle is lit (and glows after dark) only while someone sits at the table
   draw(k, t, o) {
-    const { box, fL, fR, top, R, P, cyl, al } = k;
+    const { ctx, box, fL, fR, top, R, P, cyl, al, fade } = k,
+      u = o.use || 0;
     cyl(0.35, 0.35, 0, 1, 0.15, '#2d3142');
     cyl(0.35, 0.35, 1, 10, 0.03, '#5d6578');
     box(0.05, 0.05, 0.6, 0.6, 10, 11.5, '#f6f4ee', '#dcd6c9', '#c4bdae');
@@ -210,10 +212,17 @@ I.cafetable = {
     {
       const [lx, ly] = P(0.5, 0.25, 11.5);
       R(lx - 1, ly - 4, 2, 4, '#f2ead9');
-      if (o.night) {
-        al(0.25, () => k.ell(lx, ly - 5, 5, 4, '#ffd166'));
+      R(lx - 0.5, ly - 5, 1, 1, '#3a2a20');
+      if (u > 0) {
+        const g = fade(u);
+        if (o.night) {
+          ctx.globalAlpha = g * 0.25 * u;
+          k.ell(lx, ly - 5, 5, 4, '#ffd166');
+          ctx.globalAlpha = g * u;
+        }
+        R(lx - 0.5, ly - 6, 1, 2, Math.floor(t * 6) % 2 ? '#ffd166' : '#ff8b3d');
+        ctx.globalAlpha = g;
       }
-      R(lx - 0.5, ly - 6, 1, 2, Math.floor(t * 6) % 2 ? '#ffd166' : '#ff8b3d');
     }
     [
       [0.9, 0.13],
@@ -227,13 +236,19 @@ I.cafetable = {
     fR(1.25, 0.15, 0.55, 9, 15, '#4a5a80');
   },
 };
+// the arcade's side neon strips, unlit and lit, and the colours of the game's pixels
+const STRIP_OFF = ['#4a1f38', '#4a3f22', '#1f3f48'],
+  STRIP_ON = ['#ff5fa2', '#ffd166', '#5ef2ff'],
+  PIXELS = ['#50fa7b', '#ff5fa2', '#ffd166', '#5ef2ff', '#ffffff', '#e5484d', '#8e4ec6'];
 I.arcade = {
   name: 'Máy arcade',
   group: 'Góc game',
   size: [0.7, 0.8],
   note: 'Thân tím',
+  // o.use: off (dark screen, unlit neon) unless someone is playing; the light fades in and out with o.use
   draw(k, t, o) {
-    const { box, fL, fR, top, R, P, al } = k,
+    const { ctx, box, fL, fR, top, R, P, al, fade } = k,
+      u = o.use || 0,
       body = '#5b2a8c',
       neon = '#ff5fa2',
       w = 0.7,
@@ -241,22 +256,32 @@ I.arcade = {
       ph = Math.floor(t * 6);
     box(0, 0, w, d, 0, 1.5, '#14161c');
     box(0, 0, w, d, 1.5, 32, body, shade(body, -12), shade(body, -32));
-    for (let q = 0; q < 3; q++) fR(w, 0.08 + q * 0.15, 0.14 + q * 0.15, 4, 30, [neon, '#ffd166', '#5ef2ff'][q]);
+    for (let q = 0; q < 3; q++) fR(w, 0.08 + q * 0.15, 0.14 + q * 0.15, 4, 30, STRIP_OFF[q]);
     fR(w, 0.1, 0.5, 24, 28, shade(body, -10));
-    fL(0.04, w - 0.04, d, 27.5, 31.5, neon);
-    if (o.night) al(0.28, () => fL(-0.12, w + 0.12, d, 25, 34, neon));
-    fL(0.1, w - 0.1, d, 28.5, 30.5, '#ffe0ee');
+    fL(0.04, w - 0.04, d, 27.5, 31.5, '#5a2340');
+    fL(0.1, w - 0.1, d, 28.5, 30.5, '#3a1a2a');
     fL(0.05, w - 0.05, d, 14, 26.8, '#2a1440');
     fL(0.09, w - 0.09, d, 15, 25.8, '#07080c');
-    for (let q = 0; q < 7; q++) {
-      const px = 0.13 + ((ph * 3 + q * 7) % 9) * 0.05,
-        z = 16 + ((ph + q * 5) % 9);
-      fL(px, px + 0.045, d, z, z + 1, ['#50fa7b', '#ff5fa2', '#ffd166', '#5ef2ff', '#ffffff', '#e5484d', '#8e4ec6'][q]);
-    }
-    fL(0.09, w - 0.09, d, 15, 15.8, '#3a4462');
-    {
+    if (u > 0) {
+      const g = fade(u);
+      for (let q = 0; q < 3; q++) fR(w, 0.08 + q * 0.15, 0.14 + q * 0.15, 4, 30, STRIP_ON[q]);
+      fR(w, 0.1, 0.5, 24, 28, shade(body, -10));
+      fL(0.04, w - 0.04, d, 27.5, 31.5, neon);
+      if (o.night) {
+        ctx.globalAlpha = g * 0.28 * u;
+        fL(-0.12, w + 0.12, d, 25, 34, neon);
+        ctx.globalAlpha = g * u;
+      }
+      fL(0.1, w - 0.1, d, 28.5, 30.5, '#ffe0ee');
+      for (let q = 0; q < 7; q++) {
+        const px = 0.13 + ((ph * 3 + q * 7) % 9) * 0.05,
+          z = 16 + ((ph + q * 5) % 9);
+        fL(px, px + 0.045, d, z, z + 1, PIXELS[q]);
+      }
+      fL(0.09, w - 0.09, d, 15, 15.8, '#3a4462');
       const bx = 0.15 + ((ph * 2) % 8) * 0.05;
       fL(bx, bx + 0.08, d, 16.4, 17.4, '#ffd166');
+      ctx.globalAlpha = g;
     }
     al(0.15, () => fL(0.1, 0.22, d, 17, 25.5, '#ffffff'));
     box(0.02, d, w - 0.04, 0.2, 11.5, 14, shade(body, 10), shade(body, -8), shade(body, -28));
@@ -276,9 +301,9 @@ I.arcade = {
       });
     }
     fL(0.12, w - 0.12, d, 3, 9.5, shade(body, -22));
-    fL(0.24, 0.32, d, 6, 7.5, '#ffd166');
-    fL(0.38, 0.46, d, 6, 7.5, '#ffd166');
-    if (Math.floor(t * 2) % 2) al(0.6, () => fL(0.24, 0.46, d, 5.4, 8, '#ffd166'));
+    fL(0.24, 0.32, d, 6, 7.5, u > 0.5 ? '#ffd166' : '#7a6430');
+    fL(0.38, 0.46, d, 6, 7.5, u > 0.5 ? '#ffd166' : '#7a6430');
+    if (u > 0.5 && Math.floor(t * 2) % 2) al(0.6, () => fL(0.24, 0.46, d, 5.4, 8, '#ffd166'));
   },
 };
 I.foosball = {
@@ -286,8 +311,10 @@ I.foosball = {
   group: 'Góc game',
   size: [1.6, 0.6],
   note: 'Khung gỗ',
-  draw(k, t) {
+  // o.use: the ball rolls and the rods slide only while someone plays; otherwise the ball rests mid-table
+  draw(k, t, o) {
     const { box, fL, fR, top, R, P, line } = k,
+      u = (o && o.use) || 0,
       x1 = 1.6,
       y1 = 0.6;
     [
@@ -303,14 +330,14 @@ I.foosball = {
     top(0.79, 0.06, 0.02, y1 - 0.12, 12.6, '#ffffff');
     [0.06, x1 - 0.1].forEach(x => top(x, 0.22, 0.04, 0.16, 12.6, '#ffffff'));
     {
-      const p = (Math.sin(t * 1.5) + 1) / 2,
+      const p = 0.5 + (Math.sin(t * 1.5) / 2) * u,
         [bx, by] = P(0.25 + p * 1.1, 0.3, 12.6);
       R(bx, by - 1, 2, 2, '#ffffff');
     }
     for (let i = 0; i < 6; i++) {
       const x = 0.18 + i * 0.25,
         col = i % 2 ? '#3e8ed0' : '#e5484d',
-        sl = Math.sin(t * 2 + i) * 0.04;
+        sl = Math.sin(t * 2 + i) * 0.04 * u;
       const a = P(x, -0.18, 15),
         b = P(x, y1 + 0.18, 15);
       line(a, b, '#c9d3e3');

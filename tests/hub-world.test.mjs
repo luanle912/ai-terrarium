@@ -142,12 +142,35 @@ test('offline after 90 s without a packet', () => {
 
 test('seq 0 after a higher seq is accepted as a restart; other lower seqs are dropped', () => {
   const { world } = mkWorld();
-  assert.equal(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 10 })).accepted, true);
-  assert.equal(world.publish(ISL, 'd1', 'kin', val([sess(2)], { seq: 5 })).accepted, false);
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 10 })), { accepted: true });
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(2)], { seq: 5 })), { accepted: false, reason: 'stale_seq', seq: 10 });
   assert.equal(world.snapshotFor('i1')[0].id, sid(1));
-  assert.equal(world.publish(ISL, 'd1', 'kin', val([sess(3)], { seq: 0 })).accepted, true);
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(3)], { seq: 0 })), { accepted: true });
   assert.equal(world.snapshotFor('i1')[0].id, sid(3));
-  assert.equal(world.publish(ISL, 'd1', 'kin', val([sess(3)], { seq: 0 })).accepted, true);
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(3)], { seq: 0 })), { accepted: true });
+});
+
+test('a second instance is refused while the first one is fresh, and takes over with seq 0 or after 90 s of silence', () => {
+  const { world, clock } = mkWorld();
+  const A = { instance: 'aaaaaaaaaaaaaaaa' };
+  const B = { instance: 'bbbbbbbbbbbbbbbb' };
+  for (let seq = 0; seq <= 3; seq++) assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq }), A), { accepted: true });
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(2)], { seq: 7 }), B), { accepted: false, reason: 'other_instance' });
+  assert.equal(world.snapshotFor('i1')[0].id, sid(1));
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(2)], { seq: 0 }), B), { accepted: true });
+  assert.equal(world.snapshotFor('i1')[0].id, sid(2));
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 4 }), A), { accepted: false, reason: 'other_instance' });
+  assert.equal(world.snapshotFor('i1')[0].id, sid(2));
+  clock.t += 90_000;
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 5 }), A), { accepted: true });
+  assert.equal(world.snapshotFor('i1')[0].id, sid(1));
+});
+
+test('a publisher without the instance header is one legacy instance', () => {
+  const { world } = mkWorld();
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 1 })), { accepted: true });
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 2 }), {}), { accepted: true });
+  assert.deepEqual(world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 9 }), { instance: 'cccccccccccccccc' }), { accepted: false, reason: 'other_instance' });
 });
 
 test('removeDevice and removeIsland emit', () => {
@@ -237,10 +260,12 @@ test('publish without token is 401, bad token too', async () => {
   } finally { await h.close(); }
 });
 
-test('publish 204, 400 on bad schema, island id in the body is ignored (400)', async () => {
+test('publish 200 {accepted:true}, 400 on bad schema, island id in the body is ignored (400)', async () => {
   const { h, dev } = await setup();
   try {
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    const ok = await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
+    assert.equal(ok.status, 200);
+    assert.deepEqual(await ok.json(), { accepted: true });
     assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)], { island: 'abc' }), bearer(dev.token))).status, 400);
     assert.equal((await postJson(h.url, '/api/publish', { v: 1 }, bearer(dev.token))).status, 400);
     const bad = await fetch(h.url + '/api/publish', { method: 'POST', headers: bearer(dev.token), body: '{nope' });
@@ -252,12 +277,88 @@ test('publish 204, 400 on bad schema, island id in the body is ignored (400)', a
   } finally { await h.close(); }
 });
 
+test('a stale seq is answered accepted:false with the hub\'s seq', async () => {
+  const { h, login, dev } = await setup();
+  let st;
+  try {
+    const a = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 5 }), bearer(dev.token));
+    assert.equal(a.status, 200);
+    assert.deepEqual(await a.json(), { accepted: true });
+    st = await openStream(h.url, login.cookie);
+    assert.ok(await st.until((e) => e.event === 'island' && e.data.sessions.length === 1));
+    const n = st.events.filter((e) => e.event === 'island').length;
+    const b = await postJson(h.url, '/api/publish', pkt([sess(1), sess(2)], { seq: 3 }), bearer(dev.token));
+    assert.equal(b.status, 200);
+    assert.deepEqual(await b.json(), { accepted: false, reason: 'stale_seq', seq: 5 });
+    assert.equal(await st.until((e) => e.event === 'island' && e.data.sessions.length === 2, 700), null);
+    assert.equal(st.events.filter((e) => e.event === 'island').length, n);
+  } finally { if (st) st.close(); await h.close(); }
+});
+
+test('the instance header picks the publishing instance over HTTP', async () => {
+  const { h, dev } = await setup();
+  try {
+    const pub = async (seq, instance) => {
+      const r = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq }), { ...bearer(dev.token), ...(instance ? { 'x-terrarium-instance': instance } : {}) });
+      assert.equal(r.status, 200);
+      return r.json();
+    };
+    assert.deepEqual(await pub(0, '0123456789abcdef'), { accepted: true });
+    assert.deepEqual(await pub(1, 'fedcba9876543210'), { accepted: false, reason: 'other_instance' });
+    assert.deepEqual(await pub(2), { accepted: false, reason: 'other_instance' }); // no header = legacy, another instance
+    assert.deepEqual(await pub(2, '0123456789abcdef'), { accepted: true });
+  } finally { await h.close(); }
+});
+
+test('a malformed instance header is ignored, not rejected', async () => {
+  const { h, dev } = await setup();
+  try {
+    const r = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 1 }), { ...bearer(dev.token), 'x-terrarium-instance': 'ZZZ' });
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), { accepted: true });
+    // it counts as legacy, so a header-less publisher is the same instance
+    const r2 = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 2 }), bearer(dev.token));
+    assert.deepEqual(await r2.json(), { accepted: true });
+  } finally { await h.close(); }
+});
+
+test('the stream sends a named ping event', async () => {
+  const h = await startDevHub({ deps: { pingMs: 50 } });
+  const ac = new AbortController();
+  try {
+    const login = await devLogin(h.url, 'an@newera.inc', 'An');
+    const r = await fetch(h.url + '/api/world/stream', { headers: { cookie: login.cookie }, signal: ac.signal });
+    assert.equal(r.status, 200);
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    const t0 = Date.now();
+    const timer = setTimeout(() => ac.abort(), 250);
+    try {
+      while (Date.now() - t0 < 200) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+      }
+    } catch { /* aborted */ }
+    clearTimeout(timer);
+    const pings = buf.split('\n\n').filter((b) => /^event: ping$/m.test(b));
+    assert.ok(pings.length >= 2, `got ${pings.length} pings`);
+    for (const b of pings) {
+      const data = /^data: (.+)$/m.exec(b);
+      assert.ok(data);
+      assert.equal(typeof JSON.parse(data[1]).t, 'number');
+    }
+    assert.equal(/^: ping$/m.test(buf), false);
+  } finally { ac.abort(); await h.close(); }
+});
+
 test('publish is rate limited per device (429 with Retry-After)', async () => {
   const { h, dev } = await setup();
   try {
     const codes = [];
     for (let i = 0; i < 12; i++) { const r = await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: i }), bearer(dev.token)); codes.push(r.status); if (r.status === 429) assert.ok(r.headers.get('retry-after')); }
-    assert.equal(codes.filter((c) => c === 204).length, 8);
+    assert.equal(codes.filter((c) => c === 200).length, 8);
     assert.ok(codes.includes(429));
   } finally { await h.close(); }
 });
@@ -265,7 +366,7 @@ test('publish is rate limited per device (429 with Retry-After)', async () => {
 test('revoked token is 401', async () => {
   const { h, login, dev } = await setup();
   try {
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
     h.clock.advance(1000);
     const r = await fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: login.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: login.csrf, device_id: dev.device_id }) });
     assert.equal(r.status, 302);
@@ -289,7 +390,7 @@ test('stream needs a session and sends world then island events', async () => {
     const w = await st.until((e) => e.event === 'world');
     assert.ok(w);
     assert.equal(w.data.islands.length, 1);
-    assert.deepEqual(Object.keys(w.data.islands[0]).sort(), ['color', 'id', 'name', 'online', 'private', 'share', 'slot']);
+    assert.deepEqual(Object.keys(w.data.islands[0]).sort(), ['color', 'id', 'lastAt', 'name', 'online', 'private', 'share', 'slot']);
     assert.equal(w.data.islands[0].id, dev.island_id);
     assert.equal(w.data.viewers, 1);
     const isl = await st.until((e) => e.event === 'island');
@@ -316,7 +417,7 @@ test('revoking the last device leaves the island offline in its slot', async () 
     const r = await fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: login.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: login.csrf, device_id: dev.device_id }) });
     assert.equal(r.status, 302);
     const w = await st.until((e) => e.event === 'world' && e.data.islands[0] && e.data.islands[0].online === false);
-    assert.deepEqual(w.data.islands, [{ id: dev.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin' }]);
+    assert.deepEqual(w.data.islands, [{ id: dev.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin', lastAt: null }]);
     assert.ok(await st.until((e) => e.event === 'island' && e.data.id === dev.island_id && e.data.sessions.length === 0));
     assert.equal(st.events.some((e) => e.event === 'remove'), false);
     assert.equal(h.hub.world.islands().length, 0);
@@ -357,7 +458,8 @@ test('an island with no device sending shows offline in its slot', async () => {
     st = await openStream(h2.url, login.cookie);
     const w = await st.until((e) => e.event === 'world');
     assert.equal(w.data.islands.length, 1);
-    assert.deepEqual(w.data.islands[0], { id: a.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin' });
+    // a fresh hub has not heard from it yet: offline, and waking for the first 90 s (Task 8, H2)
+    assert.deepEqual(w.data.islands[0], { id: a.island_id, name: w.data.islands[0].name, color: w.data.islands[0].color, slot: 0, online: false, private: false, share: 'kin', lastAt: null, waking: true });
     const isl = await st.until((e) => e.event === 'island' && e.data.id === a.island_id);
     assert.deepEqual(isl.data.sessions, []);
   } finally { st && st.close(); if (h2) await h2.close(); await h.close(); }
@@ -375,7 +477,7 @@ test('a hidden island publishes but is never sent to viewers', async () => {
     raw.prepare('UPDATE islands SET slot=NULL WHERE id=?').run(b.island_id);
     raw.close();
     st = await openStream(h.url, an.cookie);
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(2)]), bearer(b.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(2)]), bearer(b.token))).status, 200);
     await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(a.token));
     assert.ok(await st.until((e) => e.event === 'island' && e.data.id === a.island_id && e.data.sessions.length === 1));
     await new Promise((res) => setTimeout(res, 700)); // past the island throttle
@@ -422,7 +524,7 @@ test('a promoted hidden island that was already publishing sends its sessions on
     const raw = new DatabaseSync(h.config.dbPath);
     raw.prepare('UPDATE islands SET slot=NULL WHERE id=?').run(ids[7]);
     raw.close();
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(9), sess(10)]), bearer(hiddenTok))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(9), sess(10)]), bearer(hiddenTok))).status, 200);
     st = await openStream(h.url, boss.cookie);
     assert.ok(await st.until((e) => e.event === 'world'));
     const r = await postJson(h.url, `/api/owner/islands/${ids[4]}/remove`, {}, { cookie: boss.cookie, origin: h.url, 'x-csrf-token': boss.csrf });
@@ -441,7 +543,7 @@ test('removing an island does not re-send the other live islands', async () => {
     const boss = await devLogin(h.url, 'boss@newera.inc', 'Boss');
     const devs = [];
     for (let i = 0; i < 3; i++) devs.push(await pairDevice(h.url, await devLogin(h.url, `u${i}@newera.inc`, 'U' + i), 'M' + i));
-    for (const [i, d] of devs.slice(0, 2).entries()) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i + 1)]), bearer(d.token))).status, 204);
+    for (const [i, d] of devs.slice(0, 2).entries()) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i + 1)]), bearer(d.token))).status, 200);
     st = await openStream(h.url, boss.cookie);
     for (const d of devs.slice(0, 2)) assert.ok(await st.until((e) => e.event === 'island' && e.data.id === d.island_id && e.data.sessions.length === 1));
     const count = (id) => st.events.filter((e) => e.event === 'island' && e.data.id === id).length;
@@ -461,7 +563,7 @@ test('island events do not read the island row from the DB', async () => {
     const orig = h.hub.db.getIsland;
     h.hub.db.getIsland = (...a) => { reads++; return orig(...a); };
     try {
-      for (let i = 1; i <= 3; i++) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i)], { seq: i }), bearer(dev.token))).status, 204);
+      for (let i = 1; i <= 3; i++) assert.equal((await postJson(h.url, '/api/publish', pkt([sess(i)], { seq: i }), bearer(dev.token))).status, 200);
       await new Promise((res) => setTimeout(res, 600)); // let a trailing send run
     } finally { h.hub.db.getIsland = orig; }
     assert.equal(reads, 0);
@@ -490,7 +592,7 @@ test('one user cannot revoke another user\'s device', async () => {
     const other = await devLogin(h.url, 'bo@newera.inc', 'Bo');
     await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
     await fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: other.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: other.csrf, device_id: dev.device_id }) });
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 2 }), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 2 }), bearer(dev.token))).status, 200);
   } finally { await h.close(); }
 });
 
@@ -546,7 +648,7 @@ test('world state rebuilds from the next publish after a restart', async () => {
   const { loadConfig } = require('../hub/config.js');
   let st, hub2;
   try {
-    assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 40 }), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 40 }), bearer(dev.token))).status, 200);
     const cfg = h1.config;
     await h1.hub.close(); // keep the temp dir until the end
     hub2 = createHub(loadConfig({ HUB_PUBLIC_URL: cfg.publicUrl, HUB_ALLOWED_DOMAINS: 'newera.inc', HUB_OWNER_EMAILS: 'boss@newera.inc', HUB_SECRET_KEY: cfg.secretKey.toString('base64'), HUB_DEV_LOGIN: '1', HUB_DB: dbPath, HUB_PORT: String(port) }), { now: () => h1.clock.t, log: () => {} });
@@ -557,7 +659,7 @@ test('world state rebuilds from the next publish after a restart', async () => {
     const w = await st.until((e) => e.event === 'world');
     assert.deepEqual(w.data.islands.map((i) => [i.id, i.online]), [[dev.island_id, false]]); // still in its slot, offline
     // the restarted publisher begins again at seq 0, the hub never saw its old seq
-    assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 3 }), { ...bearer(dev.token), connection: 'close' })).status, 204);
+    assert.equal((await postJson(h1.url, '/api/publish', pkt([sess(1)], { seq: 3 }), { ...bearer(dev.token), connection: 'close' })).status, 200);
     const isl = await st.until((e) => e.event === 'island' && e.data.sessions.length === 1);
     assert.equal(isl.data.id, dev.island_id);
     const w2 = await st.until((e) => e.event === 'world' && e.data.islands.length === 1 && e.data.islands[0].online);
@@ -609,16 +711,16 @@ test('device of a user without refresh token gets 403 login_required after 24 h'
   try {
     const login = await devLogin(h.url, 'an@newera.inc', 'An');
     const dev = await pairDevice(h.url, login, 'Laptop');
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
     h.clock.advance(24 * 3600 * 1000);
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204); // exactly 24 h is still fine
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200); // exactly 24 h is still fine
     h.clock.advance(1);
     const late = await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
     assert.equal(late.status, 403);
     assert.deepEqual(await late.json(), { error: 'login_required' });
     // a fresh login brings it back
     await devLogin(h.url, 'an@newera.inc', 'An');
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
     // a revoked device is still a plain 401, even when stale
     h.clock.advance(25 * 3600 * 1000);
     h.hub.db.revokeDevicesForUser(h.hub.db.getUserBySub('dev:an@newera.inc').id, h.clock.t);
@@ -633,7 +735,7 @@ test('a user with a refresh token never gets login_required', async () => {
     const login = await googleLogin(h.url, google, 'an@newera.inc', { name: 'An' });
     const dev = await pairDevice(h.url, login, 'Laptop');
     h.clock.advance(30 * 24 * 3600 * 1000);
-    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 204);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
   } finally { await h.close(); }
 });
 
@@ -662,4 +764,206 @@ test('more than 16 letter rooms over two machines keep distinct labels', () => {
   const labels = w.snapshotFor('isl1').map((s) => s.project);
   assert.equal(labels.length, 24);
   assert.equal(new Set(labels).size, 24);
+});
+
+// ---- Task 8: batched world events, waking islands, stable room labels ----
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+const worlds = (st) => st.events.filter((e) => e.event === 'world');
+const revoke = (h, login, deviceId) => fetch(h.url + '/me/devices/revoke', { method: 'POST', redirect: 'manual', headers: { cookie: login.cookie, origin: h.url, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrf: login.csrf, device_id: deviceId }) });
+
+test('viewers reconnecting cause at most one world broadcast per second', async () => {
+  const h = await startDevHub();
+  const streams = [];
+  try {
+    const dev = await pairDevice(h.url, await devLogin(h.url, 'an@newera.inc', 'An'), 'Laptop');
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token))).status, 200);
+    const logins = [];
+    for (let p = 0; p < 20; p++) logins.push(await devLogin(h.url, `v${p}@newera.inc`, 'V' + p));
+    await sleep(1100); // past any broadcast from the publish
+    const before = h.hub.ctx.stats.worldBroadcasts;
+    const t0 = Date.now();
+    // 20 people x 5 tabs, spread over ~2 s
+    for (let round = 0; round < 5; round++) {
+      streams.push(...await Promise.all(logins.map((l) => openStream(h.url, l.cookie))));
+      if (round < 4) await sleep(400);
+    }
+    assert.ok(Date.now() - t0 < 3000, 'opened within the window');
+    for (const st of streams) assert.ok(await st.until((e) => e.event === 'world'), 'every stream gets its own first world');
+    await sleep(1100); // let the trailing send run
+    const n = h.hub.ctx.stats.worldBroadcasts - before;
+    assert.ok(n >= 1 && n <= 4, `world broadcasts: ${n}`);
+    assert.ok(h.hub.ctx.stats.framesWritten > 0);
+  } finally { streams.forEach((s) => s.close()); await h.close(); }
+});
+
+test('a newcomer gets its first world at once, alone', async () => {
+  const { h, login } = await setup();
+  let a, b;
+  try {
+    a = await openStream(h.url, login.cookie);
+    assert.ok(await a.until((e) => e.event === 'world'));
+    await sleep(1600); // A's own trailing send (due ~1 s after it joined) is over, with slack for a loaded machine
+    const n = worlds(a).length;
+    const t0 = Date.now();
+    b = await openStream(h.url, login.cookie);
+    const first = await b.until((e) => e.event === 'world', 500);
+    assert.ok(first, 'the newcomer has a world at once');
+    assert.equal(first.data.viewers, 2);
+    await sleep(Math.max(0, 900 - (Date.now() - t0)));
+    assert.equal(worlds(a).length, n, 'nobody else gets a world in the first second');
+  } finally { a && a.close(); b && b.close(); await h.close(); }
+});
+
+test('the viewer count still reaches everyone within a second', async () => {
+  const { h, login } = await setup();
+  let a, b;
+  try {
+    a = await openStream(h.url, login.cookie);
+    assert.ok(await a.until((e) => e.event === 'world'));
+    await sleep(1100);
+    b = await openStream(h.url, login.cookie);
+    assert.ok(await a.until((e) => e.event === 'world' && e.data.viewers === 2, 1100)); // 1 s + slack
+    b.close();
+    assert.ok(await a.until((e) => e.event === 'world' && e.data.viewers === 1 && worlds(a).indexOf(e) > 0, 1100));
+  } finally { a && a.close(); b && b.close(); await h.close(); }
+});
+
+test('an identical world is not sent twice', async () => {
+  const { h, login, dev } = await setup();
+  let st;
+  try {
+    await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
+    st = await openStream(h.url, login.cookie);
+    assert.ok(await st.until((e) => e.event === 'island' && e.data.sessions.length === 1));
+    await sleep(1100);
+    const n = worlds(st).length;
+    assert.equal((await revoke(h, login, dev.device_id)).status, 302);
+    assert.ok(await st.until((e) => e.event === 'world' && e.data.islands[0].online === false));
+    await sleep(1200); // any trailing send has run
+    assert.equal(worlds(st).length - n, 1, 'exactly one world for the change');
+  } finally { st && st.close(); await h.close(); }
+});
+
+test('islands not heard from since the hub started are waking for 90 s, then offline', async () => {
+  const h = await startDevHub();
+  let h2, st;
+  try {
+    const a = await pairDevice(h.url, await devLogin(h.url, 'an@newera.inc', 'An'), 'A');
+    const b = await pairDevice(h.url, await devLogin(h.url, 'bo@newera.inc', 'Bo'), 'B');
+    await h.hub.close();
+    h2 = await startDevHub({ env: { HUB_DB: h.config.dbPath }, deps: { wakeMs: 150 } });
+    assert.equal((await postJson(h2.url, '/api/publish', pkt([sess(1)]), bearer(a.token))).status, 200);
+    st = await openStream(h2.url, (await devLogin(h2.url, 'an@newera.inc', 'An')).cookie);
+    const w = await st.until((e) => e.event === 'world' && e.data.islands.length === 2);
+    const byId = Object.fromEntries(w.data.islands.map((i) => [i.id, i]));
+    assert.equal(byId[a.island_id].online, true);
+    assert.equal('waking' in byId[a.island_id], false);
+    assert.equal(byId[b.island_id].online, false);
+    assert.equal(byId[b.island_id].waking, true);
+    await sleep(400); // the timer fires, but the hub's clock is still inside the window
+    assert.equal(st.events.some((e) => e.event === 'world' && e.data.islands.every((i) => !i.waking)), false);
+    h2.clock.advance(90_000);
+    const w2 = await st.until((e) => e.event === 'world' && e.data.islands.every((i) => !('waking' in i)), 2500);
+    assert.ok(w2, 'the waking flag goes away after 90 s');
+    assert.equal(w2.data.islands.find((i) => i.id === b.island_id).online, false);
+  } finally { st && st.close(); if (h2) await h2.close(); await h.close(); }
+});
+
+test('a device going offline does not relabel the other device\'s rooms', () => {
+  const { world, clock } = mkWorld();
+  world.publish(ISL, 'd1', 'kin', val([sess(1, { dept: 'A' }), sess(2, { dept: 'B' })]));
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' })]));
+  const labels = () => Object.fromEntries(world.snapshotFor('i1').map((x) => [x.id, x.project]));
+  assert.deepEqual(labels(), { [sid(1)]: 'A', [sid(2)]: 'B', [sid(3)]: 'C' });
+  clock.t += 60_000;
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' })], { seq: 2 }));
+  clock.t += 40_000; // d1 silent for 100 s
+  world.tick();
+  assert.deepEqual(labels(), { [sid(3)]: 'C' });
+});
+
+test('room labels survive a device reconnecting', () => {
+  const { world, clock } = mkWorld();
+  world.publish(ISL, 'd1', 'kin', val([sess(1, { dept: 'A' }), sess(2, { dept: 'B' })]));
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' })]));
+  clock.t += 100_000; // both offline
+  world.tick();
+  // d2 comes back first, then d1
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' })], { seq: 0 }));
+  assert.equal(world.snapshotFor('i1')[0].project, 'C');
+  world.publish(ISL, 'd1', 'kin', val([sess(1, { dept: 'A' }), sess(2, { dept: 'B' })], { seq: 0 }));
+  const s = Object.fromEntries(world.snapshotFor('i1').map((x) => [x.id, x.project]));
+  assert.deepEqual(s, { [sid(1)]: 'A', [sid(2)]: 'B', [sid(3)]: 'C' });
+  // a new letter on d2 gets the next free label, never one already given
+  world.publish(ISL, 'd2', 'kin', val([sess(3, { dept: 'A' }), sess(4, { dept: 'B' })], { seq: 1 }));
+  assert.equal(world.snapshotFor('i1').find((x) => x.id === sid(4)).project, 'D');
+});
+
+test('a newcomer whose private world differs from the last broadcast still gets the trailing change', async () => {
+  const { h, login } = await setup();
+  let a, b;
+  try {
+    a = await openStream(h.url, login.cookie);
+    assert.ok(await a.until((e) => e.event === 'world'));
+    await sleep(1100); // the last broadcast says 1 viewer
+    b = await openStream(h.url, login.cookie);
+    assert.ok(await b.until((e) => e.event === 'world' && e.data.viewers === 2, 500));
+    a.close(); // back to 1 viewer: the same frame as the last broadcast, but not what B has
+    assert.ok(await b.until((e) => e.event === 'world' && e.data.viewers === 1, 1500), 'B learns A left');
+  } finally { a && a.close(); b && b.close(); await h.close(); }
+});
+
+test('world items carry lastAt and the payload carries now', async () => {
+  const { h, login, dev } = await setup();
+  try {
+    const other = await devLogin(h.url, 'bo@newera.inc', 'Bo'); // an island with no machine in RAM
+    await pairDevice(h.url, other, 'May B');
+    await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
+    const t = h.clock.t;
+    h.clock.advance(5000);
+    const st = await openStream(h.url, login.cookie);
+    const w = await st.until((e) => e.event === 'world');
+    assert.equal(w.data.now, h.clock.t);
+    assert.equal(w.data.islands.find((i) => i.id === dev.island_id).lastAt, t);
+    assert.ok(w.data.islands.some((i) => i.lastAt === null));
+    st.close();
+  } finally { await h.close(); }
+});
+
+test('the world payload keeps every field it had', async () => {
+  const { h, login, dev } = await setup();
+  try {
+    await postJson(h.url, '/api/publish', pkt([sess(1)]), bearer(dev.token));
+    const st = await openStream(h.url, login.cookie);
+    const w = await st.until((e) => e.event === 'world');
+    for (const k of ['islands', 'viewers', 'capacity']) assert.ok(k in w.data, k);
+    for (const k of ['id', 'name', 'color', 'slot', 'online', 'private', 'share']) assert.ok(k in w.data.islands[0], k);
+    st.close();
+  } finally { await h.close(); }
+});
+
+test('lastAt moving does not make the valve send more than once per window', async () => {
+  const { h, login, dev } = await setup();
+  try {
+    const st = await openStream(h.url, login.cookie);
+    await st.until((e) => e.event === 'world');
+    const before = h.hub.ctx.stats.worldBroadcasts;
+    for (let i = 0; i < 6; i++) { h.clock.advance(100); await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: i }), bearer(dev.token)); }
+    await new Promise((r) => setTimeout(r, 1300));
+    assert.ok(h.hub.ctx.stats.worldBroadcasts - before <= 2);
+    st.close();
+  } finally { await h.close(); }
+});
+
+test('publishes that only move lastAt emit at most one world change per 15 s step', () => {
+  const { clock, events, world } = mkWorld();
+  clock.t = 30000; // the start of a 15 s step
+  world.publish(ISL, 'd1', 'kin', val([sess(1)]));
+  const after = events.filter((e) => e.type === 'world').length;
+  for (let i = 0; i < 6; i++) { clock.t += 250; world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: i + 2 })); }
+  assert.equal(events.filter((e) => e.type === 'world').length, after, 'no world change inside the step');
+  clock.t = 45000;
+  world.publish(ISL, 'd1', 'kin', val([sess(1)], { seq: 20 }));
+  assert.equal(events.filter((e) => e.type === 'world').length, after + 1, 'one when the step turns');
+  assert.equal(world.islands().find((i) => i.id === 'i1').lastAt, 45000, 'the payload still reads the exact lastAt');
 });

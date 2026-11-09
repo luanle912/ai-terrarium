@@ -1,8 +1,10 @@
 import { tr } from './i18n.js';
 import { SeasonTree } from './season-tree.js';
+import { SeasonLogic } from './season-logic.js';
 import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { DogLogic } from './dog-logic.js';
+import { WorldLogic } from './world-logic.js';
 import {
   DOG_PLACES,
   LH,
@@ -66,13 +68,21 @@ export class ClaudeOffice extends React.Component {
     this.usedLooks = 0;
     this.last = 0;
     this.seasonKey = 'default';
-    this.goneSids = new Set();
+    this.seasonChoice = SeasonLogic.loadSeasonChoice(this.storage);
+    this.seasonPreview = null;
+    this.goneSids = new Map();
     this.depts = new Map();
     this.setCanvas = el => {
       this.canvas = el;
     };
     this.setStage = el => {
       this.stageEl = el;
+    };
+    // The stage clips the scene (overflow hidden) but the browser can still scroll it, e.g. to bring a focused control
+    // into view; it would slide the island and leave a band of bare page under the sky. The stage never scrolls.
+    this.onStageScroll = () => {
+      const st = this.stageEl;
+      if (st && (st.scrollTop || st.scrollLeft)) st.scrollTop = st.scrollLeft = 0;
     };
     this.setBack = el => {
       this.backCanvas = el;
@@ -235,20 +245,45 @@ export class ClaudeOffice extends React.Component {
       st.addEventListener('pointermove', this.onDrag);
       st.addEventListener('pointerup', this.onUp);
       st.addEventListener('pointercancel', this.onUp);
-      // A resized window changes the fitted layout; pull the view back inside the new limits.
+      st.addEventListener('scroll', this.onStageScroll);
+      // A resized window changes the fitted layout; pull the view back inside the new limits, and repaint the sky at
+      // the new size before the browser shows it (no stretched or short sky for a frame).
       if (window.ResizeObserver) {
         this.ro = new ResizeObserver(() => {
           const b = this.camBox();
           if (b) this.setCam(CameraLogic.clamp(this.cam, b));
+          this.drawSky(performance.now() / 1000);
         });
         this.ro.observe(st);
       }
     }
     this.simTimer = setInterval(() => this.simTick(), 250);
+    // In world mode a wall-clock jump between two ticks (WAKE_JUMP_MS) means the machine slept: reconnect at once.
     this.uiTimer = setInterval(() => {
+      const wall = Date.now();
+      if (this.world && this.tickWall && wall - this.tickWall > WorldLogic.WAKE_JUMP_MS)
+        this.relink({
+          type: 'wake',
+          visible: document.visibilityState === 'visible',
+          quietMs: wall - (this.world.lastEventWall || 0),
+        });
+      this.tickWall = wall;
+      // Hidden tab: no render and no setState; only finished sub-agents still leave on time.
+      if (document.visibilityState === 'hidden') {
+        this.doneSweep(wall);
+        if (this.world) for (const sc of this.world.scenes.values()) sc.doneSweep(wall);
+        return;
+      }
       if (performance.now() - (this.lastFrame || 0) > 200) this.frame(performance.now());
       this.setState(s => ({ tick: s.tick + 1 }));
     }, 300);
+    // Back from hidden: one frame and one render at once.
+    this.onShown = () => {
+      if (document.visibilityState !== 'visible') return;
+      this.frame(performance.now());
+      this.setState(s => ({ tick: s.tick + 1 }));
+    };
+    document.addEventListener('visibilitychange', this.onShown);
     this.last = performance.now();
     setTimeout(() => this.frame(performance.now()), 0);
     const loop = t => {
@@ -281,6 +316,7 @@ export class ClaudeOffice extends React.Component {
       st.removeEventListener('pointermove', this.onDrag);
       st.removeEventListener('pointerup', this.onUp);
       st.removeEventListener('pointercancel', this.onUp);
+      st.removeEventListener('scroll', this.onStageScroll);
     }
     this.ro && this.ro.disconnect();
     clearTimeout(this.kTimer);
@@ -295,13 +331,12 @@ export class ClaudeOffice extends React.Component {
     clearTimeout(this.wcTimer);
     this.world && this.world.es && this.world.es.close();
     if (this.onWorldKey) window.removeEventListener('keydown', this.onWorldKey);
-    if (this.world) {
-      clearTimeout(this.world.probeTimer);
-      clearTimeout(this.world.meTimer);
-      clearTimeout(this.world.waitTimer);
-    }
+    if (this.world) this.stopWorld(this.world);
     if (this.onWorldVisible) document.removeEventListener('visibilitychange', this.onWorldVisible);
     this.stopAnimals();
+    if (this.onShown) document.removeEventListener('visibilitychange', this.onShown);
+    if (this.onPreviewVis) document.removeEventListener('visibilitychange', this.onPreviewVis);
+    if (this.onWorldOnline) window.removeEventListener('online', this.onWorldOnline);
   }
   // ---- weather settings ----
   setWeather(patch) {
@@ -368,6 +403,16 @@ export class ClaudeOffice extends React.Component {
         ? SeasonTree.seasonFor()
         : 'default';
   }
+  // The season the island shows (SeasonLogic): a one-minute preview, else the choice in Settings, else the date.
+  // seasonChoice / seasonPreview are set from Settings; until then the date decides.
+  seasonNow() {
+    return SeasonLogic.currentSeason({
+      date: new Date(),
+      choice: this.seasonChoice || 'auto',
+      preview: this.seasonPreview || null,
+      now: Date.now(),
+    }).key;
+  }
   get treeOn() {
     return this.season !== 'default';
   }
@@ -385,15 +430,17 @@ export class ClaudeOffice extends React.Component {
     if (!this.state.paused) {
       this.agents.forEach(a => this.updateAgent(a, dt));
       this.stepDogs(dt);
+      this.stepProps(dt);
       if (this.agents.some(a => a.gone)) {
         const goneA = this.agents.filter(a => a.gone);
-        goneA.forEach(a => this.goneSids.add(a.sid));
+        goneA.forEach(a => this.goneSids.set(a.sid, a.leftWhy || 'missing'));
         const goneIds = goneA.map(a => a.id);
         this.agents = this.agents.filter(a => !a.gone);
         if (goneIds.includes(this.state.sel)) this.setState({ sel: null });
       }
     }
     this.stepAnimals(dt);
+    this.doneSweep(Date.now());
     this.env = this.envNow();
     this.draw(ts / 1000);
     this.drawSky(ts / 1000);
@@ -427,10 +474,12 @@ export class ClaudeOffice extends React.Component {
     const reduced = !!(this.reducedMq && this.reducedMq.matches),
       fx = SkyLogic.weatherFx(this.wx, now),
       df = dayFactor();
+    // Winter keeps at least its own snow on the lawn, the roofs and the mountain whatever the weather.
+    const season = this.seasonNow();
     {
       const sn = SkyLogic.stepSnow(this.snow, fx, this.preview, dtMs);
       this.snow = sn.cover;
-      this.snowShown = sn.shown;
+      this.snowShown = Math.max(sn.shown, SeasonLogic.look(season).minSnow);
     }
     if (fx.storm > 0.5 && !reduced) {
       if (now >= this.nextFlashAt) {
@@ -441,6 +490,15 @@ export class ClaudeOffice extends React.Component {
     } else this.nextFlashAt = now + 2000;
     this.flash = reduced ? 0 : SkyLogic.flashLevel(now, this.flashStart || 0, this.flashMs || 0);
     const hour = d.getHours() + d.getMinutes() / 60;
-    return { df, hour, fx, reduced, flash: this.flash, col: SkyLogic.skyColors(df, hour, fx) };
+    return {
+      df,
+      hour,
+      fx,
+      reduced,
+      frozen: SeasonLogic.look(season).frozen,
+      flash: this.flash,
+      col: SkyLogic.skyColors(df, hour, fx),
+      season,
+    };
   }
 }

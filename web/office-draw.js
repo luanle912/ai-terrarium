@@ -3,6 +3,10 @@ import { OfficeDecor } from './office-decor.js';
 import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { SkyRender } from './sky-render.js';
+import { IslandLife } from './island-life.js';
+import { IslandSeasonLife } from './island-season-life.js';
+import { SeasonIsland } from './season-island.js';
+import { PropUse } from './prop-use.js';
 import {
   DESKS,
   FH,
@@ -17,6 +21,7 @@ import {
   PG,
   SEGS,
   STAIRS,
+  behindWalls,
   W,
   WALL,
   ZONES,
@@ -27,6 +32,10 @@ import {
 import { shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Drawing the office: sky, camera, the floor, walls, planters, pantry and desks.
+// The night tint over event trees, in 1/50 steps of its strength (built once, no string per frame).
+const NIGHT_TINT = Array.from({ length: 31 }, (_, i) => 'rgba(13,19,34,' + i / 50 + ')');
+// On a holiday these few trees by the office turn into the holiday's tree; the rest keep the season's.
+const HOLIDAY_TREES = SeasonIsland.holidayTrees(ISLAND, W, H);
 mixin(
   ClaudeOffice,
   class {
@@ -40,7 +49,13 @@ mixin(
         dpr = window.devicePixelRatio || 1,
         b = this.camBox();
       // Clouds follow the island camera (zoom and pan), each layer by its depth.
-      const skyEnv = b ? { ...env, view: CameraLogic.skyView(this.cam, b) } : env;
+      // The world's "Toàn cảnh" of 8 islands keeps its own far islands (SkyRender.drawBack, env.overview).
+      const overview = !!(this.world && this.world.view === 'all'),
+        skyEnv = b
+          ? { ...env, view: CameraLogic.skyView(this.cam, b), overview }
+          : overview
+            ? { ...env, overview }
+            : env;
       for (const [cv, fn] of [
         [this.backCanvas, SkyRender.drawBack],
         [this.frontCanvas, SkyRender.drawFront],
@@ -106,6 +121,45 @@ mixin(
       }
     }
 
+    // One event tree at its tile, tinted for the night by `dusk` (0 = full day). Every event tree of a season looks
+    // the same at a given moment, so after dark the tinted tree is painted once a frame into a scratch canvas (at the
+    // scene's resolution) and stamped at each tile.
+    drawEventTree(ctx, d, season, t, k, dusk) {
+      const [px, py] = PG(d.x + 0.5, d.y + 0.5, 0),
+        X = Math.round(px),
+        Y = Math.round(py);
+      if (dusk < 0.02) {
+        ctx.save();
+        ctx.translate(X, Y);
+        SeasonTree.drawSeasonTree(ctx, 0, 0, season, t);
+        ctx.restore();
+        return;
+      }
+      const sc = this.treeScratch || (this.treeScratch = document.createElement('canvas')),
+        m = this.treeMemo || (this.treeMemo = { t: null, k: 0, dusk: 0, season: '' });
+      if (m.t !== t || m.k !== k || m.dusk !== dusk || m.season !== season) {
+        Object.assign(m, { t, k, dusk, season });
+        const w = Math.ceil(48 * k),
+          h = Math.ceil(58 * k);
+        if (sc.width !== w || sc.height !== h) {
+          sc.width = w;
+          sc.height = h;
+        }
+        const g = sc.getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalCompositeOperation = 'source-over';
+        g.clearRect(0, 0, w, h);
+        g.setTransform(k, 0, 0, k, 24 * k, 48 * k);
+        SeasonTree.drawSeasonTree(g, 0, 0, season, t);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalCompositeOperation = 'source-atop';
+        g.fillStyle = NIGHT_TINT[Math.min(NIGHT_TINT.length - 1, Math.round(dusk * 50))];
+        g.fillRect(0, 0, w, h);
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(sc, Math.round((X - 24) * k), Math.round((Y - 48) * k));
+      ctx.setTransform(k, 0, 0, k, 0, 0);
+    }
     renderK() {
       return CameraLogic.renderScale(this.canvas.clientWidth, window.devicePixelRatio || 1, this.kZoom, LW);
     }
@@ -130,24 +184,64 @@ mixin(
       ctx.imageSmoothingEnabled = false;
       ctx.globalAlpha = 1;
       ctx.clearRect(0, 0, LW, LH);
-      // The island is baked once per resolution / light level / snow level and stamped under the office.
+      // The island is baked once per resolution / light level / snow level / season and stamped under the office.
       const snow = this.snowShown || 0,
         ic = this.islandCache,
         dfB = Math.round(df * 10),
-        snB = Math.round(snow * 10);
-      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB)
+        snB = Math.round(snow * 10),
+        season = this.seasonNow();
+      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season) {
+        // let the browser drop the old bake's canvases now rather than at the next collection
+        if (ic) for (const c of [ic.img, ...ic.props.map(p => p.img)]) c.width = c.height = 0;
+        const frame = { LW, LH, OX, OY },
+          light = { df: dfB / 10, snow: snB / 10, season, block: { W, H } };
         this.islandCache = {
-          img: SkyRender.renderIsland(ISLAND, { LW, LH, OX, OY }, k, { df: dfB / 10, snow: snB / 10 }),
+          img: SkyRender.renderIsland(ISLAND, frame, k, light),
+          props: SkyRender.renderProps(ISLAND, frame, k, light),
           k,
           df: dfB,
           sn: snB,
+          season,
         };
+      }
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(this.islandCache.img, 0, 0);
       ctx.restore();
-      SkyRender.drawPond(ctx, ISLAND, PG, t, df);
-      SkyRender.drawWaterfall(ctx, ISLAND, PG, t, SkyLogic.WATERFALL_LEN, df);
+      // Water, falls, mist, lamp pools, vines, birds, fireflies and the rainbow (web/island-life.js).
+      if (env) IslandLife.drawLife(ctx, ISLAND, PG, t, env);
+      // What stands up off the lawn (trees, bushes, lamps, the bench, the pavilion) is sorted with the people and dogs;
+      // whatever stands in the strip right behind the walls goes down before them (below), so the walls hide it.
+      const items = [],
+        behind = [],
+        stamp = p => () => {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.drawImage(p.img, p.dx, p.dy);
+          ctx.setTransform(k, 0, 0, k, 0, 0);
+          if (p.lamp >= 0 && env) IslandLife.drawLampLight(ctx, ISLAND, PG, p.lamp, t, env);
+          // the pavilion's lantern glows over its own sprite (web/island-life.js, when it draws one)
+          if (p.lantern && env && IslandLife.drawLanternLight) IslandLife.drawLanternLight(ctx, ISLAND, PG, t, env);
+        },
+        backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y)),
+        walker = a => !a.sleeping && !a.seated && !a.wcIn;
+      // The island's trees: on a holiday the few by the office are the holiday's tree (HOLIDAY_TREES); the rest are
+      // the season's, baked among the props. Holiday trees are drawn in their
+      // own colours; after dark each goes through a scratch canvas and takes the same night tint as the lawn
+      // (SkyRender.night: toward #0d1322 by (1 - light) x 0.6), so it does not glow.
+      const tk = SeasonTree && this.treeOn ? this.season : null,
+        info = tk && SeasonTree.SEASONS[tk],
+        holiday = info && (info.type === 'event' || info.type === 'lunar') ? tk : null,
+        dusk = (1 - dfB / 10) * 0.6,
+        held = d => holiday && HOLIDAY_TREES.has(d.x + ',' + d.y);
+      for (const p of this.islandCache.props)
+        if (!(p.tree && held(p))) (backOf(p) ? behind : items).push({ z: p.z, f: stamp(p) });
+      for (const d of ISLAND.decor) {
+        if (d.kind !== 'tree' || !held(d)) continue;
+        (backOf(d) ? behind : items).push({
+          z: d.x + d.y + 0.5,
+          f: () => this.drawEventTree(ctx, d, holiday, t, k, dusk),
+        });
+      }
       const poly = (pts, fill, stroke) => {
         ctx.beginPath();
         pts.forEach((p, i) =>
@@ -230,6 +324,14 @@ mixin(
         ctx.fillRect(Math.round(x), Math.round(y), w, hh);
       };
       const G = { ctx, poly, box, rect, th, t, df };
+      // World islands (IslandScene) have no animals; "view as others" hides them like the hub would.
+      const showAn = !(this.isLive && this.state.asOthers),
+        an = showAn ? this.animals || [] : [];
+      for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
+      for (const a of an) if (backOf(a)) behind.push({ z: a.x + a.y, f: () => this.drawAnimal(G, a, t, dfB, snB) });
+      for (const a of this.agents)
+        if (walker(a) && backOf(a)) behind.push({ z: a.x + a.y, f: () => this.drawPerson(G, a) });
+      behind.sort((p, q) => p.z - q.z).forEach(it => it.f());
       // Walls are WT tiles thick so their cut edges show; openings sit RD deep in the wall.
       const WT = 0.35,
         ZT = WALL + 3,
@@ -477,12 +579,14 @@ mixin(
         ctx.globalAlpha = 1;
       });
       if (SeasonTree) this.seasonKey = SeasonTree.seasonFor(new Date());
-      const items = [];
       {
-        const OD = OfficeDecor;
+        const OD = OfficeDecor,
+          lit = this.propLit || PropUse.DARK;
         DESKS.forEach((d, i) => {
           const owner = this.agents.find(a => a.desk === i && !a.leaving && !a.parent);
-          OD.deskWorkstation(ctx, P, d, owner, t, () => this.drawPerson(G, owner)).forEach(it => items.push(it));
+          OD.deskWorkstation(ctx, P, d, owner, t, () => this.drawPerson(G, owner), lit[i]).forEach(it =>
+            items.push(it),
+          );
         });
       }
       {
@@ -494,27 +598,6 @@ mixin(
       this.pantryItems(G, items);
       this.smokingItems(G, items, snow);
       this.restroomItems(G, items, snow);
-      // All front-facing island trees become event trees when treeOn is active
-      {
-        const frontTrees = ISLAND.decor.filter(d => d.kind === 'tree' && d.x >= 0 && d.y >= 0);
-        const ST_ = SeasonTree;
-        frontTrees.forEach(d => {
-          if (this.treeOn && ST_) {
-            items.push({
-              z: d.x + d.y + 0.5,
-              f: () => {
-                const [px, py] = PG(d.x + 0.5, d.y + 0.5, 0);
-                ctx.save();
-                ctx.translate(Math.round(px), Math.round(py));
-                ST_.drawSeasonTree(ctx, 0, 0, this.season, t);
-                ctx.restore();
-              },
-            });
-          } else {
-            items.push({ z: d.x + d.y + 0.5, f: () => SkyRender.drawTree(ctx, PG, d, dfB / 10, snB / 10) });
-          }
-        });
-      }
       [
         [8.5, 13.5],
         [19.5, 13.5],
@@ -550,11 +633,8 @@ mixin(
         },
       });
 
-      this.dogs.forEach(d => items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) }));
-      // World islands (IslandScene) have no animals; "view as others" hides them like the hub would.
-      const showAn = !(this.isLive && this.state.asOthers),
-        an = showAn ? this.animals || [] : [];
-      an.forEach(a => items.push({ z: a.x + a.y, f: () => this.drawAnimal(G, a, t, dfB, snB) }));
+      for (const d of this.dogs) if (!backOf(d)) items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
+      for (const a of an) if (!backOf(a)) items.push({ z: a.x + a.y, f: () => this.drawAnimal(G, a, t, dfB, snB) });
       this.agents.forEach(a => {
         if (a.sleeping) {
           const d = DESKS[a.desk];
@@ -577,11 +657,13 @@ mixin(
               }
             },
           });
-        } else if (!a.seated && !a.wcIn) {
+        } else if (walker(a) && !backOf(a)) {
           items.push({ z: a.x + a.y + (a.stool ? 0.1 : 0), f: () => this.drawPerson(G, a) });
         }
       });
       items.sort((p, q) => p.z - q.z).forEach(it => it.f());
+      // The season's petals, leaves or snow drift down over everything on the island.
+      if (env) IslandSeasonLife.drawFall(ctx, ISLAND, PG, t, env);
       // A storm darkens the island and office; source-atop only tints what is already drawn, never the sky behind.
       if (env && env.fx.storm > 0) {
         ctx.save();

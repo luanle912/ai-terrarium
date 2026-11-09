@@ -24,7 +24,17 @@ mixin(
         seasonInfo &&
         h(
           'div',
-          { className: 'chip', style: { borderColor: seasonInfo.accent, gap: 6 } },
+          {
+            className: 'chip',
+            role: 'button',
+            tabIndex: 0,
+            title: tr('settings.season'),
+            style: { borderColor: seasonInfo.accent, gap: 6, cursor: 'pointer' },
+            onClick: () => this.openSeasonSettings(),
+            onKeyDown: e => {
+              if (e.key === 'Enter' || e.key === ' ') this.openSeasonSettings();
+            },
+          },
           h('span', {
             style: {
               width: 8,
