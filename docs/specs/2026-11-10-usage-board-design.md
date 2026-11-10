@@ -67,3 +67,14 @@ tính tiền **khi anh chạy `claude` trong terminal** (dùng gói thay vì API
 - Nếu giữ API key: bảng chỉ có S3 (LIMIT khi chạm trần) và ghi rõ lý do trong ⚙; vẫn đúng, không giả số.
 
 Dù chọn gì, thiết kế ở mục 3 vẫn như nhau; chỉ khác máy anh có số % hay không.
+
+## 5. Quyết định và kết quả (2026-11-10)
+
+- Anh Kiệt: **chỉ làm cho gói subscription**: không có gói (API key, Bedrock, …) hoặc chưa biết thì **ẩn hẳn bảng**,
+  không ghi lý do trong ⚙ (bỏ mục 3.5).
+- CLI của máy anh đã đổi sang đăng nhập claude.ai (`claude auth login --claudeai`, gói Team).
+- Đã làm `lib/usage.js` như mục 3. Snapshot có `usage`, `usagePlan` (true / false / null), `usageSource`; trang chỉ vẽ
+  bảng khi `usagePlan === true` (server cũ không gửi trường này thì vẽ như trước). Bỏ đọc file `usage-quota` cũ.
+- Định dạng `get_usage` thật: `rate_limits.five_hour = {utilization: 0–100 | null, resets_at: ISO | null, …}`.
+- Đo thật trên máy anh: `get_usage` trả lời ~3 s, 5H 1 %, 7D 6 %; snapshot gửi `usageSource: "claude"`, bảng hiện
+  trên tường.

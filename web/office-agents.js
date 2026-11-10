@@ -331,6 +331,9 @@ mixin(
 
     syncLive(snap) {
       if (snap.usage) this.usage = snap.usage;
+      // The 5H / 7D limits exist only with a claude.ai plan: the server says whether one is known (lib/usage.js).
+      // An older server sends no usagePlan, and the board shows as before.
+      if ('usagePlan' in snap) this.usagePlan = snap.usagePlan;
       if (snap.version) this.serverVersion = snap.version;
       const list = ((snap && snap.sessions) || [])
         .slice()

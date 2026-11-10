@@ -366,7 +366,8 @@ mixin(
           const d = new Date(r) - Date.now();
           return Math.max(0, d / 60000);
         };
-        if (OD && OD.drawUsageBoard && !this.noUsage) {
+        // Shown only with a claude.ai plan (usagePlan true; undefined from an older server) and not on hub islands.
+        if (OD && OD.drawUsageBoard && !this.noUsage && (this.usagePlan === undefined || this.usagePlan === true)) {
           const [bx, by] = P(0, 4.9, 50); // hub islands and the public preview carry no usage
           OD.drawUsageBoard(
             ctx,

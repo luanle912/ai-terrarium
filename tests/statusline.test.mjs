@@ -6,7 +6,6 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const sl = require('../lib/statusline.js');
-const { readUsage } = require('../server.js');
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'terr-sl-'));
 const NOW = 1_800_000_000_000;
@@ -68,33 +67,21 @@ test('run: unwritable dir does not throw', () => {
   assert.equal(r.code, 0);
 });
 
-test('readUsage maps usage.json to the legacy shape with ISO resets', () => {
+test('readUsageFile maps usage.json to [{kind, pct, resets(ISO)}]', () => {
   const dir = tmp();
   sl.run({ stdin: full, argv: [], dir, now: NOW });
-  const u = readUsage({ dir, legacyDir: tmp(), now: NOW });
+  const u = sl.readUsageFile(dir, NOW);
   assert.deepEqual(u.map(x => x.kind), ['five_hour', 'seven_day']);
   assert.equal(u[0].pct, 23.4);
   assert.equal(u[0].resets, new Date(sec(NOW + 3600e3) * 1000).toISOString());
 });
-test('readUsage drops expired windows; empty means unknown', () => {
+test('readUsageFile drops expired windows; no file or garbage is null', () => {
   const dir = tmp();
   sl.run({ stdin: full, argv: [], dir, now: NOW });
-  const u = readUsage({ dir, legacyDir: tmp(), now: NOW + 7200e3 });
-  assert.deepEqual(u.map(x => x.kind), ['seven_day']);
-  assert.deepEqual(readUsage({ dir, legacyDir: tmp(), now: NOW + 2 * 86400e3 }), []);
-  assert.deepEqual(readUsage({ dir: tmp(), legacyDir: tmp(), now: NOW }), []);
-});
-test('readUsage falls back to legacy usage-quota files', () => {
-  const legacy = tmp();
-  fs.writeFileSync(path.join(legacy, 'usage-quota-x.json'), JSON.stringify({ limits: { limits: [{ kind: 'five_hour', percentUsed: 12, resetsAt: '2030-01-01T00:00:00Z' }] } }));
-  const u = readUsage({ dir: tmp(), legacyDir: legacy, now: NOW });
-  assert.deepEqual(u, [{ kind: 'five_hour', pct: 12, resets: '2030-01-01T00:00:00Z' }]);
-});
-test('readUsage prefers usage.json over legacy; garbage usage.json falls back', () => {
-  const dir = tmp(), legacy = tmp();
-  fs.writeFileSync(path.join(legacy, 'usage-quota-x.json'), JSON.stringify({ limits: { limits: [{ kind: 'five_hour', percentUsed: 12, resetsAt: '2030-01-01T00:00:00Z' }] } }));
-  fs.writeFileSync(path.join(dir, 'usage.json'), '{garbage');
-  assert.equal(readUsage({ dir, legacyDir: legacy, now: NOW })[0].pct, 12);
-  sl.run({ stdin: full, argv: [], dir, now: NOW });
-  assert.equal(readUsage({ dir, legacyDir: legacy, now: NOW })[0].pct, 23.4);
+  assert.deepEqual(sl.readUsageFile(dir, NOW + 7200e3).map(x => x.kind), ['seven_day']);
+  assert.deepEqual(sl.readUsageFile(dir, NOW + 2 * 86400e3), []);
+  assert.equal(sl.readUsageFile(tmp(), NOW), null);
+  const g = tmp();
+  fs.writeFileSync(path.join(g, 'usage.json'), '{garbage');
+  assert.equal(sl.readUsageFile(g, NOW), null);
 });
