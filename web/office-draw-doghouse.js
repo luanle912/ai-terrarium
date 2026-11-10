@@ -3,6 +3,8 @@ import { SkyRender } from './sky-render.js';
 import { DogSprites } from './dog-sprites.js';
 import { PG, DOG_HOUSES, FLOOR_Z, mix } from './office-scene.js';
 import { shade } from './office-util.js';
+import { SnowLogic } from './snow-logic.js';
+import { snowTones } from './office-draw-winter.js';
 import { ClaudeOffice, mixin } from './office.js';
 
 // One roof colour per dog, in DogLogic.BREEDS order: the corgi's red, the husky's blue, the dalmatian's green.
@@ -49,6 +51,7 @@ mixin(
       const { ctx, poly, t, df } = G,
         N = c => SkyRender.night(c, df),
         dogs = this.dogs || [],
+        sd = SnowLogic.depth(snow),
         // a face with a dark pixel edge, like the scene's other props
         face = (pts, col) => poly(pts, col, shade(col, -48)),
         flat = (pts, col) => poly(pts, col, null);
@@ -61,7 +64,7 @@ mixin(
           yc = 0,
           ya = -HW,
           yb = HW,
-          roof = N(mix(ROOF[i], '#eef3f7', snow * 0.8)),
+          roof = N(mix(ROOF[i], '#eef3f7', snow * 0.2)),
           wood = N(WOOD),
           stone = N(STONE),
           dog = dogs.find(d => d.id === i && d.act === 'inside');
@@ -119,6 +122,22 @@ mixin(
               ],
               shade(roof, -45),
             );
+            // snow lying on the near slope, from the ridge most of the way down, thicker with the depth
+            if (sd) {
+              const T = snowTones(df),
+                at = (x, f, up) => L(x, yc + (yb + OV - yc) * f, ZR - (ZR - ZE) * f + up);
+              flat(
+                [
+                  at(xa - OV, 0, sd + 1),
+                  at(xb + OV, 0, sd + 1),
+                  at(xb + OV, 0.62, sd),
+                  at((xa + xb) / 2, 0.74, sd),
+                  at(xa - OV, 0.6, sd),
+                ],
+                T.lit,
+              );
+              flat([at(xb + OV, 0, sd + 1), at(xb + OV, 0.62, sd), at(xb + OV, 0.62, 0), at(xb + OV, 0, 0)], T.shade);
+            }
             for (const ye of [ya - OV, yb + OV])
               flat([L(xb + OV, ye, ZE), L(xb + OV, yc, ZR), L(xb + OV, yc, ZR - 2), L(xb + OV, ye, ZE - 2)], N(TRIM));
             // the paw plaque over the door
