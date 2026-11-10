@@ -186,7 +186,7 @@ mixin(
     // over the roof tell when it sleeps.
     doghouseSleeper(ctx, d, door, [bx, by], dfB, snB) {
       const f = DogSprites.frame(d.breed, 'lie'),
-        img = this.dogSprite(d.breed, 'lie', dfB, snB),
+        img = this.dogSprite(d.breed, 'lie', dfB, snB, this.eventNow()),
         { hc, ht } = headOf(f),
         left = Math.round(bx) - hc,
         top = Math.round(by) - DH + 2 - ht;
@@ -195,7 +195,7 @@ mixin(
       door.forEach((_, k) => (k ? ctx.lineTo(...Q(door, k)) : ctx.moveTo(...Q(door, k))));
       ctx.closePath();
       ctx.clip();
-      ctx.drawImage(img, left, top);
+      ctx.drawImage(img, left, top - img.pad);
       ctx.restore();
     }
     // A small bowl in the roof's colour with kibble in it.

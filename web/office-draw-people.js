@@ -1,6 +1,7 @@
 import { SkyRender } from './sky-render.js';
 import { DogLogic } from './dog-logic.js';
 import { DogSprites } from './dog-sprites.js';
+import { DogXmas } from './dog-sprites-xmas.js';
 import { SmokeLogic } from './smoke-logic.js';
 import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW } from './office-scene.js';
 import { WATER_Z } from './island-land.js';
@@ -509,16 +510,20 @@ mixin(
       }
     }
     // A dog's frame baked once per light level and snow level (like the island), then stamped with one drawImage.
-    dogSprite(breed, name, dfB, snB) {
-      const k = breed + '/' + name + '/' + dfB + '/' + snB,
+    // With `ev` (the event from its second week) the dog is dressed and the sprite is DogXmas.PAD rows taller (cv.pad).
+    dogSprite(breed, name, dfB, snB, ev) {
+      const x = ev && ev.level >= 2,
+        k = breed + '/' + name + '/' + dfB + '/' + snB + (x ? '/x' : ''),
         hit = this.dogSprites.get(k);
       if (hit) return hit;
       if (this.dogSprites.size > 300) this.dogSprites.clear();
-      const f = DogSprites.frame(breed, name),
-        pal = DogSprites.BREEDS[breed].pal,
+      const f0 = DogSprites.frame(breed, name),
+        f = x ? DogXmas.dress(breed, name, f0) : f0,
+        pal = x ? DogXmas.palFor(breed) : DogSprites.BREEDS[breed].pal,
         cv = document.createElement('canvas');
       cv.width = f.w;
       cv.height = f.h;
+      cv.pad = f.pad || 0;
       const c = cv.getContext('2d'),
         top = new Array(f.w).fill(-1);
       f.rows.forEach((row, y) =>
@@ -545,7 +550,7 @@ mixin(
       const { ctx, th, rect } = G,
         p = DogLogic.pose(d, t),
         f = DogSprites.frame(d.breed, p.frame),
-        img = this.dogSprite(d.breed, p.frame, dfB, snB);
+        img = this.dogSprite(d.breed, p.frame, dfB, snB, G.ev);
       let [sx, sy] = PG(d.x, d.y);
       sx = Math.round(sx);
       sy = Math.round(sy);
@@ -561,9 +566,9 @@ mixin(
         ctx.save();
         ctx.translate(sx + 1, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(img, -f.ax, top);
+        ctx.drawImage(img, -f.ax, top - img.pad);
         ctx.restore();
-      } else ctx.drawImage(img, sx - f.ax, top);
+      } else ctx.drawImage(img, sx - f.ax, top - img.pad);
       if (d.act === 'drink' && !d.path.length)
         for (let k = 0; k < 2; k++) {
           const q = (t * 0.7 + k * 0.5 + d.id * 0.3) % 1;
