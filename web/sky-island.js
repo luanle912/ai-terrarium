@@ -24,6 +24,8 @@ import { drawSeasonFlowers, drawSeasonTree, drawSnowman, seasonC, SNOWMAN_EXT, T
 import { SeasonIsland } from './season-island.js';
 import { SeasonLogic } from './season-logic.js';
 import { SnowLogic } from './snow-logic.js';
+import { EventLogic } from './event-logic.js';
+import { BIG_TREE_EXT, drawBigTree } from './island-art-xmas.js';
 import { drawIcicles, drawSnowEdge, drawSnowLawn, snowOnTop, snowTile } from './island-art-snow.js';
 export { hash, hex, mix, toHex, WATER_Z };
 // Night pulls every island colour toward the same deep blue the office uses after dark (web/island-art.js).
@@ -207,5 +209,11 @@ export function renderProps(island, frame, k, env) {
   if (look.frozen && env.block)
     for (const m of SeasonIsland.snowmanTiles(island, env.block.W, env.block.H))
       add(m.x, m.y, m.x + m.y + 0.5, SNOWMAN_EXT, pt => drawSnowman(pt, P, C, m), -1, false);
+  // the Christmas event's big tree (env.event is its level): it keeps more of its colour after dark than the lawn
+  if (env.event && env.block) {
+    const t = EventLogic.bigTreeTile(island, env.block.W, env.block.H),
+      T = c => night(c, 1 - (1 - env.df) * 0.55);
+    if (t) add(t[0], t[1], t[0] + t[1] + 0.5, BIG_TREE_EXT, pt => drawBigTree(pt, P, T, t, env.event));
+  }
   return out;
 }

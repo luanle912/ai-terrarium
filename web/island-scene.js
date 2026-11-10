@@ -10,6 +10,7 @@ import './office-draw-doghouse.js';
 import './office-draw-fate.js';
 import './office-draw-fate-more.js';
 import './office-draw-winter.js';
+import './office-draw-xmas.js';
 import './office-draw-people.js';
 import './office-render.js';
 import { DogLogic } from './dog-logic.js';
@@ -51,12 +52,15 @@ export const SCENE_METHODS = [
   'fateCtx',
   'startFate',
   'fateItems',
+  'xmasItems',
+  'xmasTreeLights',
   'winterWalls',
   'drawPrints',
   'stepPrints',
   'restroomItems',
   'restroomPaint',
   'seasonNow',
+  'eventNow',
   'stepDogs',
   'stepProps',
   'dogSprite',
@@ -102,6 +106,12 @@ export class IslandScene {
   }
   get seasonChoice() {
     return this.host.seasonChoice;
+  }
+  get eventChoice() {
+    return this.host.eventChoice;
+  }
+  get eventPreview() {
+    return this.host.eventPreview;
   }
   get seasonPreview() {
     return this.host.seasonPreview;

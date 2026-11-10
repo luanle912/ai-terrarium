@@ -81,6 +81,10 @@ test('the big tree stands on open lawn in front of the office, clear of everythi
     assert.ok(island.cells.has(K(x + dx, y + dy)), `${K(x + dx, y + dy)} is off the island`)
     assert.ok(!no.has(K(x + dx, y + dy)), `${K(x + dx, y + dy)} is taken`)
   }
+  for (const m of loadWeb('season-island').SeasonIsland.snowmanTiles(island, W, H))
+    // a snowman behind the tree in its own screen column (the tree is about 70 px tall, 9 rows of tiles) would be hidden
+    assert.ok(!(Math.abs(x - y - (m.x - m.y)) <= 3 && x + y - (m.x + m.y) > -2 && x + y - (m.x + m.y) <= 10),
+      `the tree would hide or crowd the snowman at ${K(m.x, m.y)}`)
   for (const s of island.spots) assert.ok(!(x >= s.x - 1 && x <= s.x + s.w && y >= s.y - 1 && y <= s.y + s.h), 'in an outdoor spot')
 })
 
