@@ -3,7 +3,9 @@
 // once per colour and stamped, never a gradient made in the frame.
 import { EventLogic } from './event-logic.js';
 import { BIG_TREE_BULBS, BIG_TREE_TOP } from './island-art-xmas.js';
-import { ISLAND, PG, W, H } from './office-scene.js';
+import { PAVILION } from './island-art.js';
+import { KENNEL } from './office-draw-doghouse.js';
+import { DOG_HOUSES, ISLAND, P, PG, SMOKE, W, H, WALL } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 
 export const BULB = ['#ff5a66', '#ffd166', '#5fd27a', '#5ec8ff'];
@@ -32,6 +34,59 @@ export const glowAt = df => (df >= 0.6 ? 0 : 1 - df / 0.6);
 // Which of the four colour groups are lit at time t: two at a time, changing once a second; all with reduced motion.
 export const groupLit = (g, t, still) => still || (Math.floor(t) + g) % 4 < 2;
 
+// The strings of lights, laid out once: each { at: Float32Array of x, y, level: the event level it comes with, z: its
+// depth among the scene's sprites (null: on the office walls, drawn right after them) }. In all never more than
+// EventLogic.MAX_BULBS: the shares below add up to 114.
+const STRINGS = [];
+{
+  const add = (pts, gap, max, level, z) => {
+    const at = EventLogic.lightString(pts, gap, max);
+    // a slight sag between fixings, so the line is not ruler-straight
+    for (let i = 0; i < at.length / 2; i++) at[i * 2 + 1] = Math.round(at[i * 2 + 1] + (i % 3 === 1 ? 1 : 0));
+    for (let i = 0; i < at.length; i += 2) at[i] = Math.round(at[i]);
+    STRINGS.push({ at, level, z });
+  };
+  // under the cap of the office's back wall and its left wall
+  add([P(0.3, 0, WALL - 1), P(W - 0.3, 0, WALL - 1)], 9, 54, 1, null);
+  add([P(0, 0.3, WALL - 1), P(0, H - 0.3, WALL - 1)], 9, 30, 1, null);
+  // along each kennel's gable, eave to ridge to eave
+  const { X1, HW, OV, ZE, ZR } = KENNEL;
+  for (const h of DOG_HOUSES) {
+    const L = (w, z) => PG(h.x + X1 + OV, h.y + w, z);
+    add([L(-HW - OV, ZE - 2), L(0, ZR - 2), L(HW + OV, ZE - 2)], 6, 5, 2, h.x + X1 + h.y + HW + 0.01);
+  }
+  // under the pergola's front beam
+  add([PG(SMOKE.x + 0.95, SMOKE.y + 1.1, 35), PG(SMOKE.x + 4.0, SMOKE.y + 1.1, 35)], 8, 7, 2, SMOKE.x + SMOKE.y + 2.11);
+  // round the two near eaves of the pavilion's lower roof
+  const pv = ISLAND.pavilion;
+  if (pv) {
+    const r = PAVILION.r.eave,
+      z = PAVILION.z.eave - 1,
+      c = pv.pillar;
+    add(
+      [PG(c.x + 0.5 - r, c.y + 0.5 + r, z), PG(c.x + 0.5 + r, c.y + 0.5 + r, z), PG(c.x + 0.5 + r, c.y + 0.5 - r, z)],
+      7,
+      8,
+      3,
+      c.x + c.y + 1.01,
+    );
+  }
+}
+// One string's bulbs: a 2 px square each, and after dark a glow under every lit one.
+function drawString(ctx, at, t, glow, still, lit) {
+  for (let i = 0; i < at.length; i += 2) {
+    const g = (i >> 1) % 4,
+      on = groupLit(g, t, still);
+    if (on && lit) {
+      ctx.globalAlpha = 0.85 * glow;
+      ctx.drawImage(glowSprite(BULB[g]), at[i] - 5, at[i + 1] - 5);
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = on ? BULB[g] : BULB_OFF[g];
+    ctx.fillRect(at[i], at[i + 1], 2, 2);
+  }
+}
+
 const TREE = EventLogic.bigTreeTile(ISLAND, W, H),
   [TX, TY] = TREE ? PG(TREE[0] + 0.5, TREE[1] + 0.5, 0).map(Math.round) : [0, 0];
 
@@ -40,8 +95,21 @@ mixin(
   class {
     // The event's lights among the scene's sprites (ev from eventNow, never null here).
     xmasItems(G, items, ev) {
-      if (!TREE) return;
-      items.push({ z: TREE[0] + TREE[1] + 0.52, f: () => this.xmasTreeLights(G) });
+      if (TREE) items.push({ z: TREE[0] + TREE[1] + 0.52, f: () => this.xmasTreeLights(G) });
+      for (const s of STRINGS)
+        if (s.z != null && ev.level >= s.level) items.push({ z: s.z, f: () => this.xmasString(G, s.at) });
+    }
+    // The strings on the office's own walls, drawn right after the walls so everything in the room is in front.
+    xmasWallLights(G, ev) {
+      for (const s of STRINGS) if (s.z == null && ev.level >= s.level) this.xmasString(G, s.at);
+    }
+    xmasString(G, at) {
+      const { ctx, t, df } = G,
+        glow = glowAt(df),
+        smooth = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = true;
+      drawString(ctx, at, t, glow, !!(this.env && this.env.reduced), glow > 0.01);
+      ctx.imageSmoothingEnabled = smooth;
     }
     xmasTreeLights(G) {
       const { ctx, t, df } = G,
