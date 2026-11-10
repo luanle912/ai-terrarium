@@ -5,7 +5,8 @@ import { PeopleLogic } from './people-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { PropUse } from './prop-use.js';
-import { DEPT_PAL, DESKS, DOOR, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
+import { FateLogic } from './fate-logic.js';
+import { DEPT_PAL, DESKS, DOOR, FATE_PLACES, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
 import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Agents: the simulated office and the live feed, desks and departments, where each agent goes next.
@@ -217,7 +218,15 @@ mixin(
       a.leftWhy = why;
       a.status = 'leaving';
       this.log(a, tr('office.log.sessionEnded'));
-      if (WorldLogic.leaveGone(document.visibilityState)) a.gone = true;
+      if (WorldLogic.leaveGone(document.visibilityState)) return void (a.gone = true);
+      // How they go (web/fate-logic.js): out of the EXIT door, or some other way that suits the weather, at a spot on
+      // the lawn, in the lake or a few steps along the way. A spot nobody can walk to falls back to the door.
+      const way = bfs(startCell(a.x, a.y), DOOR.tile);
+      a.fate = FateLogic.pick(this.fateCtx(), Math.random, this.lastFate, this.forceFate);
+      a.fateGoal = FateLogic.goal(a.fate, FATE_PLACES, way, Math.random);
+      if (a.fateGoal && !bfs(startCell(a.x, a.y), a.fateGoal.tile).length) a.fateGoal = null;
+      if (!a.fateGoal) a.fate = 'exit';
+      this.lastFate = a.fate;
     }
     // Finished sub-agents walk out 3 s after their 'done' (called from frame and from the hidden-tab timer).
     doneSweep(now) {
@@ -421,7 +430,7 @@ mixin(
     }
 
     goalFor(a) {
-      if (a.leaving) return { key: 'exit', tile: DOOR.tile, pt: DOOR.pt };
+      if (a.leaving) return a.fateGoal ? { key: 'fate', ...a.fateGoal } : { key: 'exit', tile: DOOR.tile, pt: DOOR.pt };
       if (a.parent) {
         const p = this.byId(a.parent),
           d = DESKS[p ? p.desk : a.desk];
@@ -574,6 +583,7 @@ mixin(
           if (g.key === 'sleep') a.sleeping = true;
           if (g.stool) a.stool = g.stool;
           if (g.key === 'exit') a.gone = a.exited = true;
+          if (g.key === 'fate') a.gone = a.fated = true;
           a.dirFront = g.spot ? g.spot.front : false;
           if (g.spot) a.actNow = g.spot.act;
         }
