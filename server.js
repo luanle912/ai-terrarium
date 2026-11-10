@@ -43,7 +43,9 @@ function readUsage(opts) {
 }
 const files = new Map();
 // Transcript parsing and the status decision live in lib/status.js (pure functions, tested with fixture transcripts).
-const { TRANSCRIPT_RE, newState, ingest, readRegistryDir, liveFromRegistry, defaultAlive, buildSessions } = require('./lib/status.js');
+const { TRANSCRIPT_RE, newState, ingest, readRegistryDir, liveFromRegistry, defaultAlive, buildSessions, quotaHits, mergeQuota } = require('./lib/status.js');
+// Limit hits (429s) seen in any transcript, kept after the transcript goes quiet: {kind: resetsAt ms}.
+const quotaMemo = {};
 
 function walk(dir, out = []) {
   let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
@@ -105,7 +107,8 @@ function liveSessions() {
 
 function snapshot() {
   const now = Date.now();
-  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage: readUsage(), version: VERSION };
+  const usage = mergeQuota(readUsage(), quotaHits(files.values(), quotaMemo), now);
+  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage, version: VERSION };
 }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');
