@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-The office as your Mac's live wallpaper, with the server started for you, and lighter page loads on the hub. Deploy the hub to get the lighter page loads; the protocol is unchanged, so old and new pages, publishers and hubs keep working together.
+## [2.2.0] - 2026-11-10
+
+The office as your Mac's live wallpaper, with the server started for you, lighter page loads on the hub, and agents that stay at their desks while their shells still run. Deploy the hub to get the lighter page loads; the protocol is unchanged, so old and new pages, publishers and hubs keep working together.
 
 ### Added
 
@@ -394,7 +396,8 @@ A major version because the source layout changes completely (the page moved fro
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
-[Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/luanle912/ai-terrarium/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/luanle912/ai-terrarium/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/luanle912/ai-terrarium/compare/v1.6.0...v2.0.0
 [1.6.0]: https://github.com/luanle912/ai-terrarium/compare/v1.5.0...v1.6.0
