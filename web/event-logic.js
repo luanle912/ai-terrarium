@@ -52,6 +52,14 @@ function saveChoice(storage, choice) {
   }
 }
 
+// What a page does with the event choice the local server sends (undefined from a server or a save that has none):
+// take it when it differs, or give the server this page's own, once, when it has none and this page's is not the
+// default. The wallpaper has no settings of its own to give.
+function adopt(server, own, { wallpaper = false, seeded = false } = {}) {
+  if (CHOICES.includes(server)) return { take: server !== own ? server : null, seed: false };
+  return { take: null, seed: !wallpaper && !seeded && own !== 'auto' };
+}
+
 // The big tree's tile: open lawn in front of the office (the y side, where the lawn is widest before the lake), its
 // own tile and the eight round it on the island and free of paths, water, stairs, lamps, decor, outdoor spots,
 // places people stand and winter's snowmen (none beside it, none behind it in its screen column); of those, the one
@@ -100,7 +108,7 @@ function lightString(points, gap, max) {
   let len = 0;
   for (let i = 1; i < points.length; i++)
     len += Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]);
-  if (!len) return new Float32Array(0);
+  if (!len || max < 1) return new Float32Array(0);
   const n = Math.max(1, Math.min(max, Math.round(len / gap))),
     step = len / n,
     out = new Float32Array(n * 2);
@@ -137,6 +145,7 @@ export const EventLogic = {
   cacheKey,
   loadChoice,
   saveChoice,
+  adopt,
   bigTreeTile,
   lightString,
   MAX_BULBS,
