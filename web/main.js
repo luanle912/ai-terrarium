@@ -32,6 +32,8 @@ import './office-draw.js';
 import './office-draw-furniture.js';
 import './office-draw-restroom.js';
 import './office-draw-smoking.js';
+import './office-draw-doghouse.js';
+import './office-draw-fall.js';
 import './office-draw-people.js';
 import './office-render.js';
 import './office-render-header.js';

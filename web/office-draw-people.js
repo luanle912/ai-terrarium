@@ -535,6 +535,8 @@ mixin(
       return cv;
     }
     drawDog(G, d, t, dfB, snB) {
+      // a dog in its house shows only in the doorway (doghouseItems)
+      if (d.act === 'inside') return;
       const { ctx, th, rect } = G,
         p = DogLogic.pose(d, t),
         f = DogSprites.frame(d.breed, p.frame),

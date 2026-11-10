@@ -23,6 +23,7 @@ import {
   SEGS,
   STAIRS,
   behindWalls,
+  DRAW_REACH,
   W,
   WALL,
   ZONES,
@@ -74,6 +75,7 @@ mixin(
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, w, hh);
         fn(ctx, w, hh, t, skyEnv);
+        if (cv === this.backCanvas) this.drawFallers(ctx, t, hh);
       }
       // The island bobs a few pixels; moving the wrapper (not a transform) keeps bubbles, clicks and layering intact.
       if (this.wrapEl) {
@@ -223,7 +225,7 @@ mixin(
           // the pavilion's lantern glows over its own sprite (web/island-life.js, when it draws one)
           if (p.lantern && env && IslandLife.drawLanternLight) IslandLife.drawLanternLight(ctx, ISLAND, PG, t, env);
         },
-        backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y)),
+        backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y), DRAW_REACH),
         walker = a => !a.sleeping && !a.seated && !a.wcIn;
       // The island's trees: on a holiday the few by the office are the holiday's tree (HOLIDAY_TREES); the rest are
       // the season's, baked among the props. Holiday trees are drawn in their
@@ -366,7 +368,8 @@ mixin(
           const d = new Date(r) - Date.now();
           return Math.max(0, d / 60000);
         };
-        if (OD && OD.drawUsageBoard && !this.noUsage) {
+        // Shown only with a claude.ai plan (usagePlan true; undefined from an older server) and not on hub islands.
+        if (OD && OD.drawUsageBoard && !this.noUsage && (this.usagePlan === undefined || this.usagePlan === true)) {
           const [bx, by] = P(0, 4.9, 50); // hub islands and the public preview carry no usage
           OD.drawUsageBoard(
             ctx,
@@ -594,6 +597,7 @@ mixin(
       }
       this.pantryItems(G, items);
       this.smokingItems(G, items, snow);
+      this.doghouseItems(G, items, snow, dfB, snB);
       this.restroomItems(G, items, snow);
       [
         [8.5, 13.5],
