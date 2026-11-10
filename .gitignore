@@ -4,3 +4,7 @@
 *.log
 *~
 *.swp
+
+# macOS wallpaper app build output
+wallpaper/.build/
+wallpaper/build/
