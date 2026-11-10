@@ -132,6 +132,7 @@ Still no build step and no dependencies: the browser runs the ES modules in `web
 |------|------------|
 | `server.js`, `lib/` | The local server (transcripts → SSE) and the publisher that sends your island to a hub |
 | `hub/` | The optional multi-island hub |
+| `wallpaper/` | The macOS app that shows the office as your desktop wallpaper (Swift; `node server.js wallpaper`) |
 | `claude-office.html` | A short shell page that loads `web/main.js` |
 | `web/main.js` | Entry point: imports every module in a fixed order, then mounts the page |
 | `web/*-logic.js` | DOM-free logic (sky, camera, dogs, people, restroom, bubbles, world layout); `tests/` imports each one |
@@ -247,6 +248,24 @@ Nếu bạn đã có status line riêng, giữ nó bằng `--chain`:
 
 Lệnh ghi `~/.claude-terrarium/usage.json` (quyền 0600) và in một dòng như `🏝 5H 23% · 7D 41%`. Khi chưa có dữ liệu, bảng hiện `--` thay vì 0%.
 Chỉ chạy được với gói Pro/Max của claude.ai, Claude Code ≥ 2.1.80, và sau phản hồi đầu tiên của mỗi phiên.
+
+## 🖼️ Văn phòng làm hình nền (macOS)
+
+App `LiveWallpaper` trong `wallpaper/` đặt văn phòng làm hình nền máy Mac: mỗi màn hình một cửa sổ ở tầng desktop
+(dưới icon, click xuyên qua) mở `http://localhost:4317/?wallpaper=1`. Ở chế độ này trang chỉ còn bầu trời và hòn đảo,
+phủ kín màn hình: không header, không nút ⚙, không panel.
+
+```bash
+node <đường dẫn plugin>/server.js wallpaper         # build rồi cài vào ~/Applications và mở app (cần Swift / Xcode CLT)
+node <đường dẫn plugin>/server.js wallpaper build   # chỉ build ra wallpaper/build/LiveWallpaper.app
+```
+
+- Cắm sạc: chạy live, mỗi phút chụp lại làm wallpaper hệ thống. Chạy pin hoặc Low Power Mode: chụp khung cuối làm
+  ảnh tĩnh và đóng WebView.
+- Khoá màn hình: macOS không cho app hiện gì trên màn hình khoá, nên app chụp khung đang hiện làm wallpaper (màn hình
+  khoá hiện ảnh này) rồi tạm dừng; mở khoá là chạy live lại.
+- Menu bar: tải lại, chụp ngay, mở trang thường trong trình duyệt, khởi động cùng máy, thoát.
+- Đổi địa chỉ: `defaults write local.kham.livewallpaper url "http://localhost:4317/?wallpaper=1"`.
 
 ## 🔄 Update
 
