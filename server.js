@@ -231,6 +231,8 @@ async function main() {
     try { await pub.join(hub, { name, dir: cfgLib.configDir() }); return 0; }
     catch (e) { console.log('join: ' + e.message); return 1; }
   };
+  // wallpaper [install|build]: build (and install) the macOS wallpaper app in wallpaper/ (lib/wallpaper.js).
+  if (process.argv[2] === 'wallpaper') process.exit(require('./lib/wallpaper.js').run(process.argv.slice(3)));
   if (process.argv[2] === 'statusline') process.exit(require('./lib/statusline.js').main(process.argv.slice(3), cfgLib.configDir()));
   const code = await cfgLib.runCommand(process.argv.slice(2), { join: joinCmd, revokeSelf: pub.revokeSelf });
   if (typeof code === 'number') process.exit(code);
