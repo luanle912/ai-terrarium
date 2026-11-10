@@ -1,10 +1,11 @@
-// node tools/perf-frame.mjs --port 9333 --url http://localhost:4317/ --at 2026-12-20T21:00:00 [--seconds 9]
+// node tools/perf-frame.mjs --port 9333 --url http://localhost:4317/ --at 2026-12-20T21:00:00 [--seconds 9] [--eval @file.js]
 // One line of JSON about a frame of the page at that date and time: the JS time of ClaudeOffice.frame (p50 / p95, ms),
 // the canvas calls it makes (p50), each bake of the island (renderIsland / renderProps, ms) and the share of time in GC.
 // The first 60 frames are left out. See tools/README.md for the baseline and the budget.
+import fs from 'node:fs'
 import { args, page, sleep, dateShim } from './cdp.mjs'
 
-const o = args({ port: 9333, url: 'http://localhost:4317/', at: '', seconds: 9, w: 1512, h: 982, dpr: 2 })
+const o = args({ port: 9333, url: 'http://localhost:4317/', at: '', seconds: 9, w: 1512, h: 982, dpr: 2, eval: '' })
 const p = await page(o.port)
 await p.send('Emulation.setDeviceMetricsOverride', { width: +o.w, height: +o.h, deviceScaleFactor: +o.dpr, mobile: false })
 const hook = `${o.at ? dateShim(o.at) : ''}
@@ -26,6 +27,9 @@ const hook = `${o.at ? dateShim(o.at) : ''}
 })();`
 const s = await p.send('Page.addScriptToEvaluateOnNewDocument', { source: hook })
 await p.send('Page.navigate', { url: o.url }); await sleep(3000)
+// --eval "js" or --eval @file.js: run in the page (awaited) before measuring, e.g. to switch to simulated agents
+const js = o.eval[0] === '@' ? fs.readFileSync(o.eval.slice(1), 'utf8') : o.eval
+if (js) await p.send('Runtime.evaluate', { expression: js, awaitPromise: true })
 await p.send('Profiler.enable'); await p.send('Profiler.setSamplingInterval', { interval: 500 }); await p.send('Profiler.start')
 await sleep(+o.seconds * 1000)
 const { result: { profile } } = await p.send('Profiler.stop')

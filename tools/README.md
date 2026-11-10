@@ -9,7 +9,9 @@ Small scripts for checking the page by hand. They drive a Chrome you start yours
 - `perf-frame.mjs`: JS time and canvas calls of one frame, the island's bakes, share of GC, at a given date and time.
 - `shot.mjs`: a screenshot of the page at a given date and time.
 
-Both take `--at 2026-12-20T21:00:00` (the page's clock is shifted) and `--url` (default `http://localhost:4317/`).
+Both take `--at 2026-12-20T21:00:00` (the page's clock is shifted), `--url` (default `http://localhost:4317/`) and
+`--eval "js"` or `--eval @file.js`: a script run in the page (awaited) first, e.g.
+`__office.setState({ dataSource: 'sim', agentCount: 16 })` to switch to simulated agents (`window.__office` is the page).
 
 ## Baseline 2026-11-10 (before the Christmas event; 1512×982 @2x, 9 s, first 60 frames left out)
 
@@ -56,3 +58,16 @@ Bakes timed directly in the page (median of 12, k = 2.3, same load): summer prop
 28–32 + 7 ms; winter with the event 33–36 + 7 ms.
 
 The wallpaper app's GPU share could not be measured: its windows were covered, and WebKit pauses a covered page.
+
+## After phase 3, Christmas outfits (2026-11-10)
+
+Sixteen simulated agents (four of them sub-agents) standing on the lawn, paused, 20 Dec 21:00, event level 3; the same
+scene with the outfits taken off, measured alternately:
+
+| Scene | ms p50 / p95 | canvas calls |
+|---|---|---|
+| outfits on | 3.9 / 4.9 | 19,339–19,357 |
+| outfits off | 4.0 / 4.9–5.0 | 19,291–19,323 |
+
+So 16 to 66 calls for sixteen people (1 to 4 each; the budget was 8 each). The dogs' clothes are baked into their
+sprites and cost nothing a frame.
