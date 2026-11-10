@@ -10,7 +10,7 @@ import { text3 } from './office-util.js';
 import { hash } from './sky-island.js';
 import { ClaudeOffice, mixin } from './office.js';
 
-const clamp = v => Math.max(0, Math.min(1, v)),
+export const clamp = v => Math.max(0, Math.min(1, v)),
   ease = v => {
     const p = clamp(v);
     return p * p * (3 - 2 * p);
@@ -27,7 +27,7 @@ const clamp = v => Math.max(0, Math.min(1, v)),
   };
 // The person as they stood, moved (dx, dy), turned (rot), scaled (s, or sx / sy) and faded (a) round their feet;
 // `extra` draws in the same frame (an umbrella, balloons, a rocket pack).
-function fig(S, G, f, x, y, o = {}, extra) {
+export function fig(S, G, f, x, y, o = {}, extra) {
   const { ctx } = G;
   ctx.save();
   ctx.translate(x + (o.dx || 0), y + (o.dy || 0));
@@ -62,13 +62,13 @@ function skeleton(R, x, y) {
   R(x + 2, y - 6, 1, 6, B);
 }
 // n wisps of smoke (or steam) rising from (x, y).
-function wisps(R, x, y, u, n, rgb = '90,90,100', rise = 18) {
+export function wisps(R, x, y, u, n, rgb = '90,90,100', rise = 18) {
   for (let k = 0; k < n; k++) {
     const p = (u * 0.6 + k / n) % 1;
     R(x + Math.sin(p * 6 + k * 2) * 3, y - p * rise, 2, 2, `rgba(${rgb},${(0.6 * (1 - p)).toFixed(2)})`);
   }
 }
-function ripples(ctx, x, y, u, a = 1) {
+export function ripples(ctx, x, y, u, a = 1) {
   for (let k = 0; k < 2; k++) {
     const p = (u * 0.6 + k * 0.5) % 1;
     ctx.strokeStyle = `rgba(255,255,255,${(0.6 * (1 - p) * a).toFixed(2)})`;
@@ -79,7 +79,7 @@ function ripples(ctx, x, y, u, a = 1) {
   }
 }
 
-const SCENES = {
+export const SCENES = {
   // A bolt from the sky: the skeleton shows through, a charred figure blinks, then a heap of ash smokes.
   lightning(S, G, f, u, x, y) {
     const { ctx } = G,

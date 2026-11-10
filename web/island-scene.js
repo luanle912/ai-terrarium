@@ -8,6 +8,7 @@ import './office-draw-restroom.js';
 import './office-draw-smoking.js';
 import './office-draw-doghouse.js';
 import './office-draw-fate.js';
+import './office-draw-fate-more.js';
 import './office-draw-people.js';
 import './office-render.js';
 import { DogLogic } from './dog-logic.js';
