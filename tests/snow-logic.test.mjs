@@ -13,7 +13,7 @@ const island = SkyLogic.buildIsland({ W, H })
 const K = (x, y) => x + ',' + y
 
 test('depth: none, thin, medium, deep at the spec thresholds', () => {
-  for (const [snow, d] of [[0, 0], [0.14, 0], [0.15, 1], [0.44, 1], [0.45, 2], [0.8, 2], [0.81, 3], [1, 3]])
+  for (const [snow, d] of [[0, 0], [0.14, 0], [0.15, 1], [0.44, 1], [0.45, 2], [0.8, 2], [0.84, 2], [0.85, 3], [1, 3]])
     assert.equal(S.depth(snow), d, `snow ${snow}`)
   assert.equal(S.depth(SeasonLogic.look('winter').minSnow), 2, "winter's lasting cover is medium")
 })
@@ -26,6 +26,19 @@ test('depth never goes back as the cover grows, and changes at three of the elev
     if (c !== a) changes++
   }
   assert.equal(changes, 3)
+})
+
+test('depth is the same for a snow cover and for the tenth the island is baked at, so the walls never disagree with the lawn', () => {
+  for (let i = 0; i <= 1000; i++) {
+    const snow = i / 1000
+    assert.equal(S.depth(snow), S.depth(Math.round(snow * 10) / 10), `snow ${snow}`)
+  }
+})
+
+test('a footprint made after weeks of uptime still has its exact time', () => {
+  const b = S.prints(), now = 3e6 + 0.123
+  S.addPrint(b, 1, 2, now)
+  assert.equal(b.t[0], now)
 })
 
 test('drifts lie on open lawn: off the paths, the water, the office and where people stand; the same every time', () => {
@@ -75,4 +88,17 @@ test('the palette is white with blue shade, not mint', () => {
     assert.ok(b >= g && g >= r, `${c} leans green or red`)
   }
   assert.ok(S.NIGHT_K > 0 && S.NIGHT_K < 1)
+})
+
+test('walking leaves a print every half tile on the lawn only, and none for a jump', () => {
+  const b = S.prints(), o = { x: 30, y: 10 }, lawn = (x, y) => x >= 28
+  S.walkPrint(b, o, lawn, 0)
+  assert.equal(b.n, 0, 'the first sight of someone leaves nothing')
+  for (let i = 1; i <= 10; i++) { o.x = 30 + i * 0.1; S.walkPrint(b, o, lawn, i) }
+  assert.equal(b.n, 2, 'one tile walked, two prints')
+  o.x = 60; S.walkPrint(b, o, lawn, 11)
+  assert.equal(b.n, 2, 'a jump leaves none')
+  const p = { x: 20, y: 5 }
+  S.walkPrint(b, p, lawn, 12); p.x = 20.6; S.walkPrint(b, p, lawn, 13)
+  assert.equal(b.n, 2, 'off the lawn leaves none')
 })

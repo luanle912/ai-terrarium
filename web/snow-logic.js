@@ -5,8 +5,12 @@ import { hash, key } from './island-grid.js';
 
 // 0 none, 1 thin (grass tips show, no drifts), 2 medium (covered, low drifts), 3 deep (high drifts, long icicles).
 // Winter's lasting cover (SeasonLogic minSnow 0.65) is medium. The island is baked per tenth of the cover, so the
-// depth changes at three of those steps and never needs a bake of its own.
-const depth = snow => (snow < 0.15 ? 0 : snow < 0.45 ? 1 : snow <= 0.8 ? 2 : 3);
+// depth is read off that tenth: it changes at three of those steps, never needs a bake of its own, and what is drawn
+// every frame (walls, roofs) always agrees with the baked lawn.
+const depth = snow => {
+  const b = Math.round(snow * 10);
+  return b < 2 ? 0 : b < 5 ? 1 : b < 9 ? 2 : 3;
+};
 
 // White with blue shade. NIGHT_K: after dark snow is dimmed this share of what the grass is, so the island's night
 // is pale blue rather than grey.
@@ -74,7 +78,7 @@ const prints = () => ({
   at: 0,
   x: new Float32Array(PRINTS),
   y: new Float32Array(PRINTS),
-  t: new Float32Array(PRINTS),
+  t: new Float64Array(PRINTS),
 });
 function addPrint(buf, x, y, now) {
   buf.x[buf.at] = x;
@@ -84,4 +88,14 @@ function addPrint(buf, x, y, now) {
   if (buf.n < PRINTS) buf.n++;
 }
 
-export const SnowLogic = { depth, PAL, NIGHT_K, drifts, icicles, prints, addPrint, PRINTS, PRINT_LIFE };
+// Someone (a person or a dog, o.x / o.y in tiles) moving over ground where `onLawn` says prints show: one print for
+// every half tile walked. o.px / o.py remember where the last one was; a jump (a new place) leaves none.
+function walkPrint(buf, o, onLawn, now) {
+  const far = o.px == null ? Infinity : Math.hypot(o.x - o.px, o.y - o.py);
+  if (far < 0.5) return;
+  if (far <= 3 && onLawn(o.x, o.y)) addPrint(buf, o.x, o.y, now);
+  o.px = o.x;
+  o.py = o.y;
+}
+
+export const SnowLogic = { depth, PAL, NIGHT_K, drifts, icicles, prints, addPrint, walkPrint, PRINTS, PRINT_LIFE };

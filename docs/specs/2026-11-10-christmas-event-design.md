@@ -145,11 +145,12 @@ quầng sáng dây đèn (giữ bóng), đồ trên bàn.
 |---|---|---|
 | 0 | < 0,15 | Không có tuyết |
 | 1 mỏng | 0,15–0,45 | Lớp trắng mỏng, lộ nhiều ngọn cỏ, không có ụ |
-| 2 vừa | 0,45–0,8 | Phủ kín, ụ thấp, tuyết trên vật thể 2 px |
-| 3 dày | > 0,8 | Ụ cao, tuyết trên vật thể 3–4 px, mép đảo nhô, nhũ băng dài |
+| 2 vừa | 0,45–0,85 | Phủ kín, ụ thấp, tuyết trên vật thể 2 px |
+| 3 dày | ≥ 0,85 | Ụ cao, tuyết trên vật thể 3–4 px, mép đảo nhô, nhũ băng dài |
 
-Mùa đông tối thiểu 0,65 nên luôn ở mức 2 trở lên. Khoá cache vẫn là `snB` (0–10) như hôm nay; mức dày suy ra từ
-`snB`, không thêm khoá.
+Mùa đông tối thiểu 0,65 nên luôn ở mức 2 trở lên. Khoá cache vẫn là `snB` (0–10) như hôm nay; mức dày đọc từ chính
+`snB` (ngưỡng nằm đúng ranh giới của nó: 0,15 / 0,45 / 0,85), không thêm khoá, nên phần vẽ mỗi khung luôn khớp ảnh đã
+nướng.
 
 ### 4.2 Màu
 
