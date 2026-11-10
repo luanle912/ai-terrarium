@@ -13,18 +13,20 @@ import { ClaudeOffice, mixin } from './office.js';
 mixin(
   ClaudeOffice,
   class {
+    // Where the status icon and the bubble hang: over the head, and over the Christmas hat when there is one.
     headPos(a) {
+      const hat = a.outfit && !a.sleeping ? 5 : 0;
       if (a.stool && !a.moving) {
         const [sx, sy] = PA(a.x, a.y);
-        return [sx, sy - (a.stool === 2 ? 30 : 25)];
+        return [sx, sy - (a.stool === 2 ? 30 : 25) - hat];
       }
       if (a.sleeping) {
         const [hx, hy] = P(a.x - 0.45, a.y, 4);
         return [hx, hy];
       }
       const [sx, sy] = PA(a.x, a.y);
-      if (a.actNow === 'bath' && !a.moving) return [sx, sy - 11];
-      return [sx, sy - (a.seated ? 23 : 21)];
+      if (a.actNow === 'bath' && !a.moving) return [sx, sy - 11 - hat];
+      return [sx, sy - (a.seated ? 23 : 21) - hat];
     }
 
     actArms(R, act, sx, by, t, sh, shD, sk) {
