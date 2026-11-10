@@ -279,9 +279,13 @@ export class ClaudeOffice extends React.Component {
     document.addEventListener('visibilitychange', this.onShown);
     this.last = performance.now();
     setTimeout(() => this.frame(performance.now()), 0);
+    // As a wallpaper only every WallpaperLogic.FPS-th of a second is drawn (wallpaper-logic.js).
     const loop = t => {
-      this.lastFrame = performance.now();
-      this.frame(t);
+      if (!this.wallpaper || WallpaperLogic.frameDue(t, this.wallFrameAt)) {
+        this.wallFrameAt = t;
+        this.lastFrame = performance.now();
+        this.frame(t);
+      }
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
