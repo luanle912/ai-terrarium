@@ -264,7 +264,11 @@ node <đường dẫn plugin>/server.js wallpaper build   # chỉ build ra wallp
   ảnh tĩnh và đóng WebView.
 - Khoá màn hình: macOS không cho app hiện gì trên màn hình khoá, nên app chụp khung đang hiện làm wallpaper (màn hình
   khoá hiện ảnh này) rồi tạm dừng; mở khoá là chạy live lại.
-- Menu bar: tải lại, chụp ngay, mở trang thường trong trình duyệt, khởi động cùng máy, thoát.
+- **Chạy chung với server**: mở app (hoặc bật "Khởi động cùng máy") là đủ. Chưa có ai chạy server ở `localhost:4317`
+  thì app tự chạy `node server.js` của repo đã cài app, chết thì bật lại; thoát app thì tắt server đó. Đã có server
+  khác (plugin của một phiên Claude Code, chạy tay) thì app dùng luôn. Log: `~/Library/Logs/LiveWallpaper-server.log`.
+- Menu bar: trạng thái hình nền và server, tải lại, chụp ngay, mở trang thường trong trình duyệt, khởi động cùng máy,
+  thoát.
 - Đổi địa chỉ: `defaults write local.kham.livewallpaper url "http://localhost:4317/?wallpaper=1"`.
 
 ## 🔄 Update

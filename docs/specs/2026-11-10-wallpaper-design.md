@@ -39,6 +39,22 @@ Gộp hai dự án: app nằm trong repo ai-terrarium, và trang văn phòng có
 5. **URL mặc định** của app: `http://localhost:4317/?wallpaper=1` (vẫn đổi được bằng
    `defaults write local.kham.livewallpaper url "…"`).
 
+## 2b. Chạy chung: app tự bật server (bổ sung 2026-11-10)
+
+Anh Kiệt: "anh muốn nó chạy chung", chọn kiểu **app tự bật server**. Mở `LiveWallpaper` (hoặc khởi động cùng máy) là
+đủ: không cần mở terminal hay Claude Code.
+
+- Lúc cài, `build.sh` ghi vào `Info.plist` của app đường dẫn tuyệt đối tới `node` và `server.js` của repo đã build
+  (app mở từ Finder không có `PATH` của shell). Đổi được bằng `defaults write local.kham.livewallpaper node|server …`.
+- App chỉ tự chạy server khi URL là `localhost` / `127.0.0.1`. Cứ 10 giây hỏi thử URL: không ai trả lời thì chạy
+  `node server.js` (cổng lấy từ URL, log ra `~/Library/Logs/LiveWallpaper-server.log`). Server do app chạy mà chết thì
+  bật lại sau 3 giây, chết liền nhiều lần thì giãn ra tối đa 60 giây.
+- Đã có server khác trả lời (plugin của một phiên Claude Code, hay ai đó chạy tay) thì app không chạy thêm.
+- Thoát app thì tắt server do chính app chạy, không đụng server của người khác.
+- Khoá màn hình, chạy pin: server vẫn chạy (nó còn gửi đảo lên hub); chỉ WebView tạm dừng.
+- Menu bar thêm một dòng trạng thái server: do app chạy / có sẵn / đang bật lại / không tìm thấy node.
+- Cài lại từ thư mục nào thì app chạy server của thư mục đó: sau khi merge, cài lại từ thư mục chính.
+
 ## 3. Không làm
 
 - Hình nền chuyển động trên màn hình khoá (không có API công khai cho app bên thứ ba).

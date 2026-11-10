@@ -7,10 +7,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let defaultURL = URL(string: "http://localhost:4317/?wallpaper=1")!
 
     private var controller: WallpaperController!
+    private var server: ServerSupervisor!
     private let power = PowerMonitor()
     private let lock = LockMonitor()
     private var statusItem: NSStatusItem!
     private let statusLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let serverLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let loginItem = NSMenuItem(title: "Khởi động cùng máy", action: nil, keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -18,7 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let url = UserDefaults.standard.string(forKey: "url").flatMap(URL.init(string:)) ?? Self.defaultURL
         controller = WallpaperController(url: url)
         controller.onStateChange = { [weak self] in self?.refreshMenu() }
+        // Mở app là đủ: app tự chạy server terrarium nếu chưa có ai chạy (ServerSupervisor).
+        server = ServerSupervisor(url: url)
+        server.onStateChange = { [weak self] in self?.refreshMenu() }
         setupMenu()
+        server.start()
 
         power.onChange = { [weak self] _ in self?.reevaluate() }
         lock.onChange = { [weak self] _ in self?.reevaluate() }
@@ -52,6 +58,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         statusLine.isEnabled = false
         menu.addItem(statusLine)
+        serverLine.isEnabled = false
+        menu.addItem(serverLine)
         menu.addItem(.separator())
         menu.addItem(item("Tải lại trang", #selector(reload), "r"))
         menu.addItem(item("Chụp làm wallpaper ngay", #selector(snapshotNow), "s"))
@@ -83,6 +91,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .unreachable: ("Không kết nối được server, đang thử lại…", "exclamationmark.triangle")
         }
         statusLine.title = text
+        serverLine.isHidden = !server.isLocal
+        serverLine.title = switch server.state {
+        case .off: "Server: chưa kiểm tra"
+        case .starting: "Server: đang khởi động…"
+        case .owned: "Server: do app chạy"
+        case .external: "Server: đã có sẵn (chạy ngoài app)"
+        case .missingNode: "Server: không tìm thấy node"
+        case .failing: "Server: lỗi, đang bật lại…"
+        }
         statusItem.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: text)
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
     }
@@ -119,6 +136,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Thoát cũng chụp frame cuối trước, để wallpaper còn lại khớp với trang vừa hiển thị.
     @objc private func quit() {
-        controller.goStill { NSApp.terminate(nil) }
+        controller.goStill { [weak self] in
+            self?.server.stop()
+            NSApp.terminate(nil)
+        }
+    }
+
+    /// Thoát kiểu khác (đăng xuất, tắt máy) cũng tắt server do app chạy.
+    func applicationWillTerminate(_ notification: Notification) {
+        server?.stop()
     }
 }
