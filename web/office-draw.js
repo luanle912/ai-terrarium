@@ -4,6 +4,7 @@ import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { SkyRender } from './sky-render.js';
 import { SnowLogic } from './snow-logic.js';
+import { EventLogic } from './event-logic.js';
 import { IslandLife } from './island-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
@@ -193,12 +194,14 @@ mixin(
         ic = this.islandCache,
         dfB = Math.round(df * 10),
         snB = Math.round(snow * 10),
-        season = this.seasonNow();
-      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season) {
+        season = this.seasonNow(),
+        ev = this.eventNow(),
+        evK = EventLogic.cacheKey(ev);
+      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season || ic.ev !== evK) {
         // let the browser drop the old bake's canvases now rather than at the next collection
         if (ic) for (const c of [ic.img, ...ic.props.map(p => p.img)]) c.width = c.height = 0;
         const frame = { LW, LH, OX, OY },
-          light = { df: dfB / 10, snow: snB / 10, season, block: { W, H } };
+          light = { df: dfB / 10, snow: snB / 10, season, block: { W, H }, event: ev ? ev.level : 0 };
         this.islandCache = {
           img: SkyRender.renderIsland(ISLAND, frame, k, light),
           props: SkyRender.renderProps(ISLAND, frame, k, light),
@@ -206,6 +209,7 @@ mixin(
           df: dfB,
           sn: snB,
           season,
+          ev: evK,
         };
       }
       ctx.save();
@@ -236,7 +240,8 @@ mixin(
         info = tk && SeasonTree.SEASONS[tk],
         holiday = info && (info.type === 'event' || info.type === 'lunar') ? tk : null,
         dusk = (1 - dfB / 10) * 0.6,
-        held = d => holiday && HOLIDAY_TREES.has(d.x + ',' + d.y);
+        // (not at Christmas: one big tree stands on the front lawn instead, web/island-art-xmas.js)
+        held = d => holiday && holiday !== 'christmas' && HOLIDAY_TREES.has(d.x + ',' + d.y);
       for (const p of this.islandCache.props)
         if (!(p.tree && held(p))) (backOf(p) ? behind : items).push({ z: p.z, f: stamp(p) });
       for (const d of ISLAND.decor) {
@@ -602,6 +607,7 @@ mixin(
       this.smokingItems(G, items, snow);
       this.doghouseItems(G, items, snow, dfB, snB);
       this.fateItems(G, items);
+      if (ev) this.xmasItems(G, items, ev);
       this.restroomItems(G, items, snow);
       [
         [8.5, 13.5],

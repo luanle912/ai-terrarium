@@ -40,6 +40,7 @@ import './office-draw-fall.js';
 import './office-draw-fate.js';
 import './office-draw-fate-more.js';
 import './office-draw-winter.js';
+import './office-draw-xmas.js';
 import './office-draw-people.js';
 import './office-render.js';
 import './office-render-header.js';

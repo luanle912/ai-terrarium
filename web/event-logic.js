@@ -4,6 +4,7 @@
 // entry and its own drawing.
 import { hash, key } from './island-grid.js';
 import { SkyLogic } from './sky-logic.js';
+import { SeasonIsland } from './season-island.js';
 
 const CHOICES = ['auto', 'on', 'off'];
 const EVENT_KEY = 'ai-terrarium.event';
@@ -52,8 +53,9 @@ function saveChoice(storage, choice) {
 }
 
 // The big tree's tile: open lawn in front of the office (the y side, where the lawn is widest before the lake), its
-// own tile and the eight round it on the island and free of paths, water, stairs, lamps, decor, outdoor spots and
-// places people stand; of those, the one nearest a point a few tiles out from the middle of the office front.
+// own tile and the eight round it on the island and free of paths, water, stairs, lamps, decor, outdoor spots,
+// places people stand and winter's snowmen (none beside it, none behind it in its screen column); of those, the one
+// nearest a point a few tiles out from the middle of the office front.
 function bigTreeTile(island, W, H) {
   const no = new Set([
     ...island.paths.cells,
@@ -66,11 +68,13 @@ function bigTreeTile(island, W, H) {
   for (const s of SkyLogic.stairs(W, H))
     for (let i = 0; i < s.len; i++)
       for (let o = 0; o < 2; o++) no.add(s.side === 'east' ? key(s.x + o, s.y + i) : key(s.x + i, s.y + o));
-  const free = (x, y) =>
+  const men = SeasonIsland.snowmanTiles(island, W, H),
+    free = (x, y) =>
       island.cells.has(key(x, y)) &&
       !no.has(key(x, y)) &&
+      !men.some(m => Math.hypot(m.x - x, m.y - y) < 2) &&
       !island.spots.some(s => x >= s.x - 1 && x <= s.x + s.w && y >= s.y - 1 && y <= s.y + s.h),
-    tx = W * 0.3,
+    tx = W * 0.42,
     ty = H + 3.5;
   let best = null,
     bd = Infinity;
@@ -78,6 +82,9 @@ function bigTreeTile(island, W, H) {
     if (y <= H + 1 || x < 1 || x >= W - 1) continue;
     let ok = true;
     for (let dx = -1; dx <= 1 && ok; dx++) for (let dy = -1; dy <= 1 && ok; dy++) ok = free(x + dx, y + dy);
+    // nor in front of a snowman in the same screen column, where the tree (some nine rows tall) would hide it
+    ok =
+      ok && !men.some(m => Math.abs(x - y - (m.x - m.y)) <= 3 && x + y - (m.x + m.y) > -2 && x + y - (m.x + m.y) <= 10);
     const d = Math.hypot(x - tx, y - ty) + hash(x, y, 301) * 0.01;
     if (ok && d < bd) {
       bd = d;

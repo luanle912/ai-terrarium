@@ -6,6 +6,7 @@ import { CameraLogic } from './camera-logic.js';
 import { DogLogic } from './dog-logic.js';
 import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
+import { EventLogic } from './event-logic.js';
 import {
   DOG_PLACES,
   LH,
@@ -73,6 +74,8 @@ export class ClaudeOffice extends React.Component {
     this.seasonKey = 'default';
     this.seasonChoice = SeasonLogic.loadSeasonChoice(this.storage);
     this.seasonPreview = null;
+    this.eventChoice = EventLogic.loadChoice(this.storage);
+    this.eventPreview = null;
     this.goneSids = new Map();
     this.depts = new Map();
     this.setCanvas = el => {
@@ -375,11 +378,29 @@ export class ClaudeOffice extends React.Component {
     }
     if (w.mode !== this.state.weatherMode || w.city !== this.state.city)
       this.setWeather({ weatherMode: w.mode, city: w.city, cityDraft: w.city }, true);
+    // a server that has no event choice yet (an older save) takes this page's own, like the weather above
+    if (ps.event && ps.event !== this.eventChoice) this.setEventChoice(ps.event, true);
+    else if (!ps.event && !this.wallpaper && this.eventChoice !== 'auto' && !this.eventSeeded) this.pushSettings();
+    this.eventSeeded = true;
+  }
+  // The event (web/event-logic.js) on the viewer's clock: a one-minute preview, else the choice in Settings.
+  eventNow() {
+    return EventLogic.active(new Date(), this.eventChoice || 'auto', this.eventPreview, Date.now());
+  }
+  setEventChoice(choice, fromServer) {
+    if (!EventLogic.CHOICES.includes(choice)) return;
+    this.eventChoice = choice;
+    EventLogic.saveChoice(this.storage, choice);
+    this.setState({ eventChoice: choice });
+    if (!fromServer) this.pushSettings();
   }
   pushSettings() {
     if (!this.sharedSettings || typeof fetch !== 'function') return;
     this.pushedAt = Date.now();
-    const body = JSON.stringify({ weather: { mode: this.state.weatherMode, city: this.state.city } });
+    const body = JSON.stringify({
+      weather: { mode: this.state.weatherMode, city: this.state.city },
+      event: this.eventChoice || 'auto',
+    });
     fetch(this.settingsUrl || '/api/settings', {
       method: 'POST',
       headers: { 'X-Terrarium': 'settings', 'Content-Type': 'application/json' },
