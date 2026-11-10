@@ -235,26 +235,36 @@ Muốn dựng hub riêng (giới hạn theo tên miền công ty, owner, sao lư
 
 ## 📊 Hiện mức dùng 5H/7D
 
-Bảng **USAGE** trên tường lấy số liệu từ statusLine của Claude Code (Claude Code không còn ghi file usage nào khác). Thêm một lần vào `~/.claude/settings.json`:
+Bảng **USAGE** trên tường hiện mức dùng gói claude.ai (5 giờ và 7 ngày). **Chỉ có với gói claude.ai** (Pro, Max,
+Team, Enterprise): máy dùng API key, Bedrock hay Vertex không có các giới hạn này nên bảng tự ẩn.
+
+Server lấy số liệu theo thứ tự (`lib/usage.js`):
+
+1. **Status line** của một phiên `claude` trong terminal, nếu bạn đã cài (xem dưới) và số liệu còn mới (≤ 10 phút).
+2. **Claude Code CLI của máy**: mỗi 5 phút server hỏi `claude` lệnh `get_usage` (chế độ SDK, không gửi prompt nên
+   không tốn lượt, không lưu phiên, không chạy hook). Cần CLI `claude` đăng nhập bằng tài khoản claude.ai:
+
+   ```bash
+   claude auth status                 # "authMethod": "claude.ai" là được
+   claude auth login --claudeai       # nếu đang là API key
+   ```
+
+   Đây là nguồn chính khi bạn dùng Claude Code trong **app desktop**: app chạy Claude Code không có status line, nên
+   cách 1 không bao giờ chạy ở đó.
+3. **Chạm trần**: mỗi lần bị chặn (429) transcript ghi cửa sổ và giờ reset; cửa sổ đó hiện **LIMIT** tới giờ reset.
+
+Bảng hiện khi một nguồn xác nhận có gói; CLI trả lời "không có giới hạn gói" thì bảng ẩn và server hỏi lại sau 1 giờ.
+Đặt `TERRARIUM_CLAUDE=/đường/dẫn/claude` nếu CLI nằm chỗ khác.
+
+**Status line (tuỳ chọn, cho ai dùng `claude` trong terminal):** thêm một lần vào `~/.claude/settings.json`, trỏ tới
+một bản repo cố định (không phải worktree tạm):
 
 ```json
-"statusLine": { "type": "command", "command": "node <đường dẫn plugin>/server.js statusline" }
+"statusLine": { "type": "command", "command": "node <đường dẫn repo>/server.js statusline" }
 ```
 
-Nếu bạn đã có status line riêng, giữ nó bằng `--chain`:
-
-```json
-"statusLine": { "type": "command", "command": "node <đường dẫn plugin>/server.js statusline --chain \"<lệnh cũ>\"" }
-```
-
-Lệnh ghi `~/.claude-terrarium/usage.json` (quyền 0600) và in một dòng như `🏝 5H 23% · 7D 41%`. Khi chưa có dữ liệu, bảng hiện `--` thay vì 0%.
-Chỉ chạy được với gói Pro/Max của claude.ai, Claude Code ≥ 2.1.80, và sau phản hồi đầu tiên của mỗi phiên.
-
-**Dùng Claude Code trong app desktop (tab Code):** app chạy Claude Code không có status line, nên lệnh trên **không
-bao giờ được gọi** và bảng không có số %. Bảng vẫn biết khi bạn **chạm trần**: transcript ghi mỗi lần bị chặn (429) kèm
-cửa sổ (5H / 7D) và giờ reset, nên cửa sổ đó hiện **LIMIT** cho tới giờ reset. Muốn có số % liên tục, mở thêm một phiên
-`claude` trong terminal (status line chạy ở đó và ghi `usage.json` cho cả máy). Đường dẫn trong `statusLine` phải trỏ
-tới một bản repo cố định (không phải worktree tạm), vì xoá thư mục đó là bảng mất nguồn.
+Có status line riêng thì giữ bằng `--chain "<lệnh cũ>"`. Lệnh ghi `~/.claude-terrarium/usage.json` (quyền 0600) và in
+một dòng như `🏝 5H 23% · 7D 41%`.
 
 ## 🖼️ Văn phòng làm hình nền (macOS)
 

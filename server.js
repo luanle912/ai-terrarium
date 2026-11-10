@@ -12,38 +12,12 @@ const PERM_MS = (+process.env.PERM_SEC || 8) * 1e3;
 const MAX_CLIENTS = 20;
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 const DEFAULT_HUB = 'https://terrarium.openlabs.click';
-const USAGE_GLOB = path.join(os.homedir(), '.claude', 'plugins', 'store');
-let usageCache = []; let usageCacheTs = 0;
-// Sources, in order: <configDir>/usage.json (written by `server.js statusline`), then the legacy usage-quota* files.
-// An empty array means "unknown", which the page shows as "--" rather than 0%.
-// Passing opts (dir, legacyDir, now) bypasses the 5 s cache; used by tests.
-function readUsage(opts) {
-  const now = (opts && opts.now) || Date.now();
-  if (!opts && now - usageCacheTs < 5000) return usageCache;
-  let out = [];
-  try {
-    const cur = require('./lib/statusline.js').readUsageFile((opts && opts.dir) || require('./lib/terrarium-config.js').configDir(), now);
-    if (cur && cur.length) out = cur;
-  } catch {}
-  if (!out.length) {
-    const legacyDir = (opts && opts.legacyDir) || USAGE_GLOB;
-    try {
-      const files = fs.readdirSync(legacyDir).filter(f => f.startsWith('usage-quota'));
-      for (const f of files) {
-        const d = JSON.parse(fs.readFileSync(path.join(legacyDir, f), 'utf8'));
-        const lims = (d.limits && d.limits.limits) || (d.planLimits && d.planLimits.limits) || [];
-        out = lims.map(l => ({ kind: l.kind, pct: l.percentUsed || 0, resets: l.resetsAt }));
-        break;
-      }
-    } catch {}
-  }
-  if (opts) return out;
-  usageCacheTs = now; usageCache = out;
-  return usageCache;
-}
 const files = new Map();
 // Transcript parsing and the status decision live in lib/status.js (pure functions, tested with fixture transcripts).
-const { TRANSCRIPT_RE, newState, ingest, readRegistryDir, liveFromRegistry, defaultAlive, buildSessions, quotaHits, mergeQuota } = require('./lib/status.js');
+const { TRANSCRIPT_RE, newState, ingest, readRegistryDir, liveFromRegistry, defaultAlive, buildSessions, quotaHits } = require('./lib/status.js');
+// The usage board's figures and whether to show it (lib/usage.js): status line, the CLI's get_usage, hit limits.
+let usageOf = null;
+const currentUsage = now => (usageOf ||= require('./lib/usage.js').createUsage({ dir: require('./lib/terrarium-config.js').configDir() }))(now, quotaHits(files.values(), quotaMemo));
 // Limit hits (429s) seen in any transcript, kept after the transcript goes quiet: {kind: resetsAt ms}.
 const quotaMemo = {};
 
@@ -107,8 +81,10 @@ function liveSessions() {
 
 function snapshot() {
   const now = Date.now();
-  const usage = mergeQuota(readUsage(), quotaHits(files.values(), quotaMemo), now);
-  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage, version: VERSION };
+  const u = currentUsage(now);
+  // usagePlan: true once a claude.ai plan is known, false with no plan limits (API key), null when unknown; the page
+  // shows the board only for true.
+  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage: u.windows, usagePlan: u.plan, usageSource: u.source, version: VERSION };
 }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');
@@ -276,5 +252,5 @@ async function main() {
     });
 }
 
-module.exports = { readAppended, hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage, makeJoinFlow, joinRequestAllowed };
+module.exports = { readAppended, hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, makeJoinFlow, joinRequestAllowed };
 if (require.main === module) main();
