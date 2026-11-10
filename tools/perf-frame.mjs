@@ -29,7 +29,10 @@ const s = await p.send('Page.addScriptToEvaluateOnNewDocument', { source: hook }
 await p.send('Page.navigate', { url: o.url }); await sleep(3000)
 // --eval "js" or --eval @file.js: run in the page (awaited) before measuring, e.g. to switch to simulated agents
 const js = o.eval[0] === '@' ? fs.readFileSync(o.eval.slice(1), 'utf8') : o.eval
-if (js) await p.send('Runtime.evaluate', { expression: js, awaitPromise: true })
+if (js) {
+  const r = (await p.send('Runtime.evaluate', { expression: js, awaitPromise: true })).result
+  if (r.exceptionDetails) { console.error('--eval failed: ' + (r.exceptionDetails.exception?.description || r.exceptionDetails.text)); process.exit(1) }
+}
 await p.send('Profiler.enable'); await p.send('Profiler.setSamplingInterval', { interval: 500 }); await p.send('Profiler.start')
 await sleep(+o.seconds * 1000)
 const { result: { profile } } = await p.send('Profiler.stop')

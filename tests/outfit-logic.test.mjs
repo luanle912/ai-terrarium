@@ -79,3 +79,57 @@ test('drawing code reads the top through shirtOf, never the raw department colou
     })
   assert.deepEqual(bad, [])
 })
+
+// ---- web/office-people-xmas.js: the outfit kept on the agent, and the hat and scarf as rects ----
+const { outfitOf, shirtOf, XMAS } = loadWeb('office-people-xmas')
+
+test('the outfit on an agent follows the event: on, a level up, off again', () => {
+  const a = { sid: 'abc-123', shirt: DEPT, parent: null }
+  assert.equal(outfitOf(a, null), null)
+  assert.equal(shirtOf(a), DEPT)
+  assert.equal(outfitOf(a, ev(1)).kind, 'hat')
+  assert.equal(shirtOf(a), DEPT, 'a hat only: the top stays the department colour')
+  const full = outfitOf(a, ev(2))
+  assert.ok(O.KINDS.includes(full.kind))
+  assert.equal(outfitOf(a, ev(2)), full, 'kept, not rebuilt every frame')
+  assert.equal(shirtOf(a), full.top)
+  assert.equal(outfitOf(a, null), null, 'the event ends: back to plain clothes')
+  assert.equal(shirtOf(a), DEPT)
+})
+
+test('someone who turns out to be a sub-agent after their first frame becomes an elf', () => {
+  const a = { sid: 'abc-123', shirt: DEPT, parent: null }
+  assert.notEqual(outfitOf(a, ev(3)).kind, 'elf')
+  a.parent = 7
+  assert.equal(outfitOf(a, ev(3)).kind, 'elf')
+  const copy = { ...a }
+  assert.equal(outfitOf(copy, ev(3)), a.outfit, 'a copy for a leaving scene keeps the same outfit')
+})
+
+test('every hat is at most 4 rects and every scarf at most 2, on whole pixels, for both head widths', () => {
+  const kits = [...sids(300).map(s => O.outfit(s, ev(3), false, DEPT)), O.outfit('s', ev(3), true, DEPT), O.outfit('s', ev(1), false, DEPT)]
+  assert.deepEqual([...new Set(kits.map(k => k.hat))].sort(), [...O.HATS].sort(), 'all six hats met')
+  for (const o of kits)
+    for (const w of [6, 8]) {
+      const rects = []
+      const R = (x, y, ww, h, c) => rects.push([x, y, ww, h, c])
+      XMAS.hatEvent(R, o, 100, 50, w)
+      assert.ok(rects.length >= 3 && rects.length <= 4, `${o.hat}: ${rects.length} rects`)
+      const n = rects.length
+      XMAS.scarf(R, o, 100, 56, w)
+      assert.ok(rects.length - n <= 2)
+      for (const [x, y, ww, h, c] of rects) {
+        assert.ok([x, y, ww, h].every(Number.isInteger) && ww > 0 && h > 0, `${o.hat} w${w}: ${[x, y, ww, h]}`)
+        assert.match(c, /^#[0-9a-f]{6}$/i)
+        assert.ok(y + h <= 50 + 4 || rects.indexOf(rects.find(r => r[1] === y)) >= n, `${o.hat}: a hat stays off the face`)
+      }
+    }
+})
+
+test('earmuffs are one piece: each pad touches the band', () => {
+  const o = sids(300).map(s => O.outfit(s, ev(3), false, DEPT)).find(k => k.hat === 'muffs')
+  const rects = []
+  XMAS.hatEvent((x, y, w, h) => rects.push([x, y, w, h]), o, 100, 50)
+  const [band, ...pads] = rects
+  for (const p of pads) assert.ok(p[1] <= band[1] + band[3], 'pad starts at the row under the band')
+})
