@@ -72,17 +72,16 @@ export const WC = RestroomLogic.layout(
   ),
   WC_WALK = new Set(WC.walk);
 WC.floor.forEach(k => LAWN_WALK.delete(k));
-// The dogs' houses, one each (DogLogic.BREEDS order), in a row on the lawn carrying on the restroom block's back line
-// out from its east corner, a tile each, doors toward the viewer (+y). Along the east wall itself there is no room:
-// the smoking corner's pergola hides all but its first tile and a half. The fourth tile of the row stays open: it is
-// the only way between the east lawn and the back lawn. `x` is a house's middle, `y` its back,
-// `door` the lawn cell a dog walks to and `front` where it lies, head out of the door. The dogs go in at night and in
-// the rain; nobody walks over the houses.
+// The dogs' houses, one each (DogLogic.BREEDS order), in a row on the lawn right against the restroom block's east
+// wall from its back corner, a tile each, doors toward the viewer (+x). The smoking corner's pergola stands in front of
+// the wall's far end, so it partly hides the last house, as it would.
+// `x` is the wall, `y` a house's middle, `door` the lawn cell a dog walks to and `front` where it stops, at the door.
+// The dogs go in at night and in the rain; nobody walks over the houses (the way to the back lawn stays open beside).
 export const DOG_HOUSES = [0, 1, 2].map(i => {
-  const x = WC.x1 + 0.5 + i;
-  return { x, y: WC.y0, door: [Math.floor(x), WC.y0 + 1], front: [x, WC.y0 + 1.05] };
+  const y = WC.y0 + 0.5 + i;
+  return { x: WC.x1, y, door: [WC.x1 + 1, Math.floor(y)], front: [WC.x1 + 1, y] };
 });
-const DOG_HOUSE_CELLS = DOG_HOUSES.map(h => Math.floor(h.x) + ',' + h.y);
+const DOG_HOUSE_CELLS = DOG_HOUSES.map(h => h.x + ',' + Math.floor(h.y));
 DOG_HOUSE_CELLS.forEach(k => LAWN_WALK.delete(k));
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
@@ -113,7 +112,7 @@ export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   avoid: [
     ...ISLAND.spots.filter(s => s.id === 'east-back' || s.id === 'east-front'),
     { x: REST.bench.x, y: REST.bench.y, w: 1, h: 1 },
-    { x: WC.x1, y: WC.y0, w: 3, h: 1 },
+    { x: WC.x1, y: WC.y0, w: 1, h: 3 },
   ],
   wallReach: WALL_REACH,
   tall: [...M.cells].map(k => {
