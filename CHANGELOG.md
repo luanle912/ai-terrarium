@@ -19,6 +19,7 @@ The office as your Mac's live wallpaper, with the server started for you, and li
 ### Fixed
 
 - **Trees no longer stand on top of the back wall** — A tree five rows behind the office's back wall has its foot right at the wall's top edge, but only four rows were drawn before the walls, so its trunk and shadow lay over the top of the wall. Whatever stands one row further back is now drawn before the walls too (dogs still keep out of the four rows where a wall would hide them)
+- **The small floating islands in pixel art** — The three far islands were smooth shapes drawn blurred (a flat diamond, one cone, a triangle tree). They are now crisp pixel art in the main island's style: an outlined diamond of checkered grass with tufts and flowers, a dirt lip, a ragged cone of layered stone with roots and vines hanging off it, and on top a clump-canopy tree in the season's colours (blossom in spring, gold in autumn, bare branches with snow in winter), an outlined boulder with a bush, or a little spring spilling over the edge as a waterfall. Winter's lasting snow whitens their grass. Each is still painted once and stamped every frame
 
 ### Changed
 
