@@ -234,14 +234,14 @@ function paintFarIsland(g, sc, haze, kind, trees, snowy) {
     SD = hz('#686a78'),
     SB = hz('#55576a');
   // column by column: grass from the top edge to the bottom edge of the diamond, the dirt lip, then the stone down to
-  // a ragged point (depth quantised to 2 px, a little different every two columns)
+  // a rounded, blunt underside (a squashed half-ellipse, depth quantised to 2 px, a little ragged every two columns)
   const bottoms = [];
   for (let x = -hw; x < hw; x++) {
     const f = 1 - Math.abs(x + 0.5) / hw,
       top = -Math.round(hh * f),
       bot = Math.round(hh * f),
-      jag = 0.75 + 0.35 * hash(Math.floor(x / 2), 7, 41),
-      dep = 2 * Math.round((D * Math.pow(f, 1.4) * jag) / 2),
+      jag = 0.9 + 0.14 * hash(Math.floor(x / 2), 7, 41),
+      dep = 2 * Math.round((D * 0.62 * Math.pow(1 - (1 - f) ** 2, 0.7) * jag) / 2),
       right = x >= 0;
     for (let yy = top; yy < bot; yy++)
       R(x, yy, 1, 1, (Math.floor((x + 64) / 4) + Math.floor((yy + 64) / 2)) % 2 ? G0 : G1);
