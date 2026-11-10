@@ -9,7 +9,7 @@ const p = await page(o.port)
 await p.send('Emulation.setDeviceMetricsOverride', { width: +o.w, height: +o.h, deviceScaleFactor: +o.dpr, mobile: false })
 const hook = `${o.at ? dateShim(o.at) : ''}
 (() => {
-  const N = (window.__perf = { calls: 0, frames: [], per: [], bakes: [] }), P = CanvasRenderingContext2D.prototype;
+  const N = (window.__perf = { calls: 0, frames: [], per: [], bakes: [], errs: [] }), P = CanvasRenderingContext2D.prototype;
   for (const m of ['fillRect', 'fill', 'stroke', 'drawImage', 'strokeRect', 'clearRect', 'fillText']) {
     const f = P[m]; P[m] = function (...a) { N.calls++; return f.apply(this, a) } }
   // the page's own modules, wrapped before its first frame: the same module instances the page imports. They need the
@@ -18,10 +18,10 @@ const hook = `${o.at ? dateShim(o.at) : ''}
   ready(() => {
   import('/web/sky-render.js').then(({ SkyRender }) => {
     for (const m of ['renderIsland', 'renderProps']) { const f = SkyRender[m];
-      SkyRender[m] = (...a) => { const t = performance.now(), v = f(...a); N.bakes.push([m, +(performance.now() - t).toFixed(1)]); return v } } });
+      SkyRender[m] = (...a) => { const t = performance.now(), v = f(...a); N.bakes.push([m, +(performance.now() - t).toFixed(1)]); return v } } }, e => N.errs.push(String(e)));
   import('/web/office.js').then(({ ClaudeOffice }) => { const f = ClaudeOffice.prototype.frame;
     ClaudeOffice.prototype.frame = function (ts) { const c = N.calls, t = performance.now(), v = f.call(this, ts);
-      N.frames.push(performance.now() - t); N.per.push(N.calls - c); return v } });
+      N.frames.push(performance.now() - t); N.per.push(N.calls - c); return v } }, e => N.errs.push(String(e)));
   });
 })();`
 const s = await p.send('Page.addScriptToEvaluateOnNewDocument', { source: hook })
@@ -34,7 +34,7 @@ let total = 0, gc = 0
 for (const n of profile.nodes) { const t = self.get(n.id) || 0; total += t; if (n.callFrame.functionName === '(garbage collector)') gc += t }
 const r = await p.send('Runtime.evaluate', { returnByValue: true, expression: `(() => { const N = window.__perf,
   q = (a, f) => { const s = a.slice(60).sort((x, y) => x - y); return s.length ? s[Math.floor(s.length * f)] : null };
-  return { frames: N.frames.length, ms_p50: +q(N.frames, .5)?.toFixed(2), ms_p95: +q(N.frames, .95)?.toFixed(2), calls_p50: q(N.per, .5), bakes: N.bakes } })()` })
+  return { frames: N.frames.length, ms_p50: +q(N.frames, .5)?.toFixed(2), ms_p95: +q(N.frames, .95)?.toFixed(2), calls_p50: q(N.per, .5), bakes: N.bakes, hookErrors: N.errs } })()` })
 await p.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: s.result.identifier })
 console.log(JSON.stringify({ at: o.at, url: o.url, ...r.result.result.value, gcPct: +((gc / total) * 100).toFixed(2), errors: p.errors }))
 p.close()
