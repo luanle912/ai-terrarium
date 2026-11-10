@@ -589,9 +589,9 @@ function shelter(d, w, night) {
   if (SHELTER.has(d.act) || (night && d.act === 'company')) return;
   const h = w.houses[d.id];
   Object.assign(d, { partner: null, lead: false, greet: null, wag: false, playing: false, act: 'home' });
-  if (!goTo(d, w, h.door, (night ? STROLL : RUN * 0.75) * LEGS[d.breed])) {
-    Object.assign(d, { act: 'inside', path: [], x: h.door[0] + 0.5, y: h.door[1] + 0.5 });
-  }
+  const at = h.front || [h.door[0] + 0.5, h.door[1] + 0.5];
+  if (goTo(d, w, h.door, (night ? STROLL : RUN * 0.75) * LEGS[d.breed])) d.path.push([...at]);
+  else Object.assign(d, { act: 'inside', path: [], x: at[0], y: at[1] });
 }
 function step(dogs, w, dt) {
   const night = isNight(w.hour),
@@ -599,7 +599,7 @@ function step(dogs, w, dt) {
     away = night || (housed && !!w.wet);
   for (const d of dogs) {
     if (housed) {
-      if (away) shelter(d, w, night);
+      if (away) shelter(d, w, night), (d.nap = night);
       else if (SHELTER.has(d.act) || d.act === 'sleep') idle(d, w, 1 + w.rand() * 3, true);
     } else if (night && d.act !== 'sleep' && d.act !== 'den' && d.act !== 'company') {
       // Everyone heads for their own cell of the den; games and greetings simply stop.
@@ -646,8 +646,8 @@ function pose(d, t) {
       frame = 'lie';
       break;
     case 'sleep':
-    case 'inside':
-      frame = 'sleep';
+    case 'inside': // in its house: asleep at night, by day lying head up, watching the rain
+      frame = d.act === 'inside' && !d.nap ? 'lie' : 'sleep';
       break;
     case 'drink':
     case 'sniff':
