@@ -573,7 +573,7 @@ mixin(
           if (g.key === 'seat') a.seated = true;
           if (g.key === 'sleep') a.sleeping = true;
           if (g.stool) a.stool = g.stool;
-          if (g.key === 'exit') a.gone = true;
+          if (g.key === 'exit') a.gone = a.exited = true;
           a.dirFront = g.spot ? g.spot.front : false;
           if (g.spot) a.actNow = g.spot.act;
         }
