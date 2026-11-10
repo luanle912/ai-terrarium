@@ -6,6 +6,7 @@ import { FateLogic } from './fate-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { PA } from './office-scene.js';
 import { LOOK, hairTones } from './office-people.js';
+import { shirtOf } from './office-people-xmas.js';
 import { text3 } from './office-util.js';
 import { hash } from './sky-island.js';
 import { ClaudeOffice, mixin } from './office.js';
@@ -342,7 +343,7 @@ export const SCENES = {
       q = clamp((u - 2.4) / 1.8),
       k = 1 - 0.65 * q;
     ctx.globalAlpha = 0.9 * (1 - q);
-    oval(ctx, x, y, (4 + 10 * p) * k, (2 + 4 * p) * k, f.who.shirt);
+    oval(ctx, x, y, (4 + 10 * p) * k, (2 + 4 * p) * k, shirtOf(f.who));
     oval(ctx, x - 2, y - 1, (2 + 5 * p) * k, (1 + 1.5 * p) * k, 'rgba(255,255,255,0.25)');
     ctx.globalAlpha = 1;
     if (p < 1) {
@@ -401,7 +402,7 @@ export const SCENES = {
         h2 = hash(i, f.seed, 2),
         q = u - 1.6 * h1;
       if (q <= 0 || q > 1.3) continue;
-      const c = h2 > 0.9 ? hr : h2 > 0.68 ? f.who.skin : h2 > 0.28 ? f.who.shirt : '#3b4252';
+      const c = h2 > 0.9 ? hr : h2 > 0.68 ? f.who.skin : h2 > 0.28 ? shirtOf(f.who) : '#3b4252';
       ctx.globalAlpha = 1 - q / 1.3;
       R(x - 7 + 14 * h1 + 30 * q + Math.sin(q * 5 + i) * 3, y - 22 * h2 - 16 * q - 8 * q * q, 2, 2, c);
     }

@@ -5,6 +5,7 @@ import { SmokeLogic } from './smoke-logic.js';
 import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW } from './office-scene.js';
 import { WATER_Z } from './island-land.js';
 import { LOOK, PERSON } from './office-people.js';
+import { XMAS, outfitOf, shirtOf } from './office-people-xmas.js';
 import { ICON, ST, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Drawing people (at desks, walking, asleep, in the pond) and the office dogs.
@@ -139,7 +140,8 @@ mixin(
     }
 
     drawPerson(G, a) {
-      const { ctx, poly, box, rect, th, t } = G;
+      const { ctx, poly, box, rect, th, t } = G,
+        o = outfitOf(a, G.ev);
       if (a.sleeping) return this.drawSleeper(G, a);
       let [sx, sy] = a.seated ? P(a.x, a.y, 11.5) : PA(a.x, a.y);
       sx = Math.round(sx);
@@ -162,8 +164,8 @@ mixin(
           ctx.ellipse(sx, sy + 1, 5 + p * 6, 2 + p * 2.5, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
-        R(sx - 4, y0 - 5, 8, 4, a.shirt);
-        R(sx + 2, y0 - 5, 2, 4, shade(a.shirt, -30));
+        R(sx - 4, y0 - 5, 8, 4, shirtOf(a));
+        R(sx + 2, y0 - 5, 2, 4, shade(shirtOf(a), -30));
         R(sx - 3, y0 - 11, 6, 6, a.skin);
         R(sx + 2, y0 - 11, 1, 6, shade(a.skin, -25));
         PERSON.hairBath(R, LOOK(a), sx, y0, a.skin);
@@ -173,9 +175,8 @@ mixin(
         ctx.beginPath();
         ctx.ellipse(sx, y0 - 1, 6, 2, 0, 0, Math.PI * 2);
         ctx.fill();
-        if (a.parent) {
-          R(sx - 3, y0 - 13, 6, 1, '#ffd166');
-        }
+        if (o) XMAS.hatEvent(R, o, sx, y0 - 11);
+        else if (a.parent) R(sx - 3, y0 - 13, 6, 1, '#ffd166');
         return;
       }
       if (!a.seated) {
@@ -185,7 +186,7 @@ mixin(
         ctx.fill();
       }
       const R = rect,
-        sh = a.shirt,
+        sh = shirtOf(a),
         shD = shade(sh, -30),
         shL = shade(sh, 30),
         sk = a.skin,
@@ -310,11 +311,13 @@ mixin(
         R(sx - 5, sy - 11, 10, 1, shL);
         R(sx - 1, sy - 10, 1, 9, shD);
         R(sx - 1, sy - 13, 3, 2, skD);
+        if (o) XMAS.scarf(R, o, sx, sy - 13, 8);
         const hy = sy - 21 + (skey === 'reading' ? 1 : 0);
         if (skey === 'visitor' || skey === 'permission') PERSON.hairProfile(R, L, sx, hy, sh, sk);
         else PERSON.hairSeat(R, L, sx, hy, sh, sk);
         post.forEach(f => f());
-        if (a.parent) {
+        if (o) XMAS.hatEvent(R, o, sx, hy + 1, 8);
+        else if (a.parent) {
           R(sx - 3, hy - 1, 6, 2, '#ffd166');
           R(sx, hy - 4, 1, 3, '#ffd166');
           R(sx - 1, hy - 5, 3, 1, '#ffffff');
@@ -364,7 +367,7 @@ mixin(
         R(sx + 2, by - 11, 2, 7, shD);
         R(sx - 4, by - 11, 1, 7, shL);
         // the top (collar and tie, hoodie, open jacket or cardigan, blouse, dress) and its sleeve colour for the arms
-        const slv = PERSON.top(R, L, sx, by, sh, sk, skD, a.dirFront),
+        const slv = o && o.top ? XMAS.top(R, o, sx, by, a.dirFront) : PERSON.top(R, L, sx, by, sh, sk, skD, a.dirFront),
           slvD = shade(slv, -30);
         if (sit) PERSON.legsSit(R, L, sx, by, sh);
         else PERSON.legs(R, L, sx, by, sh, l1, l2, a.dirFront);
@@ -392,6 +395,7 @@ mixin(
           }
         }
         R(sx - 1, by - 12, 2, 1, skD);
+        if (o) XMAS.scarf(R, o, sx, by - 12);
         const hy = by - 18;
         R(sx - 3, hy, 6, 6, sk);
         R(sx + 2, hy, 1, 6, skD);
@@ -410,6 +414,7 @@ mixin(
             a.acc === 'glasses',
           );
         } else PERSON.hairBack(R, L, sx, hy, sh, sk);
+        if (o) XMAS.hatEvent(R, o, sx, hy);
         if (a.acc === 'headset') {
           R(sx - 3, hy - 2, 6, 1, '#1a1a1a');
           R(sx - 4, hy + 1, 1, 3, '#1a1a1a');
@@ -448,7 +453,7 @@ mixin(
           R(sx + 6, by - 8, 1, 1, '#ffffff');
           if (Math.floor(t * 2 + a.id) % 2) R(sx + 4, by - 12, 1, 2, '#c9cfdc');
         }
-        if (a.parent) {
+        if (a.parent && !o) {
           R(sx - 3, hy - 2, 6, 2, '#ffd166');
           R(sx, hy - 5, 1, 3, '#ffd166');
           R(sx - 1, hy - 6, 3, 1, '#ffffff');
@@ -633,9 +638,11 @@ mixin(
         box(x + 0.09, y + 0.44, 0.11, hs === 'bob' ? 0.32 : 0.38, 0.5, hs === 'bob' ? 4 : 3, a.hair);
       else if (hs === 'bun') box(x + 0.12, y + 0.56, 0.07, 0.12, 4, 6.5, a.hair);
       else if (hs === 'ponytail') box(x + 0.08, y + 0.58, 0.11, 0.08, 0.5, 2.5, shade(a.hair, -26));
-      if (a.parent) box(x + 0.18, y + 0.48, 0.08, 0.28, 6.5, 7, '#ffd166');
-      box(x + 0.4, y + 0.44, 0.34, 0.36, 0.5, 4.5 + br, a.shirt);
-      const bl = shade(a.shirt, -50) === a.shirt ? '#5b8def' : ['#3e8ed0', '#e5484d', '#46a758', '#8e4ec6'][a.id % 4];
+      if (a.outfit) XMAS.hatSleep(box, a.outfit, x, y);
+      else if (a.parent) box(x + 0.18, y + 0.48, 0.08, 0.28, 6.5, 7, '#ffd166');
+      box(x + 0.4, y + 0.44, 0.34, 0.36, 0.5, 4.5 + br, shirtOf(a));
+      const top = shirtOf(a),
+        bl = shade(top, -50) === top ? '#5b8def' : ['#3e8ed0', '#e5484d', '#46a758', '#8e4ec6'][a.id % 4];
       box(x + 0.6, y + 0.4, 0.62, 0.44, 0.5, 4 + br * 0.6, bl);
       [0.75, 0.92, 1.09].forEach(k =>
         poly(

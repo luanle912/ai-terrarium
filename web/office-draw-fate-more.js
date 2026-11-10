@@ -1,6 +1,7 @@
 // More scenes for the ways out of the island (web/office-draw-fate.js has the rest and the helpers): swallowed by a
 // big fish, towed off by a duck, a slip on a banana peel, rolled up in a snowball, carried off by a big bird.
 import { SCENES, clamp, ease, fig, oval, ripples, rr } from './office-draw-fate.js';
+import { shirtOf } from './office-people-xmas.js';
 
 // Whatever `draw` paints shows only above the water line at y (and from x - left to x + right).
 function above(ctx, x, y, draw, right = 40) {
@@ -135,7 +136,7 @@ Object.assign(SCENES, {
     // the track it leaves in the snow
     R(bx - 60, y, 60, 1, 'rgba(255,255,255,0.35)');
     if (q) {
-      const limbs = [who.skin, who.shirt, '#3b4252', who.shirt, '#3b4252'];
+      const limbs = [who.skin, shirtOf(who), '#3b4252', shirtOf(who), '#3b4252'];
       limbs.forEach((c, k) => {
         const an = u * 9 + (k * Math.PI * 2) / limbs.length,
           d = r + (k ? 2 : 1);
