@@ -54,9 +54,12 @@ export const PA = (x, y, z = 0) =>
 // either wall, in a screen column the wall covers, is (partly) hidden by it, so the scene draws such sprites before the
 // walls (web/office-draw.js).
 export const WALL_REACH = Math.floor((WALL + 3 + FLOOR_Z) / (2 * TH));
-export const behindWalls = (x, y) =>
-  (x < 0 && x >= -WALL_REACH && y - x >= -1 && y - x <= H + 1) ||
-  (y < 0 && y >= -WALL_REACH && x - y >= -1 && x - y <= W + 1);
+// For the drawing order one row more: what stands on a cell has its foot at the cell's middle, and the walls' outer
+// faces are set back from the cells' edge, so a tree one row past WALL_REACH has its foot right at the wall's top edge;
+// drawn after the walls, its trunk and shadow would lie over the top of the wall.
+export const DRAW_REACH = WALL_REACH + 1;
+export const behindWalls = (x, y, reach = WALL_REACH) =>
+  (x < 0 && x >= -reach && y - x >= -1 && y - x <= H + 1) || (y < 0 && y >= -reach && x - y >= -1 && x - y <= W + 1);
 // The smoking corner fills the east-front outdoor spot, right beside the restroom block's east side, at the end of the
 // garden path that runs along the block's front. Only its planted trough (which faces the block) is taken off the
 // walkable lawn: seats, the ash bin and the posts are thin enough to step past, and an agent's own spot must stay

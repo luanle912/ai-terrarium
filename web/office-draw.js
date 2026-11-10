@@ -23,6 +23,7 @@ import {
   SEGS,
   STAIRS,
   behindWalls,
+  DRAW_REACH,
   W,
   WALL,
   ZONES,
@@ -224,7 +225,7 @@ mixin(
           // the pavilion's lantern glows over its own sprite (web/island-life.js, when it draws one)
           if (p.lantern && env && IslandLife.drawLanternLight) IslandLife.drawLanternLight(ctx, ISLAND, PG, t, env);
         },
-        backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y)),
+        backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y), DRAW_REACH),
         walker = a => !a.sleeping && !a.seated && !a.wcIn;
       // The island's trees: on a holiday the few by the office are the holiday's tree (HOLIDAY_TREES); the rest are
       // the season's, baked among the props. Holiday trees are drawn in their
