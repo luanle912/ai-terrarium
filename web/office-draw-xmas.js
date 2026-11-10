@@ -13,7 +13,7 @@ const BULB_OFF = ['#7a2b33', '#7a6433', '#2f653b', '#2f6079'];
 // A soft round glow of one colour, size px across, made once and kept.
 const GLOWS = new Map();
 export function glowSprite(colour, size = 12) {
-  const k = colour + size;
+  const k = size === 12 ? colour : colour + size;
   let c = GLOWS.get(k);
   if (!c) {
     c = document.createElement('canvas');
@@ -127,6 +127,17 @@ function deskDecor(ctx, i, x, y) {
   }
 }
 const OWNED = new Uint8Array(DESKS.length);
+// Where each desk's decoration sits (x, y px) and its depth among the sprites, and the wreaths, worked out once.
+const DESK_AT = new Float32Array(DESKS.length * 3);
+DESKS.forEach((d, i) => {
+  const [x, y] = P(d.gx + 1.55, d.gy + 0.25, 15);
+  DESK_AT.set([Math.round(x), Math.round(y), d.gx + d.gy + 1.52], i * 3);
+});
+const WREATHS = [(([x, y]) => ({ x: Math.round(x), y: Math.round(y), z: 7.6, small: false }))(P(0, 7.05, 24))];
+for (const h of DOG_HOUSES) {
+  const [x, y] = PG(h.x + KENNEL.X1, h.y, 19);
+  WREATHS.push({ x: Math.round(x) + 1, y: Math.round(y), z: h.x + KENNEL.X1 + h.y + KENNEL.HW + 0.02, small: true });
+}
 
 const TREE = EventLogic.bigTreeTile(ISLAND, W, H),
   [TX, TY] = TREE ? PG(TREE[0] + 0.5, TREE[1] + 0.5, 0).map(Math.round) : [0, 0];
@@ -140,23 +151,15 @@ mixin(
       for (const s of STRINGS)
         if (s.z != null && ev.level >= s.level) items.push({ z: s.z, f: () => this.xmasString(G, s.at) });
       // wreaths: on the EXIT door (in the left wall, at tile 0, 7) and over each kennel's door
-      items.push({ z: 7.6, f: () => wreath(G.ctx, ...P(0, 7.05, 24).map(Math.round), false) });
-      for (const h of DOG_HOUSES) {
-        const [x, y] = PG(h.x + KENNEL.X1, h.y, 19).map(Math.round);
-        items.push({ z: h.x + KENNEL.X1 + h.y + KENNEL.HW + 0.02, f: () => wreath(G.ctx, x + 1, y, true) });
-      }
+      for (const w of WREATHS) items.push({ z: w.z, f: () => wreath(G.ctx, w.x, w.y, w.small) });
       // something small on every desk that has an owner (people sub-agents stand by do not own one)
       if (ev.level >= 2) {
         OWNED.fill(0);
         for (const a of this.agents) if (!a.leaving && !a.parent && a.desk >= 0) OWNED[a.desk] = 1;
-        DESKS.forEach((d, i) => {
-          if (OWNED[i]) items.push({ z: d.gx + d.gy + 1.52, f: () => this.xmasDesk(G, d, i) });
-        });
+        for (let i = 0; i < DESKS.length; i++)
+          if (OWNED[i])
+            items.push({ z: DESK_AT[i * 3 + 2], f: () => deskDecor(G.ctx, i, DESK_AT[i * 3], DESK_AT[i * 3 + 1]) });
       }
-    }
-    xmasDesk(G, d, i) {
-      const [x, y] = P(d.gx + 1.55, d.gy + 0.25, 15);
-      deskDecor(G.ctx, i, Math.round(x), Math.round(y));
     }
     // The strings on the office's own walls, drawn right after the walls so everything in the room is in front.
     xmasWallLights(G, ev) {

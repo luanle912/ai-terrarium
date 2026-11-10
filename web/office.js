@@ -378,14 +378,27 @@ export class ClaudeOffice extends React.Component {
     }
     if (w.mode !== this.state.weatherMode || w.city !== this.state.city)
       this.setWeather({ weatherMode: w.mode, city: w.city, cityDraft: w.city }, true);
-    // a server that has no event choice yet (an older save) takes this page's own, like the weather above
-    if (ps.event && ps.event !== this.eventChoice) this.setEventChoice(ps.event, true);
-    else if (!ps.event && !this.wallpaper && this.eventChoice !== 'auto' && !this.eventSeeded) this.pushSettings();
+    // the event choice (EventLogic.adopt): a server that has none yet takes this page's own, sent with the weather
+    // the server just gave (this page's own may still be the old one until the state above settles)
+    const e = EventLogic.adopt(ps.event, this.eventChoice, { wallpaper: this.wallpaper, seeded: this.eventSeeded });
+    if (e.take) this.setEventChoice(e.take, true);
+    if (e.seed) this.pushSettings({ mode: w.mode, city: w.city });
     this.eventSeeded = true;
   }
   // The event (web/event-logic.js) on the viewer's clock: a one-minute preview, else the choice in Settings.
+  // Asked several times a frame, so the answer is kept for the second it was worked out in.
   eventNow() {
-    return EventLogic.active(new Date(), this.eventChoice || 'auto', this.eventPreview, Date.now());
+    const now = Date.now(),
+      sec = Math.floor(now / 1000),
+      c = this.eventChoice || 'auto',
+      p = this.eventPreview;
+    if (this.evSec !== sec || this.evFor !== c || this.evPrev !== p) {
+      this.evSec = sec;
+      this.evFor = c;
+      this.evPrev = p;
+      this.evNow = EventLogic.active(new Date(now), c, p, now);
+    }
+    return this.evNow;
   }
   setEventChoice(choice, fromServer) {
     if (!EventLogic.CHOICES.includes(choice)) return;
@@ -394,11 +407,11 @@ export class ClaudeOffice extends React.Component {
     this.setState({ eventChoice: choice });
     if (!fromServer) this.pushSettings();
   }
-  pushSettings() {
+  pushSettings(weather) {
     if (!this.sharedSettings || typeof fetch !== 'function') return;
     this.pushedAt = Date.now();
     const body = JSON.stringify({
-      weather: { mode: this.state.weatherMode, city: this.state.city },
+      weather: weather || { mode: this.state.weatherMode, city: this.state.city },
       event: this.eventChoice || 'auto',
     });
     fetch(this.settingsUrl || '/api/settings', {
@@ -506,7 +519,6 @@ export class ClaudeOffice extends React.Component {
     }
     this.doneSweep(Date.now());
     this.env = this.envNow();
-    this.env.event = (this.eventNow() || { level: 0 }).level;
     this.draw(ts / 1000);
     this.drawSky(ts / 1000);
     for (const a of this.agents) {
@@ -554,7 +566,8 @@ export class ClaudeOffice extends React.Component {
       }
     } else this.nextFlashAt = now + 2000;
     this.flash = reduced ? 0 : SkyLogic.flashLevel(now, this.flashStart || 0, this.flashMs || 0);
-    const hour = d.getHours() + d.getMinutes() / 60;
+    const hour = d.getHours() + d.getMinutes() / 60,
+      ev = this.eventNow();
     return {
       df,
       hour,
@@ -564,6 +577,8 @@ export class ClaudeOffice extends React.Component {
       flash: this.flash,
       col: SkyLogic.skyColors(df, hour, fx),
       season,
+      // the Christmas event's level (0: none), for the sky's far islands
+      event: ev ? ev.level : 0,
     };
   }
 }

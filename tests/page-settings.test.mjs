@@ -29,6 +29,13 @@ test('the event choice rides along with the weather; without one, or with a stra
   assert.equal(ps.clean({ event: 'on' }), null, 'never without a weather')
 })
 
+test('a page that knows nothing of the event (an old tab) changes the weather and leaves the event choice alone', () => {
+  const a = ps.createPageSettings(tmpFile())
+  a.set({ weather: { mode: 'off', city: '' }, event: 'on' })
+  assert.deepEqual(a.set({ weather: { mode: 'random', city: '' } }), { weather: { mode: 'random', city: '' }, event: 'on' })
+  assert.deepEqual(a.set({ weather: { mode: 'random', city: '' }, event: 'auto' }), { weather: { mode: 'random', city: '' }, event: 'auto' })
+})
+
 test('the choice is kept on disk and read back by the next server', () => {
   const f = tmpFile()
   const a = ps.createPageSettings(f)

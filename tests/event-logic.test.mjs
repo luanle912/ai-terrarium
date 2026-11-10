@@ -109,3 +109,25 @@ test('the Christmas trees by the office start with December now', () => {
   assert.notEqual(SeasonTree.seasonFor(new Date(2026, 10, 25)), 'christmas')
   assert.equal(SeasonTree.seasonFor(new Date(2026, 11, 2)), 'christmas')
 })
+
+test('bulbs lie on the line, through a doubled point too, and none are made for a most of zero', () => {
+  const b = E.lightString([[0, 0], [0, 0], [60, 0], [60, 0], [60, 40]], 10, 50)
+  assert.ok(b.length >= 16)
+  for (let i = 0; i < b.length; i += 2) {
+    assert.ok(Number.isFinite(b[i]) && Number.isFinite(b[i + 1]))
+    const onA = Math.abs(b[i + 1]) < 1e-3 && b[i] >= 0 && b[i] <= 60, onB = Math.abs(b[i] - 60) < 1e-3 && b[i + 1] >= 0 && b[i + 1] <= 40
+    assert.ok(onA || onB, `bulb ${i / 2} at ${b[i]},${b[i + 1]} is off the line`)
+  }
+  assert.equal(E.lightString([[0, 0], [100, 0]], 10, 0).length, 0)
+})
+
+test("adopting the server's event choice: follow it, seed it once when it has none, never from the wallpaper", () => {
+  const A = E.adopt
+  assert.deepEqual(A('on', 'auto', {}), { take: 'on', seed: false })
+  assert.deepEqual(A('auto', 'auto', {}), { take: null, seed: false })
+  assert.deepEqual(A(undefined, 'off', {}), { take: null, seed: true }, 'an older save has no event: this page gives its own')
+  assert.deepEqual(A(undefined, 'auto', {}), { take: null, seed: false }, 'auto is what a missing one means')
+  assert.deepEqual(A(undefined, 'off', { seeded: true }), { take: null, seed: false }, 'only once')
+  assert.deepEqual(A(undefined, 'off', { wallpaper: true }), { take: null, seed: false })
+  assert.deepEqual(A('party', 'off', {}), { take: null, seed: true }, 'a strange value counts as none')
+})
