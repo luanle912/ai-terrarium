@@ -53,6 +53,7 @@ export const SCENE_METHODS = [
   'fateItems',
   'winterWalls',
   'drawPrints',
+  'stepPrints',
   'restroomItems',
   'restroomPaint',
   'seasonNow',
