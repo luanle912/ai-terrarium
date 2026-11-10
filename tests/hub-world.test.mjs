@@ -556,6 +556,25 @@ test('removing an island does not re-send the other live islands', async () => {
   } finally { st && st.close(); await h.close(); }
 });
 
+test('a state that changes and changes back inside one throttle window is not sent again', async () => {
+  const { h, login, dev } = await setup();
+  let st;
+  try {
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1)], { seq: 1 }), bearer(dev.token))).status, 200);
+    st = await openStream(h.url, login.cookie);
+    assert.ok(await st.until((e) => e.event === 'island' && e.data.id === dev.island_id && e.data.sessions.length === 1));
+    await new Promise((res) => setTimeout(res, 700)); // past the island throttle
+    const count = () => st.events.filter((e) => e.event === 'island' && e.data.id === dev.island_id).length;
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1), sess(2)], { seq: 2 }), bearer(dev.token))).status, 200);
+    assert.ok(await st.until((e) => e.event === 'island' && e.data.sessions.length === 2), 'the change goes out at once');
+    const afterChange = count();
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1), sess(3)], { seq: 3 }), bearer(dev.token))).status, 200);
+    assert.equal((await postJson(h.url, '/api/publish', pkt([sess(1), sess(2)], { seq: 4 }), bearer(dev.token))).status, 200);
+    await new Promise((res) => setTimeout(res, 900)); // the trailing send is due and finds nothing new
+    assert.equal(count(), afterChange);
+  } finally { st && st.close(); await h.close(); }
+});
+
 test('island events do not read the island row from the DB', async () => {
   const { h, dev } = await setup();
   try {

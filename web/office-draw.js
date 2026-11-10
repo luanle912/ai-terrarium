@@ -7,6 +7,7 @@ import { IslandLife } from './island-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
 import { PropUse } from './prop-use.js';
+import { WallpaperLogic } from './wallpaper-logic.js';
 import {
   DESKS,
   FH,
@@ -47,7 +48,9 @@ mixin(
       const w = st.clientWidth,
         hh = st.clientHeight,
         dpr = window.devicePixelRatio || 1,
-        b = this.camBox();
+        b = this.camBox(),
+        // as a wallpaper the far sky is redrawn on every other frame only (WallpaperLogic.skyDue)
+        backDue = !this.wallpaper || WallpaperLogic.skyDue((this.skyFrames = (this.skyFrames || 0) + 1));
       // Clouds follow the island camera (zoom and pan), each layer by its depth.
       // The world's "Toàn cảnh" of 8 islands keeps its own far islands (SkyRender.drawBack, env.overview).
       const overview = !!(this.world && this.world.view === 'all'),
@@ -60,7 +63,7 @@ mixin(
         [this.backCanvas, SkyRender.drawBack],
         [this.frontCanvas, SkyRender.drawFront],
       ]) {
-        if (!cv) continue;
+        if (!cv || (cv === this.backCanvas && !backDue)) continue;
         const bw = Math.round(w * dpr),
           bh = Math.round(hh * dpr);
         if (cv.width !== bw || cv.height !== bh) {
