@@ -2,7 +2,7 @@
 // where each one happens.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadWeb } from './web.mjs'
+import { loadWeb, readWeb } from './web.mjs'
 
 const Fate = loadWeb('fate-logic').FateLogic
 const { look } = loadWeb('season-logic').SeasonLogic
@@ -38,6 +38,23 @@ test('freezing needs winter or snow; nobody sinks in a frozen lake or melts in t
   assert.ok(!winter.includes('lake'))
   assert.ok(!winter.includes('melt'))
   assert.ok(possible(cond('clear', 'summer')).includes('lake'))
+})
+
+test('the fish and the duck need open water, the snowball needs cold, the big bird a dry day', () => {
+  const winter = possible(cond('clear', 'winter')), summer = possible(cond('clear', 'summer'))
+  for (const k of ['fish', 'duck']) { assert.ok(!winter.includes(k), k); assert.ok(summer.includes(k), k) }
+  assert.ok(winter.includes('snowball'))
+  assert.ok(!summer.includes('snowball'))
+  assert.ok(summer.includes('bird'))
+  assert.ok(!possible(cond('rain', 'summer')).includes('bird'))
+  assert.ok(!possible(cond('clear', 'summer', 0)).includes('bird'))
+})
+
+test('every fate has its own line in every language', () => {
+  for (const lang of ['en', 'vi', 'ja', 'ko', 'es', 'zh', 'th']) {
+    const src = readWeb('i18n/' + lang)
+    for (const k of Fate.KINDS) if (k !== 'exit') assert.ok(src.includes('"bubble.fate.' + k + '":"'), lang + ' ' + k)
+  }
 })
 
 test('melting is for a clear summer day; balloons fly only on a dry day', () => {

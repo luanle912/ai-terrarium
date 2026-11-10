@@ -14,6 +14,26 @@ const WALLPAPER_APP = {
   pointerEvents: 'none',
 };
 // The React tree of the local page: header, scene, bubbles, panels and settings; plus hit testing.
+// What someone says on the way to their fate (web/fate-logic.js); nothing special for the EXIT door.
+const fateLine = kind =>
+  ({
+    lightning: () => tr('bubble.fate.lightning'),
+    wind: () => tr('bubble.fate.wind'),
+    freeze: () => tr('bubble.fate.freeze'),
+    lake: () => tr('bubble.fate.lake'),
+    fish: () => tr('bubble.fate.fish'),
+    duck: () => tr('bubble.fate.duck'),
+    melt: () => tr('bubble.fate.melt'),
+    balloon: () => tr('bubble.fate.balloon'),
+    ufo: () => tr('bubble.fate.ufo'),
+    rocket: () => tr('bubble.fate.rocket'),
+    hole: () => tr('bubble.fate.hole'),
+    banana: () => tr('bubble.fate.banana'),
+    dust: () => tr('bubble.fate.dust'),
+    ghost: () => tr('bubble.fate.ghost'),
+    snowball: () => tr('bubble.fate.snowball'),
+    bird: () => tr('bubble.fate.bird'),
+  })[kind]?.();
 mixin(
   ClaudeOffice,
   class {
@@ -92,7 +112,7 @@ mixin(
             }[a.actNow] || '☕ ') + (ACT_TXT[a.actNow] || tr('bubble.pantryBreak'))
           );
         case 'leaving':
-          return tr('bubble.leaving');
+          return fateLine(a.fate) || tr('bubble.leaving');
         default:
           return null;
       }
