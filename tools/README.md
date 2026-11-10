@@ -40,3 +40,19 @@ Measured alternately with July on a loaded machine, so compare within a row of r
 
 Bakes timed directly in the page (12 runs each, median, k = 2.3): summer props 9 ms + island 5.5 ms; winter with snow
 props 20 ms + island 6.5 ms.
+
+## After phase 2, the Christmas event (2026-11-10)
+
+Again measured alternately with July, on a machine busy with other things.
+
+| Scene | ms p50 / p95 | canvas calls |
+|---|---|---|
+| 20 Jul 12:00 | 5.3 / 6.6–7.1 | 18,510 |
+| 20 Dec 12:00, event level 3 | 5.2–5.5 / 7.0 | 18,825 (−90 on the baseline: the three small trees drawn every frame are gone) |
+| 20 Dec 21:00, event level 3 | 5.0–5.7 / 6.2–7.6 | 18,905 (+185) |
+| 20 Dec 21:00, `?wallpaper=1` | 4.1 / 5.9 | 18,870 (+160) |
+
+Bakes timed directly in the page (median of 12, k = 2.3, same load): summer props 9 ms + island 5.5 ms; winter with snow
+28–32 + 7 ms; winter with the event 33–36 + 7 ms.
+
+The wallpaper app's GPU share could not be measured: its windows were covered, and WebKit pauses a covered page.
