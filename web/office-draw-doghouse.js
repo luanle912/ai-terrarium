@@ -1,4 +1,4 @@
-// Drawing the dogs' houses on the lawn by the restroom block's east corner (DOG_HOUSES in web/office-scene.js).
+// Drawing the dogs' houses on the lawn along the restroom block's east wall (DOG_HOUSES in web/office-scene.js).
 import { SkyRender } from './sky-render.js';
 import { DogSprites } from './dog-sprites.js';
 import { PG, DOG_HOUSES, FLOOR_Z, mix } from './office-scene.js';
@@ -42,9 +42,9 @@ mixin(
   ClaudeOffice,
   class {
     // A wooden kennel per dog on a stone base: plank walls, a gabled roof shingled in the dog's colour with white
-    // bargeboards, an arched door toward the viewer (+y) with a cushion inside and a paw plaque over it, and the dog's
+    // bargeboards, an arched door toward the viewer (+x) with a cushion inside and a paw plaque over it, and the dog's
     // bowl by the door. A dog at home (DogLogic 'inside') lies inside, head up in the doorway. A lantern on the block's
-    // wall by the row glows after dark.
+    // wall over the row glows after dark.
     doghouseItems(G, items, snow, dfB, snB) {
       const { ctx, poly, t, df } = G,
         N = c => SkyRender.night(c, df),
@@ -53,8 +53,9 @@ mixin(
         face = (pts, col) => poly(pts, col, shade(col, -48)),
         flat = (pts, col) => poly(pts, col, null);
       DOG_HOUSES.forEach((h, i) => {
-        // local frame: depth d from the back (+y, toward the door), w across (+x); xa..xb is the depth, ya..yb across
-        const L = (d, w, z) => PG(h.x + w, h.y + d, z),
+        // local frame: depth d out from the wall (+x, toward the door), w along it (+y); xa..xb is the depth, ya..yb
+        // the width
+        const L = (d, w, z) => PG(h.x + d, h.y + w, z),
           xa = X0,
           xb = X1,
           yc = 0,
@@ -82,7 +83,7 @@ mixin(
           flat(onX(xb, ya + k * HW, yb - k * HW, z, z + 1), shade(wood, -45));
         };
         items.push({
-          z: h.x + HW + h.y + X1,
+          z: h.x + X1 + h.y + HW,
           f: () => {
             // contact shadow on the grass
             flat(
@@ -128,7 +129,7 @@ mixin(
             ctx.fillRect(px - 1, py - 1, 1, 1);
             ctx.fillRect(px + 1, py - 1, 1, 1);
             this.doghouseBowl(ctx, L(xb + 0.26, yb - 0.02, 0), roof, N);
-            if (i === 2) this.doghouseBone(ctx, L(xb + 0.3, yb + 0.35, 0), N(TRIM));
+            if (i === 0) this.doghouseBone(ctx, L(xb + 0.35, ya - 0.05, 0), N(TRIM));
             if (dog) {
               this.doghouseSleeper(ctx, dog, door, L(xb, yc, ZB), dfB, snB);
               if (dog.nap) this.doghouseZs(ctx, L(xb, yc, ZR + 2), t + i * 0.7, N('#e8ecf5'));
@@ -136,10 +137,10 @@ mixin(
           },
         });
       });
-      // a lantern on the restroom block's east wall, by the first house, glowing warm after dark
-      const first = DOG_HOUSES[0],
-        at = first && PG(Math.floor(first.x) + 0.02, first.y + 0.5, FLOOR_Z + 24);
-      if (first) items.push({ z: first.x + first.y, f: () => this.doghouseLantern(ctx, at, df, t, N) });
+      // a lantern on the restroom block's east wall between the first two houses, glowing warm after dark
+      const [a, b] = DOG_HOUSES,
+        at = a && b && PG(a.x + 0.02, (a.y + b.y) / 2, FLOOR_Z + 30);
+      if (at) items.push({ z: a.x + (a.y + b.y) / 2, f: () => this.doghouseLantern(ctx, at, df, t, N) });
     }
     // Rows of shingles on the near slope: lines along the roof and short joints staggered between them.
     doghouseShingles(ctx, L, x0, x1, yc, ye, col) {
@@ -159,23 +160,21 @@ mixin(
         }
       });
     }
-    // The dog lying inside its house, head up in the doorway looking out (the sprite mirrored, so its nose points out
-    // toward the viewer): only what the opening shows is drawn. Its 'lie' frame always, which has the head up; the z's
+    // The dog lying inside its house, head up in the doorway looking out (sprites face right, out of the door):
+    // only what the opening shows is drawn. Its 'lie' frame always, which has the head up; the z's
     // over the roof tell when it sleeps.
     doghouseSleeper(ctx, d, door, [bx, by], dfB, snB) {
       const f = DogSprites.frame(d.breed, 'lie'),
         img = this.dogSprite(d.breed, 'lie', dfB, snB),
         { hc, ht } = headOf(f),
-        left = Math.round(bx) - f.w + 1 + hc,
+        left = Math.round(bx) - hc,
         top = Math.round(by) - DH + 2 - ht;
       ctx.save();
       ctx.beginPath();
       door.forEach((_, k) => (k ? ctx.lineTo(...Q(door, k)) : ctx.moveTo(...Q(door, k))));
       ctx.closePath();
       ctx.clip();
-      ctx.translate(left + f.w, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(img, 0, top);
+      ctx.drawImage(img, left, top);
       ctx.restore();
     }
     // A small bowl in the roof's colour with kibble in it.
