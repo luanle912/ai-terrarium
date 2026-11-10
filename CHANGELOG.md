@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-10
+
 Dog houses, a fall out of the EXIT door, pixel-art far islands, the wallpaper following the browser's weather, and the usage board in the desktop app.
 
 ### Added
@@ -413,7 +415,8 @@ A major version because the source layout changes completely (the page moved fro
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
-[Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/luanle912/ai-terrarium/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/luanle912/ai-terrarium/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/luanle912/ai-terrarium/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/luanle912/ai-terrarium/compare/v1.6.0...v2.0.0
