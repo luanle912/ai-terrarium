@@ -6,6 +6,7 @@ import './office-draw.js';
 import './office-draw-furniture.js';
 import './office-draw-restroom.js';
 import './office-draw-smoking.js';
+import './office-draw-doghouse.js';
 import './office-draw-people.js';
 import './office-render.js';
 import { DogLogic } from './dog-logic.js';
@@ -37,6 +38,13 @@ export const SCENE_METHODS = [
   'headPos',
   'hit',
   'smokingItems',
+  'doghouseItems',
+  'doghouseSleeper',
+  'doghouseZs',
+  'doghouseShingles',
+  'doghouseBowl',
+  'doghouseBone',
+  'doghouseLantern',
   'restroomItems',
   'restroomPaint',
   'seasonNow',

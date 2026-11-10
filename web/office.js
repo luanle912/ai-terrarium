@@ -300,6 +300,8 @@ export class ClaudeOffice extends React.Component {
       }),
     };
     window.__dogs = { dogs: this.dogs, world: this.dogWorld };
+    // the first person on the floor drops from the EXIT door, as if they had just gone out (for checking the fall)
+    window.__fall = () => this.agents[0] && this.startFall(this.agents[0], performance.now() / 1000);
     if (this.state.weatherMode === 'real') this.refreshReal();
     this.realTimer = setInterval(() => {
       if (this.state.weatherMode === 'real') this.refreshReal();
@@ -335,12 +337,41 @@ export class ClaudeOffice extends React.Component {
     if (this.onWorldOnline) window.removeEventListener('online', this.onWorldOnline);
   }
   // ---- weather settings ----
-  setWeather(patch) {
+  // `fromServer`: adopting what another page chose (adoptSettings), so it is not posted back.
+  setWeather(patch, fromServer) {
     this.setState(patch, () => {
       SkyLogic.saveWeatherSettings(this.storage, { mode: this.state.weatherMode, city: this.state.city });
+      if (!fromServer) this.pushSettings();
       if (this.state.weatherMode === 'real' && (patch.weatherMode === 'real' || 'city' in patch)) this.refreshReal();
       if (this.state.weatherMode !== 'real') this.setState({ realStatus: { state: 'idle', text: '' } });
     });
+  }
+  // The local server keeps one weather choice for all its pages (lib/page-settings.js) and sends it in every snapshot,
+  // so the wallpaper app's web view, which has its own storage and no settings panel, follows what was chosen here.
+  // A server that has none yet gets this page's own choice, unless this is the wallpaper (it never chose anything).
+  adoptSettings(ps) {
+    this.sharedSettings = true;
+    // a snapshot sent before our own change reached the server must not undo it
+    if (Date.now() - (this.pushedAt || 0) < 3000) return;
+    const w = ps && ps.weather;
+    if (!w) {
+      if (!this.wallpaper && !this.settingsSeeded) this.pushSettings();
+      this.settingsSeeded = true;
+      return;
+    }
+    if (w.mode !== this.state.weatherMode || w.city !== this.state.city)
+      this.setWeather({ weatherMode: w.mode, city: w.city, cityDraft: w.city }, true);
+  }
+  pushSettings() {
+    if (!this.sharedSettings || typeof fetch !== 'function') return;
+    this.pushedAt = Date.now();
+    const body = JSON.stringify({ weather: { mode: this.state.weatherMode, city: this.state.city } });
+    fetch(this.settingsUrl || '/api/settings', {
+      method: 'POST',
+      headers: { 'X-Terrarium': 'settings', 'Content-Type': 'application/json' },
+      body,
+      cache: 'no-store',
+    }).catch(() => {});
   }
   async refreshReal() {
     const city = this.state.city,
@@ -430,6 +461,8 @@ export class ClaudeOffice extends React.Component {
       if (this.agents.some(a => a.gone)) {
         const goneA = this.agents.filter(a => a.gone);
         goneA.forEach(a => this.goneSids.set(a.sid, a.leftWhy || 'missing'));
+        // out of the EXIT door: they drop straight down from it (web/office-draw-fall.js)
+        goneA.forEach(a => a.exited && this.startFall(a, ts / 1000));
         const goneIds = goneA.map(a => a.id);
         this.agents = this.agents.filter(a => !a.gone);
         if (goneIds.includes(this.state.sel)) this.setState({ sel: null });

@@ -12,38 +12,14 @@ const PERM_MS = (+process.env.PERM_SEC || 8) * 1e3;
 const MAX_CLIENTS = 20;
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 const DEFAULT_HUB = 'https://terrarium.openlabs.click';
-const USAGE_GLOB = path.join(os.homedir(), '.claude', 'plugins', 'store');
-let usageCache = []; let usageCacheTs = 0;
-// Sources, in order: <configDir>/usage.json (written by `server.js statusline`), then the legacy usage-quota* files.
-// An empty array means "unknown", which the page shows as "--" rather than 0%.
-// Passing opts (dir, legacyDir, now) bypasses the 5 s cache; used by tests.
-function readUsage(opts) {
-  const now = (opts && opts.now) || Date.now();
-  if (!opts && now - usageCacheTs < 5000) return usageCache;
-  let out = [];
-  try {
-    const cur = require('./lib/statusline.js').readUsageFile((opts && opts.dir) || require('./lib/terrarium-config.js').configDir(), now);
-    if (cur && cur.length) out = cur;
-  } catch {}
-  if (!out.length) {
-    const legacyDir = (opts && opts.legacyDir) || USAGE_GLOB;
-    try {
-      const files = fs.readdirSync(legacyDir).filter(f => f.startsWith('usage-quota'));
-      for (const f of files) {
-        const d = JSON.parse(fs.readFileSync(path.join(legacyDir, f), 'utf8'));
-        const lims = (d.limits && d.limits.limits) || (d.planLimits && d.planLimits.limits) || [];
-        out = lims.map(l => ({ kind: l.kind, pct: l.percentUsed || 0, resets: l.resetsAt }));
-        break;
-      }
-    } catch {}
-  }
-  if (opts) return out;
-  usageCacheTs = now; usageCache = out;
-  return usageCache;
-}
 const files = new Map();
 // Transcript parsing and the status decision live in lib/status.js (pure functions, tested with fixture transcripts).
-const { TRANSCRIPT_RE, newState, ingest, readRegistryDir, liveFromRegistry, defaultAlive, buildSessions } = require('./lib/status.js');
+const { TRANSCRIPT_RE, newState, ingest, readRegistryDir, liveFromRegistry, defaultAlive, buildSessions, quotaHits } = require('./lib/status.js');
+// The usage board's figures and whether to show it (lib/usage.js): status line, the CLI's get_usage, hit limits.
+let usageOf = null;
+const currentUsage = now => (usageOf ||= require('./lib/usage.js').createUsage({ dir: require('./lib/terrarium-config.js').configDir() }))(now, quotaHits(files.values(), quotaMemo));
+// Limit hits (429s) seen in any transcript, kept after the transcript goes quiet: {kind: resetsAt ms}.
+const quotaMemo = {};
 
 function walk(dir, out = []) {
   let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
@@ -103,9 +79,17 @@ function liveSessions() {
   return (liveCache = liveFromRegistry(readRegistryDir(SESSIONS_DIR), { prev: liveCache, alive: defaultAlive }));
 }
 
+// The weather chosen on any page this server serves, for every page (lib/page-settings.js): the wallpaper app's web
+// view has its own browser storage and no settings panel. Not part of what is published to a hub (lib/public-view.js).
+let settingsOf = null;
+const pageSettings = () => (settingsOf ||= require('./lib/page-settings.js').createPageSettings(path.join(require('./lib/terrarium-config.js').configDir(), 'page-settings.json')));
+
 function snapshot() {
   const now = Date.now();
-  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage: readUsage(), version: VERSION };
+  const u = currentUsage(now);
+  // usagePlan: true once a claude.ai plan is known, false with no plan limits (API key), null when unknown; the page
+  // shows the board only for true.
+  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage: u.windows, usagePlan: u.plan, usageSource: u.source, pageSettings: pageSettings().get(), version: VERSION };
 }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');
@@ -172,7 +156,7 @@ function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date
   };
 }
 
-function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, logLines = () => [] } = {}) {
+function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, logLines = () => [], settings = pageSettings } = {}) {
   return (req, res) => {
     if (!hostAllowed(req.headers.host, port, allowedHosts)) { res.writeHead(403); res.end('Forbidden'); return; }
     const route = (req.url || '').split('?')[0];
@@ -182,6 +166,19 @@ function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFil
       (action === 'join' ? joinFlow.start() : joinFlow.leave())
         .then(j => { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(j)); })
         .catch(() => { res.writeHead(500); res.end('error'); });
+      return;
+    }
+    // A page saving its settings: same guard as join (our own origin, an X-Terrarium header), a small JSON body.
+    if (route === '/api/settings' && req.method === 'POST') {
+      if (!joinRequestAllowed(req, port, allowedHosts, 'settings')) { res.writeHead(403); res.end('Forbidden'); return; }
+      let body = '';
+      req.on('data', d => { body += d; if (body.length > 4096) req.destroy(); });
+      req.on('end', () => {
+        let saved = null;
+        try { saved = settings().set(JSON.parse(body)); } catch {}
+        res.writeHead(saved ? 200 : 400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(saved ? { ok: true, settings: saved } : { ok: false }));
+      });
       return;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); res.end('Method Not Allowed'); return; }
@@ -273,5 +270,5 @@ async function main() {
     });
 }
 
-module.exports = { readAppended, hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage, makeJoinFlow, joinRequestAllowed };
+module.exports = { readAppended, hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, makeJoinFlow, joinRequestAllowed };
 if (require.main === module) main();

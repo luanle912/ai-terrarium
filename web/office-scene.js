@@ -54,9 +54,12 @@ export const PA = (x, y, z = 0) =>
 // either wall, in a screen column the wall covers, is (partly) hidden by it, so the scene draws such sprites before the
 // walls (web/office-draw.js).
 export const WALL_REACH = Math.floor((WALL + 3 + FLOOR_Z) / (2 * TH));
-export const behindWalls = (x, y) =>
-  (x < 0 && x >= -WALL_REACH && y - x >= -1 && y - x <= H + 1) ||
-  (y < 0 && y >= -WALL_REACH && x - y >= -1 && x - y <= W + 1);
+// For the drawing order one row more: what stands on a cell has its foot at the cell's middle, and the walls' outer
+// faces are set back from the cells' edge, so a tree one row past WALL_REACH has its foot right at the wall's top edge;
+// drawn after the walls, its trunk and shadow would lie over the top of the wall.
+export const DRAW_REACH = WALL_REACH + 1;
+export const behindWalls = (x, y, reach = WALL_REACH) =>
+  (x < 0 && x >= -reach && y - x >= -1 && y - x <= H + 1) || (y < 0 && y >= -reach && x - y >= -1 && x - y <= W + 1);
 // The smoking corner fills the east-front outdoor spot, right beside the restroom block's east side, at the end of the
 // garden path that runs along the block's front. Only its planted trough (which faces the block) is taken off the
 // walkable lawn: seats, the ash bin and the posts are thin enough to step past, and an agent's own spot must stay
@@ -72,6 +75,17 @@ export const WC = RestroomLogic.layout(
   ),
   WC_WALK = new Set(WC.walk);
 WC.floor.forEach(k => LAWN_WALK.delete(k));
+// The dogs' houses, one each (DogLogic.BREEDS order), in a row on the lawn right against the restroom block's east
+// wall from its back corner, a tile each, doors toward the viewer (+x). The smoking corner's pergola stands in front of
+// the wall's far end, so it partly hides the last house, as it would.
+// `x` is the wall, `y` a house's middle, `door` the lawn cell a dog walks to and `front` where it stops, at the door.
+// The dogs go in at night and in the rain; nobody walks over the houses (the way to the back lawn stays open beside).
+export const DOG_HOUSES = [0, 1, 2].map(i => {
+  const y = WC.y0 + 0.5 + i;
+  return { x: WC.x1, y, door: [WC.x1 + 1, Math.floor(y)], front: [WC.x1 + 1, y] };
+});
+const DOG_HOUSE_CELLS = DOG_HOUSES.map(h => h.x + ',' + Math.floor(h.y));
+DOG_HOUSE_CELLS.forEach(k => LAWN_WALK.delete(k));
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
 // The office dogs live on the lawn all round the office, by the lake and on the back lawn; never in the lake, the
@@ -101,6 +115,7 @@ export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   avoid: [
     ...ISLAND.spots.filter(s => s.id === 'east-back' || s.id === 'east-front'),
     { x: REST.bench.x, y: REST.bench.y, w: 1, h: 1 },
+    { x: WC.x1, y: WC.y0, w: 1, h: 3 },
   ],
   wallReach: WALL_REACH,
   tall: [...M.cells].map(k => {
@@ -126,6 +141,7 @@ export const DOG_PLACES = {
   roamList: [...DOG_ROAM].map(k => k.split(',').map(Number)),
   clear: DOG_CLEAR,
   den: DogLogic.denCells(DOG_ROAM, [33, 8], DOG_CLEAR),
+  houses: DOG_HOUSES,
   // not at the pavilion's stepping stones or where an agent bathes
   drink: DogLogic.drinkSpots(
     DOG_ROAM,
