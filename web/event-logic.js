@@ -57,9 +57,16 @@ function adopt(server, own, { wallpaper = false, seeded = false } = {}) {
   return { take: null, seed: !wallpaper && !seeded && own !== 'auto' };
 }
 
-// The big tree stands indoors: on the tile of the pot plant at the front end of the corridor between the desks
-// (web/office-draw.js), which nobody walks over. Outdoors the island's own trees turn into plain firs.
-const TREE_TILE = [8, 13];
+// The big tree stands indoors, in the middle of the crossing of the office's two corridors: its foot at TREE_AT (in
+// tiles), on the two cells TREE_CELLS, which nobody may walk over while it stands there (block). The corridor
+// between the desk zones is three tiles wide so people pass on either side. Outdoors the island's own trees turn
+// into plain firs.
+const TREE_AT = [9.5, 7],
+  TREE_CELLS = ['9,6', '9,7'];
+// Takes the tree's cells out of (on) or puts them back into (off) the set of cells people may not walk over.
+function block(set, on) {
+  for (const k of TREE_CELLS) on ? set.add(k) : set.delete(k);
+}
 // While the event is on the season is winter, whatever the date or the season chosen in Settings: snow on the lawn,
 // frozen lakes, snowmen.
 const season = (ev, key) => (ev ? 'winter' : key);
@@ -118,7 +125,9 @@ export const EventLogic = {
   loadChoice,
   saveChoice,
   adopt,
-  TREE_TILE,
+  TREE_AT,
+  TREE_CELLS,
+  block,
   season,
   weather,
   SNOWFALL,

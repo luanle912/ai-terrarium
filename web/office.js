@@ -8,6 +8,7 @@ import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import { EventLogic } from './event-logic.js';
 import {
+  BLOCK,
   DOG_PLACES,
   LH,
   LW,
@@ -398,6 +399,7 @@ export class ClaudeOffice extends React.Component {
       this.evFor = c;
       this.evPrev = p;
       this.evNow = EventLogic.active(new Date(now), c, p, now);
+      EventLogic.block(BLOCK, !!this.evNow); // nobody walks through the big tree while it stands
     }
     return this.evNow;
   }

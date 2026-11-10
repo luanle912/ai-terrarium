@@ -46,7 +46,7 @@ chụp: `tools/perf-frame.mjs`, `tools/shot.mjs` (cả hai có `--at` và `--eva
 4. **Bóng đổ nằm trong sprite** (một elip mờ vẽ lúc dựng), để mỗi con là một `drawImage`.
 5. **Bật tay hoặc xem thử ngoài tháng 12** (`eve` và `day` đều `false`): có tuần lộc, yêu tinh và chim cánh cụt
    (hồ đóng băng theo quyết định 7); không ông già Noel.
-6. **Cây thông lớn nằm trong văn phòng** (`EventLogic.TREE_TILE`, từ 2026-11-11), nên nhân vật ngoài trời không tới
+6. **Cây thông lớn nằm trong văn phòng** (`EventLogic.TREE_AT`, giữa ngã tư hành lang, từ 2026-11-11), nên nhân vật ngoài trời không tới
    gốc cây. Điểm hẹn ngoài trời là **chỗ nhận quà** `w.drop`: ô `roam` trên bãi cỏ ngay chân cầu thang trước gần cây
    nhất. Yêu tinh khuân quà tới đó, quà dù đáp ở đó, ông già Noel ngày 25 ngồi cạnh đó. Mọi chữ "cây" trong các task
    bên dưới, khi nói về chỗ nhân vật đi tới, nghĩa là `w.drop`.
