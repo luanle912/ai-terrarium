@@ -618,6 +618,7 @@ mixin(
         items.push({
           z: x + y,
           f: () => {
+            if (ev && x < 9) return this.xmasTree(G, ev); // the Christmas tree stands where this pot was
             box(x - 0.2, y - 0.2, 0.4, 0.4, 0, 7, th.pot);
             const [px, py] = P(x, y, 7);
             [

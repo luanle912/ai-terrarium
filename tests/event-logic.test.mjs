@@ -66,26 +66,32 @@ test("the bake's key: nothing without the event, one per level", () => {
   assert.deepEqual([1, 2, 3].map(level => E.cacheKey({ key: 'christmas', level })), ['x1', 'x2', 'x3'])
 })
 
-test('the big tree stands on open lawn in front of the office, clear of everything, the same every time', () => {
-  const [x, y] = E.bigTreeTile(island, W, H)
-  assert.deepEqual(E.bigTreeTile(SkyLogic.buildIsland({ W, H }), W, H), [x, y])
-  assert.ok(y > H && x >= 0 && x < W, `(${x},${y}) is not on the lawn in front of the office`)
-  const K = (a, b) => a + ',' + b
-  const no = new Set([...island.paths.cells, ...island.pond.cells, ...island.mountain.cells, ...island.mountain.pool.cells])
-  for (const p of [...island.pond.spots, island.rest.bench, island.rest.fish, ...island.lamps]) no.add(K(p.x, p.y))
-  for (const d of island.decor) if (d.kind !== 'flower') no.add(K(d.x, d.y))
-  for (const s of SkyLogic.stairs(W, H)) for (let i = 0; i < s.len; i++) for (let o = 0; o < 2; o++)
-    no.add(s.side === 'east' ? K(s.x + o, s.y + i) : K(s.x + i, s.y + o))
-  // its own tile and the ring round it: on the island and free; no path within a tile
-  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-    assert.ok(island.cells.has(K(x + dx, y + dy)), `${K(x + dx, y + dy)} is off the island`)
-    assert.ok(!no.has(K(x + dx, y + dy)), `${K(x + dx, y + dy)} is taken`)
+test('the big tree stands indoors, on the tile of the pot plant at the front of the corridor', () => {
+  assert.deepEqual(E.TREE_TILE, [8, 13])
+  assert.ok(E.TREE_TILE[0] >= 0 && E.TREE_TILE[0] < W && E.TREE_TILE[1] >= 0 && E.TREE_TILE[1] < H, 'inside the office')
+})
+
+test('while the event is on the season is winter, whatever the date or the choice in Settings', () => {
+  const ev = { key: 'christmas', level: 3, eve: false, day: false }
+  for (const k of ['spring', 'summer', 'autumn', 'winter']) {
+    assert.equal(E.season(ev, k), 'winter')
+    assert.equal(E.season(null, k), k)
   }
-  for (const m of loadWeb('season-island').SeasonIsland.snowmanTiles(island, W, H))
-    // a snowman behind the tree in its own screen column (the tree is about 70 px tall, 9 rows of tiles) would be hidden
-    assert.ok(!(Math.abs(x - y - (m.x - m.y)) <= 3 && x + y - (m.x + m.y) > -2 && x + y - (m.x + m.y) <= 10),
-      `the tree would hide or crowd the snowman at ${K(m.x, m.y)}`)
-  for (const s of island.spots) assert.ok(!(x >= s.x - 1 && x <= s.x + s.w && y >= s.y - 1 && y <= s.y + s.h), 'in an outdoor spot')
+})
+
+test('while the event is on it snows: rain and storm turn to snow, and it never stops', () => {
+  const ev = { key: 'christmas', level: 1, eve: false, day: false }
+  const clear = { cloud: 0.2, rain: 0, snow: 0, storm: 0, fog: 0 }
+  assert.equal(E.weather(clear, ev), clear, 'the same object, changed in place')
+  assert.equal(clear.snow, E.SNOWFALL)
+  assert.ok(E.SNOWFALL >= 0.3 && E.SNOWFALL <= 0.6, 'a light fall')
+  const storm = E.weather({ cloud: 1, rain: 1, snow: 0, storm: 1, fog: 0 }, ev)
+  assert.deepEqual([storm.rain, storm.storm, storm.snow], [0, 0, 1])
+  const heavy = E.weather({ cloud: 0.7, rain: 0, snow: 1, storm: 0, fog: 0 }, ev)
+  assert.equal(heavy.snow, 1)
+  assert.equal(E.weather({ cloud: 0.5, rain: 0, snow: 0, storm: 0, fog: 1 }, ev).fog, 1, 'fog stays')
+  const off = { cloud: 1, rain: 1, snow: 0, storm: 1, fog: 0 }
+  assert.deepEqual(E.weather({ ...off }, null), off, 'no event: untouched')
 })
 
 test('a string of lights: bulbs a gap apart along the line, never more than the most allowed', () => {

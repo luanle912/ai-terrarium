@@ -1,6 +1,6 @@
-// The Christmas event's still pieces, painted into the island's bake (web/sky-island.js) so they cost nothing per
-// frame: the one big tree with its tinsel and presents. What blinks or glows on them is drawn every frame by
-// web/office-draw-xmas.js from the tables here.
+// The Christmas event's still pieces, painted once so they cost nothing per frame: the one big tree with its tinsel
+// and presents (a sprite of its own, web/office-draw-xmas.js) and the candy canes (the island's bake). What blinks
+// or glows on them is drawn every frame by web/office-draw-xmas.js from the tables here.
 import { EventLogic } from './event-logic.js';
 import { OUTLINE } from './island-art.js';
 
@@ -37,7 +37,7 @@ const GIFT_BOXES = [
   [9, 5, 3, '#ffffff', '#d94a5a'],
 ];
 
-// The big tree at its tile (EventLogic.bigTreeTile): a trunk, four tiers of fir lit from the left with ragged lower
+// The big tree at its tile (EventLogic.TREE_TILE): a trunk, four tiers of fir lit from the left with ragged lower
 // edges, a line of gold tinsel across each, the unlit star, and the presents the level brings. T maps a colour
 // through the bake's light (a tree keeps more of its colour after dark than the lawn does).
 export function drawBigTree(pt, P, T, tile, level) {

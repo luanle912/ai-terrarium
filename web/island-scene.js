@@ -53,6 +53,7 @@ export const SCENE_METHODS = [
   'startFate',
   'fateItems',
   'xmasItems',
+  'xmasTree',
   'xmasTreeLights',
   'xmasWallLights',
   'xmasString',
