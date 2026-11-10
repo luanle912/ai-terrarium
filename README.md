@@ -106,6 +106,7 @@ Open your browser → **http://localhost:4317** — that's it.
 | 💬 | **Speech bubbles** | Agents show what they're doing in speech bubbles above their heads |
 | 📊 | **Whiteboard** | A wall-mounted board showing real Claude API usage (5-hour and 7-day quotas) |
 | 🔒 | **Private** | Reads local transcripts only; nothing leaves your machine unless you turn on Real weather, which sends the city name to Open-Meteo |
+| 🖼️ | **Live wallpaper (macOS)** | The office as your desktop wallpaper, with the server started for you: `node server.js wallpaper` (see below) |
 | 📦 | **Zero dependencies** | Pure Node.js — no `npm install`, no build step |
 
 ---
@@ -132,6 +133,7 @@ Still no build step and no dependencies: the browser runs the ES modules in `web
 |------|------------|
 | `server.js`, `lib/` | The local server (transcripts → SSE) and the publisher that sends your island to a hub |
 | `hub/` | The optional multi-island hub |
+| `wallpaper/` | The macOS app that shows the office as your desktop wallpaper (Swift; `node server.js wallpaper`) |
 | `claude-office.html` | A short shell page that loads `web/main.js` |
 | `web/main.js` | Entry point: imports every module in a fixed order, then mounts the page |
 | `web/*-logic.js` | DOM-free logic (sky, camera, dogs, people, restroom, bubbles, world layout); `tests/` imports each one |
@@ -247,6 +249,82 @@ Nếu bạn đã có status line riêng, giữ nó bằng `--chain`:
 
 Lệnh ghi `~/.claude-terrarium/usage.json` (quyền 0600) và in một dòng như `🏝 5H 23% · 7D 41%`. Khi chưa có dữ liệu, bảng hiện `--` thay vì 0%.
 Chỉ chạy được với gói Pro/Max của claude.ai, Claude Code ≥ 2.1.80, và sau phản hồi đầu tiên của mỗi phiên.
+
+## 🖼️ Văn phòng làm hình nền (macOS)
+
+App `LiveWallpaper` (thư mục `wallpaper/`) đặt văn phòng làm hình nền máy Mac. Mỗi màn hình có một cửa sổ nằm ở tầng
+desktop (dưới icon, click xuyên qua) mở `http://localhost:4317/?wallpaper=1`. Ở chế độ này trang chỉ còn bầu trời và
+hòn đảo, phủ kín màn hình: không header, không nút ⚙, không panel. Bong bóng tên nhân vật vẫn hiện.
+
+### Cần có
+
+- macOS 14 trở lên.
+- Swift: Xcode hoặc Command Line Tools (`xcode-select --install`).
+- Node 18 trở lên (như server).
+
+### Cài và chạy
+
+```bash
+node <đường dẫn repo>/server.js wallpaper         # build, cài vào ~/Applications rồi mở app
+node <đường dẫn repo>/server.js wallpaper build   # chỉ build ra wallpaper/build/LiveWallpaper.app
+```
+
+Xong là xong: app tự chạy server nếu chưa có ai chạy (xem dưới), biểu tượng hiện trên menu bar, hình nền đổi thành văn
+phòng sau vài giây. Muốn bật cùng máy: menu bar → **Khởi động cùng máy**.
+
+### Nó làm gì
+
+| Lúc | App làm gì |
+|---|---|
+| Cắm sạc | Chạy live, 15 khung/giây; mỗi phút chụp lại làm wallpaper hệ thống (để Mission Control, màn hình khoá thấy đúng cảnh) |
+| Chạy pin hoặc Low Power Mode | Chụp khung cuối làm ảnh tĩnh, đóng trang: gần như không tốn gì |
+| Khoá màn hình | macOS không cho app nào vẽ lên màn hình khoá, nên app chụp khung đang hiện làm wallpaper (màn hình khoá hiện ảnh này) rồi tạm dừng; mở khoá là chạy live lại |
+| Hình nền bị cửa sổ khác che kín | WebKit tự dừng vẽ |
+| Chưa có server ở `localhost:4317` | Tự chạy `node server.js` của repo đã cài app; server chết thì bật lại (3 s, rồi giãn dần tới 60 s); thoát app thì tắt server đó |
+| Đã có server khác (plugin của một phiên Claude Code, hay chạy tay) | Dùng luôn, không chạy thêm |
+| Server chưa trả lời | Ẩn cửa sổ (wallpaper tĩnh lộ ra), 5 giây thử lại một lần |
+
+Menu bar: trạng thái hình nền và server, **Tải lại trang**, **Chụp làm wallpaper ngay**, **Mở trong trình duyệt**
+(trang thường, có header và cài đặt), **Khởi động cùng máy**, **Thoát**.
+
+Đo trên MacBook + một màn ngoài khi cắm sạc: khoảng 65 % một lõi CPU (phần lớn là WebKit đưa hai màn retina lên GPU),
+server ~105 MB RAM.
+
+### Sau khi cập nhật repo
+
+App nhớ đường dẫn `node` và `server.js` **lúc build**. Sau `git pull` (hoặc khi chuyển repo sang chỗ khác) chạy lại
+`node server.js wallpaper` để app dùng code mới; lệnh này tắt app cũ đàng hoàng (kèm server do nó chạy) rồi mở bản mới.
+
+### Tuỳ chỉnh
+
+```bash
+defaults write local.kham.livewallpaper url "http://localhost:4317/?wallpaper=1"   # địa chỉ trang
+defaults write local.kham.livewallpaper node /đường/dẫn/node                       # node khác bản lúc build
+defaults write local.kham.livewallpaper server /đường/dẫn/server.js                # server.js khác
+```
+
+Thêm tham số vào `url` như ở trang thường, ví dụ `&lang=en`. Đổi xong thì thoát rồi mở lại app.
+
+### Gỡ bỏ
+
+Menu bar → **Khởi động cùng máy** (bỏ chọn) → **Thoát**, rồi:
+
+```bash
+rm -rf ~/Applications/LiveWallpaper.app ~/Library/Application\ Support/LiveWallpaper ~/Library/Logs/LiveWallpaper-server.log
+defaults delete local.kham.livewallpaper
+```
+
+Hình nền hệ thống giữ ảnh chụp cuối; đổi lại trong System Settings → Wallpaper.
+
+### Gặp trục trặc
+
+- **Hình nền đứng yên, menu báo "Không kết nối được server"**: xem `~/Library/Logs/LiveWallpaper-server.log`. Menu
+  báo "Server: không tìm thấy node" thì chạy lại `node server.js wallpaper` từ terminal có `node`, hoặc đặt
+  `defaults write … node`.
+- **Hình nền vẫn có header / nút ⚙**: server đang chạy là bản cũ (chưa có `?wallpaper=1`). Tắt server cũ, chạy lại
+  `node server.js wallpaper`.
+- **Màn hình khoá hiện ảnh cũ**: ảnh được chụp mỗi phút và lúc khoá; nếu macOS hiện màn hình khoá trước khi kịp áp ảnh
+  lúc khoá, lần khoá sau sẽ đúng.
 
 ## 🔄 Update
 

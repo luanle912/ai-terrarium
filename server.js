@@ -60,17 +60,36 @@ function scan() {
     if (!st) { st = newState(f, stat.mtimeMs); files.set(f, st); }
     const wasIncremental = st.offset > 0;
     st.fileMtime = stat.mtimeMs;
-    if (stat.size < st.offset) { st.offset = 0; st.rest = ''; }
+    if (stat.size < st.offset) { st.offset = 0; st.restBuf = null; }
     if (stat.size === st.offset) continue;
-    const MAX_CHUNK = 64 * 1024 * 1024;
-    const remaining = stat.size - st.offset;
-    if (st.offset === 0 && remaining > MAX_CHUNK) { st.offset = Math.max(0, stat.size - MAX_CHUNK); st.rest = ''; }
-    const toRead = Math.min(MAX_CHUNK, stat.size - st.offset);
-    const fd = fs.openSync(f, 'r'); const buf = Buffer.alloc(toRead);
-    try { fs.readSync(fd, buf, 0, toRead, st.offset); } finally { fs.closeSync(fd); } st.offset += toRead;
-    const lines = (st.rest + buf.toString('utf8')).split('\n'); st.rest = lines.pop();
-    for (const l of lines) { if (!l.trim()) continue; try { ingest(st, JSON.parse(l), wasIncremental); } catch {} }
+    // A new file is read from its last 64 MB at most; what is new is read a megabyte at a time (readAppended).
+    const MAX_TAIL = 64 * 1024 * 1024;
+    if (st.offset === 0 && stat.size > MAX_TAIL) { st.offset = stat.size - MAX_TAIL; st.restBuf = null; }
+    try { readAppended(f, st, stat.size, l => { try { ingest(st, JSON.parse(l), wasIncremental); } catch {} }); } catch {}
   }
+}
+
+// Feeds each whole line appended to f between st.offset and size to onLine, reading `chunk` bytes at a time through
+// one reused buffer (a single 64 MB read used to leave the process holding ~250 MB it never gave back). Lines are cut
+// at the newline byte, which never occurs inside a UTF-8 character, so text is decoded only once a line is whole; the
+// bytes of a line still being written wait in st.restBuf for the next read.
+const READ_CHUNK = 1024 * 1024;
+let readBuf = null;
+function readAppended(f, st, size, onLine, chunk = READ_CHUNK) {
+  const buf = chunk === READ_CHUNK ? (readBuf ||= Buffer.alloc(READ_CHUNK)) : Buffer.alloc(chunk);
+  const fd = fs.openSync(f, 'r');
+  try {
+    while (st.offset < size) {
+      const n = fs.readSync(fd, buf, 0, Math.min(chunk, size - st.offset), st.offset);
+      if (n <= 0) break;
+      st.offset += n;
+      const data = st.restBuf && st.restBuf.length ? Buffer.concat([st.restBuf, buf.subarray(0, n)]) : buf.subarray(0, n);
+      const nl = data.lastIndexOf(10);
+      if (nl < 0) { st.restBuf = Buffer.from(data); continue; }
+      for (const l of data.toString('utf8', 0, nl).split('\n')) if (l.trim()) onLine(l);
+      st.restBuf = Buffer.from(data.subarray(nl + 1));
+    }
+  } finally { fs.closeSync(fd); }
 }
 
 // Live sessions: Claude Code writes ~/.claude/sessions/<pid>.json per process. With that directory only live sessions
@@ -185,7 +204,7 @@ function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFil
     }
     else if (route.startsWith('/web/')) {
       const a = webAssets.readAsset(route, webDir);
-      if (a) { res.writeHead(200, { 'Content-Type': a.type, ...webAssets.HEADERS }); res.end(a.body); }
+      if (a) { const r = webAssets.respond(a, req.headers); res.writeHead(r.status, r.headers); res.end(r.body || undefined); }
       else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); }
     }
     else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); }
@@ -231,6 +250,8 @@ async function main() {
     try { await pub.join(hub, { name, dir: cfgLib.configDir() }); return 0; }
     catch (e) { console.log('join: ' + e.message); return 1; }
   };
+  // wallpaper [install|build]: build (and install) the macOS wallpaper app in wallpaper/ (lib/wallpaper.js).
+  if (process.argv[2] === 'wallpaper') process.exit(require('./lib/wallpaper.js').run(process.argv.slice(3)));
   if (process.argv[2] === 'statusline') process.exit(require('./lib/statusline.js').main(process.argv.slice(3), cfgLib.configDir()));
   const code = await cfgLib.runCommand(process.argv.slice(2), { join: joinCmd, revokeSelf: pub.revokeSelf });
   if (typeof code === 'number') process.exit(code);
@@ -252,5 +273,5 @@ async function main() {
     });
 }
 
-module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage, makeJoinFlow, joinRequestAllowed };
+module.exports = { readAppended, hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage, makeJoinFlow, joinRequestAllowed };
 if (require.main === module) main();

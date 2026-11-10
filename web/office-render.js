@@ -4,6 +4,15 @@ import { BubbleLogic } from './bubble-logic.js';
 import { ACT_TXT, FH, LH, LW, P, PA, h } from './office-scene.js';
 import { ST, fmtK } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
+// The page root as the desktop wallpaper: edge to edge and deaf to the pointer (made once, reused every render).
+const WALLPAPER_APP = {
+  paddingTop: 0,
+  paddingBottom: 0,
+  paddingLeft: 0,
+  paddingRight: 0,
+  gap: 0,
+  pointerEvents: 'none',
+};
 // The React tree of the local page: header, scene, bubbles, panels and settings; plus hit testing.
 mixin(
   ClaudeOffice,
@@ -224,20 +233,25 @@ mixin(
       };
 
       const hdrCtl = { padding: '4px 10px', fontSize: 11 };
-      const narrow = !!(this.narrowMq && this.narrowMq.matches);
-      const top = this.renderHeader({
-        deptList,
-        hdrCtl,
-        isLive,
-        isSim,
-        ls,
-        narrow,
-        paused,
-        seasonInfo,
-        srcColor,
-        srcLabel,
-        summary,
-      });
+      const narrow = !!(this.narrowMq && this.narrowMq.matches),
+        wp = this.wallpaper;
+      // As the desktop wallpaper (?wallpaper=1) the page is the scene alone: no header, frame, error box, buttons or
+      // panels, and it takes no pointer input (the app's window lets every click through to the desktop anyway).
+      const top =
+        !wp &&
+        this.renderHeader({
+          deptList,
+          hdrCtl,
+          isLive,
+          isSim,
+          ls,
+          narrow,
+          paused,
+          seasonInfo,
+          srcColor,
+          srcLabel,
+          summary,
+        });
 
       return h(
         'div',
@@ -253,12 +267,14 @@ mixin(
             overflow: 'hidden',
             background: 'var(--bg)',
             ...pad,
+            ...(wp ? WALLPAPER_APP : null),
           },
         },
 
         top,
 
-        isLive &&
+        !wp &&
+          isLive &&
           ls === 'error' &&
           h(
             'div',
@@ -304,7 +320,7 @@ mixin(
               position: 'relative',
               flex: '1 1 0',
               minHeight: 0,
-              border: '3px solid #232a39',
+              border: wp ? 'none' : '3px solid #232a39',
               overflow: 'hidden',
               containerType: 'size',
               display: 'flex',
@@ -317,7 +333,7 @@ mixin(
             style: {
               position: 'absolute',
               inset: 0,
-              cursor: 'grab',
+              cursor: wp ? 'default' : 'grab',
               touchAction: 'none',
               width: '100%',
               height: '100%',
@@ -375,21 +391,23 @@ mixin(
           }),
 
           // As others see it the panel carries only what the hub gets: no name, folder, activity text or history.
-          this.renderOthersPanel({ others, s, selData }),
-          this.renderDetailPanel({ others, s, selData }),
+          !wp && this.renderOthersPanel({ others, s, selData }),
+          !wp && this.renderDetailPanel({ others, s, selData }),
 
-          h(
-            'button',
-            {
-              className: 'settings-toggle',
-              'aria-label': tr('settings.title'),
-              title: tr('settings.toggleTitle'),
-              onClick: () => this.setState(p => ({ showSettings: !p.showSettings })),
-            },
-            '⚙',
-          ),
+          !wp &&
+            h(
+              'button',
+              {
+                className: 'settings-toggle',
+                'aria-label': tr('settings.title'),
+                title: tr('settings.toggleTitle'),
+                onClick: () => this.setState(p => ({ showSettings: !p.showSettings })),
+              },
+              '⚙',
+            ),
 
-          others &&
+          !wp &&
+            others &&
             h(
               'div',
               {
@@ -414,17 +432,18 @@ mixin(
               }),
             ),
 
-          this.renderSettingsPanel({
-            agentCount,
-            autoApprove,
-            bubbleMode,
-            dataSource,
-            endpoint,
-            isLive,
-            isSim,
-            showSettings,
-            speed,
-          }),
+          !wp &&
+            this.renderSettingsPanel({
+              agentCount,
+              autoApprove,
+              bubbleMode,
+              dataSource,
+              endpoint,
+              isLive,
+              isSim,
+              showSettings,
+              speed,
+            }),
         ),
       );
     }

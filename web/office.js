@@ -5,6 +5,7 @@ import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { DogLogic } from './dog-logic.js';
 import { WorldLogic } from './world-logic.js';
+import { WallpaperLogic } from './wallpaper-logic.js';
 import {
   DOG_PLACES,
   LH,
@@ -26,6 +27,8 @@ export class ClaudeOffice extends React.Component {
   constructor(props) {
     super(props);
     const params = new URLSearchParams(location.search);
+    // ?wallpaper=1: only the scene, edge to edge, for the LiveWallpaper app (wallpaper/; office-render.js).
+    this.wallpaper = WallpaperLogic.fromSearch(location.search);
     // Over https the page never reads ?server=: a crafted link must not point a hosted page at another host.
     const secure = location.protocol === 'https:';
     const srv = params.get('server') || location.host || 'localhost:4317';
@@ -276,9 +279,13 @@ export class ClaudeOffice extends React.Component {
     document.addEventListener('visibilitychange', this.onShown);
     this.last = performance.now();
     setTimeout(() => this.frame(performance.now()), 0);
+    // As a wallpaper only every WallpaperLogic.FPS-th of a second is drawn (wallpaper-logic.js).
     const loop = t => {
-      this.lastFrame = performance.now();
-      this.frame(t);
+      if (!this.wallpaper || WallpaperLogic.frameDue(t, this.wallFrameAt)) {
+        this.wallFrameAt = t;
+        this.lastFrame = performance.now();
+        this.frame(t);
+      }
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
