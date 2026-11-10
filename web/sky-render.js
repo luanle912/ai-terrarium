@@ -126,7 +126,17 @@ function drawBack(ctx, w, h, t, env) {
       snowy = !!(look && look.minSnow > 0);
     for (let i = 0; i < far.length; i++) {
       const [fx_, fy, sc, kind] = far[i];
-      farIsland(ctx, w * fx_, hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S, sc * S, col, kind, trees, snowy);
+      farIsland(
+        ctx,
+        w * fx_,
+        hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S,
+        sc * S,
+        col,
+        kind,
+        trees,
+        snowy,
+        env.event >= 2,
+      );
     }
     // Wider than the stage so a pan never shows where the horizon haze ends.
     const hb = ctx.createLinearGradient(0, hy - 18 * S, 0, hy + 18 * S);
