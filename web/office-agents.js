@@ -10,6 +10,7 @@ import { SnowLogic } from './snow-logic.js';
 import { DEPT_PAL, DESKS, DOOR, FATE_PLACES, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
 import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
+const ON_LAWN = (x, y) => LAWN_WALK.has(Math.floor(x) + ',' + Math.floor(y));
 // Agents: the simulated office and the live feed, desks and departments, where each agent goes next.
 mixin(
   ClaudeOffice,
@@ -645,19 +646,9 @@ mixin(
       this.printNow = (this.printNow || 0) + dt;
       if (SnowLogic.depth(this.snowShown || 0) < 2 || w.calm) return;
       if (!this.prints) this.prints = SnowLogic.prints();
-      const walk = o => {
-        if (o.px == null || Math.hypot(o.x - o.px, o.y - o.py) > 3) {
-          o.px = o.x;
-          o.py = o.y;
-        } else if (Math.hypot(o.x - o.px, o.y - o.py) >= 0.5) {
-          if (LAWN_WALK.has(Math.floor(o.x) + ',' + Math.floor(o.y)))
-            SnowLogic.addPrint(this.prints, o.x, o.y, this.printNow);
-          o.px = o.x;
-          o.py = o.y;
-        }
-      };
-      for (const a of this.agents) if (a.x >= W || a.y >= H || a.x < 0 || a.y < 0) walk(a);
-      for (const d of this.dogs) if (d.act !== 'inside') walk(d);
+      for (const a of this.agents)
+        if (a.x >= W || a.y >= H || a.x < 0 || a.y < 0) SnowLogic.walkPrint(this.prints, a, ON_LAWN, this.printNow);
+      for (const d of this.dogs) if (d.act !== 'inside') SnowLogic.walkPrint(this.prints, d, ON_LAWN, this.printNow);
     }
   },
 );
