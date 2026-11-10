@@ -7,6 +7,7 @@ import './office-draw-furniture.js';
 import './office-draw-restroom.js';
 import './office-draw-smoking.js';
 import './office-draw-doghouse.js';
+import './office-draw-fate.js';
 import './office-draw-people.js';
 import './office-render.js';
 import { DogLogic } from './dog-logic.js';
@@ -45,6 +46,9 @@ export const SCENE_METHODS = [
   'doghouseBowl',
   'doghouseBone',
   'doghouseLantern',
+  'fateCtx',
+  'startFate',
+  'fateItems',
   'restroomItems',
   'restroomPaint',
   'seasonNow',
@@ -126,6 +130,7 @@ export class IslandScene {
     if (this.agents.some(a => a.gone)) {
       const gone = this.agents.filter(a => a.gone);
       gone.forEach(a => this.goneSids.set(a.sid, a.leftWhy || 'missing'));
+      gone.forEach(a => a.fated && this.startFate(a));
       this.agents = this.agents.filter(a => !a.gone);
       const h_ = this.host;
       if (h_.state.selIsland === this.id && gone.some(a => a.id === h_.state.sel)) h_.setState({ sel: null });

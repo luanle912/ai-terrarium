@@ -155,6 +155,22 @@ export const DOG_PLACES = {
   ),
   rest: DogLogic.besideCell(DOG_ROAM, [REST.bench.x, REST.bench.y], DOG_CLEAR, [FISH_PT]),
 };
+// Where a leaving person's fate plays out (web/fate-logic.js): open lawn in front of the office and beside it, in
+// view and off the paths, and the bathing spots in the lake.
+export const FATE_PLACES = {
+  lawn: DOG_PLACES.roamList.filter(
+    ([x, y]) =>
+      (x > W || y > H) &&
+      x >= 2 &&
+      y >= 2 &&
+      x <= W + 7 &&
+      y <= H + 7 &&
+      !DOG_CLEAR.has(x + ',' + y) &&
+      // not right behind the smoking corner's pergola or the other outdoor spot, which would hide the scene
+      !ISLAND.spots.some(s => x >= s.x - 3 && x < s.x + s.w + 1 && y >= s.y - 3 && y < s.y + s.h + 1),
+  ),
+  lake: ISLAND.pond.spots.map(s => [s.x, s.y]),
+};
 export const REAL_WEATHER_EVERY_MS = 15 * 60_000;
 export const WEATHER_LABEL = {
   clear: tr('weather.label.clear'),
