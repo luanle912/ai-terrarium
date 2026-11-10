@@ -481,13 +481,15 @@ export class ClaudeOffice extends React.Component {
   }
   // The season the island shows (SeasonLogic): a one-minute preview, else the choice in Settings, else the date.
   // seasonChoice / seasonPreview are set from Settings; until then the date decides.
+  // The Christmas event brings winter with it (EventLogic.season), whatever the date or the choice.
   seasonNow() {
-    return SeasonLogic.currentSeason({
+    const key = SeasonLogic.currentSeason({
       date: new Date(),
       choice: this.seasonChoice || 'auto',
       preview: this.seasonPreview || null,
       now: Date.now(),
     }).key;
+    return EventLogic.season(this.eventNow(), key);
   }
   get treeOn() {
     return this.season !== 'default';
@@ -549,8 +551,10 @@ export class ClaudeOffice extends React.Component {
       this.wx = r.wx;
       this.preview = r.preview;
     } else this.stepWeather(now);
+    // During the Christmas event it snows (unless the weather is switched off in Settings).
     const reduced = !!(this.reducedMq && this.reducedMq.matches),
-      fx = SkyLogic.weatherFx(this.wx, now),
+      ev = this.eventNow(),
+      fx = EventLogic.weather(SkyLogic.weatherFx(this.wx, now), this.state.weatherMode === 'off' ? null : ev),
       df = dayFactor();
     // Winter keeps at least its own snow on the lawn, the roofs and the mountain whatever the weather.
     const season = this.seasonNow();
@@ -567,8 +571,7 @@ export class ClaudeOffice extends React.Component {
       }
     } else this.nextFlashAt = now + 2000;
     this.flash = reduced ? 0 : SkyLogic.flashLevel(now, this.flashStart || 0, this.flashMs || 0);
-    const hour = d.getHours() + d.getMinutes() / 60,
-      ev = this.eventNow();
+    const hour = d.getHours() + d.getMinutes() / 60;
     return {
       df,
       hour,

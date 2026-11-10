@@ -218,6 +218,17 @@ Khung này dùng lại được: sự kiện khác sau này chỉ thêm một m�
   một quầng sáng lớn dưới gốc hắt lên tuyết (1 sprite).
 - Đêm: cây không nhận lớp tối như bãi cỏ; tầng lá tối vừa, bóng đèn giữ nguyên màu.
 
+**Sửa theo yêu cầu ngày 2026-11-11** (thay các ý trên ở chỗ khác nhau):
+
+- Cây thông lớn đứng **trong văn phòng**, ở ô chậu cây đầu hành lang phía trước (`EventLogic.TREE_TILE = [8, 13]`,
+  ô vốn không ai đi qua). Phần tĩnh của cây là một sprite dựng một lần cho mỗi (mức sự kiện, mức sáng), mỗi khung
+  một `drawImage` cộng bóng đèn như trên. `bigTreeTile` đã bỏ.
+- Ngoài trời, các cây trơ cành của mùa đông thành **cây thông thường phủ tuyết nhẹ** (`drawSeasonTree` kiểu `'fir'`),
+  nướng cùng prop của đảo.
+- **Sự kiện bật thì mùa là mùa đông** dù ngày nào hay chọn mùa gì (`EventLogic.season`), và **trời luôn có tuyết
+  rơi**: mưa và bão thành tuyết, lúc quang cũng rơi nhẹ ở 0,45 (`EventLogic.weather`). Tắt thời tiết trong Settings
+  thì không có tuyết rơi, mùa vẫn là mùa đông.
+
 ### 5.3 Dây đèn và ánh sáng đêm
 
 - Dây đèn chạy theo: đỉnh tường sau và tường trái của văn phòng, mái ba chuồng chó, xà giàn hút thuốc, hai tầng mái

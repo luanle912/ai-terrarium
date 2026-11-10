@@ -60,7 +60,8 @@ function trunk(pt, C, x, y, h) {
   ctx.fillStyle = C('#4e3420');
   ctx.fillRect(x + 1, y - h, 1, h);
 }
-// One island tree at its tile d: kind 'fresh' (spring), 'green' (summer), 'gold' (autumn) or 'bare' (winter).
+// One island tree at its tile d: kind 'fresh' (spring), 'green' (summer), 'gold' (autumn), 'bare' (winter) or 'fir'
+// (winter during the Christmas event).
 export function drawSeasonTree(pt, P, C, d, kind) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
     x = Math.round(px),
@@ -77,6 +78,7 @@ export function drawSeasonTree(pt, P, C, d, kind) {
     'rgba(0,0,0,0.18)',
   );
   if (kind === 'bare') return bareTree(pt, C, d, x, y);
+  if (kind === 'fir') return firTree(pt, C, d, x, y);
   // a few leaves already down on the lawn round an autumn tree
   if (kind === 'gold')
     for (let i = 0; i < 6; i++) {
@@ -164,6 +166,49 @@ function bareTree(pt, C, d, x, y) {
       [0, 7],
     ],
     C('#f4f8fc'),
+  );
+}
+
+// The Christmas event: a plain fir in three tiers, lit from the left, with a little snow on the tip of each tier
+// and along its upper edge. Each tree is a touch taller or shorter than its neighbour.
+const FIR = [
+  [10, 4, 10],
+  [8, 11, 9],
+  [5, 18, 9],
+];
+function firTree(pt, C, d, x, y) {
+  const ctx = pt.ctx,
+    tall = Math.floor(hash(d.x, d.y, 190) * 3),
+    snow = C('#f4f8fc'),
+    R = (a, b, w, h, c) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(x + a, y - b - h, w, h);
+    };
+  trunk(pt, C, x, y, 6);
+  FIR.forEach(([hw, z0, h0], ti) => {
+    const h = h0 + (ti === 2 ? tall : 0),
+      lit = C(ti === 1 ? '#34965a' : '#3aa05a', 0.1),
+      dark = C('#236f42', 0.05),
+      under = C('#185030');
+    for (let r = 0; r < h; r++) {
+      const w = Math.max(1, Math.round((hw * (h - r)) / h)),
+        z = z0 + r + (ti ? Math.min(tall, ti) : 0);
+      R(-w - 1, z, 2 * w + 2, 1, C(OUTLINE));
+      R(-w, z, w, 1, r < 2 ? under : lit);
+      R(0, z, w, 1, r < 2 ? under : dark);
+      // snow: the tier's tip, and here and there along the edge the light falls on
+      if (r >= h - 2) R(-w, z, 2 * w - (r === h - 1 ? 0 : 1), 1, snow);
+      else if (r > 1 && hash(d.x * 7 + r, d.y * 5 + ti, 191) < 0.45) R(-w, z, 2, 1, snow);
+    }
+  });
+  pt.rows(
+    x - 3,
+    y - 1,
+    [
+      [1, 5],
+      [0, 7],
+    ],
+    snow,
   );
 }
 

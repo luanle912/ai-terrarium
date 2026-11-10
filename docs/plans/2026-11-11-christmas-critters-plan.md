@@ -3,8 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Trong sự kiện Noel, đảo có thêm nhân vật: 3 tuần lộc gặm cỏ, 2 yêu tinh khuân quà tới cây thông, 4 chim
-cánh cụt trên hồ băng, và ông già Noel (xe trượt bay ngang trời đêm 24, ngồi cạnh cây ngày 25), với tối đa 20 lệnh
+**Goal:** Trong sự kiện Noel, đảo có thêm nhân vật: 3 tuần lộc gặm cỏ, 2 yêu tinh khuân quà tới trước văn phòng, 4 chim
+cánh cụt trên hồ băng, và ông già Noel (xe trượt bay ngang trời đêm 24, ngồi trước văn phòng ngày 25), với tối đa 20 lệnh
 vẽ thêm mỗi khung.
 
 **Architecture:** Hành vi là một module thuần có test (`EventCritters`), cùng kiểu `DogLogic` nhưng nhỏ: mỗi con có
@@ -44,8 +44,14 @@ chụp: `tools/perf-frame.mjs`, `tools/shot.mjs` (cả hai có `--at` và `--eva
    Quà dù rơi xuống thành hộp vẽ mỗi khung cạnh cây, tối đa 4 hộp, giữ tới khi tải lại trang. Không nướng lại.
 3. **World:** đảo khác chỉ có tuần lộc. Yêu tinh, chim cánh cụt, ông già Noel và xe trượt chỉ ở đảo của người xem.
 4. **Bóng đổ nằm trong sprite** (một elip mờ vẽ lúc dựng), để mỗi con là một `drawImage`.
-5. **Bật tay hoặc xem thử ngoài tháng 12** (`eve` và `day` đều `false`): có tuần lộc và yêu tinh; không chim cánh cụt
-   nếu hồ không đóng băng; không ông già Noel.
+5. **Bật tay hoặc xem thử ngoài tháng 12** (`eve` và `day` đều `false`): có tuần lộc, yêu tinh và chim cánh cụt
+   (hồ đóng băng theo quyết định 7); không ông già Noel.
+6. **Cây thông lớn nằm trong văn phòng** (`EventLogic.TREE_TILE`, từ 2026-11-11), nên nhân vật ngoài trời không tới
+   gốc cây. Điểm hẹn ngoài trời là **chỗ nhận quà** `w.drop`: ô `roam` trên bãi cỏ ngay chân cầu thang trước gần cây
+   nhất. Yêu tinh khuân quà tới đó, quà dù đáp ở đó, ông già Noel ngày 25 ngồi cạnh đó. Mọi chữ "cây" trong các task
+   bên dưới, khi nói về chỗ nhân vật đi tới, nghĩa là `w.drop`.
+7. **Sự kiện bật thì mùa luôn là mùa đông và trời có tuyết rơi** (`EventLogic.season`, `EventLogic.weather`), nên hồ
+   luôn đóng băng trong sự kiện (tắt thời tiết trong Settings chỉ tắt tuyết rơi).
 
 ## Review Focus
 
@@ -112,10 +118,10 @@ chụp: `tools/perf-frame.mjs`, `tools/shot.mjs` (cả hai có `--at` và `--eva
 
 **Files:** Create `web/event-critters.js`, `tests/event-critters.test.mjs`.
 
-**Interfaces — Consumes:** `DogLogic.path(roam, from, to)` (đường đi trên tập ô), `EventLogic.bigTreeTile`.
+**Interfaces — Consumes:** `DogLogic.path(roam, from, to)` (đường đi trên tập ô), `STAIRS` (`web/office-scene.js`).
 
 **Produces:**
-- Thế giới `w` (do trang dựng, Task 3): `{ roam: Set<'x,y'>, roamList: [x,y][], clear: Set, houses, tree: [x,y] |
+- Thế giới `w` (do trang dựng, Task 3): `{ roam: Set<'x,y'>, roamList: [x,y][], clear: Set, houses, drop: [x,y] |
   null, ice: [x,y][], edge: [x,y] | null, level, eve, day, frozen, calm, now, rand, dogs: {x,y}[], only }`.
   `only: 'reindeer'` cho đảo khác ở world.
 - `EventCritters.create(w) → critter[]`; mỗi con `{ kind, id, x, y, face (1 | -1), act, until, path, home: [x,y],
@@ -128,7 +134,7 @@ chụp: `tools/perf-frame.mjs`, `tools/shot.mjs` (cả hai có `--at` và `--eva
 - Hành vi tuần lộc: `graze` 6–14 giây → `look` 2–4 giây → `walk` tới một ô trong `RANGE` của `home` (qua
   `DogLogic.path`) → lặp. Có chó trong `NOTICE` ô: `look`, `face` hướng về chó, tới khi chó ra xa.
 - Chỗ ở (`home`) của ba con, tính một lần từ `roamList`: ô xa nhất phía sau (y nhỏ nhất), ô xa nhất phía đông (x lớn
-  nhất), ô xa nhất phía tây-nam (x − y nhỏ nhất); bỏ ô trong `clear`, ô chuồng chó, ô cây thông và 8 ô quanh.
+  nhất), ô xa nhất phía tây-nam (x − y nhỏ nhất); bỏ ô trong `clear`, ô chuồng chó, ô `drop` và 8 ô quanh.
 
 - [ ] **Test** (dùng `rand` có hạt giống và đảo thật như `tests/event-logic.test.mjs`):
   - `wanted`: mức 1 → không con nào; mức 2 → 3 tuần lộc, 0 yêu tinh; `ev` rỗng (`level: 0`) → tất cả 0.
@@ -180,8 +186,8 @@ chụp: `tools/perf-frame.mjs`, `tools/shot.mjs` (cả hai có `--at` và `--eva
 **Files:** Modify `web/event-critters.js`, `web/office-draw-critters.js`, `tests/event-critters.test.mjs`.
 
 **Interfaces — Produces:**
-- `EventCritters.elfRoute(w) → [x,y][] | null`: `DogLogic.path(roam, w.edge, ô cạnh cây)`; ô cạnh cây là ô thuộc
-  `roam` kề `w.tree` gần `w.edge` nhất. `null` khi thiếu `edge`, `tree` hoặc không có đường.
+- `EventCritters.elfRoute(w) → [x,y][] | null`: `DogLogic.path(roam, w.edge, ô cạnh chỗ nhận quà)`; đó là ô thuộc
+  `roam` kề `w.drop` gần `w.edge` nhất. `null` khi thiếu `edge`, `drop` hoặc không có đường.
 - `w.edge`: ô `roam` ở mép đảo phía trước gần cây nhất (trang tính một lần trong constructor).
 - Hằng số: `ELVES = 2`, `ELF_FROM = 3`, `ELF_SPEED = 1`, `SLIP = 0.15` (xác suất mỗi chặng), `SLIP_FOR = 1.2` giây,
   `PLACE_FOR = 1.5` giây, nghỉ ngoài mép 8–20 giây.
@@ -190,8 +196,8 @@ chụp: `tools/perf-frame.mjs`, `tools/shot.mjs` (cả hai có `--at` và `--eva
 - `pose`: `carry` → `carry1`/`carry2`; `back` → `walk1`/`walk2`; `place`, `slip` → khung cùng tên. `away` → không vẽ
   (`critterItems` bỏ qua con có `act === 'away'`).
 
-- [ ] **Test:** mức 3 → 2 yêu tinh, mức 2 → 0; `elfRoute` bắt đầu ở `edge`, kết thúc ở ô kề `tree` và không phải ô
-  `tree`, mọi ô thuộc `roam`; trong 300 giây mỗi yêu tinh qua đủ `carry`, `place`, `back`, `away` theo đúng thứ tự;
+- [ ] **Test:** mức 3 → 2 yêu tinh, mức 2 → 0; `elfRoute` bắt đầu ở `edge`, kết thúc ở ô kề `drop` và không phải ô
+  `drop`, mọi ô thuộc `roam`; trong 300 giây mỗi yêu tinh qua đủ `carry`, `place`, `back`, `away` theo đúng thứ tự;
   hai con không bao giờ cùng `place` một lúc; với `rand` luôn trả 0 có đúng một `slip` mỗi chặng, với `rand` luôn trả
   0,99 không có `slip`; `calm: true` → 0 yêu tinh; không `edge` → 0 yêu tinh, không ném lỗi.
 - [ ] Đỏ → viết → xanh. Chụp cận một yêu tinh đang ôm quà, một con đang đặt, một con ngã.
@@ -216,7 +222,7 @@ chụp: `tools/perf-frame.mjs`, `tools/shot.mjs` (cả hai có `--at` và `--eva
 - [ ] **Test:** mức 3 và `frozen` → 4 con; `frozen: false` → 0 và lần `step` kế tiếp danh sách không còn chim cánh
   cụt; trong 120 giây mọi con luôn ở trong `ice` (làm tròn xuống ô), không quá một con có `act` khác `stand` cùng
   lúc, mỗi con đã `slide` ít nhất một lần; `ice` có 3 ô → 0 con; `calm: true` → 4 con đứng yên.
-- [ ] Đỏ → viết → xanh. Chụp 20/12 12:00 và 21:00, cắt cận hồ. Chụp 20/7 với sự kiện bật: không có chim cánh cụt.
+- [ ] Đỏ → viết → xanh. Chụp 20/12 12:00 và 21:00, cắt cận hồ. Chụp 20/7 với sự kiện bật: có chim cánh cụt (mùa đông theo sự kiện).
 - [ ] Commit `feat: four penguins on the frozen lake`.
 
 ### Task 6: Ông già Noel

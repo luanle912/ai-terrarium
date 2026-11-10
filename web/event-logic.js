@@ -1,10 +1,7 @@
 // The Christmas event as logic (no DOM, no canvas; tests/event-logic.test.mjs): when it is on and how far along, the
-// choice in Settings, where the one big tree stands and how a string of lights is laid out. The page asks active()
-// what to show; everything else about the event hangs off its answer, so another event later is one more calendar
-// entry and its own drawing.
-import { hash, key } from './island-grid.js';
-import { SkyLogic } from './sky-logic.js';
-import { SeasonIsland } from './season-island.js';
+// choice in Settings, where the one big tree stands, the winter and the snowfall it brings, and how a string of
+// lights is laid out. The page asks active() what to show; everything else about the event hangs off its answer, so
+// another event later is one more calendar entry and its own drawing.
 
 const CHOICES = ['auto', 'on', 'off'];
 const EVENT_KEY = 'ai-terrarium.event';
@@ -60,46 +57,21 @@ function adopt(server, own, { wallpaper = false, seeded = false } = {}) {
   return { take: null, seed: !wallpaper && !seeded && own !== 'auto' };
 }
 
-// The big tree's tile: open lawn in front of the office (the y side, where the lawn is widest before the lake), its
-// own tile and the eight round it on the island and free of paths, water, stairs, lamps, decor, outdoor spots,
-// places people stand and winter's snowmen (none beside it, none behind it in its screen column); of those, the one
-// nearest a point a few tiles out from the middle of the office front.
-function bigTreeTile(island, W, H) {
-  const no = new Set([
-    ...island.paths.cells,
-    ...island.pond.cells,
-    ...island.mountain.cells,
-    ...island.mountain.pool.cells,
-  ]);
-  for (const p of [...island.pond.spots, island.rest.bench, island.rest.fish, ...island.lamps]) no.add(key(p.x, p.y));
-  for (const d of island.decor) if (d.kind !== 'flower') no.add(key(d.x, d.y));
-  for (const s of SkyLogic.stairs(W, H))
-    for (let i = 0; i < s.len; i++)
-      for (let o = 0; o < 2; o++) no.add(s.side === 'east' ? key(s.x + o, s.y + i) : key(s.x + i, s.y + o));
-  const men = SeasonIsland.snowmanTiles(island, W, H),
-    free = (x, y) =>
-      island.cells.has(key(x, y)) &&
-      !no.has(key(x, y)) &&
-      !men.some(m => Math.hypot(m.x - x, m.y - y) < 2) &&
-      !island.spots.some(s => x >= s.x - 1 && x <= s.x + s.w && y >= s.y - 1 && y <= s.y + s.h),
-    tx = W * 0.42,
-    ty = H + 3.5;
-  let best = null,
-    bd = Infinity;
-  for (const { x, y } of island.list) {
-    if (y <= H + 1 || x < 1 || x >= W - 1) continue;
-    let ok = true;
-    for (let dx = -1; dx <= 1 && ok; dx++) for (let dy = -1; dy <= 1 && ok; dy++) ok = free(x + dx, y + dy);
-    // nor in front of a snowman in the same screen column, where the tree (some nine rows tall) would hide it
-    ok =
-      ok && !men.some(m => Math.abs(x - y - (m.x - m.y)) <= 3 && x + y - (m.x + m.y) > -2 && x + y - (m.x + m.y) <= 10);
-    const d = Math.hypot(x - tx, y - ty) + hash(x, y, 301) * 0.01;
-    if (ok && d < bd) {
-      bd = d;
-      best = [x, y];
-    }
-  }
-  return best;
+// The big tree stands indoors: on the tile of the pot plant at the front end of the corridor between the desks
+// (web/office-draw.js), which nobody walks over. Outdoors the island's own trees turn into plain firs.
+const TREE_TILE = [8, 13];
+// While the event is on the season is winter, whatever the date or the season chosen in Settings: snow on the lawn,
+// frozen lakes, snowmen.
+const season = (ev, key) => (ev ? 'winter' : key);
+// And it snows. fx is the weather's mix of effects (SkyLogic.weatherFx: cloud, rain, snow, storm, fog; a fresh
+// object each frame), changed in place: rain and storm fall as snow, and there is always at least a light fall.
+const SNOWFALL = 0.45;
+function weather(fx, ev) {
+  if (!ev) return fx;
+  fx.snow = Math.max(fx.snow, fx.rain, SNOWFALL);
+  fx.rain = 0;
+  fx.storm = 0;
+  return fx;
 }
 
 // Bulbs along a line of points (px), about `gap` px apart, at most `max` of them (the gap widens to fit): a
@@ -146,7 +118,10 @@ export const EventLogic = {
   loadChoice,
   saveChoice,
   adopt,
-  bigTreeTile,
+  TREE_TILE,
+  season,
+  weather,
+  SNOWFALL,
   lightString,
   MAX_BULBS,
   GIFTS,
