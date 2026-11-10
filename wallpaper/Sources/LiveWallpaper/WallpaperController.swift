@@ -17,7 +17,10 @@ final class WallpaperController: NSObject, WKNavigationDelegate {
     private var currentImages: [CGDirectDisplayID: URL] = [:]
     private let storage: URL
 
-    private let snapshotInterval: TimeInterval = 300
+    /// Màn hình khoá hiện ảnh wallpaper, nên chụp mỗi phút để ảnh đó không cũ quá một phút.
+    private let snapshotInterval: TimeInterval = 60
+    /// Hạn cho một lượt chụp: quá hạn thì vẫn đi tiếp (đóng WebView), không treo.
+    private let snapshotTimeout: TimeInterval = 3
     private let retryInterval: TimeInterval = 5
     private let firstSnapshotDelay: TimeInterval = 3
 
@@ -43,7 +46,7 @@ final class WallpaperController: NSObject, WKNavigationDelegate {
         }
     }
 
-    func goStill(completion: (() -> Void)? = nil) {
+    func goStill(waitForUpdate: Bool = true, completion: (() -> Void)? = nil) {
         guard isLiveMode else { completion?(); return }
         snapshotTimer?.invalidate()
         snapshotTimer = nil
@@ -54,7 +57,7 @@ final class WallpaperController: NSObject, WKNavigationDelegate {
         let old = windows
         windows = []
         state = .still
-        snapshot(of: old) { [weak self] in
+        snapshot(of: old, waitForUpdate: waitForUpdate) { [weak self] in
             self?.tearDown(old)
             completion?()
         }
@@ -163,15 +166,23 @@ final class WallpaperController: NSObject, WKNavigationDelegate {
 
     // MARK: - Chụp & đặt wallpaper
 
-    private func snapshot(of targets: [WallpaperWindow], completion: (() -> Void)?) {
+    private func snapshot(of targets: [WallpaperWindow], waitForUpdate: Bool = true, completion: (() -> Void)?) {
         let ready = targets.filter(\.isLoaded)
         guard !ready.isEmpty else { completion?(); return }
+
+        var finished = false
+        let finish = {
+            guard !finished else { return }
+            finished = true
+            completion?()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + snapshotTimeout) { finish() }
 
         let group = DispatchGroup()
         for window in ready {
             group.enter()
             let config = WKSnapshotConfiguration()
-            config.afterScreenUpdates = true
+            config.afterScreenUpdates = waitForUpdate
             window.webView.takeSnapshot(with: config) { [weak self] image, _ in
                 MainActor.assumeIsolated {
                     if let image { self?.setWallpaper(image, for: window.targetScreen) }
@@ -179,7 +190,7 @@ final class WallpaperController: NSObject, WKNavigationDelegate {
                 }
             }
         }
-        group.notify(queue: .main) { completion?() }
+        group.notify(queue: .main) { finish() }
     }
 
     private func setWallpaper(_ image: NSImage, for screen: NSScreen) {

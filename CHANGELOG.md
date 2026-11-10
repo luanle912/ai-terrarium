@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The office as your Mac's wallpaper** — The LiveWallpaper app now lives in the repo (`wallpaper/`, macOS 14+) and `node server.js wallpaper` builds it and installs it to `~/Applications` (`wallpaper build` only builds; elsewhere the command says the app is macOS only). It shows the page on every screen at desktop level, under the icons and letting clicks through, and copies it into the system wallpaper every minute; on battery or Low Power Mode it keeps the last frame as a still wallpaper and closes the page. When the screen locks it saves the frame on screen as the wallpaper (the lock screen shows it: macOS lets no app draw there) and pauses, and it goes live again on unlock. The menu bar opens the normal page in the browser
+- **`?wallpaper=1`** — The page shows only the sky and the island, edge to edge: no header, frame, settings button, panels or "server needed" box, and no pointer input. Bubbles still follow the saved bubble setting
+
 ## [2.1.0] - 2026-11-09
 
 A new island in four seasons, office devices that wake only when used, and a sturdier link to the world. Deploy the hub before the plugin (either order works with the old side).

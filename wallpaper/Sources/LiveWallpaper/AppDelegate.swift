@@ -3,10 +3,12 @@ import ServiceManagement
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private static let defaultURL = URL(string: "http://localhost:4317/")!
+    /// ?wallpaper=1: trang chỉ còn bầu trời và hòn đảo, không header / nút / panel (web/wallpaper-logic.js).
+    private static let defaultURL = URL(string: "http://localhost:4317/?wallpaper=1")!
 
     private var controller: WallpaperController!
     private let power = PowerMonitor()
+    private let lock = LockMonitor()
     private var statusItem: NSStatusItem!
     private let statusLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let loginItem = NSMenuItem(title: "Khởi động cùng máy", action: nil, keyEquivalent: "")
@@ -18,9 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onStateChange = { [weak self] in self?.refreshMenu() }
         setupMenu()
 
-        power.onChange = { [weak self] live in self?.apply(live: live) }
+        power.onChange = { [weak self] _ in self?.reevaluate() }
+        lock.onChange = { [weak self] _ in self?.reevaluate() }
         power.start()
-        apply(live: power.shouldBeLive)
+        lock.start()
+        reevaluate()
 
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
@@ -30,8 +34,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] _ in MainActor.assumeIsolated { self?.controller.spaceChanged() } }
     }
 
+    /// Live khi cắm sạc, không bật Low Power Mode và màn hình không khoá.
+    private func reevaluate() {
+        apply(live: power.shouldBeLive && !lock.isLocked)
+    }
+
     private func apply(live: Bool) {
-        if live { controller.goLive() } else { controller.goStill() }
+        // Lúc khoá cửa sổ bị che có thể không vẽ thêm khung nào: chụp khung đã có, không đợi vẽ lại.
+        if live { controller.goLive() } else { controller.goStill(waitForUpdate: !lock.isLocked) }
         refreshMenu()
     }
 
@@ -65,7 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refreshMenu() {
         guard statusItem != nil else { return }
         let (text, symbol): (String, String) = switch controller.state {
-        case .still: ("Ảnh tĩnh (đang dùng pin)", "photo")
+        case .still: lock.isLocked
+            ? ("Ảnh tĩnh (đang khoá màn hình)", "lock.fill")
+            : ("Ảnh tĩnh (đang dùng pin)", "photo")
         case .loading: ("Đang tải \(controller.url.absoluteString)…", "hourglass")
         case .live: ("Live · \(controller.url.absoluteString)", "play.rectangle.fill")
         case .unreachable: ("Không kết nối được server, đang thử lại…", "exclamationmark.triangle")
@@ -81,7 +93,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func snapshotNow() { controller.snapshot() }
 
-    @objc private func openInBrowser() { NSWorkspace.shared.open(controller.url) }
+    /// Trình duyệt mở trang thường (bỏ ?wallpaper) để còn header, cài đặt và panel.
+    @objc private func openInBrowser() {
+        guard var parts = URLComponents(url: controller.url, resolvingAgainstBaseURL: false) else {
+            NSWorkspace.shared.open(controller.url)
+            return
+        }
+        let kept = (parts.queryItems ?? []).filter { $0.name != "wallpaper" }
+        parts.queryItems = kept.isEmpty ? nil : kept
+        NSWorkspace.shared.open(parts.url ?? controller.url)
+    }
 
     @objc private func toggleLaunchAtLogin() {
         do {
