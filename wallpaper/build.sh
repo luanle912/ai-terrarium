@@ -26,6 +26,9 @@ codesign --force --sign - "$APP"
 echo "Built $APP"
 
 if [[ "${1:-}" == "install" ]]; then
+    # Thoát đàng hoàng để app kịp tắt server do nó chạy; pkill chỉ khi app không trả lời.
+    if pgrep -x LiveWallpaper >/dev/null; then osascript -e 'quit app "LiveWallpaper"' >/dev/null 2>&1 || true; fi
+    for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x LiveWallpaper >/dev/null || break; sleep 0.5; done
     pkill -x LiveWallpaper || true
     mkdir -p ~/Applications
     rm -rf ~/Applications/LiveWallpaper.app
