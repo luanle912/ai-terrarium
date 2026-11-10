@@ -25,6 +25,8 @@ const X0 = 0.08,
   OV = 0.07,
   DW = 0.18,
   DH = 10;
+// for whatever hangs on a kennel's gable (the event's lights, web/office-draw-xmas.js)
+export const KENNEL = { X1, HW, OV, ZE, ZR };
 // Where a frame's head is: the middle column (hc) and top row (ht) of what is drawn in its top three rows.
 const headOf = f => {
   const cols = [];

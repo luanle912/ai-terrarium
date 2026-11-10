@@ -362,6 +362,7 @@ mixin(
       poly([P(W, -WT, 0), P(W, 0, 0), P(W, 0, ZT), P(W, -WT, ZT)], shade(th.wr, -34), null);
       poly([P(-WT, H, 0), P(0, H, 0), P(0, H, ZT), P(-WT, H, ZT)], shade(th.wl, -20), null);
       if (SnowLogic.depth(snow)) this.winterWalls(G, SnowLogic.depth(snow));
+      if (ev) this.xmasWallLights(G, ev);
       {
         const OD = OfficeDecor;
         if (OD) [1.6, 4.8, 11.6, 14.8].forEach(x => OD.F.window(OD.kit(ctx, ...P(x, 0)), t, { night: df < 0.5 }));

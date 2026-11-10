@@ -54,6 +54,8 @@ export const SCENE_METHODS = [
   'fateItems',
   'xmasItems',
   'xmasTreeLights',
+  'xmasWallLights',
+  'xmasString',
   'winterWalls',
   'drawPrints',
   'stepPrints',
