@@ -16,6 +16,7 @@ The office as your Mac's live wallpaper, with the server started for you, and li
 
 ### Changed
 
+- **The usage board shows a hit limit even without a status line** — In the desktop app Claude Code runs without a status line, so the `statusline` bridge never runs and the board had no source at all. Every 429 in a transcript names the window (5H or 7D) and when it resets; the board now shows that window as LIMIT until then (and it wins over an older status-line figure). The README explains the desktop-app case
 - **Page loads are much lighter, on the hub and locally** — The page's 75 scripts and stylesheet are kept in memory with an ETag and a gzip copy: a first load sends about 291 KB instead of 879 KB, and a reload gets `304 Not Modified` for each file instead of downloading them again (files are still revalidated on every load, and an edited file is served new at once)
 - **The hub does less per publish and per viewer** — SQL statements are prepared once and reused, an `island` frame identical to the last one sent is not sent again, and the once-a-minute sign-in check looks up each session once however many tabs it has open
 - **The local server uses far less memory** — It reads transcripts a megabyte at a time instead of in one 64 MB piece: about 105 MB instead of 250 MB, with the same sessions

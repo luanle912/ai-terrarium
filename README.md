@@ -250,6 +250,12 @@ Nếu bạn đã có status line riêng, giữ nó bằng `--chain`:
 Lệnh ghi `~/.claude-terrarium/usage.json` (quyền 0600) và in một dòng như `🏝 5H 23% · 7D 41%`. Khi chưa có dữ liệu, bảng hiện `--` thay vì 0%.
 Chỉ chạy được với gói Pro/Max của claude.ai, Claude Code ≥ 2.1.80, và sau phản hồi đầu tiên của mỗi phiên.
 
+**Dùng Claude Code trong app desktop (tab Code):** app chạy Claude Code không có status line, nên lệnh trên **không
+bao giờ được gọi** và bảng không có số %. Bảng vẫn biết khi bạn **chạm trần**: transcript ghi mỗi lần bị chặn (429) kèm
+cửa sổ (5H / 7D) và giờ reset, nên cửa sổ đó hiện **LIMIT** cho tới giờ reset. Muốn có số % liên tục, mở thêm một phiên
+`claude` trong terminal (status line chạy ở đó và ghi `usage.json` cho cả máy). Đường dẫn trong `statusLine` phải trỏ
+tới một bản repo cố định (không phải worktree tạm), vì xoá thư mục đó là bảng mất nguồn.
+
 ## 🖼️ Văn phòng làm hình nền (macOS)
 
 App `LiveWallpaper` (thư mục `wallpaper/`) đặt văn phòng làm hình nền máy Mac. Mỗi màn hình có một cửa sổ nằm ở tầng
