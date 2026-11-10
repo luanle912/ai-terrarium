@@ -303,6 +303,7 @@ export class ClaudeOffice extends React.Component {
       }),
     };
     window.__dogs = { dogs: this.dogs, world: this.dogWorld };
+    window.__office = this; // for tools/shot.mjs --eval: switch to simulated agents, pose someone
     // the first person on the floor drops from the EXIT door, as if they had just gone out (for checking the fall)
     window.__fall = () => this.agents[0] && this.startFall(this.agents[0], performance.now() / 1000);
     // the first person on the floor leaves by the named fate (web/fate-logic.js), for checking the scenes

@@ -69,3 +69,13 @@ test('a missing or odd department colour never breaks an outfit', () => {
     assert.match(o.scarfD, /^#[0-9a-f]{6}$/)
   }
 })
+
+test('drawing code reads the top through shirtOf, never the raw department colour', () => {
+  const allowed = { 'office-people-xmas.js': 1, 'office-agents.js': 1, 'office-render.js': 1, 'people-logic.js': 1 }
+  const bad = []
+  for (const f of readdirSync(new URL('../web', import.meta.url)).filter(f => f.endsWith('.js') && !allowed[f]))
+    readFileSync(new URL('../web/' + f, import.meta.url), 'utf8').split('\n').forEach((line, i) => {
+      if (/\.shirt\b/.test(line)) bad.push(`${f}:${i + 1}`)
+    })
+  assert.deepEqual(bad, [])
+})

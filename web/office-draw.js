@@ -332,7 +332,7 @@ mixin(
         ctx.fillStyle = col;
         ctx.fillRect(Math.round(x), Math.round(y), w, hh);
       };
-      const G = { ctx, poly, box, rect, th, t, df };
+      const G = { ctx, poly, box, rect, th, t, df, ev };
       this.drawPrints(G, this.printNow || 0);
       for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
       for (const a of this.agents)
