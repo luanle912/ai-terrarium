@@ -23,6 +23,8 @@ import { hash, WATER_Z } from './island-land.js';
 import { drawSeasonFlowers, drawSeasonTree, drawSnowman, seasonC, SNOWMAN_EXT, TREE_EXT } from './island-art-season.js';
 import { SeasonIsland } from './season-island.js';
 import { SeasonLogic } from './season-logic.js';
+import { SnowLogic } from './snow-logic.js';
+import { drawIcicles, drawSnowEdge, drawSnowLawn, snowTile } from './island-art-snow.js';
 export { hash, hex, mix, toHex, WATER_Z };
 // Night pulls every island colour toward the same deep blue the office uses after dark (web/island-art.js).
 export { night };
@@ -37,8 +39,11 @@ function bakeTools(frame, env) {
   const { OX, OY } = frame,
     look = SeasonLogic.look(env.season),
     P = (x, y, z = 0) => [OX + (x - y) * TW, OY + (x + y) * TH - z],
-    C = seasonC((c, s = 0) => night(s ? mix(c, SNOW, env.snow * s) : c, env.df), look);
-  return { P, C, look };
+    C = seasonC((c, s = 0) => night(s ? mix(c, SNOW, env.snow * s) : c, env.df), look),
+    // Lying snow (web/island-art-snow.js): its own colours, dimmed less than the grass after dark.
+    depth = SnowLogic.depth(env.snow),
+    S = c => night(c, 1 - (1 - env.df) * SnowLogic.NIGHT_K);
+  return { P, C, look, depth, S };
 }
 
 // The island as one image the size of the scene canvas. The land (underside, lawn, lake, mountain) is painted first on
@@ -57,7 +62,7 @@ export function renderIsland(island, frame, k, env) {
   };
   const [cv, ctx] = canvas(),
     [land, lctx] = canvas();
-  const { P, C, look } = bakeTools(frame, env),
+  const { P, C, look, depth, S } = bakeTools(frame, env),
     frozen = look.frozen;
   const lp = painter(lctx, P),
     pt = painter(ctx, P);
@@ -69,9 +74,17 @@ export function renderIsland(island, frame, k, env) {
   for (const c of island.list) {
     const { x, y } = c,
       grass = (x + y) % 2 ? '#5eae4a' : '#5aa847';
-    lp.poly([P(x, y, 0), P(x + 1, y, 0), P(x + 1, y + 1, 0), P(x, y + 1, 0)], C(grass, 0.85));
+    lp.poly(
+      [P(x, y, 0), P(x + 1, y, 0), P(x + 1, y + 1, 0), P(x, y + 1, 0)],
+      depth ? snowTile(S, C(grass), x, y, depth) : C(grass, 0.85),
+    );
     if (!has(x, y + 1)) shoreFace(lp, P, C, x, y, 'y', x === f.x && y === f.y);
     if (!has(x + 1, y)) shoreFace(lp, P, C, x, y, 'x');
+  }
+  // snow that lies: over the lawn and hanging over the edge (the water and the mountain are painted over it)
+  if (depth) {
+    drawSnowLawn(lp, P, S, C, island, env.block, depth);
+    drawSnowEdge(lp, P, S, island, depth, f);
   }
   drawWater(lp, P, C, island, frame, frozen);
   drawMountain(lp, P, C, island, env.snow);
@@ -96,6 +109,7 @@ export function renderIsland(island, frame, k, env) {
     ctx.restore();
     land.width = land.height = 0; // let the browser drop it now rather than at the next collection
   }
+  if (depth) drawIcicles(ctx, P, S, island, depth);
   // the small pool the mountain fall drops into, in its stone rim, against the rock of the gap
   drawPool(pt, P, C, island, frozen);
   drawLakeDecor(pt, P, C, island, frozen);

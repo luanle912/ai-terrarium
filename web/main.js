@@ -21,6 +21,7 @@ import './island-life.js';
 import './dog-logic.js';
 import './dog-sprites.js';
 import './smoke-logic.js';
+import './snow-logic.js';
 import './fate-logic.js';
 import './people-logic.js';
 import './restroom-logic.js';
