@@ -171,6 +171,31 @@ test('at night every dog walks to the den and sleeps there; in the morning they 
   assert.ok(dogs.every(d => d.act !== 'sleep'))
 })
 
+// Three houses in a row, doors to the east (like DOG_HOUSES beside the restroom block).
+const houses = [0, 1, 2].map(i => ({ x: W + 4, y: i, door: [W + 5, i] }))
+const atDoor = (d, h) => Math.floor(d.x) === h.door[0] && Math.floor(d.y) === h.door[1]
+
+test('with houses, at night each dog walks to its own house and goes in; in the morning they come out', () => {
+  const w = world({ hour: 23, houses }), dogs = Dog.create(w)
+  simulate(dogs, w, 60)
+  for (const d of dogs) { assert.equal(d.act, 'inside'); assert.ok(atDoor(d, houses[d.id]), `dog ${d.id} is at its own door`) }
+  assert.equal(Dog.pose(dogs[0], 1).frame, 'sleep')
+  w.hour = 7; simulate(dogs, w, 5)
+  assert.ok(dogs.every(d => d.act !== 'inside' && d.act !== 'home'))
+})
+
+test('in the rain the dogs run into their houses by day, greet nobody, and come out once it stops', () => {
+  const w = world({ houses, agents: [{ id: 'a1', x: 13.5, y: 8.5 }] }), dogs = Dog.create(w)
+  simulate(dogs, w, 3)
+  w.wet = true
+  let ran = false
+  simulate(dogs, w, 40, ds => { if (ds.some(d => d.act === 'home' && d.speed >= 2)) ran = true })
+  assert.ok(ran, 'they hurry home in the rain')
+  for (const d of dogs) { assert.equal(d.act, 'inside'); assert.ok(atDoor(d, houses[d.id])); assert.equal(d.greet, null) }
+  w.wet = false; simulate(dogs, w, 5)
+  assert.ok(dogs.every(d => d.act !== 'inside' && d.act !== 'home'))
+})
+
 test('a person coming out on the lawn gets a dog sitting by them, wagging', () => {
   const w = world({ agents: [{ id: 'a1', x: 13.5, y: 8.5 }] }), dogs = Dog.create(w)
   let greeted = null

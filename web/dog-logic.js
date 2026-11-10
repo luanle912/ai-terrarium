@@ -175,12 +175,7 @@ function near(d, w, r) {
   return null;
 }
 function idle(d, w, s, happy) {
-  d.act = 'idle';
-  d.path = [];
-  d.until = w.now + s;
-  d.wag = !!happy;
-  d.partner = null;
-  d.lead = false;
+  Object.assign(d, { act: 'idle', path: [], until: w.now + s, wag: !!happy, partner: null, lead: false });
 }
 // Mostly a stroll of a few tiles; now and then (FAR_WALK) a long walk to anywhere on the lawn, so the dogs get round
 // to the back lawn and the lake shore too.
@@ -439,6 +434,9 @@ function arrive(d, dogs, w) {
       d.face = faceToward(d, d.spot.tx + 0.5, d.spot.ty + 0.5);
       d.until = w.now + 3 + r() * 2.5;
       break;
+    case 'home':
+      Object.assign(d, { act: 'inside', face: 1 });
+      break;
     case 'den':
       d.act = 'sleep';
       d.face = dogs.indexOf(d) % 2 ? -1 : 1;
@@ -474,6 +472,7 @@ function tick(d, dogs, w) {
     case 'wander':
     case 'zoom':
     case 'den':
+    case 'home':
       if (still && d.act === 'wander') next(d, dogs, w);
       break;
     case 'rest':
@@ -481,6 +480,7 @@ function tick(d, dogs, w) {
       if (still && done) idle(d, w, 1 + w.rand() * 2);
       break;
     case 'sleep':
+    case 'inside':
       break;
     case 'chase': {
       const b = d.partner;
@@ -583,17 +583,28 @@ function create(w) {
     };
   });
 }
+// Each dog's own house (w.houses[id]: {x, y, door}): in at night and in the rain (w.wet), out when that ends.
+const SHELTER = new Set(['home', 'inside']);
+function shelter(d, w, night) {
+  if (SHELTER.has(d.act) || (night && d.act === 'company')) return;
+  const h = w.houses[d.id];
+  Object.assign(d, { partner: null, lead: false, greet: null, wag: false, playing: false, act: 'home' });
+  if (!goTo(d, w, h.door, (night ? STROLL : RUN * 0.75) * LEGS[d.breed])) {
+    Object.assign(d, { act: 'inside', path: [], x: h.door[0] + 0.5, y: h.door[1] + 0.5 });
+  }
+}
 function step(dogs, w, dt) {
-  const night = isNight(w.hour);
+  const night = isNight(w.hour),
+    housed = !!(w.houses && w.houses.length >= dogs.length), // without houses: the den, out in the open
+    away = night || (housed && !!w.wet);
   for (const d of dogs) {
-    if (night && d.act !== 'sleep' && d.act !== 'den' && d.act !== 'company') {
+    if (housed) {
+      if (away) shelter(d, w, night);
+      else if (SHELTER.has(d.act) || d.act === 'sleep') idle(d, w, 1 + w.rand() * 3, true);
+    } else if (night && d.act !== 'sleep' && d.act !== 'den' && d.act !== 'company') {
       // Everyone heads for their own cell of the den; games and greetings simply stop.
       const c = (w.den || [])[d.id != null ? d.id : dogs.indexOf(d)];
-      d.partner = null;
-      d.lead = false;
-      d.greet = null;
-      d.wag = false;
-      d.act = 'den';
+      Object.assign(d, { partner: null, lead: false, greet: null, wag: false, act: 'den' });
       if (!c || !goTo(d, w, c, STROLL * LEGS[d.breed])) {
         d.act = 'sleep';
         d.path = [];
@@ -608,7 +619,7 @@ function step(dogs, w, dt) {
     } else if (!night && (d.act === 'sleep' || d.act === 'den')) idle(d, w, 1 + w.rand() * 3, true);
   }
   company(dogs, w);
-  if (!night) greet(dogs, w);
+  if (!away) greet(dogs, w);
   for (const d of dogs) {
     const had = d.path.length > 0;
     move(d, w, dt);
@@ -635,6 +646,7 @@ function pose(d, t) {
       frame = 'lie';
       break;
     case 'sleep':
+    case 'inside':
       frame = 'sleep';
       break;
     case 'drink':

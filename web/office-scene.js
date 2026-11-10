@@ -72,6 +72,12 @@ export const WC = RestroomLogic.layout(
   ),
   WC_WALK = new Set(WC.walk);
 WC.floor.forEach(k => LAWN_WALK.delete(k));
+// The dogs' houses, one each (DogLogic.BREEDS order), in a row on the lawn against the restroom block's east wall,
+// their doors toward the viewer (+x). The row runs from the block's back corner outward, so the smoking corner's
+// pergola and plants, in front of the wall's other end, hide none of them. The dogs go in at night and in the rain;
+// nobody walks over the houses.
+export const DOG_HOUSES = [0, 1, 2].map(i => ({ x: WC.x1, y: WC.y0 - 2 + i, door: [WC.x1 + 1, WC.y0 - 2 + i] }));
+DOG_HOUSES.forEach(h => LAWN_WALK.delete(h.x + ',' + h.y));
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
 // The office dogs live on the lawn all round the office, by the lake and on the back lawn; never in the lake, the
@@ -101,6 +107,7 @@ export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   avoid: [
     ...ISLAND.spots.filter(s => s.id === 'east-back' || s.id === 'east-front'),
     { x: REST.bench.x, y: REST.bench.y, w: 1, h: 1 },
+    ...DOG_HOUSES.map(h => ({ x: h.x, y: h.y, w: 1, h: 1 })),
   ],
   wallReach: WALL_REACH,
   tall: [...M.cells].map(k => {
@@ -126,6 +133,7 @@ export const DOG_PLACES = {
   roamList: [...DOG_ROAM].map(k => k.split(',').map(Number)),
   clear: DOG_CLEAR,
   den: DogLogic.denCells(DOG_ROAM, [33, 8], DOG_CLEAR),
+  houses: DOG_HOUSES,
   // not at the pavilion's stepping stones or where an agent bathes
   drink: DogLogic.drinkSpots(
     DOG_ROAM,
