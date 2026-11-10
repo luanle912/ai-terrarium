@@ -24,7 +24,7 @@ import { drawSeasonFlowers, drawSeasonTree, drawSnowman, seasonC, SNOWMAN_EXT, T
 import { SeasonIsland } from './season-island.js';
 import { SeasonLogic } from './season-logic.js';
 import { SnowLogic } from './snow-logic.js';
-import { drawIcicles, drawSnowEdge, drawSnowLawn, snowTile } from './island-art-snow.js';
+import { drawIcicles, drawSnowEdge, drawSnowLawn, snowOnTop, snowTile } from './island-art-snow.js';
 export { hash, hex, mix, toHex, WATER_Z };
 // Night pulls every island colour toward the same deep blue the office uses after dark (web/island-art.js).
 export { night };
@@ -169,10 +169,11 @@ export function renderIsland(island, frame, k, env) {
 // (SeasonIsland.snowmanTiles).
 // Someone behind a lamp post, a bush, the bench, a tree, a snowman or the pavilion is hidden by it.
 export function renderProps(island, frame, k, env) {
-  const { P, C, look } = bakeTools(frame, env),
+  const { P, C, look, depth, S } = bakeTools(frame, env),
     out = [];
   // ext: [left, up, right, down] px round the point (x + 0.5, y + 0.5) on the lawn
-  const add = (x, y, z, ext, draw, lamp = -1) => {
+  // (snowy: lying snow settles on its top; the snowmen are snow already)
+  const add = (x, y, z, ext, draw, lamp = -1, snowy = true) => {
     const [ax, ay] = P(x + 0.5, y + 0.5, 0),
       dx = Math.floor((ax - ext[0]) * k),
       dy = Math.floor((ay - ext[1]) * k),
@@ -182,6 +183,7 @@ export function renderProps(island, frame, k, env) {
     const g = img.getContext('2d');
     g.setTransform(k, 0, 0, k, -dx, -dy);
     draw(painter(g, P), g);
+    if (snowy) snowOnTop(img, k, S, depth);
     out.push({ x, y, z, img, dx, dy, lamp });
   };
   const { pavilion, rest } = island;
@@ -204,6 +206,6 @@ export function renderProps(island, frame, k, env) {
     }
   if (look.frozen && env.block)
     for (const m of SeasonIsland.snowmanTiles(island, env.block.W, env.block.H))
-      add(m.x, m.y, m.x + m.y + 0.5, SNOWMAN_EXT, pt => drawSnowman(pt, P, C, m));
+      add(m.x, m.y, m.x + m.y + 0.5, SNOWMAN_EXT, pt => drawSnowman(pt, P, C, m), -1, false);
   return out;
 }

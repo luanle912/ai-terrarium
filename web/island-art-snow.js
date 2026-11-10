@@ -123,3 +123,37 @@ export function snowCap(R, S, x, y, w, depth) {
   R(x + 1, y - h - 1, w - 2, 1, S(PAL.lit));
   R(x, y, w, 1, S(PAL.rim));
 }
+
+// Snow settling on a finished sprite (a bush, a lamp, the bench, a tree, the pavilion): every upper edge of the
+// sprite is whitened, a few pixels deep by the depth, lit along the very top. Done once at the bake by compositing
+// (the sprite minus itself moved down leaves its upper edges), with no pixels read back, so it follows whatever
+// shape was drawn and stays cheap. k is canvas px to an art px.
+let scratch = null;
+function upperEdge(img, px, colour) {
+  const s = scratch || (scratch = document.createElement('canvas'));
+  if (s.width < img.width || s.height < img.height) {
+    s.width = Math.max(s.width, img.width);
+    s.height = Math.max(s.height, img.height);
+  }
+  const g = s.getContext('2d');
+  g.globalCompositeOperation = 'source-over';
+  g.clearRect(0, 0, s.width, s.height);
+  g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = 'destination-out';
+  g.drawImage(img, 0, px);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = colour;
+  g.fillRect(0, 0, img.width, img.height);
+  return s;
+}
+export function snowOnTop(img, k, S, depth) {
+  if (depth < 1 || !img.width || !img.height) return;
+  const g = img.getContext('2d'),
+    w = img.width,
+    h = img.height;
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.drawImage(upperEdge(img, Math.max(1, Math.round(depth * k)), S(PAL.base)), 0, 0, w, h, 0, 0, w, h);
+  g.drawImage(upperEdge(img, Math.max(1, Math.round(k)), S(PAL.lit)), 0, 0, w, h, 0, 0, w, h);
+  g.restore();
+}
