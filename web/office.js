@@ -300,6 +300,8 @@ export class ClaudeOffice extends React.Component {
       }),
     };
     window.__dogs = { dogs: this.dogs, world: this.dogWorld };
+    // the first person on the floor drops from the EXIT door, as if they had just gone out (for checking the fall)
+    window.__fall = () => this.agents[0] && this.startFall(this.agents[0], performance.now() / 1000);
     if (this.state.weatherMode === 'real') this.refreshReal();
     this.realTimer = setInterval(() => {
       if (this.state.weatherMode === 'real') this.refreshReal();
@@ -459,6 +461,8 @@ export class ClaudeOffice extends React.Component {
       if (this.agents.some(a => a.gone)) {
         const goneA = this.agents.filter(a => a.gone);
         goneA.forEach(a => this.goneSids.set(a.sid, a.leftWhy || 'missing'));
+        // out of the EXIT door: they drop straight down from it (web/office-draw-fall.js)
+        goneA.forEach(a => a.exited && this.startFall(a, ts / 1000));
         const goneIds = goneA.map(a => a.id);
         this.agents = this.agents.filter(a => !a.gone);
         if (goneIds.includes(this.state.sel)) this.setState({ sel: null });

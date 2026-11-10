@@ -74,6 +74,7 @@ mixin(
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, w, hh);
         fn(ctx, w, hh, t, skyEnv);
+        if (cv === this.backCanvas) this.drawFallers(ctx, t, hh);
       }
       // The island bobs a few pixels; moving the wrapper (not a transform) keeps bubbles, clicks and layering intact.
       if (this.wrapEl) {
