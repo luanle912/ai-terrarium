@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ./build.sh          → build ra build/LiveWallpaper.app
-# ./build.sh install  → build, copy vào ~/Applications rồi mở app
+# ./build.sh install  → build, copy vào ~/Applications rồi mở app (app tự chạy server.js của repo này)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -11,6 +11,17 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp .build/release/LiveWallpaper "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
+# App mở từ Finder không có PATH của shell: ghi sẵn đường dẫn node và server.js của repo này để app tự chạy server
+# (ServerSupervisor.swift). Cài lại từ thư mục nào thì app chạy server của thư mục đó.
+SERVER="$(cd .. && pwd)/server.js"
+NODE="$(command -v node || true)"
+PB=/usr/libexec/PlistBuddy
+$PB -c "Add :TerrariumServer string $SERVER" "$APP/Contents/Info.plist"
+if [[ -n "$NODE" ]]; then
+    $PB -c "Add :TerrariumNode string $NODE" "$APP/Contents/Info.plist"
+else
+    echo "warning: node not found in PATH; the app will look in /opt/homebrew/bin and /usr/local/bin"
+fi
 codesign --force --sign - "$APP"
 echo "Built $APP"
 
