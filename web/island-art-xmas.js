@@ -91,3 +91,24 @@ export function drawBigTree(pt, P, T, tile, level) {
     R(gx + (w >> 1) - 1, gy + h, 3, 1, ribbon);
   });
 }
+
+// A candy cane stuck in the snow beside a lamp post (from the event's second level): [left, up, right, down].
+export const CANE_EXT = [4, 14, 5, 2];
+export function drawCandyCane(pt, P, T, l) {
+  const [px, py] = P(l.x + 0.86, l.y + 0.62, 0),
+    x = Math.round(px),
+    y = Math.round(py),
+    ctx = pt.ctx,
+    R = (a, b, w, h, c) => {
+      ctx.fillStyle = T(c);
+      ctx.fillRect(x + a, y - b - h, w, h);
+    };
+  R(-2, 0, 4, 12, OUTLINE);
+  R(-2, 10, 6, 3, OUTLINE);
+  R(2, 7, 2, 4, OUTLINE);
+  for (let i = 0; i < 11; i++) R(-1, i, 2, 1, i % 4 < 2 ? '#f6f9fc' : '#d94a5a');
+  R(-1, 11, 4, 1, '#f6f9fc');
+  R(1, 11, 1, 1, '#d94a5a');
+  R(2, 8, 1, 3, '#d94a5a');
+  R(3, 9, 1, 1, '#f6f9fc');
+}

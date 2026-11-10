@@ -5,7 +5,7 @@ import { EventLogic } from './event-logic.js';
 import { BIG_TREE_BULBS, BIG_TREE_TOP } from './island-art-xmas.js';
 import { PAVILION } from './island-art.js';
 import { KENNEL } from './office-draw-doghouse.js';
-import { DOG_HOUSES, ISLAND, P, PG, SMOKE, W, H, WALL } from './office-scene.js';
+import { DESKS, DOG_HOUSES, ISLAND, P, PG, SMOKE, W, H, WALL } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 
 export const BULB = ['#ff5a66', '#ffd166', '#5fd27a', '#5ec8ff'];
@@ -87,6 +87,47 @@ function drawString(ctx, at, t, glow, still, lit) {
   }
 }
 
+// A wreath, its middle at (x, y): a ring of fir with a red bow under it; `small` for a kennel's gable.
+function wreath(ctx, x, y, small) {
+  const r = small ? 2 : 3;
+  ctx.fillStyle = '#1f6b3a';
+  ctx.fillRect(x - r, y - r + 1, 2 * r + 1, 2 * r - 1);
+  ctx.fillRect(x - r + 1, y - r, 2 * r - 1, 2 * r + 1);
+  ctx.fillStyle = '#3aa05a';
+  ctx.fillRect(x - r + 1, y - r, 2 * r - 2, 1);
+  ctx.fillStyle = small ? '#6b4a2a' : '#7a5232';
+  ctx.fillRect(x - r + 2, y - r + 2, 2 * r - 3, 2 * r - 3);
+  ctx.fillStyle = '#e5484d';
+  ctx.fillRect(x - 1, y + r - 1, 3, 2);
+}
+// On a desk with an owner (from the event's second level), by the desk's number: a mini tree, a stocking over the
+// edge, or a strand of tinsel. Four rectangles at most. (x, y) is the back corner of the desk top.
+function deskDecor(ctx, i, x, y) {
+  const k = i % 3;
+  if (k === 0) {
+    ctx.fillStyle = '#2a8048';
+    ctx.fillRect(x - 2, y - 3, 5, 2);
+    ctx.fillRect(x - 1, y - 5, 3, 2);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(x, y - 6, 1, 1);
+    ctx.fillStyle = '#d94a5a';
+    ctx.fillRect(x - 1, y - 1, 3, 1);
+  } else if (k === 1) {
+    ctx.fillStyle = '#f6f9fc';
+    ctx.fillRect(x - 1, y - 4, 3, 1);
+    ctx.fillStyle = '#d94a5a';
+    ctx.fillRect(x - 1, y - 3, 3, 3);
+    ctx.fillRect(x + 1, y - 1, 2, 1);
+  } else {
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(x - 3, y - 2, 2, 1);
+    ctx.fillRect(x + 1, y - 2, 2, 1);
+    ctx.fillStyle = '#5ec8ff';
+    ctx.fillRect(x - 1, y - 1, 2, 1);
+  }
+}
+const OWNED = new Uint8Array(DESKS.length);
+
 const TREE = EventLogic.bigTreeTile(ISLAND, W, H),
   [TX, TY] = TREE ? PG(TREE[0] + 0.5, TREE[1] + 0.5, 0).map(Math.round) : [0, 0];
 
@@ -98,6 +139,24 @@ mixin(
       if (TREE) items.push({ z: TREE[0] + TREE[1] + 0.52, f: () => this.xmasTreeLights(G) });
       for (const s of STRINGS)
         if (s.z != null && ev.level >= s.level) items.push({ z: s.z, f: () => this.xmasString(G, s.at) });
+      // wreaths: on the EXIT door (in the left wall, at tile 0, 7) and over each kennel's door
+      items.push({ z: 7.6, f: () => wreath(G.ctx, ...P(0, 7.05, 24).map(Math.round), false) });
+      for (const h of DOG_HOUSES) {
+        const [x, y] = PG(h.x + KENNEL.X1, h.y, 19).map(Math.round);
+        items.push({ z: h.x + KENNEL.X1 + h.y + KENNEL.HW + 0.02, f: () => wreath(G.ctx, x + 1, y, true) });
+      }
+      // something small on every desk that has an owner (people sub-agents stand by do not own one)
+      if (ev.level >= 2) {
+        OWNED.fill(0);
+        for (const a of this.agents) if (!a.leaving && !a.parent && a.desk >= 0) OWNED[a.desk] = 1;
+        DESKS.forEach((d, i) => {
+          if (OWNED[i]) items.push({ z: d.gx + d.gy + 1.52, f: () => this.xmasDesk(G, d, i) });
+        });
+      }
+    }
+    xmasDesk(G, d, i) {
+      const [x, y] = P(d.gx + 1.55, d.gy + 0.25, 15);
+      deskDecor(G.ctx, i, Math.round(x), Math.round(y));
     }
     // The strings on the office's own walls, drawn right after the walls so everything in the room is in front.
     xmasWallLights(G, ev) {

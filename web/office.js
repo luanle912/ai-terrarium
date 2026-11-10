@@ -506,6 +506,7 @@ export class ClaudeOffice extends React.Component {
     }
     this.doneSweep(Date.now());
     this.env = this.envNow();
+    this.env.event = (this.eventNow() || { level: 0 }).level;
     this.draw(ts / 1000);
     this.drawSky(ts / 1000);
     for (const a of this.agents) {
