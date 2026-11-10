@@ -595,6 +595,7 @@ mixin(
       }
       this.pantryItems(G, items);
       this.smokingItems(G, items, snow);
+      this.doghouseItems(G, items, snow, dfB, snB);
       this.restroomItems(G, items, snow);
       [
         [8.5, 13.5],

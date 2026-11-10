@@ -598,6 +598,11 @@ mixin(
       w.hour = now.getHours() + now.getMinutes() / 60;
       w.snow = this.snowShown || 0;
       w.calm = !!(this.env && this.env.reduced);
+      // In the rain or a storm they go into their houses: in once it is really raining, out once it has nearly
+      // stopped, so a passing blend does not send them in and out.
+      const fx = this.env && this.env.fx,
+        wet = fx ? Math.max(fx.rain, fx.storm) : 0;
+      w.wet = w.wet ? wet > 0.2 : wet > 0.4;
       w.frozen = SeasonLogic.look(this.seasonNow()).frozen;
       // People out on the lawn (down the stairs, bathing in the pond) are who the dogs run over to greet.
       // `act` is what they are doing, or the idle spot they are walking to, so a smoker is left alone on the way too.
