@@ -136,8 +136,7 @@ function upperEdge(img, px, colour) {
     s.height = Math.max(s.height, img.height);
   }
   const g = s.getContext('2d');
-  g.globalCompositeOperation = 'source-over';
-  g.clearRect(0, 0, s.width, s.height);
+  g.globalCompositeOperation = 'copy';
   g.drawImage(img, 0, 0);
   g.globalCompositeOperation = 'destination-out';
   g.drawImage(img, 0, px);

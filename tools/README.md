@@ -27,3 +27,16 @@ GC: 0.1–0.5 % of the profile.
 
 Against the same scene: ms p50 +0.4, p95 +1; canvas calls +900 by day, +1,400 by night; a bake (island + props) at
 most 65 ms the first time (cold) and 45 ms after that.
+
+## After phase 1, winter snow with depth (2026-11-10)
+
+Measured alternately with July on a loaded machine, so compare within a row of runs, not with the baseline above.
+
+| Scene | ms p50 / p95 | canvas calls |
+|---|---|---|
+| 20 Jul 12:00 (unchanged code path) | 3.2–3.7 / 4.2–4.5 | 18,510 |
+| 20 Dec 12:00 | 3.6–3.8 / 4.6–4.8 | 18,980 (+65 on the baseline) |
+| 20 Dec 21:00 | 3.7–3.9 / 4.7–4.9 | 18,770 (+50) |
+
+Bakes timed directly in the page (12 runs each, median, k = 2.3): summer props 9 ms + island 5.5 ms; winter with snow
+props 20 ms + island 6.5 ms.
