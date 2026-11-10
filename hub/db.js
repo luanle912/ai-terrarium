@@ -96,7 +96,14 @@ function openDb(dbPath) {
     for (const suffix of ['', '-wal', '-shm']) { try { fs.chmodSync(dbPath + suffix, 0o600); } catch { /* may not exist */ } }
   }
 
-  const q = (sql) => raw.prepare(sql);
+  // Each SQL text is prepared once and the statement reused (every query here is a fixed string, so the cache holds
+  // at most one entry per query in this file): a publish runs ~4 lookups and used to parse each one again.
+  const stmts = new Map();
+  const q = (sql) => {
+    let s = stmts.get(sql);
+    if (!s) stmts.set(sql, (s = raw.prepare(sql)));
+    return s;
+  };
   const run = (sql, ...p) => q(sql).run(...p);
   const get = (sql, ...p) => q(sql).get(...p);
   const all = (sql, ...p) => q(sql).all(...p);
