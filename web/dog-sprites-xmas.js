@@ -19,7 +19,7 @@ const EARS = {
   drink: [12, 14, 5],
 };
 // The neck where the frame shows no collar (asleep, the head tucked in): [x, y] of what would be its collar pixels.
-const NECK = { 'husky/sleep': [[10, 5]], 'dalmatian/sleep': [[11, 4]] };
+const NECK = { 'husky/sleep': [[10, 5]], 'dalmatian/sleep': [[10, 4]] };
 const full = (f, x, y) => y >= 0 && y < f.h && x >= 0 && x < f.w && f.rows[y][x] !== '.';
 function collar(breed, name, f) {
   const out = [];

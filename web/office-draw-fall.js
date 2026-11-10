@@ -51,7 +51,8 @@ mixin(
         top: (outfitOf(a, this.eventNow()), shirtOf(a)),
         skin: a.skin,
         look: LOOK(a),
-        sub: !!a.parent,
+        sub: !!a.parent && !a.outfit,
+        hat: a.outfit ? a.outfit.hatColor : null,
         spin: a.id % 2 ? 1 : -1,
       });
     }
@@ -113,6 +114,7 @@ mixin(
       R(1, -11, 1, 1, '#1a1a1a');
       R(-1, -9, 2, 1, '#5a1f1f');
       if (f.sub) R(-3, -15, 6, 1, '#ffd166');
+      if (f.hat) R(-3, -17, 6, 3, f.hat);
       ctx.restore();
     }
   },

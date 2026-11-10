@@ -314,10 +314,10 @@ mixin(
         R(sx - 5, sy - 11, 10, 1, shL);
         R(sx - 1, sy - 10, 1, 9, shD);
         R(sx - 1, sy - 13, 3, 2, skD);
-        if (o) XMAS.scarf(R, o, sx, sy - 13, 8);
         const hy = sy - 21 + (skey === 'reading' ? 1 : 0);
         if (skey === 'visitor' || skey === 'permission') PERSON.hairProfile(R, L, sx, hy, sh, sk);
         else PERSON.hairSeat(R, L, sx, hy, sh, sk);
+        if (o) XMAS.scarf(R, o, sx, sy - 13, 8);
         post.forEach(f => f());
         if (o) XMAS.hatEvent(R, o, sx, hy + 1, 8);
         else if (a.parent) {
@@ -398,7 +398,7 @@ mixin(
           }
         }
         R(sx - 1, by - 12, 2, 1, skD);
-        if (o) XMAS.scarf(R, o, sx, by - 12);
+        if (o && a.dirFront) XMAS.scarf(R, o, sx, by - 12);
         const hy = by - 18;
         R(sx - 3, hy, 6, 6, sk);
         R(sx + 2, hy, 1, 6, skD);
@@ -417,12 +417,14 @@ mixin(
             a.acc === 'glasses',
           );
         } else PERSON.hairBack(R, L, sx, hy, sh, sk);
-        if (o) XMAS.hatEvent(R, o, sx, hy);
         if (a.acc === 'headset') {
           R(sx - 3, hy - 2, 6, 1, '#1a1a1a');
           R(sx - 4, hy + 1, 1, 3, '#1a1a1a');
           R(sx + 3, hy + 1, 1, 3, '#1a1a1a');
         }
+        // the hat goes over the headset's band; from behind the scarf goes over the hair
+        if (o && !a.dirFront) XMAS.scarf(R, o, sx, by - 12);
+        if (o) XMAS.hatEvent(R, o, sx, hy);
         if (act === 'smoke') {
           // ember at the cigarette tip (brighter during a drag), a thin wisp rising off it, a puff after each drag
           const { drag, exhale } = SmokeLogic.cycle(tp),
@@ -612,6 +614,7 @@ mixin(
     }
     drawSleeper(G, a) {
       const { ctx, poly, box, rect, th, t } = G,
+        o = outfitOf(a, G.ev),
         d = DESKS[a.desk],
         x = d.gx,
         y = d.gy;
@@ -645,7 +648,7 @@ mixin(
         box(x + 0.09, y + 0.44, 0.11, hs === 'bob' ? 0.32 : 0.38, 0.5, hs === 'bob' ? 4 : 3, a.hair);
       else if (hs === 'bun') box(x + 0.12, y + 0.56, 0.07, 0.12, 4, 6.5, a.hair);
       else if (hs === 'ponytail') box(x + 0.08, y + 0.58, 0.11, 0.08, 0.5, 2.5, shade(a.hair, -26));
-      if (a.outfit) XMAS.hatSleep(box, a.outfit, x, y);
+      if (o) XMAS.hatSleep(box, o, x, y);
       else if (a.parent) box(x + 0.18, y + 0.48, 0.08, 0.28, 6.5, 7, '#ffd166');
       box(x + 0.4, y + 0.44, 0.34, 0.36, 0.5, 4.5 + br, shirtOf(a));
       const top = shirtOf(a),
