@@ -6,6 +6,7 @@ import { RestroomLogic } from './restroom-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { PropUse } from './prop-use.js';
 import { FateLogic } from './fate-logic.js';
+import { SnowLogic } from './snow-logic.js';
 import { DEPT_PAL, DESKS, DOOR, FATE_PLACES, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
 import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
@@ -637,6 +638,26 @@ mixin(
         }))
         .filter(a => a.act !== 'wc');
       DogLogic.step(this.dogs, w, dt);
+      this.stepPrints(dt, w);
+    }
+    // Footprints in lying snow (SnowLogic): whoever walks the lawn, person or dog, leaves one every half tile.
+    stepPrints(dt, w) {
+      this.printNow = (this.printNow || 0) + dt;
+      if (SnowLogic.depth(this.snowShown || 0) < 2 || w.calm) return;
+      if (!this.prints) this.prints = SnowLogic.prints();
+      const walk = o => {
+        if (o.px == null || Math.hypot(o.x - o.px, o.y - o.py) > 3) {
+          o.px = o.x;
+          o.py = o.y;
+        } else if (Math.hypot(o.x - o.px, o.y - o.py) >= 0.5) {
+          if (LAWN_WALK.has(Math.floor(o.x) + ',' + Math.floor(o.y)))
+            SnowLogic.addPrint(this.prints, o.x, o.y, this.printNow);
+          o.px = o.x;
+          o.py = o.y;
+        }
+      };
+      for (const a of this.agents) if (a.x >= W || a.y >= H || a.x < 0 || a.y < 0) walk(a);
+      for (const d of this.dogs) if (d.act !== 'inside') walk(d);
     }
   },
 );
