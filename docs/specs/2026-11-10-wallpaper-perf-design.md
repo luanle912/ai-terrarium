@@ -67,7 +67,43 @@ Phân tích thêm:
 | D2 | Nhớ danh sách thư mục, chỉ đọc lại khi thư mục đổi | −vài ms mỗi giây; lợi nhỏ |
 | D3 | `fs.watch` thay cho quét mỗi giây | Lợi nhỏ, macOS watch hay lỗi với 1.000+ file; không đáng |
 
-## 3. Đề xuất
+## 3. Thí nghiệm sau khi brainstorm (đo bằng app thật, 15 khung/s)
+
+| Thí nghiệm (tạm, không giữ) | GPU WebKit | Kết luận |
+|---|---|---|
+| Bình thường | ~57 % | mốc |
+| Bỏ hết đồ đạc + người (chỉ đảo, sàn, tường) | ~41 % | số lệnh vẽ chỉ chiếm ~16 điểm |
+| Vẽ cảnh ở 1× (A4) | ~42 % | lợi ~15 điểm nhưng xấu đi |
+| Không vẽ cảnh đảo luôn | ~22 % | phần cố định: lớp trời + ghép lớp |
+| Lớp trời sau vẽ 1/3 số khung | ~44 % | lợi ~13 điểm, mây vẫn mượt |
+| Bỏ lớp trời trước | ~44 % | không bỏ được (mưa, tuyết, sương, mây gần) |
+
+- **A2 thừa**: log của WebKit (`isViewVisible … window occluded 1`) cho thấy WebKit **đã tự** dừng trang khi cửa sổ
+  hình nền bị che. Không thêm gì.
+- **A3 không đáng**: kể cả bỏ hẳn mọi đồ đạc và người, GPU chỉ giảm ~16 điểm; nướng sẵn lớp tĩnh được ít hơn thế mà
+  phải mổ phần vẽ dùng chung. Hoãn, chỉ làm nếu sau này vẽ thêm nhiều đồ.
+- Chi phí lớn còn lại là WebKit ghép ba canvas toàn màn hình (trời sau, cảnh, trời trước) cho hai màn retina mỗi khung.
+
+## 4. Đã làm
+
+| Việc | Kết quả đo |
+|---|---|
+| A1: 15 khung/s | tổng ~190 % → ~80 % |
+| Lớp trời sau vẽ cách một khung (7,5 lần/s) | GPU ~57 % → ~40 %, hai trang ~25 % → ~20 % |
+| D1: đọc transcript từng khúc 1 MB | RAM node ~250 MB → ~105 MB, kết quả phân tích phiên y hệt (so cả hai bản) |
+| Sửa lỗi: tắt app bằng SIGTERM (`pkill`, đăng xuất) bỏ server mồ côi | app bắt SIGTERM, `build.sh` quit đàng hoàng trước |
+
+Tổng sau cùng (cắm sạc, hai màn): **~65 % một lõi** (GPU ~40 %, hai trang ~20 %, app ~2 %, server ~0,5 %), từ
+~190 % lúc đầu. RAM: GPU ~235 MB, mỗi trang ~125–150 MB, node ~105 MB, app ~65 MB.
+
+## 5. Còn có thể làm (chưa làm)
+
+- A4 có điều kiện: chỉ vẽ 1× khi tỉ lệ ra số nguyên (màn 2× đúng bằng 2 lần) để pixel đều — lợi ~15 điểm.
+- Gộp hai lớp trời thành một khi trời quang (không mưa / tuyết / sương) — cần đo lại mây gần.
+- Chạy pin: đã dừng hẳn (ảnh tĩnh). Có thể thêm tuỳ chọn "luôn ảnh tĩnh, chụp mỗi N phút" cho ai muốn ~0 %.
+- Không đổi công nghệ (WebGL/PixiJS, SpriteKit, Electron/Tauri): lợi thêm không đủ bù việc viết lại / thêm phụ thuộc.
+
+## 6. Đề xuất ban đầu (trước thí nghiệm)
 
 Giữ WKWebView + canvas 2D (một bộ vẽ cho trình duyệt, hub và hình nền; không thêm thư viện, không bước build). Làm theo
 thứ tự lợi / rủi ro:
@@ -78,7 +114,7 @@ thứ tự lợi / rủi ro:
 3. **Không làm**: B1–B3, C1–C3 (đổi công nghệ tốn công viết lại, lợi thêm không đáng so với A2 + A3), A4 (xấu đi), A5
    (A3 lấy phần lớn lợi ích), A6, A7, D2, D3.
 
-## 4. Chi tiết đợt này
+## 7. Kế hoạch ban đầu (A2 đã bỏ, xem mục 3)
 
 ### A2 — dừng khi bị che
 

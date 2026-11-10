@@ -17,4 +17,12 @@ const FPS = 15,
 function frameDue(t, last) {
   return last == null || t - last >= 1000 / FPS - SLACK_MS;
 }
-export const WallpaperLogic = { fromSearch, FPS, frameDue };
+// The far sky (gradient, stars, slow clouds, far islands) is redrawn on every SKY_EVERY-th frame only: clouds drift
+// 5–10 px a second, so at 7.5 redraws a second they still move about a pixel at a time. Measured: the back sky at a
+// third of the frames took WebKit's GPU process from ~57 % to ~44 % of a core. The wallpaper never pans or zooms, so
+// the layer drawn last stays right in between. The near layer (rain, snow, fog, the near cloud) keeps every frame.
+const SKY_EVERY = 2;
+function skyDue(n) {
+  return n % SKY_EVERY === 0;
+}
+export const WallpaperLogic = { fromSearch, FPS, frameDue, SKY_EVERY, skyDue };

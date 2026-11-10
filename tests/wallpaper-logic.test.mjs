@@ -37,3 +37,9 @@ test('on a 120 Hz screen it is still FPS frames a second', () => {
   }
   assert.equal(drawn, FPS)
 })
+
+test('as a wallpaper the far sky is redrawn on every other frame', () => {
+  const { SKY_EVERY, skyDue } = WallpaperLogic
+  assert.equal(SKY_EVERY, 2)
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map(skyDue), [false, true, false, true, false, true])
+})
