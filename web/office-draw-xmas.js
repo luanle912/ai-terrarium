@@ -139,10 +139,9 @@ for (const h of DOG_HOUSES) {
   WREATHS.push({ x: Math.round(x) + 1, y: Math.round(y), z: h.x + KENNEL.X1 + h.y + KENNEL.HW + 0.02, small: true });
 }
 
-// The big tree stands indoors, where the pot plant at the front end of the corridor is (EventLogic.TREE_TILE): its
-// foot on the floor a little back from the office's front edge, so the presents stay on the floor.
-const TREE = EventLogic.TREE_TILE,
-  [TX, TY] = P(TREE[0] + 0.5, TREE[1] + 0.05, 0).map(Math.round),
+// The big tree stands indoors, in the middle of the crossing of the two corridors (EventLogic.TREE_AT).
+const TREE = EventLogic.TREE_AT,
+  [TX, TY] = P(TREE[0], TREE[1], 0).map(Math.round),
   [TL, TU, TR, TD] = BIG_TREE_EXT;
 // Its still part (trunk, tiers, tinsel, presents), painted once per event level and light level and stamped with
 // one drawImage; what blinks is drawn over it every frame (xmasTreeLights).
@@ -176,6 +175,7 @@ mixin(
   class {
     // The event's lights among the scene's sprites (ev from eventNow, never null here).
     xmasItems(G, items, ev) {
+      items.push({ z: TREE[0] + TREE[1] + 0.02, f: () => this.xmasTree(G, ev) });
       for (const s of STRINGS)
         if (s.z != null && ev.level >= s.level) items.push({ z: s.z, f: () => this.xmasString(G, s.at) });
       // wreaths: on the EXIT door (in the left wall, at tile 0, 7) and over each kennel's door
@@ -201,7 +201,7 @@ mixin(
       drawString(ctx, at, t, glow, !!(this.env && this.env.reduced), glow > 0.01);
       ctx.imageSmoothingEnabled = smooth;
     }
-    // The big tree, in place of the pot plant on its tile (web/office-draw.js): the sprite, then its lights.
+    // The big tree among the office's sprites: its still part as one sprite, then its lights.
     xmasTree(G, ev) {
       G.ctx.drawImage(treeSprite(ev.level, Math.round(G.df * 10)), TX - TL, TY - TU);
       this.xmasTreeLights(G);

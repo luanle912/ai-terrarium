@@ -66,9 +66,26 @@ test("the bake's key: nothing without the event, one per level", () => {
   assert.deepEqual([1, 2, 3].map(level => E.cacheKey({ key: 'christmas', level })), ['x1', 'x2', 'x3'])
 })
 
-test('the big tree stands indoors, on the tile of the pot plant at the front of the corridor', () => {
-  assert.deepEqual(E.TREE_TILE, [8, 13])
-  assert.ok(E.TREE_TILE[0] >= 0 && E.TREE_TILE[0] < W && E.TREE_TILE[1] >= 0 && E.TREE_TILE[1] < H, 'inside the office')
+test('the big tree stands indoors, in the middle of the crossing of the two corridors, and people walk round it', () => {
+  globalThis.React ??= { createElement: () => null } // office-scene.js only needs React for h()
+  const { ZONES, BLOCK, DESKS } = loadWeb('office-scene')
+  const [x, y] = E.TREE_AT
+  // the corridors: between the left and the right desk zones, and between the back and the front ones
+  const x0 = Math.max(...ZONES.filter(z => z.zx === 0).map(z => z.zx + 8)), x1 = Math.max(...ZONES.map(z => z.zx))
+  const y0 = 6, y1 = Math.max(...ZONES.map(z => z.zy))
+  assert.equal(x1 - x0, 3, 'the corridor between the desk zones is three tiles wide')
+  assert.deepEqual([x, y], [(x0 + x1) / 2, (y0 + y1) / 2], 'the middle of the crossing')
+  assert.deepEqual(E.TREE_CELLS, ['9,6', '9,7'])
+  // a free tile on each side of the tree, so both corridors stay open round it
+  for (const k of ['8,6', '8,7', '10,6', '10,7', '9,5', '9,8']) assert.ok(!BLOCK.has(k) && !E.TREE_CELLS.includes(k), k)
+  for (const d of DESKS) assert.ok(d.gx + 1 < x0 || d.gx >= x1, 'no desk in the corridor')
+  const set = new Set(['1,1'])
+  E.block(set, true)
+  assert.deepEqual([...set].sort(), ['1,1', '9,6', '9,7'])
+  E.block(set, true)
+  assert.equal(set.size, 3)
+  E.block(set, false)
+  assert.deepEqual([...set], ['1,1'], 'free again when the event ends')
 })
 
 test('while the event is on the season is winter, whatever the date or the choice in Settings', () => {

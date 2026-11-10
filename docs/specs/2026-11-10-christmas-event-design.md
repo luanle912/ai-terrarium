@@ -220,8 +220,9 @@ Khung này dùng lại được: sự kiện khác sau này chỉ thêm một m�
 
 **Sửa theo yêu cầu ngày 2026-11-11** (thay các ý trên ở chỗ khác nhau):
 
-- Cây thông lớn đứng **trong văn phòng**, ở ô chậu cây đầu hành lang phía trước (`EventLogic.TREE_TILE = [8, 13]`,
-  ô vốn không ai đi qua). Phần tĩnh của cây là một sprite dựng một lần cho mỗi (mức sự kiện, mức sáng), mỗi khung
+- Cây thông lớn đứng **trong văn phòng**, giữa ngã tư hai hành lang (`EventLogic.TREE_AT = [9.5, 7]`, chiếm hai ô
+  `TREE_CELLS`, bị chặn khi sự kiện bật để mọi người đi vòng). Hành lang giữa hai cặp khu bàn rộng 3 ô (khu bên phải
+  dời sang đông 1 ô; lối cạnh bồn cây pantry còn 1 ô). Phần tĩnh của cây là một sprite dựng một lần cho mỗi (mức sự kiện, mức sáng), mỗi khung
   một `drawImage` cộng bóng đèn như trên. `bigTreeTile` đã bỏ.
 - Ngoài trời, các cây trơ cành của mùa đông thành **cây thông thường phủ tuyết nhẹ** (`drawSeasonTree` kiểu `'fir'`),
   nướng cùng prop của đảo.

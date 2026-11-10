@@ -509,9 +509,9 @@ mixin(
         ctx.strokeStyle = th.stroke ? '#c9d3e3' : df > 0.5 ? '#c9a77a' : '#3a4462';
         ctx.lineWidth = 1;
         [
-          [9, 0, 9, H],
+          [9.5, 0, 9.5, H],
           [0, 7, 20, 7],
-          [19, 0, 19, H],
+          [19.5, 0, 19.5, H],
         ].forEach(([a, b, c, d]) => {
           const L = Math.max(c - a, d - b) * 2;
           for (let k = 0; k < L; k += 2) {
@@ -613,12 +613,11 @@ mixin(
       [
         [8.5, 13.5],
         [19.5, 13.5],
-        [18.5, 0.5],
+        [19.5, 0.5],
       ].forEach(([x, y]) =>
         items.push({
           z: x + y,
           f: () => {
-            if (ev && x < 9) return this.xmasTree(G, ev); // the Christmas tree stands where this pot was
             box(x - 0.2, y - 0.2, 0.4, 0.4, 0, 7, th.pot);
             const [px, py] = P(x, y, 7);
             [
