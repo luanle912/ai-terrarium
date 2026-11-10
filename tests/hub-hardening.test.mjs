@@ -51,6 +51,21 @@ test('the hub serves every web/ module and the stylesheet the page loads, withou
   } finally { await h.close(); }
 });
 
+test('the hub answers a reload of web/ files with 304 and sends them gzipped (no 1 MB per page load)', async () => {
+  const h = await startDevHub();
+  try {
+    const first = await fetch(h.url + '/web/office-draw.js', { headers: { 'accept-encoding': 'gzip' } });
+    assert.equal(first.status, 200);
+    assert.equal(first.headers.get('content-encoding'), 'gzip');
+    const etag = first.headers.get('etag');
+    assert.ok(etag);
+    await first.arrayBuffer();
+    const again = await fetch(h.url + '/web/office-draw.js', { headers: { 'if-none-match': etag } });
+    assert.equal(again.status, 304);
+    assert.equal((await again.arrayBuffer()).byteLength, 0);
+  } finally { await h.close(); }
+});
+
 test('csp follows the file after an edit', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'csp-'));
   const f = path.join(dir, 'page.html');

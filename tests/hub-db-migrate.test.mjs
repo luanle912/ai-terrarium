@@ -412,3 +412,12 @@ test('a second handle waits for the write lock instead of failing at once', () =
   assert.equal(Object.values(t)[0], 5000);
   db.close();
 });
+
+test('a query is prepared once and its statement reused', () => {
+  const db = openDb(':memory:');
+  let prepares = 0;
+  const orig = db.raw.prepare.bind(db.raw);
+  db.raw.prepare = (sql) => { prepares++; return orig(sql); };
+  for (let i = 0; i < 5; i++) assert.equal(db.getUserById('nobody'), undefined);
+  assert.equal(prepares, 1);
+});

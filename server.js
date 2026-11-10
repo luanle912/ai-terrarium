@@ -204,7 +204,7 @@ function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFil
     }
     else if (route.startsWith('/web/')) {
       const a = webAssets.readAsset(route, webDir);
-      if (a) { res.writeHead(200, { 'Content-Type': a.type, ...webAssets.HEADERS }); res.end(a.body); }
+      if (a) { const r = webAssets.respond(a, req.headers); res.writeHead(r.status, r.headers); res.end(r.body || undefined); }
       else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); }
     }
     else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); }
