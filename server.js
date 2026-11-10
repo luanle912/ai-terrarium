@@ -79,12 +79,17 @@ function liveSessions() {
   return (liveCache = liveFromRegistry(readRegistryDir(SESSIONS_DIR), { prev: liveCache, alive: defaultAlive }));
 }
 
+// The weather chosen on any page this server serves, for every page (lib/page-settings.js): the wallpaper app's web
+// view has its own browser storage and no settings panel. Not part of what is published to a hub (lib/public-view.js).
+let settingsOf = null;
+const pageSettings = () => (settingsOf ||= require('./lib/page-settings.js').createPageSettings(path.join(require('./lib/terrarium-config.js').configDir(), 'page-settings.json')));
+
 function snapshot() {
   const now = Date.now();
   const u = currentUsage(now);
   // usagePlan: true once a claude.ai plan is known, false with no plan limits (API key), null when unknown; the page
   // shows the board only for true.
-  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage: u.windows, usagePlan: u.plan, usageSource: u.source, version: VERSION };
+  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage: u.windows, usagePlan: u.plan, usageSource: u.source, pageSettings: pageSettings().get(), version: VERSION };
 }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');
@@ -151,7 +156,7 @@ function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date
   };
 }
 
-function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, logLines = () => [] } = {}) {
+function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, logLines = () => [], settings = pageSettings } = {}) {
   return (req, res) => {
     if (!hostAllowed(req.headers.host, port, allowedHosts)) { res.writeHead(403); res.end('Forbidden'); return; }
     const route = (req.url || '').split('?')[0];
@@ -161,6 +166,19 @@ function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFil
       (action === 'join' ? joinFlow.start() : joinFlow.leave())
         .then(j => { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(j)); })
         .catch(() => { res.writeHead(500); res.end('error'); });
+      return;
+    }
+    // A page saving its settings: same guard as join (our own origin, an X-Terrarium header), a small JSON body.
+    if (route === '/api/settings' && req.method === 'POST') {
+      if (!joinRequestAllowed(req, port, allowedHosts, 'settings')) { res.writeHead(403); res.end('Forbidden'); return; }
+      let body = '';
+      req.on('data', d => { body += d; if (body.length > 4096) req.destroy(); });
+      req.on('end', () => {
+        let saved = null;
+        try { saved = settings().set(JSON.parse(body)); } catch {}
+        res.writeHead(saved ? 200 : 400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(saved ? { ok: true, settings: saved } : { ok: false }));
+      });
       return;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); res.end('Method Not Allowed'); return; }

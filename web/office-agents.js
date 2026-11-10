@@ -31,7 +31,13 @@ mixin(
           es.onmessage = e => {
             if (this.state.asOthers) return;
             try {
-              this.syncLive(JSON.parse(e.data));
+              const snap = JSON.parse(e.data);
+              this.syncLive(snap);
+              // the local server's shared weather choice (ClaudeOffice.adoptSettings), posted back to the same server
+              if ('pageSettings' in snap) {
+                this.settingsUrl = new URL('/api/settings', new URL(url, location.href)).href;
+                this.adoptSettings(snap.pageSettings);
+              }
               this.state.live !== 'ok' && this.setState({ live: 'ok' });
             } catch (err) {}
           };
