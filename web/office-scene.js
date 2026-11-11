@@ -3,6 +3,7 @@ import { SkyLogic } from './sky-logic.js';
 import { DogLogic } from './dog-logic.js';
 import { SmokeLogic } from './smoke-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
+import { EventCritters } from './event-critters.js';
 export const h = React.createElement;
 // Shared by both settings panels. A change reloads the page so tables built at load time pick up the new language;
 // when the choice could not be saved (storage blocked) it travels in ?lang= instead.
@@ -155,6 +156,25 @@ export const DOG_PLACES = {
   ),
   rest: DogLogic.besideCell(DOG_ROAM, [REST.bench.x, REST.bench.y], DOG_CLEAR, [FISH_PT]),
 };
+// Where the Christmas critters go (web/event-critters.js): the dogs' lawn, a spot for the presents by the front
+// stairs, the island's front edge, and the lake's ice away from the pavilion, its stepping stones and the bathers.
+const PAV = ISLAND.pavilion.pillar;
+export const CRITTER_PLACES = EventCritters.places({
+  roam: DOG_ROAM,
+  roamList: DOG_PLACES.roamList,
+  clear: DOG_CLEAR,
+  houses: DOG_HOUSES,
+  stairs: STAIRS,
+  water: ISLAND.pond.cells,
+  skip: [
+    ...ISLAND.pavilion.path.map(p => p.x + ',' + p.y),
+    ...ISLAND.pond.spots.map(p => p.x + ',' + p.y),
+    ...[...ISLAND.pond.cells].filter(k => {
+      const [x, y] = k.split(',').map(Number);
+      return Math.abs(x - PAV.x) <= 2 && Math.abs(y - PAV.y) <= 2;
+    }),
+  ],
+});
 // Where a leaving person's fate plays out (web/fate-logic.js): open lawn in front of the office and beside it, in
 // view and off the paths, and the bathing spots in the lake.
 export const FATE_PLACES = {
