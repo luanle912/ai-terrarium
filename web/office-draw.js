@@ -3,6 +3,8 @@ import { OfficeDecor } from './office-decor.js';
 import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { SkyRender } from './sky-render.js';
+import { SnowLogic } from './snow-logic.js';
+import { EventLogic } from './event-logic.js';
 import { IslandLife } from './island-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
@@ -76,6 +78,7 @@ mixin(
         ctx.clearRect(0, 0, w, hh);
         fn(ctx, w, hh, t, skyEnv);
         if (cv === this.backCanvas) this.drawFallers(ctx, t, hh);
+        this.drawSleigh(ctx, cv === this.backCanvas, w, hh);
       }
       // The island bobs a few pixels; moving the wrapper (not a transform) keeps bubbles, clicks and layering intact.
       if (this.wrapEl) {
@@ -192,12 +195,14 @@ mixin(
         ic = this.islandCache,
         dfB = Math.round(df * 10),
         snB = Math.round(snow * 10),
-        season = this.seasonNow();
-      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season) {
+        season = this.seasonNow(),
+        ev = this.eventNow(),
+        evK = EventLogic.cacheKey(ev);
+      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season || ic.ev !== evK) {
         // let the browser drop the old bake's canvases now rather than at the next collection
         if (ic) for (const c of [ic.img, ...ic.props.map(p => p.img)]) c.width = c.height = 0;
         const frame = { LW, LH, OX, OY },
-          light = { df: dfB / 10, snow: snB / 10, season, block: { W, H } };
+          light = { df: dfB / 10, snow: snB / 10, season, block: { W, H }, event: ev ? ev.level : 0 };
         this.islandCache = {
           img: SkyRender.renderIsland(ISLAND, frame, k, light),
           props: SkyRender.renderProps(ISLAND, frame, k, light),
@@ -205,6 +210,7 @@ mixin(
           df: dfB,
           sn: snB,
           season,
+          ev: evK,
         };
       }
       ctx.save();
@@ -235,7 +241,8 @@ mixin(
         info = tk && SeasonTree.SEASONS[tk],
         holiday = info && (info.type === 'event' || info.type === 'lunar') ? tk : null,
         dusk = (1 - dfB / 10) * 0.6,
-        held = d => holiday && HOLIDAY_TREES.has(d.x + ',' + d.y);
+        // (not at Christmas: one big tree stands on the front lawn instead, web/island-art-xmas.js)
+        held = d => holiday && holiday !== 'christmas' && HOLIDAY_TREES.has(d.x + ',' + d.y);
       for (const p of this.islandCache.props)
         if (!(p.tree && held(p))) (backOf(p) ? behind : items).push({ z: p.z, f: stamp(p) });
       for (const d of ISLAND.decor) {
@@ -326,8 +333,12 @@ mixin(
         ctx.fillStyle = col;
         ctx.fillRect(Math.round(x), Math.round(y), w, hh);
       };
-      const G = { ctx, poly, box, rect, th, t, df };
+      // cold: breath shows (deep enough snow, daylight, motion allowed)
+      const cold = SnowLogic.depth(snow) >= 2 && df >= 0.6 && !(env && env.reduced),
+        G = { ctx, poly, box, rect, th, t, df, ev, cold };
+      this.drawPrints(G, this.printNow || 0);
       for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
+      this.critterItems(G, behind, true, dfB);
       for (const a of this.agents)
         if (walker(a) && backOf(a)) behind.push({ z: a.x + a.y, f: () => this.drawPerson(G, a) });
       behind.sort((p, q) => p.z - q.z).forEach(it => it.f());
@@ -354,6 +365,8 @@ mixin(
       poly([P(-WT, -WT, ZT), P(0, 0, ZT), P(0, H, ZT), P(-WT, H, ZT)], shade(th.trim, 18), null);
       poly([P(W, -WT, 0), P(W, 0, 0), P(W, 0, ZT), P(W, -WT, ZT)], shade(th.wr, -34), null);
       poly([P(-WT, H, 0), P(0, H, 0), P(0, H, ZT), P(-WT, H, ZT)], shade(th.wl, -20), null);
+      if (SnowLogic.depth(snow)) this.winterWalls(G, SnowLogic.depth(snow));
+      if (ev) this.xmasWallLights(G, ev);
       {
         const OD = OfficeDecor;
         if (OD) [1.6, 4.8, 11.6, 14.8].forEach(x => OD.F.window(OD.kit(ctx, ...P(x, 0)), t, { night: df < 0.5 }));
@@ -500,9 +513,9 @@ mixin(
         ctx.strokeStyle = th.stroke ? '#c9d3e3' : df > 0.5 ? '#c9a77a' : '#3a4462';
         ctx.lineWidth = 1;
         [
-          [9, 0, 9, H],
+          [9.5, 0, 9.5, H],
           [0, 7, 20, 7],
-          [19, 0, 19, H],
+          [19.5, 0, 19.5, H],
         ].forEach(([a, b, c, d]) => {
           const L = Math.max(c - a, d - b) * 2;
           for (let k = 0; k < L; k += 2) {
@@ -598,11 +611,13 @@ mixin(
       this.pantryItems(G, items);
       this.smokingItems(G, items, snow);
       this.doghouseItems(G, items, snow, dfB, snB);
+      this.fateItems(G, items);
+      if (ev) this.xmasItems(G, items, ev);
       this.restroomItems(G, items, snow);
       [
         [8.5, 13.5],
         [19.5, 13.5],
-        [18.5, 0.5],
+        [19.5, 0.5],
       ].forEach(([x, y]) =>
         items.push({
           z: x + y,
@@ -622,19 +637,21 @@ mixin(
       items.push({
         z: 9,
         f: () => {
-          box(8.55, 0.05, 0.9, 0.4, 0, 42, shade(th.trim, -5));
-          [10, 20, 30, 40].forEach(z => box(8.58, 0.06, 0.84, 0.38, z, z + 1, shade(th.trim, -30)));
+          box(9.05, 0.05, 0.9, 0.4, 0, 42, shade(th.trim, -5)); // in the middle of the corridor between the zones
+          [10, 20, 30, 40].forEach(z => box(9.08, 0.06, 0.84, 0.38, z, z + 1, shade(th.trim, -30)));
           [
             [12, '#e5484d', '#3e8ed0', '#f5a524'],
             [22, '#46a758', '#e8e2d6', '#8e4ec6'],
             [32, '#12a594', '#5b5bd6', '#e93d82'],
           ].forEach(([z, ...cs]) =>
-            cs.forEach((col, k) => box(8.65 + k * 0.24, 0.12, 0.16, 0.28, z, z + 7 - (k % 2) * 2, col)),
+            cs.forEach((col, k) => box(9.15 + k * 0.24, 0.12, 0.16, 0.28, z, z + 7 - (k % 2) * 2, col)),
           );
         },
       });
 
       for (const d of this.dogs) if (!backOf(d)) items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
+      this.critterItems(G, items, false, dfB);
+      this.idleXmasItems(G, items);
       this.agents.forEach(a => {
         if (a.sleeping) {
           const d = DESKS[a.desk];

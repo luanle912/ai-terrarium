@@ -3,6 +3,7 @@
 // person is still inside its depth and the sky below shows the rest.
 import { PG, DOOR, LW, ISLAND, TW, TH } from './office-scene.js';
 import { LOOK, hairTones } from './office-people.js';
+import { outfitOf, shirtOf } from './office-people-xmas.js';
 import { shade } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 
@@ -47,10 +48,11 @@ mixin(
         d: 0,
         v: 0,
         out: 0,
-        shirt: a.shirt,
+        top: (outfitOf(a, this.eventNow()), shirtOf(a)),
         skin: a.skin,
         look: LOOK(a),
-        sub: !!a.parent,
+        sub: !!a.parent && !a.outfit,
+        hat: a.outfit ? a.outfit.hatColor : null,
         spin: a.id % 2 ? 1 : -1,
       });
     }
@@ -98,10 +100,10 @@ mixin(
       const flap = Math.floor(u * 10) % 2;
       R(-3, 0, 2, 5, '#3b4252');
       R(1, 0, 2, 5, '#3b4252');
-      R(-4, -7, 8, 7, f.shirt);
-      R(2, -7, 2, 7, shade(f.shirt, -30));
-      R(-6, -12 - flap, 2, 6, f.shirt);
-      R(4, -12 + flap, 2, 6, shade(f.shirt, -30));
+      R(-4, -7, 8, 7, f.top);
+      R(2, -7, 2, 7, shade(f.top, -30));
+      R(-6, -12 - flap, 2, 6, f.top);
+      R(4, -12 + flap, 2, 6, shade(f.top, -30));
       R(-6, -14 - flap, 2, 2, f.skin);
       R(4, -14 + flap, 2, 2, f.skin);
       R(-3, -13, 6, 6, f.skin);
@@ -112,6 +114,7 @@ mixin(
       R(1, -11, 1, 1, '#1a1a1a');
       R(-1, -9, 2, 1, '#5a1f1f');
       if (f.sub) R(-3, -15, 6, 1, '#ffd166');
+      if (f.hat) R(-3, -17, 6, 3, f.hat);
       ctx.restore();
     }
   },

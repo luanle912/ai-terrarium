@@ -20,6 +20,22 @@ test('only a known weather mode is kept; the city is trimmed and capped', () => 
   assert.equal(ps.clean({ weather: { mode: 'real', city: 'x'.repeat(500) } }).weather.city.length, 100)
 })
 
+test('the event choice rides along with the weather; without one, or with a strange one, it is auto', () => {
+  const w = { mode: 'off', city: '' }
+  assert.deepEqual(ps.clean({ weather: w, event: 'on' }), { weather: w, event: 'on' })
+  assert.deepEqual(ps.clean({ weather: w, event: 'off' }), { weather: w, event: 'off' })
+  assert.deepEqual(ps.clean({ weather: w, event: 'party' }), { weather: w })
+  assert.deepEqual(ps.clean({ weather: w }), { weather: w }, 'an older page sends no event')
+  assert.equal(ps.clean({ event: 'on' }), null, 'never without a weather')
+})
+
+test('a page that knows nothing of the event (an old tab) changes the weather and leaves the event choice alone', () => {
+  const a = ps.createPageSettings(tmpFile())
+  a.set({ weather: { mode: 'off', city: '' }, event: 'on' })
+  assert.deepEqual(a.set({ weather: { mode: 'random', city: '' } }), { weather: { mode: 'random', city: '' }, event: 'on' })
+  assert.deepEqual(a.set({ weather: { mode: 'random', city: '' }, event: 'auto' }), { weather: { mode: 'random', city: '' }, event: 'auto' })
+})
+
 test('the choice is kept on disk and read back by the next server', () => {
   const f = tmpFile()
   const a = ps.createPageSettings(f)

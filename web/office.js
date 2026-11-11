@@ -4,9 +4,12 @@ import { SeasonLogic } from './season-logic.js';
 import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { DogLogic } from './dog-logic.js';
+import { EventCritters } from './event-critters.js';
 import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
+import { EventLogic } from './event-logic.js';
 import {
+  BLOCK,
   DOG_PLACES,
   LH,
   LW,
@@ -73,6 +76,8 @@ export class ClaudeOffice extends React.Component {
     this.seasonKey = 'default';
     this.seasonChoice = SeasonLogic.loadSeasonChoice(this.storage);
     this.seasonPreview = null;
+    this.eventChoice = EventLogic.loadChoice(this.storage);
+    this.eventPreview = null;
     this.goneSids = new Map();
     this.depts = new Map();
     this.setCanvas = el => {
@@ -300,8 +305,26 @@ export class ClaudeOffice extends React.Component {
       }),
     };
     window.__dogs = { dogs: this.dogs, world: this.dogWorld };
+    window.__critters = () => ({ list: this.critters, world: this.critterWorld });
+    // Santa's sleigh sets off now (on Christmas Eve), for checking the flight
+    window.__sleigh = () => this.critterWorld && EventCritters.flyNow(this.critterWorld);
+    window.__office = this; // for tools/shot.mjs --eval: switch to simulated agents, pose someone
     // the first person on the floor drops from the EXIT door, as if they had just gone out (for checking the fall)
     window.__fall = () => this.agents[0] && this.startFall(this.agents[0], performance.now() / 1000);
+    // the first person on the floor leaves by the named fate (web/fate-logic.js), for checking the scenes
+    // (jump: they are there at once). Returns where it happens, in tiles.
+    window.__fate = (kind, i = 0, jump = false) => {
+      const a = this.agents[i];
+      if (!a) return null;
+      this.forceFate = kind;
+      this.leave(a);
+      this.forceFate = null;
+      if (jump && a.fateGoal) {
+        [a.x, a.y] = a.fateGoal.pt;
+        a.gone = a.fated = true;
+      }
+      return a.fateGoal ? a.fateGoal.pt : null;
+    };
     if (this.state.weatherMode === 'real') this.refreshReal();
     this.realTimer = setInterval(() => {
       if (this.state.weatherMode === 'real') this.refreshReal();
@@ -361,11 +384,43 @@ export class ClaudeOffice extends React.Component {
     }
     if (w.mode !== this.state.weatherMode || w.city !== this.state.city)
       this.setWeather({ weatherMode: w.mode, city: w.city, cityDraft: w.city }, true);
+    // the event choice (EventLogic.adopt): a server that has none yet takes this page's own, sent with the weather
+    // the server just gave (this page's own may still be the old one until the state above settles)
+    const e = EventLogic.adopt(ps.event, this.eventChoice, { wallpaper: this.wallpaper, seeded: this.eventSeeded });
+    if (e.take) this.setEventChoice(e.take, true);
+    if (e.seed) this.pushSettings({ mode: w.mode, city: w.city });
+    this.eventSeeded = true;
   }
-  pushSettings() {
+  // The event (web/event-logic.js) on the viewer's clock: a one-minute preview, else the choice in Settings.
+  // Asked several times a frame, so the answer is kept for the second it was worked out in.
+  eventNow() {
+    const now = Date.now(),
+      sec = Math.floor(now / 1000),
+      c = this.eventChoice || 'auto',
+      p = this.eventPreview;
+    if (this.evSec !== sec || this.evFor !== c || this.evPrev !== p) {
+      this.evSec = sec;
+      this.evFor = c;
+      this.evPrev = p;
+      this.evNow = EventLogic.active(new Date(now), c, p, now);
+      EventLogic.block(BLOCK, !!this.evNow); // nobody walks through the big tree while it stands
+    }
+    return this.evNow;
+  }
+  setEventChoice(choice, fromServer) {
+    if (!EventLogic.CHOICES.includes(choice)) return;
+    this.eventChoice = choice;
+    EventLogic.saveChoice(this.storage, choice);
+    this.setState({ eventChoice: choice });
+    if (!fromServer) this.pushSettings();
+  }
+  pushSettings(weather) {
     if (!this.sharedSettings || typeof fetch !== 'function') return;
     this.pushedAt = Date.now();
-    const body = JSON.stringify({ weather: { mode: this.state.weatherMode, city: this.state.city } });
+    const body = JSON.stringify({
+      weather: weather || { mode: this.state.weatherMode, city: this.state.city },
+      event: this.eventChoice || 'auto',
+    });
     fetch(this.settingsUrl || '/api/settings', {
       method: 'POST',
       headers: { 'X-Terrarium': 'settings', 'Content-Type': 'application/json' },
@@ -432,13 +487,15 @@ export class ClaudeOffice extends React.Component {
   }
   // The season the island shows (SeasonLogic): a one-minute preview, else the choice in Settings, else the date.
   // seasonChoice / seasonPreview are set from Settings; until then the date decides.
+  // The Christmas event brings winter with it (EventLogic.season), whatever the date or the choice.
   seasonNow() {
-    return SeasonLogic.currentSeason({
+    const key = SeasonLogic.currentSeason({
       date: new Date(),
       choice: this.seasonChoice || 'auto',
       preview: this.seasonPreview || null,
       now: Date.now(),
     }).key;
+    return EventLogic.season(this.eventNow(), key);
   }
   get treeOn() {
     return this.season !== 'default';
@@ -457,12 +514,14 @@ export class ClaudeOffice extends React.Component {
     if (!this.state.paused) {
       this.agents.forEach(a => this.updateAgent(a, dt));
       this.stepDogs(dt);
+      this.stepCritters(dt);
       this.stepProps(dt);
       if (this.agents.some(a => a.gone)) {
         const goneA = this.agents.filter(a => a.gone);
         goneA.forEach(a => this.goneSids.set(a.sid, a.leftWhy || 'missing'));
         // out of the EXIT door: they drop straight down from it (web/office-draw-fall.js)
-        goneA.forEach(a => a.exited && this.startFall(a, ts / 1000));
+        // or some other way, where they stand (web/office-draw-fate.js)
+        goneA.forEach(a => (a.exited ? this.startFall(a, ts / 1000) : a.fated && this.startFate(a)));
         const goneIds = goneA.map(a => a.id);
         this.agents = this.agents.filter(a => !a.gone);
         if (goneIds.includes(this.state.sel)) this.setState({ sel: null });
@@ -499,8 +558,10 @@ export class ClaudeOffice extends React.Component {
       this.wx = r.wx;
       this.preview = r.preview;
     } else this.stepWeather(now);
+    // During the Christmas event it snows (unless the weather is switched off in Settings).
     const reduced = !!(this.reducedMq && this.reducedMq.matches),
-      fx = SkyLogic.weatherFx(this.wx, now),
+      ev = this.eventNow(),
+      fx = EventLogic.weather(SkyLogic.weatherFx(this.wx, now), this.state.weatherMode === 'off' ? null : ev),
       df = dayFactor();
     // Winter keeps at least its own snow on the lawn, the roofs and the mountain whatever the weather.
     const season = this.seasonNow();
@@ -527,6 +588,8 @@ export class ClaudeOffice extends React.Component {
       flash: this.flash,
       col: SkyLogic.skyColors(df, hour, fx),
       season,
+      // the Christmas event's level (0: none), for the sky's far islands
+      event: ev ? ev.level : 0,
     };
   }
 }

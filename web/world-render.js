@@ -391,6 +391,7 @@ Object.assign(ClaudeOffice.prototype, {
         ),
       ),
       this.seasonSection(),
+      this.eventSection(),
     );
   },
 });

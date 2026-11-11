@@ -2,6 +2,7 @@
 import { tr } from './i18n.js';
 import { BubbleLogic } from './bubble-logic.js';
 import { SeasonLogic } from './season-logic.js';
+import { EventLogic } from './event-logic.js';
 import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 mixin(
@@ -48,6 +49,50 @@ mixin(
               name(k),
             ),
           ),
+        ),
+      );
+    }
+    // The Event section, under Season: the choice (shared with the wallpaper through the local server), what is on
+    // now, and a button that shows the whole event for a minute.
+    eventSection() {
+      const ev = this.eventNow();
+      return h(
+        'div',
+        { id: 'event-section', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+        h(
+          'label',
+          null,
+          tr('settings.event'),
+          h(
+            'select',
+            {
+              'aria-label': tr('settings.event.mode'),
+              value: this.eventChoice || 'auto',
+              onChange: e => this.setEventChoice(e.target.value),
+            },
+            h('option', { value: 'auto' }, tr('settings.event.auto')),
+            h('option', { value: 'on' }, tr('settings.event.on')),
+            h('option', { value: 'off' }, tr('settings.event.off')),
+          ),
+        ),
+        h(
+          'span',
+          null,
+          tr('settings.event.current', {
+            label: ev ? tr('event.christmas') + ' · ' + ev.level + '/3' : tr('settings.event.none'),
+          }),
+        ),
+        h(
+          'button',
+          {
+            className: 'btn',
+            style: { padding: '3px 7px', fontSize: 11, alignSelf: 'flex-start' },
+            onClick: () => {
+              this.eventPreview = EventLogic.startPreview(Date.now());
+              this.setState({ eventPreviewAt: Date.now() });
+            },
+          },
+          tr('settings.event.preview'),
         ),
       );
     }
@@ -275,6 +320,7 @@ mixin(
             ),
           ),
           this.seasonSection(),
+          this.eventSection(),
           isSim &&
             h(
               'label',
