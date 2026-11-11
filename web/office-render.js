@@ -1,7 +1,7 @@
 import { tr } from './i18n.js';
 import { SeasonLogic } from './season-logic.js';
 import { BubbleLogic } from './bubble-logic.js';
-import { ACT_TXT, FH, LH, LW, P, PA, h } from './office-scene.js';
+import { actLabel, FH, LH, LW, P, PA, h } from './office-scene.js';
 import { ST, fmtK } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // The page root as the desktop wallpaper: edge to edge and deaf to the pointer (made once, reused every render).
@@ -33,6 +33,10 @@ const fateLine = kind =>
     ghost: () => tr('bubble.fate.ghost'),
     snowball: () => tr('bubble.fate.snowball'),
     bird: () => tr('bubble.fate.bird'),
+    sleigh: () => tr('bubble.fate.sleigh'),
+    wrapped: () => tr('bubble.fate.wrapped'),
+    skateoff: () => tr('bubble.fate.skateoff'),
+    chimney: () => tr('bubble.fate.chimney'),
   })[kind]?.();
 mixin(
   ClaudeOffice,
@@ -109,7 +113,11 @@ mixin(
               microwave: '🍱 ',
               meal: '🍪 ',
               snack: '🍪 ',
-            }[a.actNow] || '☕ ') + (ACT_TXT[a.actNow] || tr('bubble.pantryBreak'))
+              snowball: '❄️ ',
+              snowman: '⛄ ',
+              skate: '⛸️ ',
+              gift: '🎁 ',
+            }[a.actNow] || '☕ ') + (actLabel(a.actNow, this.eventNow()) || tr('bubble.pantryBreak'))
           );
         case 'leaving':
           return fateLine(a.fate) || tr('bubble.leaving');

@@ -4,6 +4,7 @@ import { DogLogic } from './dog-logic.js';
 import { SmokeLogic } from './smoke-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
 import { EventCritters } from './event-critters.js';
+import { EventIdle } from './event-idle.js';
 export const h = React.createElement;
 // Shared by both settings panels. A change reloads the page so tables built at load time pick up the new language;
 // when the choice could not be saved (storage blocked) it travels in ?lang= instead.
@@ -175,6 +176,15 @@ export const CRITTER_PLACES = EventCritters.places({
     }),
   ],
 });
+// Where people idle during the Christmas event (web/event-idle.js): a snowball pitch and a spot to roll a snowball
+// on the front lawn, a rink on the lake (entered by the second bathing spot) and a place beside the big tree.
+export const EVENT_IDLE = EventIdle.layout({
+  ...CRITTER_PLACES,
+  H,
+  entry: [ISLAND.pond.spots[1].x, ISLAND.pond.spots[1].y],
+  avoid: EventCritters.elfRoute({ ...CRITTER_PLACES }) || [],
+  huddle: EventCritters.huddle(CRITTER_PLACES.ice),
+});
 // Where a leaving person's fate plays out (web/fate-logic.js): open lawn in front of the office and beside it, in
 // view and off the paths, and the bathing spots in the lake.
 export const FATE_PLACES = {
@@ -284,6 +294,8 @@ export const IDLE_SPOTS = [
     front: true,
   },
   { act: 'fish', tile: [REST.fish.x, REST.fish.y], pt: FISH_PT, front: true },
+  // the Christmas event's own (web/event-idle.js), last so that the others keep their numbers
+  ...EVENT_IDLE.spots,
 ];
 export const ACT_TXT = {
   table: tr('office.act.table'),
@@ -302,7 +314,14 @@ export const ACT_TXT = {
   bath: tr('office.act.bath'),
   bench: tr('office.act.bench'),
   fish: tr('office.act.fish'),
+  snowball: tr('office.act.snowball'),
+  snowman: tr('office.act.snowman'),
+  skate: tr('office.act.skate'),
+  gift: tr('office.act.gift'),
+  cocoa: tr('office.act.cocoa'),
 };
+// What someone is doing, in words: during the Christmas event (ev) the coffee is hot cocoa.
+export const actLabel = (act, ev) => (ev && act === 'coffee' ? ACT_TXT.cocoa : ACT_TXT[act]);
 export const SEGS = [],
   EDGE = new Set();
 export const addV = (zi, X, y) => {

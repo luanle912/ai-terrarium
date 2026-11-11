@@ -105,3 +105,38 @@ test('a skater goes round the rink, always on the ice', () => {
     assert.ok(PL.iceSet.has(Math.floor(out[0]) + ',' + Math.floor(out[1])))
   }
 })
+
+test('the page: the event spots come last in IDLE_SPOTS, the others keep their places, and each has a label', () => {
+  const n = S.IDLE_SPOTS.length
+  assert.deepEqual(S.IDLE_SPOTS.slice(n - 5), S.EVENT_IDLE.spots)
+  assert.ok(S.IDLE_SPOTS.slice(0, n - 5).every(s => !s.event))
+  assert.equal(S.IDLE_SPOTS[n - 6].act, 'fish')
+  for (const a of [...I.ACTS, 'cocoa']) assert.ok(S.ACT_TXT[a] && !S.ACT_TXT[a].startsWith('office.act.'), a)
+  const ev = { key: 'christmas', level: 1 }
+  assert.equal(S.actLabel('coffee', ev), S.ACT_TXT.cocoa)
+  assert.equal(S.actLabel('coffee', null), S.ACT_TXT.coffee)
+  assert.equal(S.actLabel('skate', ev), S.ACT_TXT.skate)
+})
+
+test('everyone can walk to every event spot from the door, round the big tree too', () => {
+  const { bfs } = loadWeb('office-util')
+  EventLogic.block(S.BLOCK, true)
+  for (const s of S.EVENT_IDLE.spots) assert.ok(bfs(S.DOOR.tile, s.tile).length > 0, s.act)
+  EventLogic.block(S.BLOCK, false)
+})
+
+test('a skater set going moves round the rink, and steps back to where they came on before walking off', () => {
+  const a = { x: 0, y: 0, id: 3 }, rink = S.EVENT_IDLE.rink, sk = S.EVENT_IDLE.spots.find(s => s.act === 'skate')
+  I.skate(a, rink, 0.1)
+  const at = [a.x, a.y]
+  assert.ok(PL.iceSet.has(Math.floor(a.x) + ',' + Math.floor(a.y)))
+  I.skate(a, rink, 1)
+  assert.notDeepEqual([a.x, a.y], at)
+  I.skate(a, rink, NaN)
+  assert.ok(Number.isFinite(a.x + a.y))
+  I.offRink(a, S.EVENT_IDLE)
+  assert.deepEqual([a.x, a.y], [sk.tile[0] + 0.5, sk.tile[1] + 0.5])
+  const none = { x: 1, y: 2 }
+  I.offRink(none, { spots: [] })
+  assert.deepEqual([none.x, none.y], [1, 2])
+})

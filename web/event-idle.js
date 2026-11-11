@@ -132,5 +132,36 @@ function skateAt(rink, t, out) {
   out[1] = rink.cy + rink.ry * Math.sin(a);
   return out;
 }
+// One step of someone skating: their own clock (a.skT) moves on dt seconds and they are put on the rink.
+const XY = [0, 0];
+function skate(a, rink, dt) {
+  a.skT = (a.skT || 0) + (dt > 0 ? dt : 0);
+  skateAt(rink, a.skT + (a.id || 0), XY);
+  a.x = XY[0];
+  a.y = XY[1];
+}
+// Before a skater walks off: back to the cell they came onto the ice by, where a path can start.
+function offRink(a, laid) {
+  const s = laid.spots.find(sp => sp.act === 'skate');
+  if (!s) return;
+  a.x = s.tile[0] + 0.5;
+  a.y = s.tile[1] + 0.5;
+}
 
-export const EventIdle = { ACTS, THROW, FLY, GROW, LAP, GAP, layout, open, stays, ball, thrower, snowmanSize, skateAt };
+export const EventIdle = {
+  ACTS,
+  THROW,
+  FLY,
+  GROW,
+  LAP,
+  GAP,
+  layout,
+  open,
+  stays,
+  ball,
+  thrower,
+  snowmanSize,
+  skateAt,
+  skate,
+  offRink,
+};

@@ -6,8 +6,21 @@ import { RestroomLogic } from './restroom-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { PropUse } from './prop-use.js';
 import { FateLogic } from './fate-logic.js';
+import { EventIdle } from './event-idle.js';
 import { SnowLogic } from './snow-logic.js';
-import { DEPT_PAL, DESKS, DOOR, FATE_PLACES, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
+import {
+  DEPT_PAL,
+  DESKS,
+  DOOR,
+  EVENT_IDLE,
+  FATE_PLACES,
+  H,
+  IDLE_SPOTS,
+  LAWN_WALK,
+  SIM_DEPTS,
+  W,
+  colOf,
+} from './office-scene.js';
 import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 const ON_LAWN = (x, y) => LAWN_WALK.has(Math.floor(x) + ',' + Math.floor(y));
@@ -510,14 +523,14 @@ mixin(
         }
         // Men use WC NAM and women WC NỮ (RestroomLogic.roomOf); about one idle choice in four is a free stall there.
         // On the frozen lakes nobody fishes or bathes: whoever is there leaves (SeasonLogic.idleStays).
-        const frozen = SeasonLogic.look(this.seasonNow()).frozen;
-        if (!SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen)) a.idleSpot = null;
+        // The Christmas event's own spots are open by its level, the snow and the ice (EventIdle.open).
+        const frozen = SeasonLogic.look(this.seasonNow()).frozen,
+          c = this.idleCtx(frozen);
+        if (!SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen) || !EventIdle.stays(IDLE_SPOTS, a.idleSpot, c))
+          a.idleSpot = null;
         if (a.idleSpot == null || taken.has(a.idleSpot)) {
-          const free = SeasonLogic.idleOpen(
-            IDLE_SPOTS,
-            IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i)),
-            frozen,
-          );
+          const all = IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i)),
+            free = EventIdle.open(IDLE_SPOTS, SeasonLogic.idleOpen(IDLE_SPOTS, all, frozen), c);
           a.idleSpot = RestroomLogic.pickIdle(IDLE_SPOTS, free, a.wcDone ? null : RestroomLogic.roomOf(a), Math.random);
         }
         if (a.idleSpot != null) {
@@ -545,6 +558,7 @@ mixin(
       if (a.sleeping) return;
       const g = this.goalFor(a);
       if (g.key !== a.goalKey) {
+        if (a.actNow === 'skate') EventIdle.offRink(a, EVENT_IDLE);
         a.goalKey = g.key;
         a.seated = false;
         a.sleeping = false;
@@ -592,6 +606,7 @@ mixin(
       }
       // At a stall or the vanity: count the visit along (RestroomLogic.visit); while inside the stall, the person is
       // not drawn.
+      else if (a.actNow === 'skate') EventIdle.skate(a, EVENT_IDLE.rink, dt * this.speed);
       else if (a.actNow === 'wc') {
         a.wcT = (a.wcT || 0) + dt * this.speed;
         a.wcIn = RestroomLogic.visit(a.wcT) === 'inside';
