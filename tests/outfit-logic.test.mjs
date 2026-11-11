@@ -133,3 +133,31 @@ test('earmuffs are one piece: each pad touches the band', () => {
   const [band, ...pads] = rects
   for (const p of pads) assert.ok(p[1] <= band[1] + band[3], 'pad starts at the row under the band')
 })
+
+test('breath in the cold: a puff for under a second every three, each person in their own time', () => {
+  const { breathAt } = loadWeb('office-people-xmas')
+  const run = id => Array.from({ length: 300 }, (_, i) => breathAt(i * 0.03, id))
+  const a = run(1)
+  assert.ok(a.every(k => k === 0 || k === 1 || k === 2))
+  const share = a.filter(k => k > 0).length / a.length
+  assert.ok(share > 0.2 && share < 0.4, `${share} of the time`)
+  assert.ok(a.includes(1) && a.includes(2))
+  assert.notDeepEqual(run(2), a, 'out of step with the next person')
+  assert.equal(breathAt(NaN, 1), 0)
+  const drawn = []
+  XMAS.breath((x, y, w, h, c) => drawn.push([x, y, w, h, c]), 0, 10, 20)
+  assert.equal(drawn.length, 0)
+  XMAS.breath((x, y, w, h, c) => drawn.push([x, y, w, h, c]), 1, 10, 20)
+  assert.equal(drawn.length, 2)
+  assert.ok(drawn.every(d => d[2] === 1 && d[3] === 1))
+})
+
+test('outdoors is the lawn: not the office floor, not the restroom block', () => {
+  globalThis.React ??= { createElement: () => null }
+  const { outdoors, WC, W, H } = loadWeb('office-scene')
+  assert.equal(outdoors(5.5, 5.5), false)
+  assert.equal(outdoors(12.5, 20.5), true)
+  assert.equal(outdoors(-2.5, 9.5), true)
+  assert.equal(outdoors(WC.x0 + 1.5, WC.y0 + 1.5), false)
+  assert.equal(outdoors(W + 8.5, H + 3.5), true)
+})

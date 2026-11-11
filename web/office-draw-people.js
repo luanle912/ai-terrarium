@@ -3,10 +3,10 @@ import { DogLogic } from './dog-logic.js';
 import { DogSprites } from './dog-sprites.js';
 import { DogXmas } from './dog-sprites-xmas.js';
 import { SmokeLogic } from './smoke-logic.js';
-import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW } from './office-scene.js';
+import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW, outdoors } from './office-scene.js';
 import { WATER_Z } from './island-land.js';
 import { LOOK, PERSON } from './office-people.js';
-import { XMAS, outfitOf, shirtOf } from './office-people-xmas.js';
+import { XMAS, breathAt, outfitOf, shirtOf } from './office-people-xmas.js';
 import { ICON, ST, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Drawing people (at desks, walking, asleep, in the pond) and the office dogs.
@@ -426,6 +426,7 @@ mixin(
         // the hat goes over the headset's band; from behind the scarf goes over the hair
         if (o && !a.dirFront) XMAS.scarf(R, o, sx, by - 12);
         if (o) XMAS.hatEvent(R, o, sx, hy);
+        if (G.cold && a.dirFront && !a.moving && outdoors(a.x, a.y)) XMAS.breath(R, breathAt(t, a.id), sx, hy);
         if (act === 'smoke') {
           // ember at the cigarette tip (brighter during a drag), a thin wisp rising off it, a puff after each drag
           const { drag, exhale } = SmokeLogic.cycle(tp),

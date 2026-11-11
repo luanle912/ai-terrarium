@@ -77,6 +77,8 @@ export const WC = RestroomLogic.layout(
   ),
   WC_WALK = new Set(WC.walk);
 WC.floor.forEach(k => LAWN_WALK.delete(k));
+// Out in the open: not on the office floor, not in the restroom block.
+export const outdoors = (x, y) => !(x >= 0 && y >= 0 && x < W && y < H) && !RestroomLogic.onFloor(WC, x, y);
 // The dogs' houses, one each (DogLogic.BREEDS order), in a row on the lawn right against the restroom block's east
 // wall from its back corner, a tile each, doors toward the viewer (+x). The smoking corner's pergola stands in front of
 // the wall's far end, so it partly hides the last house, as it would.

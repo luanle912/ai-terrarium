@@ -1,7 +1,9 @@
 import { OutfitLogic } from './outfit-logic.js';
 // Christmas outfits on people (OutfitLogic says who wears what). Everything here draws with the scene's 1px rect R
 // and colours the outfit already holds, so a frame makes no colour strings: a hat is at most 4 rects, a scarf 2.
-const { RED, WHITE, GOLD, COAL } = OutfitLogic;
+const { RED, WHITE, GOLD, COAL } = OutfitLogic,
+  BREATH = '#b9c9dc',
+  BREATH_FAR = '#cfdbe8';
 // The agent's outfit for the event as it stands (null outside it), worked out once and again when the event's level
 // changes, or the agent turns out to be a sub-agent, or changes department. A fate's copy of the agent carries it
 // along. Compared field by field: this runs for every person every frame and must not build a key.
@@ -16,9 +18,21 @@ export function outfitOf(a, ev) {
   }
   return a.outfit;
 }
+// Breath in the cold for person `id` at time t (seconds): 0 none, 1 a puff just out, 2 the puff drifting off. Under
+// a second of it every three, each person in their own time.
+export function breathAt(t, id) {
+  const p = (t + id * 1.13) % 3;
+  return p >= 0 && p < 0.45 ? 1 : p >= 0.45 && p < 0.9 ? 2 : 0;
+}
 // The colour of the top: the outfit's, or the department's when there is none (or it is only a hat).
 export const shirtOf = a => (a.outfit && a.outfit.top) || a.shirt;
 export const XMAS = {
+  // The puff (breathAt's 1 or 2) in front of a face seen from the front: two pixels by the mouth, then higher up.
+  breath(R, k, sx, hy) {
+    if (!k) return;
+    R(sx + 3 + k, hy + 4 - (k - 1) * 2, 1, 1, BREATH);
+    R(sx + 5 + k, hy + 3 - (k - 1) * 2, 1, 1, BREATH_FAR);
+  },
   // A hat over a head w px wide (6 standing, 8 at the desk) centred on sx, whose top row of hair is hy - 1.
   hatEvent(R, o, sx, hy, w = 6) {
     const x = sx - w / 2,
