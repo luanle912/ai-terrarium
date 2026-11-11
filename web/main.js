@@ -39,6 +39,7 @@ import './office-draw-doghouse.js';
 import './office-draw-fall.js';
 import './office-draw-fate.js';
 import './office-draw-fate-more.js';
+import './office-draw-fate-xmas.js';
 import './office-draw-winter.js';
 import './office-draw-xmas.js';
 import './office-draw-critters.js';
