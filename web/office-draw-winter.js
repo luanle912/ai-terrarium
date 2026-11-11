@@ -1,7 +1,6 @@
 // Winter on what the office draws every frame (the island's own snow is baked, web/island-art-snow.js): snow along
 // the tops of the walls, and the footprints people and dogs leave on the lawn. A handful of polygons a frame.
 import { SnowLogic } from './snow-logic.js';
-import { night } from './sky-island.js';
 import { H, P, PA, W, WALL } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 
@@ -11,7 +10,7 @@ export function snowTones(df) {
   const b = Math.round(df * 10);
   let t = TONES.get(b);
   if (!t) {
-    const S = c => night(c, 1 - (1 - b / 10) * SnowLogic.NIGHT_K),
+    const S = c => SnowLogic.night(c, b / 10),
       { PAL } = SnowLogic;
     TONES.set(b, (t = { lit: S(PAL.lit), base: S(PAL.base), shade: S(PAL.shade), rim: S(PAL.rim) }));
   }

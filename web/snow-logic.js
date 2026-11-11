@@ -16,6 +16,19 @@ const depth = snow => {
 // is pale blue rather than grey.
 const PAL = { lit: '#f6f9fc', base: '#e6eef6', shade: '#c3d3e6', rim: '#9fb4cf', glint: '#ffffff' };
 const NIGHT_K = 0.7;
+// Snow through the light (df 1 day .. 0 night): after dark it goes toward a moonlit blue rather than the lawn's
+// near-black, so a snowy night is pale blue, not grey.
+const MOON = [40, 62, 122];
+function night(c, df) {
+  const p = (1 - df) * NIGHT_K * 0.6;
+  if (!(p > 0)) return c;
+  let out = '#';
+  for (let i = 0; i < 3; i++) {
+    const v = Math.round(parseInt(c.slice(1 + i * 2, 3 + i * 2), 16) * (1 - p) + MOON[i] * p);
+    out += (v < 16 ? '0' : '') + v.toString(16);
+  }
+  return out;
+}
 
 // Where snow piles up: at the foot of the office (the lawn tiles along its two near sides), round the trees, behind
 // rocks and behind the bench. [{ x, y, h, side }], h 1..3 (drawn 2 px a step). Never on a path, the water, the office
@@ -98,4 +111,16 @@ function walkPrint(buf, o, onLawn, now) {
   o.py = o.y;
 }
 
-export const SnowLogic = { depth, PAL, NIGHT_K, drifts, icicles, prints, addPrint, walkPrint, PRINTS, PRINT_LIFE };
+export const SnowLogic = {
+  depth,
+  PAL,
+  NIGHT_K,
+  night,
+  drifts,
+  icicles,
+  prints,
+  addPrint,
+  walkPrint,
+  PRINTS,
+  PRINT_LIFE,
+};

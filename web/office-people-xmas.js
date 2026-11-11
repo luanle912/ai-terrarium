@@ -24,6 +24,13 @@ export function breathAt(t, id) {
   const p = (t + id * 1.13) % 3;
   return p >= 0 && p < 0.45 ? 1 : p >= 0.45 && p < 0.9 ? 2 : 0;
 }
+// The look to draw the hair with under outfit o: a baseball cap would stick out under a hat that covers the head,
+// so there it gives way to plain cropped hair (a copy made once and kept on the look).
+const COVERS = { santa: true, beanie: true, tophat: true, elf: true };
+export function lookUnder(L, o) {
+  if (!o || L.hairStyle !== 'cap' || !COVERS[o.hat]) return L;
+  return L.bare || (L.bare = { ...L, hairStyle: 'crop' });
+}
 // The colour of the top: the outfit's, or the department's when there is none (or it is only a hat).
 export const shirtOf = a => (a.outfit && a.outfit.top) || a.shirt;
 export const XMAS = {

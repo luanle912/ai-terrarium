@@ -637,14 +637,14 @@ mixin(
       items.push({
         z: 9,
         f: () => {
-          box(8.55, 0.05, 0.9, 0.4, 0, 42, shade(th.trim, -5));
-          [10, 20, 30, 40].forEach(z => box(8.58, 0.06, 0.84, 0.38, z, z + 1, shade(th.trim, -30)));
+          box(9.05, 0.05, 0.9, 0.4, 0, 42, shade(th.trim, -5)); // in the middle of the corridor between the zones
+          [10, 20, 30, 40].forEach(z => box(9.08, 0.06, 0.84, 0.38, z, z + 1, shade(th.trim, -30)));
           [
             [12, '#e5484d', '#3e8ed0', '#f5a524'],
             [22, '#46a758', '#e8e2d6', '#8e4ec6'],
             [32, '#12a594', '#5b5bd6', '#e93d82'],
           ].forEach(([z, ...cs]) =>
-            cs.forEach((col, k) => box(8.65 + k * 0.24, 0.12, 0.16, 0.28, z, z + 7 - (k % 2) * 2, col)),
+            cs.forEach((col, k) => box(9.15 + k * 0.24, 0.12, 0.16, 0.28, z, z + 7 - (k % 2) * 2, col)),
           );
         },
       });
