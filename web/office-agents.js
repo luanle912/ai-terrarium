@@ -207,6 +207,7 @@ mixin(
         dirFront: true,
         seated: !parent && !!seated,
         idleSpot: null,
+        idleT: 0,
         stool: false,
         actNow: null,
       };
@@ -530,10 +531,22 @@ mixin(
           c = this.idleCtx(frozen);
         if (!SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen) || !EventIdle.stays(IDLE_SPOTS, a.idleSpot, c))
           a.idleSpot = null;
+        // After ten minutes or so at one thing (a.idleT against a.idleFor) the person goes on to a different one.
+        const was = a.idleSpot != null && a.idleT >= a.idleFor ? a.idleSpot : null;
+        if (was != null) a.idleSpot = null;
         if (a.idleSpot == null || taken.has(a.idleSpot)) {
           const all = IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i)),
-            free = EventIdle.open(IDLE_SPOTS, SeasonLogic.idleOpen(IDLE_SPOTS, all, frozen), c);
-          a.idleSpot = RestroomLogic.pickIdle(IDLE_SPOTS, free, a.wcDone ? null : RestroomLogic.roomOf(a), Math.random);
+            free = EventIdle.open(IDLE_SPOTS, SeasonLogic.idleOpen(IDLE_SPOTS, all, frozen), c),
+            room = a.wcDone && was == null ? null : RestroomLogic.roomOf(a);
+          a.idleSpot = RestroomLogic.pickIdle(
+            IDLE_SPOTS,
+            RestroomLogic.moveOn(IDLE_SPOTS, free, was),
+            room,
+            Math.random,
+          );
+          a.wcDone = a.wcDone && was == null;
+          a.idleT = 0;
+          a.idleFor = RestroomLogic.stint(Math.random);
         }
         if (a.idleSpot != null) {
           const sp = IDLE_SPOTS[a.idleSpot];
@@ -575,6 +588,7 @@ mixin(
           .concat([g.pt]);
         if (g.key === 'seat' && a.path.length > 1) a.path.splice(a.path.length - 2, 1);
       }
+      if (a.actNow && !a.path.length) a.idleT += dt * this.speed; // the stay at an idle spot, walking not counted
       if (a.path.length) {
         a.moving = true;
         let step = 2.6 * this.speed * dt;
