@@ -19,10 +19,10 @@ const key = (x, y) => x + ',' + y,
 // Where the event's activities happen on an island:
 //   pitch { a, b }   two lawn cells in one row GAP apart, on the front lawn (y >= H), off the paths, clear of the
 //                    presents (drop) and of `avoid` (the elves' way), as near the middle of that lawn as can be
-//   rink { cx, cy, rx, ry }   the largest round on the ice (iceSet) that keeps 3 tiles from the penguins (huddle)
+//   rink { cx, cy, rx, ry, t0 }   the largest round on the ice (iceSet) that keeps 3 tiles from the penguins (huddle)
 //   spots            the idle spots, in a fixed order; one the island has no room for is left out
-// `entry` is the lake cell people walk into (a bathing spot: nobody bathes while the lake is frozen).
-function layout({ roam, roamList, clear, iceSet, ice, drop, entry, avoid = [], huddle, H }) {
+// People step onto the ice from the lawn cell nearest the rink (the skate spot's `tile`).
+function layout({ roam, roamList, clear, iceSet, ice, drop, avoid = [], huddle, H }) {
   const lawn = roamList.filter(
       c =>
         c[1] >= H && !clear.has(key(c[0], c[1])) && !(drop && cheb(c, drop) <= 2) && avoid.every(r => cheb(c, r) >= 2),
@@ -57,7 +57,8 @@ function layout({ roam, roamList, clear, iceSet, ice, drop, entry, avoid = [], h
       }
     }
   let rink = null;
-  const out = [0, 0];
+  const out = [0, 0],
+    shore = (x, y) => roamList.reduce((m, c) => Math.min(m, far(c, x - 0.5, y - 0.5)), Infinity);
   // the widest round that fits: as deep as 0.6 of its width where the ice allows, else flat (0.3)
   for (let rx = 3; rx >= 1.5 && !rink; rx -= 0.5)
     for (let n = 0; n < (ice || []).length * 8 && !(rink && n >= (ice || []).length * 4); n++) {
@@ -76,9 +77,27 @@ function layout({ roam, roamList, clear, iceSet, ice, drop, entry, avoid = [], h
           iceSet.has(key(Math.floor(out[0]), Math.floor(out[1]))) &&
           (huddle || []).every(h => Math.hypot(out[0] - h[0], out[1] - h[1]) >= 3);
       }
-      if (fits && (!rink || far([r.cx, r.cy], entry[0], entry[1]) < far([rink.cx, rink.cy], entry[0], entry[1])))
-        rink = r;
+      // of those that fit, the one nearest the lawn: that is where people step on
+      if (fits && (!rink || shore(r.cx, r.cy) < shore(rink.cx, rink.cy))) rink = r;
     }
+  // The way on: the lawn cell nearest the round, and the round begins (t0) at its point nearest that cell.
+  let entry = null;
+  if (rink) {
+    let best = Infinity;
+    const round = { ...rink, t0: 0 };
+    for (const c of roamList) {
+      if (clear.has(key(c[0], c[1]))) continue;
+      for (let i = 0; i < 32; i++) {
+        skateAt(round, (i / 32) * LAP, out);
+        const d = far(c, out[0] - 0.5, out[1] - 0.5);
+        if (d < best) {
+          best = d;
+          entry = c;
+          rink.t0 = (i / 32) * LAP;
+        }
+      }
+    }
+  }
   const spots = [],
     at = (c, more) => ({ tile: [c[0], c[1]], pt: [c[0] + 0.5, c[1] + 0.5], event: true, ...more });
   if (pitch) {
@@ -127,23 +146,26 @@ function snowmanSize(t) {
 }
 // Where on the rink a skater is at time t, in tiles, written into `out` (one lap takes LAP seconds).
 function skateAt(rink, t, out) {
-  const a = (t / LAP) * Math.PI * 2;
+  const a = ((t + (rink.t0 || 0)) / LAP) * Math.PI * 2;
   out[0] = rink.cx + rink.rx * Math.cos(a);
   out[1] = rink.cy + rink.ry * Math.sin(a);
   return out;
 }
-// One step of someone skating: their own clock (a.skT) moves on dt seconds and they are put on the rink.
+// One step of someone skating: their own clock (a.skT, from 0 where they stepped on) moves on dt seconds and they
+// are put on the rink.
 const XY = [0, 0];
 function skate(a, rink, dt) {
   a.skT = (a.skT || 0) + (dt > 0 ? dt : 0);
-  skateAt(rink, a.skT + (a.id || 0), XY);
+  skateAt(rink, a.skT, XY);
   a.x = XY[0];
   a.y = XY[1];
 }
-// Before a skater walks off: back to the cell they came onto the ice by, where a path can start.
-function offRink(a, laid) {
+// When someone's goal changes: if they are out on the lake (skating, or on the step onto the ice), back to the lawn
+// cell they came by, where a path can start; their skating clock starts over. `water` is the lake's cells.
+function offRink(a, laid, water) {
+  a.skT = 0;
   const s = laid.spots.find(sp => sp.act === 'skate');
-  if (!s) return;
+  if (!s || !water.has(key(Math.floor(a.x), Math.floor(a.y)))) return;
   a.x = s.tile[0] + 0.5;
   a.y = s.tile[1] + 0.5;
 }

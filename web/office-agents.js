@@ -9,6 +9,7 @@ import { FateLogic } from './fate-logic.js';
 import { EventIdle } from './event-idle.js';
 import { SnowLogic } from './snow-logic.js';
 import {
+  CRITTER_PLACES,
   DEPT_PAL,
   DESKS,
   DOOR,
@@ -230,6 +231,7 @@ mixin(
     leave(a, why = 'missing') {
       if (a.leaving) return;
       a.leaving = true;
+      EventIdle.offRink(a, EVENT_IDLE, CRITTER_PLACES.water);
       a.leftWhy = why;
       a.status = 'leaving';
       this.log(a, tr('office.log.sessionEnded'));
@@ -558,7 +560,7 @@ mixin(
       if (a.sleeping) return;
       const g = this.goalFor(a);
       if (g.key !== a.goalKey) {
-        if (a.actNow === 'skate') EventIdle.offRink(a, EVENT_IDLE);
+        EventIdle.offRink(a, EVENT_IDLE, CRITTER_PLACES.water); // a skater steps off the ice first
         a.goalKey = g.key;
         a.seated = false;
         a.sleeping = false;

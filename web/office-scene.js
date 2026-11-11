@@ -179,11 +179,10 @@ export const CRITTER_PLACES = EventCritters.places({
   ],
 });
 // Where people idle during the Christmas event (web/event-idle.js): a snowball pitch and a spot to roll a snowball
-// on the front lawn, a rink on the lake (entered by the second bathing spot) and a place beside the big tree.
+// on the front lawn, a rink on the lake (stepped onto from the lawn beside it) and a place beside the big tree.
 export const EVENT_IDLE = EventIdle.layout({
   ...CRITTER_PLACES,
   H,
-  entry: [ISLAND.pond.spots[1].x, ISLAND.pond.spots[1].y],
   avoid: EventCritters.elfRoute({ ...CRITTER_PLACES }) || [],
   huddle: EventCritters.huddle(CRITTER_PLACES.ice),
 });
