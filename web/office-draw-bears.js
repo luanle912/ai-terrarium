@@ -4,7 +4,18 @@
 import { SkyRender } from './sky-render.js';
 import { DogLogic } from './dog-logic.js';
 import { PolarBears } from './polar-bears.js';
-import { BEARS, DOG_PLACES, DOG_PLACES_WINTER, DRAW_REACH, OX, OY, TH, TW, behindWalls } from './office-scene.js';
+import {
+  BEARS,
+  DOG_PLACES,
+  DOG_PLACES_WINTER,
+  DOG_ROAM,
+  DRAW_REACH,
+  OX,
+  OY,
+  TH,
+  TW,
+  behindWalls,
+} from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 
 const NIGHT = '#0d1322',
@@ -86,6 +97,32 @@ mixin(
       const places = w.winter ? DOG_PLACES_WINTER : DOG_PLACES;
       this.dogWorld.roam = places.roam;
       this.dogWorld.roamList = places.roamList;
+      this.dogWorld.drink = places.drink;
+      if (w.winter) for (const d of this.dogs) this.dogOut(d);
+    }
+    // A dog that stands in the ring round the bears (it was there when winter came, or the page opened with it there)
+    // walks out to the nearest lawn outside it, over the whole lawn since its own ground no longer reaches it.
+    dogOut(d) {
+      const x = Math.floor(d.x),
+        y = Math.floor(d.y);
+      if (d.path.length || !BEARS.keep.has(x + ',' + y) || d.act === 'home' || d.act === 'inside') return;
+      let best = null,
+        bd = Infinity;
+      for (const c of DOG_PLACES_WINTER.roamList) {
+        const dd = Math.hypot(c[0] - x, c[1] - y);
+        if (dd < bd) (bd = dd), (best = c);
+      }
+      const p = best ? DogLogic.path(DOG_ROAM, [x, y], best) : [];
+      if (!p.length) return;
+      Object.assign(d, {
+        act: 'wander',
+        wag: false,
+        partner: null,
+        lead: false,
+        until: Infinity,
+        speed: DogLogic.STROLL,
+      });
+      d.path = p.slice(1).map(c => [c[0] + 0.5, c[1] + 0.5]);
     }
     // The igloo and the bears on one side of the walls (back: those drawn before them), into the sorted list.
     bearItems(G, list, back, dfB) {
