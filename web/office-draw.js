@@ -78,6 +78,7 @@ mixin(
         ctx.clearRect(0, 0, w, hh);
         fn(ctx, w, hh, t, skyEnv);
         if (cv === this.backCanvas) this.drawFallers(ctx, t, hh);
+        this.drawSleigh(ctx, cv === this.backCanvas, w, hh);
       }
       // The island bobs a few pixels; moving the wrapper (not a transform) keeps bubbles, clicks and layering intact.
       if (this.wrapEl) {
@@ -335,6 +336,7 @@ mixin(
       const G = { ctx, poly, box, rect, th, t, df, ev };
       this.drawPrints(G, this.printNow || 0);
       for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
+      this.critterItems(G, behind, true, dfB);
       for (const a of this.agents)
         if (walker(a) && backOf(a)) behind.push({ z: a.x + a.y, f: () => this.drawPerson(G, a) });
       behind.sort((p, q) => p.z - q.z).forEach(it => it.f());
@@ -646,6 +648,7 @@ mixin(
       });
 
       for (const d of this.dogs) if (!backOf(d)) items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
+      this.critterItems(G, items, false, dfB);
       this.agents.forEach(a => {
         if (a.sleeping) {
           const d = DESKS[a.desk];

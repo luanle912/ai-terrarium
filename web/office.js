@@ -4,6 +4,7 @@ import { SeasonLogic } from './season-logic.js';
 import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { DogLogic } from './dog-logic.js';
+import { EventCritters } from './event-critters.js';
 import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import { EventLogic } from './event-logic.js';
@@ -304,6 +305,9 @@ export class ClaudeOffice extends React.Component {
       }),
     };
     window.__dogs = { dogs: this.dogs, world: this.dogWorld };
+    window.__critters = () => ({ list: this.critters, world: this.critterWorld });
+    // Santa's sleigh sets off now (on Christmas Eve), for checking the flight
+    window.__sleigh = () => this.critterWorld && EventCritters.flyNow(this.critterWorld);
     window.__office = this; // for tools/shot.mjs --eval: switch to simulated agents, pose someone
     // the first person on the floor drops from the EXIT door, as if they had just gone out (for checking the fall)
     window.__fall = () => this.agents[0] && this.startFall(this.agents[0], performance.now() / 1000);
@@ -510,6 +514,7 @@ export class ClaudeOffice extends React.Component {
     if (!this.state.paused) {
       this.agents.forEach(a => this.updateAgent(a, dt));
       this.stepDogs(dt);
+      this.stepCritters(dt);
       this.stepProps(dt);
       if (this.agents.some(a => a.gone)) {
         const goneA = this.agents.filter(a => a.gone);

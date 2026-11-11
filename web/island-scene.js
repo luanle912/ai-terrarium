@@ -11,6 +11,7 @@ import './office-draw-fate.js';
 import './office-draw-fate-more.js';
 import './office-draw-winter.js';
 import './office-draw-xmas.js';
+import './office-draw-critters.js';
 import './office-draw-people.js';
 import './office-render.js';
 import { DogLogic } from './dog-logic.js';
@@ -65,6 +66,11 @@ export const SCENE_METHODS = [
   'seasonNow',
   'eventNow',
   'stepDogs',
+  'stepCritters',
+  'critterItems',
+  'critterSprite',
+  'drawCritter',
+  'drawPile',
   'stepProps',
   'dogSprite',
   'drawDog',
@@ -144,6 +150,7 @@ export class IslandScene {
     this.doneSweep(Date.now());
     this.agents.forEach(a => this.updateAgent(a, dt));
     this.stepDogs(dt);
+    this.stepCritters(dt);
     this.stepProps(dt);
     if (this.agents.some(a => a.gone)) {
       const gone = this.agents.filter(a => a.gone);
