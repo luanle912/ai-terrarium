@@ -71,3 +71,18 @@ scene with the outfits taken off, measured alternately:
 
 So 16 to 66 calls for sixteen people (1 to 4 each; the budget was 8 each). The dogs' clothes are baked into their
 sprites and cost nothing a frame.
+
+## After phase 4, Christmas critters (2026-11-11)
+
+Same build, 24 Dec 21:00, 8 simulated people, the sleigh kept flying (`__sleigh()` every second), with the critters
+and with them switched off in the page (`critterItems`, `drawSleigh`, `stepCritters` stubbed), runs interleaved:
+
+| | calls p50 | ms p50 |
+|---|---|---|
+| critters off | 19,314 / 19,284 | 6.6 / 5.7 |
+| critters on | 19,279 | 6.4 |
+
+The critters are at most 14 `drawImage` calls a frame (3 reindeer and one nose glow, 2 elves, 4 penguins, the pile,
+the sleigh, 2 parcels); that is inside the run-to-run spread of the people walking about (about ±20 calls). The
+island is not baked again for them.
+
