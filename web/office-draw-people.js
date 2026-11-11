@@ -6,7 +6,7 @@ import { SmokeLogic } from './smoke-logic.js';
 import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW, outdoors } from './office-scene.js';
 import { WATER_Z } from './island-land.js';
 import { LOOK, PERSON } from './office-people.js';
-import { XMAS, breathAt, outfitOf, shirtOf } from './office-people-xmas.js';
+import { XMAS, breathAt, lookUnder, outfitOf, shirtOf } from './office-people-xmas.js';
 import { ICON, ST, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Drawing people (at desks, walking, asleep, in the pond) and the office dogs.
@@ -194,7 +194,7 @@ mixin(
         shL = shade(sh, 30),
         sk = a.skin,
         skD = shade(sk, -25),
-        L = LOOK(a),
+        L = lookUnder(LOOK(a), o),
         st = a.status;
       if (a.seated) {
         const skey =

@@ -43,7 +43,7 @@ function bakeTools(frame, env) {
     C = seasonC((c, s = 0) => night(s ? mix(c, SNOW, env.snow * s) : c, env.df), look),
     // Lying snow (web/island-art-snow.js): its own colours, dimmed less than the grass after dark.
     depth = SnowLogic.depth(env.snow),
-    S = c => night(c, 1 - (1 - env.df) * SnowLogic.NIGHT_K);
+    S = c => SnowLogic.night(c, env.df);
   return { P, C, look, depth, S };
 }
 

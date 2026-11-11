@@ -161,3 +161,28 @@ test('outdoors is the lawn: not the office floor, not the restroom block', () =>
   assert.equal(outdoors(WC.x0 + 1.5, WC.y0 + 1.5), false)
   assert.equal(outdoors(W + 8.5, H + 3.5), true)
 })
+
+test('under a hat that covers the head a baseball cap gives way to plain cropped hair', () => {
+  const { lookUnder } = loadWeb('office-people-xmas')
+  const cap = { hairStyle: 'cap', hair: '#3b2a20' }, long = { hairStyle: 'long', hair: '#3b2a20' }
+  for (const hat of ['santa', 'beanie', 'tophat', 'elf']) {
+    const l = lookUnder(cap, { hat })
+    assert.equal(l.hairStyle, 'crop', hat)
+    assert.equal(l.hair, cap.hair)
+    assert.equal(lookUnder(cap, { hat }), l, 'made once')
+  }
+  assert.equal(cap.hairStyle, 'cap', 'the look itself is left alone')
+  for (const hat of ['muffs', 'antlers']) assert.equal(lookUnder(cap, { hat }), cap, hat)
+  assert.equal(lookUnder(cap, null), cap)
+  assert.equal(lookUnder(long, { hat: 'santa' }), long)
+})
+
+test('snow at night is moonlit blue, not grey, and unchanged by day', () => {
+  const { SnowLogic: SL } = loadWeb('snow-logic')
+  const rgb = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16))
+  assert.equal(SL.night(SL.PAL.base, 1), SL.PAL.base)
+  const [r, g, b] = rgb(SL.night(SL.PAL.base, 0))
+  assert.ok(b - r >= 30, `blue ${b} against red ${r}`)
+  assert.ok(g > r && b > g)
+  assert.ok(r > 110 && r < 170, 'still pale, so the island reads at night')
+})

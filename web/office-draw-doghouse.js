@@ -128,16 +128,30 @@ mixin(
             if (sd) {
               const T = snowTones(df),
                 at = (x, f, up) => L(x, yc + (yb + OV - yc) * f, ZR - (ZR - ZE) * f + up);
-              flat(
-                [
-                  at(xa - OV, 0, sd + 1),
-                  at(xb + OV, 0, sd + 1),
+              // a ragged lower edge, the lower part in the snow's base tone, a darker line where it ends
+              const xm = (xa + xb) / 2,
+                edge = [
                   at(xb + OV, 0.62, sd),
-                  at((xa + xb) / 2, 0.74, sd),
-                  at(xa - OV, 0.6, sd),
-                ],
+                  at((xm + xb) / 2 + 0.06, 0.7, sd),
+                  at(xm + 0.04, 0.6, sd),
+                  at(xm - 0.1, 0.76, sd),
+                  at((xa + xm) / 2, 0.64, sd),
+                  at(xa - OV, 0.7, sd),
+                ];
+              flat([at(xa - OV, 0, sd + 1), at(xb + OV, 0, sd + 1), ...edge], T.base);
+              flat(
+                [at(xa - OV, 0, sd + 1), at(xb + OV, 0, sd + 1), at(xb + OV, 0.3, sd), at(xa - OV, 0.34, sd)],
                 T.lit,
               );
+              ctx.strokeStyle = T.rim;
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              edge.forEach(([ex, ey], i) =>
+                i
+                  ? ctx.lineTo(Math.round(ex) + 0.5, Math.round(ey) + 0.5)
+                  : ctx.moveTo(Math.round(ex) + 0.5, Math.round(ey) + 0.5),
+              );
+              ctx.stroke();
               flat([at(xb + OV, 0, sd + 1), at(xb + OV, 0.62, sd), at(xb + OV, 0.62, 0), at(xb + OV, 0, 0)], T.shade);
             }
             for (const ye of [ya - OV, yb + OV])

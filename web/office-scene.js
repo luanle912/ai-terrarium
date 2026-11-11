@@ -242,7 +242,7 @@ DESKS.forEach(d => {
   BLOCK.add(d.gx + ',' + d.gy);
   BLOCK.add(d.gx + 1 + ',' + d.gy);
 });
-['8,0', '9,0', '8,13', '19,13', '19,0', '26,13'].forEach(k => BLOCK.add(k));
+['9,0', '8,13', '19,13', '19,0', '26,13'].forEach(k => BLOCK.add(k));
 // Pantry furniture: the kitchen wall (row 0), the island (row 3), the tables by the bench and the sky-view bar.
 for (let x = 20; x < W; x++) BLOCK.add(x + ',0');
 for (let x = 22; x <= 25; x++) {
