@@ -86,3 +86,18 @@ The critters are at most 14 `drawImage` calls a frame (3 reindeer and one nose g
 the sleigh, 2 parcels); that is inside the run-to-run spread of the people walking about (about ±20 calls). The
 island is not baked again for them.
 
+
+## After phase 5, Christmas things to do (2026-11-11)
+
+Same build, 20 Dec 12:00, 16 simulated people, paused with one person posed at each of the event's five spots and one
+at the espresso machine, with the event's idle drawing and with it switched off in the page (`idleXmasItems`,
+`xmasArms` stubbed), runs interleaved:
+
+| | calls p50 | ms p50 |
+|---|---|---|
+| off | 19,474 / 19,542 | 6.6 / 6.3 |
+| on | 19,578 / 19,527 | 6.8 / 6.7 |
+
+The difference is inside the run-to-run spread (about ±50 calls with snow falling). Counted in the code, all five
+activities in use at once add about 30 `fillRect` calls: the arms (about 2 more than the usual ones per person), the
+rolled snowball 6, the skater's trail 8, the snowball in the air 3, a puff of breath 2. The island is not baked again.
