@@ -448,6 +448,7 @@ mixin(
         day: th && th._day != null ? th._day : 1,
         summer: season === 'summer',
         calm: env.reduced,
+        ev: this.eventNow(),
       });
     }
     // Someone has reached the place of their fate (a.fated): keep how they looked and where they stood.
