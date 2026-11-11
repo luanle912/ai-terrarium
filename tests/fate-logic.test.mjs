@@ -117,7 +117,7 @@ test('every fate but the door has a scene length', () => {
   for (const k of Fate.KINDS) assert.ok(k === 'exit' || Fate.FATES[k].dur > 2, k)
 })
 
-test('the four Christmas ways out need the event; the sleigh only comes on Christmas Eve and Day', () => {
+test('the four Christmas ways out need the event; the sleigh only when Santa is about', () => {
   const xmas = ['sleigh', 'wrapped', 'skateoff', 'chimney']
   const ev = { key: 'christmas', level: 3, eve: false, day: false }
   const withEv = (weather, season, e, calm = false) =>
@@ -128,8 +128,8 @@ test('the four Christmas ways out need the event; the sleigh only comes on Chris
   assert.equal(on.sleigh, 0)
   assert.ok(on.wrapped > 0 && on.chimney > 0 && on.skateoff > 0)
   assert.equal(Fate.weights(withEv('clear', 'summer', ev)).skateoff, 0, 'no ice, no skating off')
-  assert.equal(Fate.weights(withEv('snow', 'winter', { ...ev, eve: true })).sleigh, 10)
-  assert.equal(Fate.weights(withEv('snow', 'winter', { ...ev, day: true })).sleigh, 10)
+  assert.equal(Fate.weights(withEv('snow', 'winter', { ...ev, eve: true })).sleigh, 4)
+  assert.equal(Fate.weights(withEv('snow', 'winter', { ...ev, day: true })).sleigh, 4)
   const calm = Fate.weights(withEv('snow', 'winter', { ...ev, eve: true }, true))
   assert.deepEqual(Fate.KINDS.filter(k => calm[k] > 0), ['exit'])
   for (const k of xmas) assert.equal(Fate.pick(cond('clear', 'summer'), () => 0.5, null, k), k)

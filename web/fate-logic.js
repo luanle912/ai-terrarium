@@ -7,7 +7,7 @@
 //   wet     it is raining            storm  a thunderstorm          windy  a storm, or autumn's steady wind
 //   cold    winter or snow falling   frozen the lake is iced over   night  after dark
 //   hot     a clear summer day       calm   reduced motion: only the door
-//   xmas    the Christmas event is on         eve    it is Christmas Eve or Christmas Day
+//   xmas    the Christmas event is on         eve    Santa is about (all event long)
 // at: 'door' the EXIT door · 'lawn' open lawn in front of the office · 'lake' the bathing spots in the lake
 //     'way' a few steps along the way to the door, wherever the person was
 const FATES = {
@@ -29,7 +29,7 @@ const FATES = {
   dust: { at: 'way', dur: 3, w: () => 2 },
   ghost: { at: 'way', dur: 4.6, w: () => 2 },
   // the Christmas event's own
-  sleigh: { at: 'lawn', dur: 5, w: c => (c.eve ? 10 : 0) },
+  sleigh: { at: 'lawn', dur: 5, w: c => (c.eve ? 4 : 0) },
   wrapped: { at: 'way', dur: 3.6, w: c => (c.xmas ? 4 : 0) },
   skateoff: { at: 'lake', dur: 4.4, w: c => (c.xmas && c.frozen ? 5 : 0) },
   chimney: { at: 'lawn', dur: 4.6, w: c => (c.xmas ? 3 : 0) },

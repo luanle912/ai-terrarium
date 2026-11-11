@@ -1,6 +1,6 @@
 // The Christmas event's critters as logic (no DOM, no canvas; tests/event-critters.test.mjs): three reindeer grazing
 // on the lawn, two elves carrying presents from the island's edge to a spot beside the front stairs, four penguins
-// on the frozen lake, Santa's sleigh across the sky on Christmas Eve and Santa himself on Christmas Day. The page
+// on the frozen lake, Santa's sleigh across the sky and Santa himself by the tree, all event long. The page
 // keeps one world `w` and one list per island and calls step() every frame; pose() says which sprite to show.
 //
 // w = { roam, roamList, clear, houses, drop, edge, ice, iceSet     the places (places(), worked out once)

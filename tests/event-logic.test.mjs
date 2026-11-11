@@ -27,21 +27,18 @@ test('the edges are exact to the second, in a leap year too', () => {
     assert.equal(lvl(at(y, 12, 1, 0, 0, 0)), 1)
     assert.equal(lvl(at(y, 12, 26, 23, 59, 59)), 3)
     assert.equal(lvl(at(y, 12, 27, 0, 0, 0)), null)
-    const eve = d => E.active(d, 'auto').eve, day = d => E.active(d, 'auto').day
-    assert.equal(eve(at(y, 12, 24, 17, 59, 59)), false)
-    assert.equal(eve(at(y, 12, 24, 18, 0, 0)), true)
-    assert.equal(eve(at(y, 12, 25, 5, 59, 59)), true)
-    assert.equal(eve(at(y, 12, 25, 6, 0, 0)), false)
-    assert.equal(day(at(y, 12, 24, 23, 59, 59)), false)
-    assert.equal(day(at(y, 12, 25, 0, 0, 0)), true)
-    assert.equal(day(at(y, 12, 25, 23, 59, 59)), true)
-    assert.equal(day(at(y, 12, 26, 0, 0, 0)), false)
+    // Santa and his sleigh are about the whole event long, not just on the 24th and 25th
+    for (const [d, h] of [[1, 0], [1, 12], [10, 3], [24, 17], [26, 23]]) {
+      const e = E.active(at(y, 12, d, h, 0, 0), 'auto')
+      assert.equal(e.eve, true, `eve on ${d} Dec ${h}:00`)
+      assert.equal(e.day, true, `day on ${d} Dec ${h}:00`)
+    }
   }
 })
 
-test('the choice: off hides it in December, on shows all of it in July (no eve, no day), a preview lasts a minute', () => {
+test('the choice: off hides it in December, on shows all of it in July (Santa and the sleigh too), a preview lasts a minute', () => {
   assert.equal(E.active(at(2026, 12, 20), 'off'), null)
-  assert.deepEqual(E.active(at(2026, 7, 20), 'on'), { key: 'christmas', level: 3, eve: false, day: false })
+  assert.deepEqual(E.active(at(2026, 7, 20), 'on'), { key: 'christmas', level: 3, eve: true, day: true })
   assert.equal(E.active(at(2026, 12, 3), 'on').level, 3)
   assert.equal(E.active(at(2026, 7, 20), 'auto'), null)
   assert.equal(E.active(at(2026, 7, 20), 'nonsense'), null)
