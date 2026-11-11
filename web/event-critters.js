@@ -350,7 +350,16 @@ function stepElf(c, list, w, dt) {
 
 const DIRS = N8.map(([dx, dy]) => [dx / Math.hypot(dx, dy), dy / Math.hypot(dx, dy)]);
 function stepPenguin(c, list, w, dt) {
-  if (w.calm) return;
+  if (w.calm) {
+    // reduced motion: back in the huddle, standing
+    if (c.act !== 'stand') {
+      c.x = c.home[0];
+      c.y = c.home[1];
+      c.act = 'stand';
+      w.slider = ((w.slider || 0) + 1) % PENGUINS;
+    }
+    return;
+  }
   if (c.act === 'stand') {
     if (c.id === 0 && w.slideAt == null) w.slideAt = w.now + 6 + w.rand() * 4;
     if (w.slideAt == null || w.now < w.slideAt || c.id !== w.slider) return;
