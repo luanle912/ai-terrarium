@@ -1,5 +1,5 @@
 // The Christmas critters as logic (web/event-critters.js): reindeer on the lawn, elves carrying presents, penguins on
-// the ice, Santa's sleigh on Christmas Eve and Santa himself on Christmas Day.
+// the ice, Santa's sleigh and Santa himself.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { loadWeb } from './web.mjs'
@@ -210,7 +210,7 @@ test('four penguins huddle on the ice; one at a time slides off on its belly and
   assert.equal(E.huddle(PL.ice).length, 4)
 })
 
-test("the sleigh crosses the sky on Christmas Eve only, every few minutes, and drops a present or two", () => {
+test("the sleigh crosses the sky only while Santa is about, every few minutes, and drops a present or two", () => {
   const off = world({}), none = E.create(off)
   run(none, off, 120, () => assert.equal(E.sleigh(off), null))
   const w = world({ eve: true }), list = E.create(w)

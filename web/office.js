@@ -306,7 +306,7 @@ export class ClaudeOffice extends React.Component {
     };
     window.__dogs = { dogs: this.dogs, world: this.dogWorld };
     window.__critters = () => ({ list: this.critters, world: this.critterWorld });
-    // Santa's sleigh sets off now (on Christmas Eve), for checking the flight
+    // Santa's sleigh sets off now (while the event is on), for checking the flight
     window.__sleigh = () => this.critterWorld && EventCritters.flyNow(this.critterWorld);
     window.__office = this; // for tools/shot.mjs --eval: switch to simulated agents, pose someone
     // the first person on the floor drops from the EXIT door, as if they had just gone out (for checking the fall)

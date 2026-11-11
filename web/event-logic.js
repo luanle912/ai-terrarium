@@ -12,22 +12,17 @@ const startPreview = now => ({ until: now + PREVIEW_MS });
 //   level 1  1-7 Dec    lights on the office, wreaths, hats
 //   level 2  8-14 Dec   candy canes, desk decorations, the kennels and the pergola lit, whole outfits
 //   level 3  15-26 Dec  everything
-//   eve      24 Dec 18:00 to 25 Dec 06:00      day  all of 25 Dec
-// choice 'on' shows level 3 whatever the date (never eve or day), 'off' nothing; a preview shows level 3 until it
-// runs out, whatever the choice.
+//   eve, day  the whole event long: Santa's sleigh crosses the sky (eve) and he sits by the tree (day) all December,
+//             not just on the 24th and 25th
+// choice 'on' shows level 3 whatever the date, 'off' nothing; a preview shows level 3 until it runs out, whatever the
+// choice.
 function active(date, choice, preview, now) {
-  if (preview && now < preview.until) return { key: 'christmas', level: 3, eve: false, day: false };
-  if (choice === 'on') return { key: 'christmas', level: 3, eve: false, day: false };
+  if (preview && now < preview.until) return { key: 'christmas', level: 3, eve: true, day: true };
+  if (choice === 'on') return { key: 'christmas', level: 3, eve: true, day: true };
   if (choice !== 'auto' || date.getMonth() !== 11) return null;
-  const d = date.getDate(),
-    h = date.getHours();
+  const d = date.getDate();
   if (d > 26) return null;
-  return {
-    key: 'christmas',
-    level: d <= 7 ? 1 : d <= 14 ? 2 : 3,
-    eve: (d === 24 && h >= 18) || (d === 25 && h < 6),
-    day: d === 25,
-  };
+  return { key: 'christmas', level: d <= 7 ? 1 : d <= 14 ? 2 : 3, eve: true, day: true };
 }
 // What the island's bake is keyed by: '' without the event, 'x1'..'x3' by level.
 const cacheKey = ev => (ev ? 'x' + ev.level : '');
