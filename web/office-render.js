@@ -1,7 +1,7 @@
 import { tr } from './i18n.js';
 import { SeasonLogic } from './season-logic.js';
 import { BubbleLogic } from './bubble-logic.js';
-import { ACT_TXT, FH, LH, LW, P, PA, h } from './office-scene.js';
+import { actLabel, FH, LH, LW, P, PA, h } from './office-scene.js';
 import { ST, fmtK } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // The page root as the desktop wallpaper: edge to edge and deaf to the pointer (made once, reused every render).
@@ -14,6 +14,30 @@ const WALLPAPER_APP = {
   pointerEvents: 'none',
 };
 // The React tree of the local page: header, scene, bubbles, panels and settings; plus hit testing.
+// What someone says on the way to their fate (web/fate-logic.js); nothing special for the EXIT door.
+const fateLine = kind =>
+  ({
+    lightning: () => tr('bubble.fate.lightning'),
+    wind: () => tr('bubble.fate.wind'),
+    freeze: () => tr('bubble.fate.freeze'),
+    lake: () => tr('bubble.fate.lake'),
+    fish: () => tr('bubble.fate.fish'),
+    duck: () => tr('bubble.fate.duck'),
+    melt: () => tr('bubble.fate.melt'),
+    balloon: () => tr('bubble.fate.balloon'),
+    ufo: () => tr('bubble.fate.ufo'),
+    rocket: () => tr('bubble.fate.rocket'),
+    hole: () => tr('bubble.fate.hole'),
+    banana: () => tr('bubble.fate.banana'),
+    dust: () => tr('bubble.fate.dust'),
+    ghost: () => tr('bubble.fate.ghost'),
+    snowball: () => tr('bubble.fate.snowball'),
+    bird: () => tr('bubble.fate.bird'),
+    sleigh: () => tr('bubble.fate.sleigh'),
+    wrapped: () => tr('bubble.fate.wrapped'),
+    skateoff: () => tr('bubble.fate.skateoff'),
+    chimney: () => tr('bubble.fate.chimney'),
+  })[kind]?.();
 mixin(
   ClaudeOffice,
   class {
@@ -89,10 +113,14 @@ mixin(
               microwave: '🍱 ',
               meal: '🍪 ',
               snack: '🍪 ',
-            }[a.actNow] || '☕ ') + (ACT_TXT[a.actNow] || tr('bubble.pantryBreak'))
+              snowball: '❄️ ',
+              snowman: '⛄ ',
+              skate: '⛸️ ',
+              gift: '🎁 ',
+            }[a.actNow] || '☕ ') + (actLabel(a.actNow, this.eventNow()) || tr('bubble.pantryBreak'))
           );
         case 'leaving':
-          return tr('bubble.leaving');
+          return fateLine(a.fate) || tr('bubble.leaving');
         default:
           return null;
       }

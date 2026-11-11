@@ -3,6 +3,8 @@ import { SkyRender } from './sky-render.js';
 import { DogSprites } from './dog-sprites.js';
 import { PG, DOG_HOUSES, FLOOR_Z, mix } from './office-scene.js';
 import { shade } from './office-util.js';
+import { SnowLogic } from './snow-logic.js';
+import { snowTones } from './office-draw-winter.js';
 import { ClaudeOffice, mixin } from './office.js';
 
 // One roof colour per dog, in DogLogic.BREEDS order: the corgi's red, the husky's blue, the dalmatian's green.
@@ -23,6 +25,8 @@ const X0 = 0.08,
   OV = 0.07,
   DW = 0.18,
   DH = 10;
+// for whatever hangs on a kennel's gable (the event's lights, web/office-draw-xmas.js)
+export const KENNEL = { X1, HW, OV, ZE, ZR };
 // Where a frame's head is: the middle column (hc) and top row (ht) of what is drawn in its top three rows.
 const headOf = f => {
   const cols = [];
@@ -49,6 +53,7 @@ mixin(
       const { ctx, poly, t, df } = G,
         N = c => SkyRender.night(c, df),
         dogs = this.dogs || [],
+        sd = SnowLogic.depth(snow),
         // a face with a dark pixel edge, like the scene's other props
         face = (pts, col) => poly(pts, col, shade(col, -48)),
         flat = (pts, col) => poly(pts, col, null);
@@ -61,7 +66,7 @@ mixin(
           yc = 0,
           ya = -HW,
           yb = HW,
-          roof = N(mix(ROOF[i], '#eef3f7', snow * 0.8)),
+          roof = N(mix(ROOF[i], '#eef3f7', snow * 0.2)),
           wood = N(WOOD),
           stone = N(STONE),
           dog = dogs.find(d => d.id === i && d.act === 'inside');
@@ -119,6 +124,36 @@ mixin(
               ],
               shade(roof, -45),
             );
+            // snow lying on the near slope, from the ridge most of the way down, thicker with the depth
+            if (sd) {
+              const T = snowTones(df),
+                at = (x, f, up) => L(x, yc + (yb + OV - yc) * f, ZR - (ZR - ZE) * f + up);
+              // a ragged lower edge, the lower part in the snow's base tone, a darker line where it ends
+              const xm = (xa + xb) / 2,
+                edge = [
+                  at(xb + OV, 0.62, sd),
+                  at((xm + xb) / 2 + 0.06, 0.7, sd),
+                  at(xm + 0.04, 0.6, sd),
+                  at(xm - 0.1, 0.76, sd),
+                  at((xa + xm) / 2, 0.64, sd),
+                  at(xa - OV, 0.7, sd),
+                ];
+              flat([at(xa - OV, 0, sd + 1), at(xb + OV, 0, sd + 1), ...edge], T.base);
+              flat(
+                [at(xa - OV, 0, sd + 1), at(xb + OV, 0, sd + 1), at(xb + OV, 0.3, sd), at(xa - OV, 0.34, sd)],
+                T.lit,
+              );
+              ctx.strokeStyle = T.rim;
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              edge.forEach(([ex, ey], i) =>
+                i
+                  ? ctx.lineTo(Math.round(ex) + 0.5, Math.round(ey) + 0.5)
+                  : ctx.moveTo(Math.round(ex) + 0.5, Math.round(ey) + 0.5),
+              );
+              ctx.stroke();
+              flat([at(xb + OV, 0, sd + 1), at(xb + OV, 0.62, sd), at(xb + OV, 0.62, 0), at(xb + OV, 0, 0)], T.shade);
+            }
             for (const ye of [ya - OV, yb + OV])
               flat([L(xb + OV, ye, ZE), L(xb + OV, yc, ZR), L(xb + OV, yc, ZR - 2), L(xb + OV, ye, ZE - 2)], N(TRIM));
             // the paw plaque over the door
@@ -165,7 +200,7 @@ mixin(
     // over the roof tell when it sleeps.
     doghouseSleeper(ctx, d, door, [bx, by], dfB, snB) {
       const f = DogSprites.frame(d.breed, 'lie'),
-        img = this.dogSprite(d.breed, 'lie', dfB, snB),
+        img = this.dogSprite(d.breed, 'lie', dfB, snB, this.eventNow()),
         { hc, ht } = headOf(f),
         left = Math.round(bx) - hc,
         top = Math.round(by) - DH + 2 - ht;
@@ -174,7 +209,7 @@ mixin(
       door.forEach((_, k) => (k ? ctx.lineTo(...Q(door, k)) : ctx.moveTo(...Q(door, k))));
       ctx.closePath();
       ctx.clip();
-      ctx.drawImage(img, left, top);
+      ctx.drawImage(img, left, top - img.pad);
       ctx.restore();
     }
     // A small bowl in the roof's colour with kibble in it.

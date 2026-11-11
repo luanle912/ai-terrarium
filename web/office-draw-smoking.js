@@ -2,6 +2,8 @@
 import { SkyRender } from './sky-render.js';
 import { PG, SMOKE, mix } from './office-scene.js';
 import { shade } from './office-util.js';
+import { SnowLogic } from './snow-logic.js';
+import { snowTones } from './office-draw-winter.js';
 import { ClaudeOffice, mixin } from './office.js';
 mixin(
   ClaudeOffice,
@@ -16,7 +18,8 @@ mixin(
         Y = SMOKE.y,
         Z = X + Y,
         N = c => SkyRender.night(c, df),
-        SN = (c, k) => N(mix(c, '#eef3f7', snow * k));
+        SN = (c, k) => N(mix(c, '#eef3f7', snow * k)),
+        sd = SnowLogic.depth(snow);
       const gbox = (x, y, w, hh, z0, z1, top, l, r) => {
         poly(
           [PG(x, y + hh, z0), PG(x + w, y + hh, z0), PG(x + w, y + hh, z1), PG(x, y + hh, z1)],
@@ -168,7 +171,17 @@ mixin(
           }
           // three rafters between the two outer ones, all overhanging the beams a little
           for (const x of [1.0, 1.75, 2.5, 3.25, 3.85])
-            gbox(X + x, Y - 0.15, 0.07, 1.4, 38, 39.2, SN('#b98a52', 0.7), shade(wood, -10), shade(wood, -25));
+            gbox(
+              X + x,
+              Y - 0.15,
+              0.07,
+              1.4,
+              38,
+              39.2,
+              sd ? snowTones(df).lit : SN('#b98a52', 0.7),
+              shade(wood, -10),
+              shade(wood, -25),
+            );
           // the vine spreads over the back beam and the pantry side of the roof
           for (const [x, y, r] of [
             [1.2, 0.05, 4],

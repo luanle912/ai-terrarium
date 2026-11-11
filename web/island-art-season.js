@@ -60,7 +60,8 @@ function trunk(pt, C, x, y, h) {
   ctx.fillStyle = C('#4e3420');
   ctx.fillRect(x + 1, y - h, 1, h);
 }
-// One island tree at its tile d: kind 'fresh' (spring), 'green' (summer), 'gold' (autumn) or 'bare' (winter).
+// One island tree at its tile d: kind 'fresh' (spring), 'green' (summer), 'gold' (autumn), 'bare' (winter) or 'fir'
+// (winter during the Christmas event).
 export function drawSeasonTree(pt, P, C, d, kind) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
     x = Math.round(px),
@@ -77,6 +78,7 @@ export function drawSeasonTree(pt, P, C, d, kind) {
     'rgba(0,0,0,0.18)',
   );
   if (kind === 'bare') return bareTree(pt, C, d, x, y);
+  if (kind === 'fir') return firTree(pt, C, d, x, y);
   // a few leaves already down on the lawn round an autumn tree
   if (kind === 'gold')
     for (let i = 0; i < 6; i++) {
@@ -167,58 +169,136 @@ function bareTree(pt, C, d, x, y) {
   );
 }
 
+// The Christmas event: a plain fir in three tiers, lit from the left, with a little snow on the tip of each tier
+// and along its upper edge. Each tree is a touch taller or shorter than its neighbour.
+const FIR = [
+  [10, 4, 10],
+  [8, 11, 9],
+  [5, 18, 9],
+];
+function firTree(pt, C, d, x, y) {
+  const ctx = pt.ctx,
+    tall = Math.floor(hash(d.x, d.y, 190) * 3),
+    snow = C('#f4f8fc'),
+    R = (a, b, w, h, c) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(x + a, y - b - h, w, h);
+    };
+  trunk(pt, C, x, y, 6);
+  FIR.forEach(([hw, z0, h0], ti) => {
+    const h = h0 + (ti === 2 ? tall : 0),
+      lit = C(ti === 1 ? '#34965a' : '#3aa05a', 0.1),
+      dark = C('#236f42', 0.05),
+      under = C('#185030');
+    for (let r = 0; r < h; r++) {
+      const w = Math.max(1, Math.round((hw * (h - r)) / h)),
+        z = z0 + r + (ti ? Math.min(tall, ti) : 0);
+      R(-w - 1, z, 2 * w + 2, 1, C(OUTLINE));
+      R(-w, z, w, 1, r < 2 ? under : lit);
+      R(0, z, w, 1, r < 2 ? under : dark);
+      // snow: the tier's tip, and here and there along the edge the light falls on
+      if (r >= h - 2) R(-w, z, 2 * w - (r === h - 1 ? 0 : 1), 1, snow);
+      else if (r > 1 && hash(d.x * 7 + r, d.y * 5 + ti, 191) < 0.45) R(-w, z, 2, 1, snow);
+    }
+  });
+  pt.rows(
+    x - 3,
+    y - 1,
+    [
+      [1, 5],
+      [0, 7],
+    ],
+    snow,
+  );
+}
+
 // ---- snowmen ----
-export const SNOWMAN_EXT = [10, 25, 10, 4];
+export const SNOWMAN_EXT = [15, 35, 15, 5];
 // A snowman at its tile m ({x, y, look}): three balls of snow lit from the upper left with the outline, coal eyes and
-// buttons, a carrot nose, twig arms and, by its look, a red scarf (0), a blue scarf (1) or a top hat (2).
+// buttons, a carrot nose, twig arms and a blue shadow on the snow. Three of them by look: (0) tall, in a top hat and a
+// red scarf; (1) stout, a bucket on its head and a broom in its arm, in a blue scarf; (2) small, its head to one side,
+// in a green scarf, one arm up.
+const SNOWMEN = [
+  { r: [7, 5.2, 4], scarf: ['#d94a5a', '#a83444'], tilt: 0 },
+  { r: [7.6, 5.6, 4.2], scarf: ['#3e8ed0', '#2c6aa0'], tilt: 0 },
+  { r: [5.4, 4.1, 3.4], scarf: ['#46a758', '#2f7d42'], tilt: 2 },
+];
 export function drawSnowman(pt, P, C, m) {
   const [px, py] = P(m.x + 0.5, m.y + 0.5, 0),
     x = Math.round(px),
     y = Math.round(py),
     ctx = pt.ctx,
+    look = m.look % 3,
+    { r, scarf, tilt } = SNOWMEN[look],
     snow = lit3(C('#ffffff'), C('#e6eef7'), C('#c4d3e6')),
+    twig = C('#5e4029'),
     dot = (a, b, c, w = 1, h = 1) => {
       ctx.fillStyle = C(c);
       ctx.fillRect(x + a, y + b, w, h);
-    };
+    },
+    // the middles of the three balls, each sitting a little into the one below
+    y0 = -Math.round(r[0] * 0.85),
+    y1 = y0 - Math.round(r[0] * 0.75 + r[1] * 0.8),
+    y2 = y1 - Math.round(r[1] * 0.7 + r[2] * 0.85),
+    hx = tilt,
+    w0 = Math.round(r[0]);
   pt.rows(
-    x - 6,
+    x - w0 - 1,
     y - 1,
     [
-      [1, 11],
-      [0, 13],
-      [1, 11],
+      [2, 2 * w0 + 4],
+      [0, 2 * w0 + 9],
+      [3, 2 * w0 + 4],
     ],
-    'rgba(40,50,80,0.2)',
+    'rgba(60,90,150,0.24)',
   );
-  // twig arms behind the middle ball
-  linePx(ctx, [x - 4, y - 10], [x - 8, y - 13], C('#5e4029'));
-  linePx(ctx, [x + 4, y - 10], [x + 8, y - 14], C('#5e4029'));
-  dot(-9, -14, '#5e4029');
-  dot(8, -15, '#5e4029');
-  blob(pt, x, y - 4, [[0, 0, 5, 4.2]], snow, C(OUTLINE));
-  blob(pt, x, y - 10.5, [[0, 0, 3.8, 3.3]], snow, C(OUTLINE));
-  blob(pt, x, y - 16, [[0, 0, 3, 2.8]], snow, C(OUTLINE));
-  dot(-2, -17, '#2b2838');
-  dot(1, -17, '#2b2838');
-  dot(0, -16, '#f08a24', 3);
-  dot(3, -15, '#c96a1a');
-  dot(0, -11, '#2b2838');
-  dot(0, -9, '#2b2838');
-  dot(0, -5, '#2b2838');
-  if (m.look === 2) {
-    dot(-4, -19, OUTLINE, 9);
-    dot(-3, -24, OUTLINE, 7, 5);
-    dot(-2, -23, '#3a3550', 5, 3);
-    dot(-2, -21, '#d94a5a', 5);
-    dot(-3, -19, '#3a3550', 7);
+  // twig arms behind the middle ball: out and up, the small one waves, the stout one holds a broom
+  const ar = Math.round(r[1]);
+  linePx(ctx, [x - ar, y + y1], [x - ar - 5, y + y1 - (look === 2 ? 6 : 3)], twig);
+  linePx(ctx, [x + ar, y + y1], [x + ar + 5, y + y1 - 4], twig);
+  dot(-ar - 6, y1 - (look === 2 ? 8 : 4), '#5e4029', 1, 2);
+  dot(ar + 5, y1 - 6, '#5e4029', 1, 2);
+  if (look === 1) {
+    linePx(ctx, [x + ar + 6, y - 1], [x + ar + 6, y + y2 - 4], C('#8a5a3a'));
+    dot(ar + 4, y2 - 9, '#d8b25a', 5, 5);
+    dot(ar + 4, y2 - 5, '#b08a3a', 5, 1);
+  }
+  blob(pt, x, y + y0, [[0, 0, r[0], r[0] * 0.84]], snow, C(OUTLINE));
+  blob(pt, x, y + y1, [[0, 0, r[1], r[1] * 0.86]], snow, C(OUTLINE));
+  blob(pt, x + hx, y + y2, [[0, 0, r[2], r[2] * 0.92]], snow, C(OUTLINE));
+  // face, buttons, scarf
+  dot(hx - 2, y2 - 1, '#2b2838');
+  dot(hx + 1, y2 - 1, '#2b2838');
+  dot(hx, y2, '#f08a24', 3);
+  dot(hx + 3, y2 + 1, '#c96a1a');
+  dot(hx - 1, y2 + 2, '#2b2838', 3);
+  dot(0, y1 - 1, '#2b2838');
+  dot(0, y1 + 2, '#2b2838');
+  dot(0, y0 - 1, '#2b2838');
+  const sy = y2 + Math.round(r[2] * 0.8),
+    sw = Math.round(r[2]) + 1;
+  dot(hx - sw, sy, scarf[0], 2 * sw + 1);
+  dot(hx - sw + 1, sy + 1, scarf[1], 2 * sw - 1);
+  dot(hx + sw - 2, sy + 1, scarf[0], 2, 4);
+  dot(hx + sw - 2, sy + 4, scarf[1], 2);
+  // on its head: a top hat, a bucket, or nothing but a tuft of twigs
+  const ty = y2 - Math.round(r[2] * 0.92);
+  if (look === 0) {
+    dot(-5, ty, OUTLINE, 11);
+    dot(-4, ty - 7, OUTLINE, 9, 7);
+    dot(-3, ty - 6, '#3a3550', 7, 5);
+    dot(-3, ty - 2, '#d94a5a', 7, 2);
+    dot(-4, ty, '#3a3550', 9);
+  } else if (look === 1) {
+    dot(-4, ty - 5, OUTLINE, 9, 6);
+    dot(-3, ty - 4, '#9aa3b5', 7, 4);
+    dot(-3, ty - 4, '#c3cad8', 2, 4);
+    dot(-4, ty, '#6f7889', 9);
+    dot(3, ty - 6, '#6f7889', 1, 2);
   } else {
-    const c = m.look ? '#3e8ed0' : '#d94a5a',
-      dk = m.look ? '#2c6aa0' : '#a83444';
-    dot(-3, -14, c, 7);
-    dot(-3, -13, dk, 7);
-    dot(2, -12, c, 2, 3);
-    dot(3, -10, dk);
+    dot(hx - 1, ty - 2, '#5e4029', 1, 3);
+    dot(hx + 1, ty - 3, '#5e4029', 1, 3);
+    dot(hx, ty - 1, '#5e4029', 2);
   }
 }
 

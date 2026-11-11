@@ -5,9 +5,26 @@ import { PeopleLogic } from './people-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { PropUse } from './prop-use.js';
-import { DEPT_PAL, DESKS, DOOR, H, IDLE_SPOTS, LAWN_WALK, SIM_DEPTS, W, colOf } from './office-scene.js';
+import { FateLogic } from './fate-logic.js';
+import { EventIdle } from './event-idle.js';
+import { SnowLogic } from './snow-logic.js';
+import {
+  CRITTER_PLACES,
+  DEPT_PAL,
+  DESKS,
+  DOOR,
+  EVENT_IDLE,
+  FATE_PLACES,
+  H,
+  IDLE_SPOTS,
+  LAWN_WALK,
+  SIM_DEPTS,
+  W,
+  colOf,
+} from './office-scene.js';
 import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
+const ON_LAWN = (x, y) => LAWN_WALK.has(Math.floor(x) + ',' + Math.floor(y));
 // Agents: the simulated office and the live feed, desks and departments, where each agent goes next.
 mixin(
   ClaudeOffice,
@@ -214,10 +231,19 @@ mixin(
     leave(a, why = 'missing') {
       if (a.leaving) return;
       a.leaving = true;
+      EventIdle.offRink(a, EVENT_IDLE, CRITTER_PLACES.water);
       a.leftWhy = why;
       a.status = 'leaving';
       this.log(a, tr('office.log.sessionEnded'));
-      if (WorldLogic.leaveGone(document.visibilityState)) a.gone = true;
+      if (WorldLogic.leaveGone(document.visibilityState)) return void (a.gone = true);
+      // How they go (web/fate-logic.js): out of the EXIT door, or some other way that suits the weather, at a spot on
+      // the lawn, in the lake or a few steps along the way. A spot nobody can walk to falls back to the door.
+      const way = bfs(startCell(a.x, a.y), DOOR.tile);
+      a.fate = FateLogic.pick(this.fateCtx(), Math.random, this.lastFate, this.forceFate);
+      a.fateGoal = FateLogic.goal(a.fate, FATE_PLACES, way, Math.random);
+      if (a.fateGoal && !bfs(startCell(a.x, a.y), a.fateGoal.tile).length) a.fateGoal = null;
+      if (!a.fateGoal) a.fate = 'exit';
+      this.lastFate = a.fate;
     }
     // Finished sub-agents walk out 3 s after their 'done' (called from frame and from the hidden-tab timer).
     doneSweep(now) {
@@ -421,7 +447,7 @@ mixin(
     }
 
     goalFor(a) {
-      if (a.leaving) return { key: 'exit', tile: DOOR.tile, pt: DOOR.pt };
+      if (a.leaving) return a.fateGoal ? { key: 'fate', ...a.fateGoal } : { key: 'exit', tile: DOOR.tile, pt: DOOR.pt };
       if (a.parent) {
         const p = this.byId(a.parent),
           d = DESKS[p ? p.desk : a.desk];
@@ -499,14 +525,14 @@ mixin(
         }
         // Men use WC NAM and women WC NỮ (RestroomLogic.roomOf); about one idle choice in four is a free stall there.
         // On the frozen lakes nobody fishes or bathes: whoever is there leaves (SeasonLogic.idleStays).
-        const frozen = SeasonLogic.look(this.seasonNow()).frozen;
-        if (!SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen)) a.idleSpot = null;
+        // The Christmas event's own spots are open by its level, the snow and the ice (EventIdle.open).
+        const frozen = SeasonLogic.look(this.seasonNow()).frozen,
+          c = this.idleCtx(frozen);
+        if (!SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen) || !EventIdle.stays(IDLE_SPOTS, a.idleSpot, c))
+          a.idleSpot = null;
         if (a.idleSpot == null || taken.has(a.idleSpot)) {
-          const free = SeasonLogic.idleOpen(
-            IDLE_SPOTS,
-            IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i)),
-            frozen,
-          );
+          const all = IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i)),
+            free = EventIdle.open(IDLE_SPOTS, SeasonLogic.idleOpen(IDLE_SPOTS, all, frozen), c);
           a.idleSpot = RestroomLogic.pickIdle(IDLE_SPOTS, free, a.wcDone ? null : RestroomLogic.roomOf(a), Math.random);
         }
         if (a.idleSpot != null) {
@@ -534,6 +560,7 @@ mixin(
       if (a.sleeping) return;
       const g = this.goalFor(a);
       if (g.key !== a.goalKey) {
+        EventIdle.offRink(a, EVENT_IDLE, CRITTER_PLACES.water); // a skater steps off the ice first
         a.goalKey = g.key;
         a.seated = false;
         a.sleeping = false;
@@ -574,12 +601,14 @@ mixin(
           if (g.key === 'sleep') a.sleeping = true;
           if (g.stool) a.stool = g.stool;
           if (g.key === 'exit') a.gone = a.exited = true;
+          if (g.key === 'fate') a.gone = a.fated = true;
           a.dirFront = g.spot ? g.spot.front : false;
           if (g.spot) a.actNow = g.spot.act;
         }
       }
       // At a stall or the vanity: count the visit along (RestroomLogic.visit); while inside the stall, the person is
       // not drawn.
+      else if (a.actNow === 'skate') EventIdle.skate(a, EVENT_IDLE.rink, dt * this.speed);
       else if (a.actNow === 'wc') {
         a.wcT = (a.wcT || 0) + dt * this.speed;
         a.wcIn = RestroomLogic.visit(a.wcT) === 'inside';
@@ -627,6 +656,16 @@ mixin(
         }))
         .filter(a => a.act !== 'wc');
       DogLogic.step(this.dogs, w, dt);
+      this.stepPrints(dt, w);
+    }
+    // Footprints in lying snow (SnowLogic): whoever walks the lawn, person or dog, leaves one every half tile.
+    stepPrints(dt, w) {
+      this.printNow = (this.printNow || 0) + dt;
+      if (SnowLogic.depth(this.snowShown || 0) < 2 || w.calm) return;
+      if (!this.prints) this.prints = SnowLogic.prints();
+      for (const a of this.agents)
+        if (a.x >= W || a.y >= H || a.x < 0 || a.y < 0) SnowLogic.walkPrint(this.prints, a, ON_LAWN, this.printNow);
+      for (const d of this.dogs) if (d.act !== 'inside') SnowLogic.walkPrint(this.prints, d, ON_LAWN, this.printNow);
     }
   },
 );

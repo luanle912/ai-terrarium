@@ -156,7 +156,7 @@ const SEASONS = {
     label: tr('seasonTree.christmas.label'),
     tree: 'Cây thông Noel',
     type: 'event',
-    from: '11-21',
+    from: '12-01',
     to: '12-26',
     key: '12-25',
     accent: '#2f8f4e',
