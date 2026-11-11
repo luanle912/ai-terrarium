@@ -515,6 +515,7 @@ export class ClaudeOffice extends React.Component {
       this.agents.forEach(a => this.updateAgent(a, dt));
       this.stepDogs(dt);
       this.stepCritters(dt);
+      this.stepBears(dt);
       this.stepProps(dt);
       if (this.agents.some(a => a.gone)) {
         const goneA = this.agents.filter(a => a.gone);

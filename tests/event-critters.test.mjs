@@ -8,7 +8,7 @@ import { loadI18n } from './load-i18n.mjs'
 loadI18n('vi')
 globalThis.React ??= { createElement: () => null }
 const { EventCritters: E } = loadWeb('event-critters')
-const { CRITTER_PLACES: PL, DOG_PLACES: D, STAIRS } = loadWeb('office-scene')
+const { CRITTER_PLACES: PL, DOG_PLACES: D, DOG_ROAM_WINTER, STAIRS } = loadWeb('office-scene')
 const { CritterSprites: S } = loadWeb('critter-sprites')
 
 const seeded = (a = 7) => () => {
@@ -36,7 +36,7 @@ test('the places: a spot for the presents beside the front stairs, a way in from
   assert.ok(PL.ice.length >= 6)
   for (const [x, y] of PL.ice)
     for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) assert.ok(PL.water.has(x + a + ',' + (y + b)), 'a cell from the shore')
-  assert.ok(PL.roam === D.roam)
+  assert.ok(PL.roam === DOG_ROAM_WINTER, 'the dogs\' winter lawn: none of them goes near the polar bears')
 })
 
 test('who is about: nobody at level 1, reindeer from level 2, elves and penguins at level 3, Santa on the day', () => {

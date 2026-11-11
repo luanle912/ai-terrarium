@@ -22,10 +22,12 @@ function paint(kind, name, dfB, red, flip) {
     K = CritterSprites.KINDS[kind],
     pal = red ? { ...K.pal, ...CritterSprites.RUDOLPH } : K.pal,
     cv = document.createElement('canvas'),
-    dim = DogLogic.nightMix(dfB / 10);
-  cv.width = f.w;
-  cv.height = f.h + 2;
+    dim = DogLogic.nightMix(dfB / 10),
+    pad = K.outline ? 1 : 0; // white on snow needs a thin edge to be seen
+  cv.width = f.w + 2 * pad;
+  cv.height = f.h + 2 + pad;
   const c = cv.getContext('2d');
+  c.translate(pad, pad);
   if (flip) {
     c.translate(f.w, 0);
     c.scale(-1, 1);
@@ -37,6 +39,13 @@ function paint(kind, name, dfB, red, flip) {
     c.fill();
   }
   cv.nx = -1;
+  if (pad) {
+    const on = (x, y) => y >= 0 && y < f.h && x >= 0 && x < f.w && f.rows[y][x] !== '.';
+    c.fillStyle = SkyRender.mix(K.outline, NIGHT, dim);
+    for (let y = -1; y <= f.h; y++)
+      for (let x = -1; x <= f.w; x++)
+        if (!on(x, y) && (on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1))) c.fillRect(x, y, 1, 1);
+  }
   f.rows.forEach((row, y) => {
     for (let x = 0; x < f.w; x++) {
       const ch = row[x];
@@ -50,8 +59,8 @@ function paint(kind, name, dfB, red, flip) {
     }
   });
   // the column under the critter's middle, in the picture as painted
-  cv.ax = flip ? f.w - 1 - f.ax : f.ax;
-  cv.fh = f.h;
+  cv.ax = pad + (flip ? f.w - 1 - f.ax : f.ax);
+  cv.fh = f.h + pad;
   return cv;
 }
 

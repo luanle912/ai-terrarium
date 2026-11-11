@@ -339,6 +339,7 @@ mixin(
       this.drawPrints(G, this.printNow || 0);
       for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
       this.critterItems(G, behind, true, dfB);
+      this.bearItems(G, behind, true, dfB);
       for (const a of this.agents)
         if (walker(a) && backOf(a)) behind.push({ z: a.x + a.y, f: () => this.drawPerson(G, a) });
       behind.sort((p, q) => p.z - q.z).forEach(it => it.f());
@@ -651,6 +652,7 @@ mixin(
 
       for (const d of this.dogs) if (!backOf(d)) items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
       this.critterItems(G, items, false, dfB);
+      this.bearItems(G, items, false, dfB);
       this.idleXmasItems(G, items);
       this.agents.forEach(a => {
         if (a.sleeping) {
