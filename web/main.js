@@ -42,6 +42,7 @@ import './office-draw-fate-more.js';
 import './office-draw-winter.js';
 import './office-draw-xmas.js';
 import './office-draw-critters.js';
+import './office-draw-idle-xmas.js';
 import './office-draw-people.js';
 import './office-render.js';
 import './office-render-header.js';

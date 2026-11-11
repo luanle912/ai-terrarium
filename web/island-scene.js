@@ -12,6 +12,7 @@ import './office-draw-fate-more.js';
 import './office-draw-winter.js';
 import './office-draw-xmas.js';
 import './office-draw-critters.js';
+import './office-draw-idle-xmas.js';
 import './office-draw-people.js';
 import './office-render.js';
 import { DogLogic } from './dog-logic.js';
@@ -67,6 +68,7 @@ export const SCENE_METHODS = [
   'eventNow',
   'stepDogs',
   'stepCritters',
+  'idleCtx',
   'critterItems',
   'critterSprite',
   'drawCritter',
