@@ -649,6 +649,7 @@ mixin(
 
       for (const d of this.dogs) if (!backOf(d)) items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
       this.critterItems(G, items, false, dfB);
+      this.idleXmasItems(G, items);
       this.agents.forEach(a => {
         if (a.sleeping) {
           const d = DESKS[a.desk];

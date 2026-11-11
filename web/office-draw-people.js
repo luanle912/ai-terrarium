@@ -146,7 +146,7 @@ mixin(
       const { ctx, poly, box, rect, th, t } = G,
         o = outfitOf(a, G.ev);
       if (a.sleeping) return this.drawSleeper(G, a);
-      let [sx, sy] = a.seated ? P(a.x, a.y, 11.5) : PA(a.x, a.y);
+      let [sx, sy] = a.seated ? P(a.x, a.y, 11.5) : PA(a.x, a.y, a.actNow === 'skate' ? WATER_Z : 0);
       sx = Math.round(sx);
       sy = Math.round(sy);
       if (a.status === 'error' && !a.moving && !a.seated) sx += Math.floor(t * 16) % 2 ? 1 : -1;
@@ -380,7 +380,8 @@ mixin(
         const act = !a.moving && st === 'idle' ? a.actNow : null;
         const tp = t + a.id * 1.37; // per-person phase, so a group of smokers never moves in step
         if (act && (!sit || act === 'smoke')) {
-          this.actArms(R, act, sx, by, act === 'smoke' ? tp : t, slv, slvD, sk);
+          if (!(G.ev && this.xmasArms(R, act, sx, by, tp, slv, slvD, sk, a)))
+            this.actArms(R, act, sx, by, act === 'smoke' ? tp : t, slv, slvD, sk);
         } else if (up) {
           R(sx - 6, by - 17, 2, 7, slv);
           R(sx + 4, by - 17, 2, 7, slv);
