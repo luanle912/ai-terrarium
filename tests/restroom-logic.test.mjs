@@ -284,3 +284,26 @@ test('a visit: at the stall door, inside, coming out, washing hands, then done',
   assert.equal(at(DOOR + INSIDE + OUT), 'wash')
   assert.equal(at(VISIT), 'done')
 })
+
+// ---- ten minutes or so at one thing, then something else ----
+
+test('stint: a stay at one idle spot lasts eight to twelve minutes, ten on average', () => {
+  assert.equal(RestroomLogic.STINT, 600)
+  assert.equal(RestroomLogic.stint(() => 0), 480)
+  assert.equal(RestroomLogic.stint(() => 0.5), 600)
+  assert.ok(RestroomLogic.stint(() => 0.999999) < 720)
+})
+
+test('moveOn: whoever has stayed long enough goes on to a different thing, not the same one elsewhere', () => {
+  const spots = [{ act: 'coffee' }, { act: 'coffee' }, { act: 'phone' }, { act: 'fish' }]
+  assert.deepEqual(RestroomLogic.moveOn(spots, [0, 1, 2, 3], 0), [2, 3], 'no other coffee spot either')
+  assert.deepEqual(RestroomLogic.moveOn(spots, [0, 1], 0), [1], 'only coffee left: at least another spot')
+  assert.deepEqual(RestroomLogic.moveOn(spots, [0], 0), [0], 'nowhere else to go: stays where it is')
+  assert.deepEqual(RestroomLogic.moveOn(spots, [], 0), [])
+})
+
+test('moveOn: a first choice, with no spot left behind, is among all the free spots', () => {
+  const spots = [{ act: 'coffee' }, { act: 'phone' }]
+  assert.deepEqual(RestroomLogic.moveOn(spots, [0, 1], null), [0, 1])
+  assert.deepEqual(RestroomLogic.moveOn(spots, [0, 1], undefined), [0, 1])
+})

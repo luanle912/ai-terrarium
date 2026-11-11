@@ -191,6 +191,19 @@ function pickIdle(spots, free, room, rand, share = SHARE) {
   const pool = wc.length && (!rest.length || rand() < share) ? wc : rest;
   return pool.length ? pool[Math.floor(rand() * pool.length)] : null;
 }
+// Ten minutes or so at one thing is enough. A stay at an idle spot lasts STINT simulated seconds, give or take a
+// fifth so that people who stopped together do not all get up together.
+const STINT = 600;
+const stint = rand => STINT * (0.8 + 0.4 * rand());
+// Where someone who has stayed long enough at spot `was` may go next: the free spots for a different thing, failing
+// that another spot for the same thing, failing that wherever is free (so it stays put when there is nowhere else).
+function moveOn(spots, free, was) {
+  if (was == null) return free;
+  const other = free.filter(i => spots[i].act !== spots[was].act);
+  if (other.length) return other;
+  const moved = free.filter(i => i !== was);
+  return moved.length ? moved : free;
+}
 // One visit, in simulated seconds spent standing (walking does not count): a moment at the stall door while it opens,
 // a while inside with the door shut, a moment coming back out, washing hands at the vanity, then on to somewhere else.
 const DOOR = 0.8,
@@ -208,6 +221,9 @@ export const RestroomLogic = {
   DOORWAY,
   roomOf,
   pickIdle,
+  STINT,
+  stint,
+  moveOn,
   SHARE,
   visit,
   VISIT,
