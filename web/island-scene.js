@@ -83,6 +83,7 @@ export const SCENE_METHODS = [
   'bearItems',
   'drawBear',
   'drawIgloo',
+  'dogOut',
   'stepProps',
   'dogSprite',
   'drawDog',

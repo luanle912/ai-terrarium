@@ -16,11 +16,11 @@ const cell = b => key(Math.floor(b.x), Math.floor(b.y))
 const world = over => ({ winter: true, night: false, calm: false, now: 0, rand: seeded(7), ...over })
 
 test('the layout: an igloo of 2 × 2 cells by the mountain, a patch of lawn round it, a wider ring kept clear', () => {
-  assert.deepEqual([L.igloo.x, L.igloo.y], [12, -8])
+  assert.deepEqual([L.igloo.x, L.igloo.y], [7, -10])
   assert.equal(L.cells.size, 4)
   assert.ok(L.zone.length >= 16, 'room to walk about')
   for (const [x, y] of L.zone) {
-    assert.ok(S.LAWN_WALK_ALL.has(key(x, y)), `${x},${y} is open lawn`)
+    assert.ok(S.DOG_ROAM.has(key(x, y)), `${x},${y} is open lawn, not hidden by the mountain`)
     assert.ok(!L.cells.has(key(x, y)), 'never into the igloo')
     assert.ok(L.keep.has(key(x, y)), 'the bears are inside the ring kept clear')
   }
@@ -43,7 +43,7 @@ test('nobody else goes near: people, dogs and the Christmas critters are kept ou
   assert.ok([...L.keep].some(k => S.DOG_ROAM.has(k)))
   // and the den, the drinking spots and the bench company are all outside it
   const xy = d => (Array.isArray(d) ? d : [d.x, d.y])
-  for (const [x, y] of [...S.DOG_PLACES.den, ...S.DOG_PLACES.drink, S.DOG_PLACES.rest].filter(Boolean).map(xy))
+  for (const [x, y] of [...S.DOG_PLACES_WINTER.den, ...S.DOG_PLACES_WINTER.drink, S.DOG_PLACES_WINTER.rest].filter(Boolean).map(xy))
     assert.ok(!L.keep.has(key(x, y)), `${x},${y}`)
 })
 
