@@ -20,6 +20,12 @@ const sxy = c => [Math.round(OX + (c[0] - c[1]) * TW), Math.round(OY + (c[0] + c
   XY = [0, 0],
   G_T = { t: 0 }; // the frame's time, for the arms (drawPerson passes each person their own phase)
 
+// The arm that is not doing anything, hanging at the side.
+function rest(R, sx, by, shD, sk) {
+  R(sx - 5, by - 11, 1, 5, shD);
+  R(sx - 5, by - 6, 1, 1, sk);
+}
+
 mixin(
   ClaudeOffice,
   class {
@@ -36,13 +42,9 @@ mixin(
     // The arms of someone at one of the event's activities (and of someone with a mug of cocoa where the coffee
     // is): true when it drew them, so the usual arms are left out.
     xmasArms(R, act, sx, by, t, sh, shD, sk, a) {
-      const rest = () => {
-        R(sx - 5, by - 11, 1, 5, shD);
-        R(sx - 5, by - 6, 1, 1, sk);
-      };
       if (act === 'coffee') {
         // a red mug held up, steam curling off it
-        rest();
+        rest(R, sx, by, shD, sk);
         R(sx + 4, by - 12, 1, 4, shD);
         R(sx + 3, by - 15, 3, 3, RED);
         R(sx + 3, by - 15, 3, 1, SNOW.lit);
@@ -52,7 +54,7 @@ mixin(
         const side = IDLE_SPOTS[a.idleSpot] ? IDLE_SPOTS[a.idleSpot].side : 0;
         if (this.snowBoth && EventIdle.thrower(G_T.t) === side && EventIdle.ball(G_T.t, true)) {
           // the throw: the arm swung up and forward
-          rest();
+          rest(R, sx, by, shD, sk);
           R(sx + 4, by - 16, 1, 5, shD);
           R(sx + 4, by - 17, 1, 1, sk);
         } else {
@@ -80,7 +82,7 @@ mixin(
       } else if (act === 'gift') {
         // a present held out, lowered to the floor by the tree every few seconds
         const down = t % 5 > 3.4 ? 4 : 0;
-        rest();
+        rest(R, sx, by, shD, sk);
         R(sx + 4, by - 11, 1, 3 + down, shD);
         R(sx + 4, by - 9 + down, 5, 4, RED);
         R(sx + 6, by - 9 + down, 1, 4, GOLD);
@@ -133,7 +135,7 @@ mixin(
     // Where the skater has just been: eight faint marks on the ice.
     drawTrail(G, a) {
       for (let k = 1; k <= 8; k++) {
-        EventIdle.skateAt(EVENT_IDLE.rink, (a.skT || 0) + a.id - k * 0.14, XY);
+        EventIdle.skateAt(EVENT_IDLE.rink, (a.skT || 0) - k * 0.14, XY);
         G.rect(OX + (XY[0] - XY[1]) * TW, OY + (XY[0] + XY[1]) * TH - WATER_Z + 1, 2, 1, TRAIL);
       }
     }

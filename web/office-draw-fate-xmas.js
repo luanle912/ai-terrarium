@@ -71,10 +71,10 @@ Object.assign(SCENES, {
       go = clamp((u - 0.4) / 2.6),
       d = 13 * go * go,
       fall = clamp((u - 3) / 1.4),
-      px = x - 17.3 * d - 14 * fall,
-      py = y + 7.4 * d + 260 * fall * fall;
+      px = x - 20.8 * d - 14 * fall,
+      py = y + 5.6 * d + 260 * fall * fall;
     // the marks of the blades behind them, while still on the ice
-    if (go > 0 && fall <= 0) for (let k = 1; k <= 5; k++) R(px + 17.3 * 0.25 * k, py - 7.4 * 0.25 * k, 2, 1, ICE_MARK);
+    if (go > 0 && fall <= 0) for (let k = 1; k <= 5; k++) R(px + 20.8 * 0.25 * k, py - 5.6 * 0.25 * k, 2, 1, ICE_MARK);
     fig(S, G, f, x, y, {
       dx: px - x,
       dy: py - y,

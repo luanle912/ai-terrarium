@@ -12,8 +12,7 @@ const { EventCritters: E } = loadWeb('event-critters')
 const { EventLogic } = loadWeb('event-logic')
 const S = loadWeb('office-scene')
 const PL = S.CRITTER_PLACES
-const entry = [S.ISLAND.pond.spots[1].x, S.ISLAND.pond.spots[1].y]
-const src = over => ({ ...PL, H: S.H, entry, avoid: E.elfRoute({ ...PL }) || [], huddle: E.huddle(PL.ice), ...over })
+const src = over => ({ ...PL, H: S.H, avoid: E.elfRoute({ ...PL }) || [], huddle: E.huddle(PL.ice), ...over })
 const L = I.layout(src())
 const C = { level: 3, snow: 2, frozen: true, calm: false }
 
@@ -38,7 +37,17 @@ test('the layout: two snowball spots facing each other, a snowman spot, a rink o
     for (const h of E.huddle(PL.ice)) assert.ok(Math.hypot(out[0] - h[0], out[1] - h[1]) >= 3, 'away from the penguins')
   }
   assert.ok(L.rink.rx >= 1.5 && L.rink.rx <= 3)
-  assert.deepEqual(L.spots[3].tile, entry)
+  // people step onto the ice from the lawn right beside the rink, not across the lake
+  const sk = L.spots[3]
+  assert.ok(PL.roam.has(sk.tile.join(',')), 'the way on is lawn')
+  assert.ok(Math.hypot(sk.pt[0] - sk.tile[0] - 0.5, sk.pt[1] - sk.tile[1] - 0.5) <= 3, 'a step or two from the rink')
+  I.skateAt(L.rink, 0, out)
+  assert.deepEqual(sk.pt, out, 'and they arrive where the round begins')
+  for (let i = 0; i <= 10; i++) {
+    const x = sk.tile[0] + 0.5 + ((sk.pt[0] - sk.tile[0] - 0.5) * i) / 10, y = sk.tile[1] + 0.5 + ((sk.pt[1] - sk.tile[1] - 0.5) * i) / 10
+    const k = Math.floor(x) + ',' + Math.floor(y)
+    assert.ok(PL.roam.has(k) || PL.water.has(k), `${k} on the way on is neither lawn nor lake`)
+  }
   assert.ok(!EventLogic.TREE_CELLS.includes(L.spots[4].tile.join(',')))
   assert.ok(!S.BLOCK.has(L.spots[4].tile.join(',')))
 })
@@ -125,18 +134,37 @@ test('everyone can walk to every event spot from the door, round the big tree to
   EventLogic.block(S.BLOCK, false)
 })
 
-test('a skater set going moves round the rink, and steps back to where they came on before walking off', () => {
-  const a = { x: 0, y: 0, id: 3 }, rink = S.EVENT_IDLE.rink, sk = S.EVENT_IDLE.spots.find(s => s.act === 'skate')
-  I.skate(a, rink, 0.1)
-  const at = [a.x, a.y]
-  assert.ok(PL.iceSet.has(Math.floor(a.x) + ',' + Math.floor(a.y)))
-  I.skate(a, rink, 1)
-  assert.notDeepEqual([a.x, a.y], at)
-  I.skate(a, rink, NaN)
-  assert.ok(Number.isFinite(a.x + a.y))
-  I.offRink(a, S.EVENT_IDLE)
-  assert.deepEqual([a.x, a.y], [sk.tile[0] + 0.5, sk.tile[1] + 0.5])
-  const none = { x: 1, y: 2 }
-  I.offRink(none, { spots: [] })
-  assert.deepEqual([none.x, none.y], [1, 2])
+test('a skater starts where they stepped on, goes round, and steps back off only when they are on the lake', () => {
+  const rink = S.EVENT_IDLE.rink, sk = S.EVENT_IDLE.spots.find(s => s.act === 'skate')
+  for (const id of [1, 2, 4, 13]) {
+    const a = { x: sk.pt[0], y: sk.pt[1], id }
+    I.skate(a, rink, 0.016)
+    assert.ok(Math.hypot(a.x - sk.pt[0], a.y - sk.pt[1]) < 0.1, `person ${id} jumps on arrival`)
+    I.skate(a, rink, 3)
+    assert.ok(PL.iceSet.has(Math.floor(a.x) + ',' + Math.floor(a.y)))
+    assert.ok(Math.hypot(a.x - sk.pt[0], a.y - sk.pt[1]) > 1)
+    I.skate(a, rink, NaN)
+    assert.ok(Number.isFinite(a.x + a.y))
+    I.offRink(a, S.EVENT_IDLE, PL.water)
+    assert.deepEqual([a.x, a.y], [sk.tile[0] + 0.5, sk.tile[1] + 0.5])
+    // the next visit starts at the beginning again
+    Object.assign(a, { x: sk.pt[0], y: sk.pt[1] })
+    I.skate(a, rink, 0.016)
+    assert.ok(Math.hypot(a.x - sk.pt[0], a.y - sk.pt[1]) < 0.1, 'no jump on a second visit')
+  }
+  // half way from the lawn onto the ice when the goal changes: back to the lawn, not a walk across the water
+  const mid = { x: (sk.pt[0] + sk.tile[0] + 0.5) / 2, y: (sk.pt[1] + sk.tile[1] + 0.5) / 2 + 0.01 }
+  if (PL.water.has(Math.floor(mid.x) + ',' + Math.floor(mid.y))) {
+    I.offRink(mid, S.EVENT_IDLE, PL.water)
+    assert.deepEqual([mid.x, mid.y], [sk.tile[0] + 0.5, sk.tile[1] + 0.5])
+  }
+  // someone on the lawn or in the office is left where they are
+  for (const p of [{ x: 12.5, y: 20.5 }, { x: 5.5, y: 5.5 }]) {
+    const was = [p.x, p.y]
+    I.offRink(p, S.EVENT_IDLE, PL.water)
+    assert.deepEqual([p.x, p.y], was)
+  }
+  const none = { x: 36.5, y: 27.2 }
+  I.offRink(none, { spots: [] }, PL.water)
+  assert.deepEqual([none.x, none.y], [36.5, 27.2])
 })
