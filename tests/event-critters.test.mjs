@@ -74,6 +74,7 @@ test('reindeer graze, look up and stroll, never leaving the lawn or straying far
       seen[i].add(c.act)
       assert.ok(Number.isFinite(c.x) && Number.isFinite(c.y))
       assert.ok(w.roam.has(cell(c)), `${cell(c)} is off the lawn`)
+      if (c.act !== 'walk') assert.ok(!w.clear.has(cell(c)), `${cell(c)}: resting on a path`)
       assert.ok(Math.hypot(c.x - 0.5 - c.home[0], c.y - 0.5 - c.home[1]) <= E.RANGE + 1)
     }),
   )
@@ -229,9 +230,9 @@ test("the sleigh crosses the sky on Christmas Eve only, every few minutes, and d
   })
   assert.ok(flights >= 5 && flights <= 10, `${flights} flights`)
   assert.equal(w.landed, E.LANDED_MAX)
-  const f0 = flights
+  while (E.sleigh(w)) E.step(list, w, 0.1)
   E.step(list, w, 3600)
-  assert.ok(E.sleigh(w) === null || f0 >= 5)
+  assert.equal(E.sleigh(w), null, 'an hour in one frame is a quarter of a second: no flight begins')
   w.eve = false
   E.step(list, w, 0.1)
   assert.equal(E.sleigh(w), null)
@@ -259,4 +260,52 @@ test('on Christmas Day Santa sits by the presents, out of the way of the elves, 
   w.day = false
   E.step(list, w, 0.1)
   assert.equal(of(list, 'santa').length, 0)
+})
+
+test('reduced motion switched on while a penguin is away brings it straight back to the huddle', () => {
+  const w = world({}), list = E.create(w), ps = of(list, 'penguin')
+  let away = null
+  for (let i = 0; i < 400 && !away; i++) {
+    E.step(list, w, 0.1)
+    away = ps.find(c => c.act === 'slide')
+  }
+  assert.ok(away)
+  run(list, w, 0.3)
+  w.calm = true
+  E.step(list, w, 0.1)
+  assert.equal(away.act, 'stand')
+  assert.deepEqual([away.x, away.y], away.home)
+  w.calm = false
+  const slid = new Set()
+  run(list, w, 120, () => ps.forEach(c => c.act === 'slide' && slid.add(c.id)))
+  assert.equal(slid.size, 4, 'and the turns go on afterwards')
+})
+
+test('the event going and coming back, or the lake thawing mid-slide, leaves everyone in order', () => {
+  const w = world({ eve: true }), list = E.create(w)
+  E.flyNow(w)
+  run(list, w, 40)
+  w.level = 0
+  E.step(list, w, 0.1)
+  assert.deepEqual([list.length, w.placed, w.landed, E.sleigh(w)], [0, 0, 0, null])
+  w.level = 3
+  E.step(list, w, 0.1)
+  assert.equal(list.length, 9)
+  let away = null
+  for (let i = 0; i < 400 && !away; i++) {
+    E.step(list, w, 0.1)
+    away = of(list, 'penguin').find(c => c.act === 'slide')
+  }
+  w.frozen = false
+  E.step(list, w, 0.1)
+  w.frozen = true
+  const slid = new Set()
+  run(list, w, 120, () => {
+    const ps = of(list, 'penguin')
+    assert.equal(ps.length, 4)
+    ps.forEach(c => c.act === 'slide' && slid.add(c.id))
+    assert.ok(ps.filter(c => c.act !== 'stand').length <= 1)
+    for (const c of list) assert.ok(Number.isFinite(c.x + c.y))
+  })
+  assert.equal(slid.size, 4)
 })

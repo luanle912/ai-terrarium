@@ -12,7 +12,8 @@ import { glowAt, glowSprite } from './office-draw-xmas.js';
 import { CRITTER_PLACES, DRAW_REACH, LW, OX, OY, TH, TW, behindWalls } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 
-const NIGHT = '#0d1322',
+const NOSE_GLOW = '#ff4d4d',
+  NIGHT = '#0d1322',
   FLOATING = { sleigh: true, parcel: true };
 // kind -> frame -> [canvas] at index light * 4 + red * 2 + flipped
 const SPRITES = new Map();
@@ -157,7 +158,7 @@ mixin(
       // Rudolph's nose glows after dark
       if (c.red && G.df < 0.6 && img.nx >= 0) {
         G.ctx.globalAlpha = glowAt(G.df);
-        G.ctx.drawImage(glowSprite('#ff4d4d', 8), x + img.nx - 4, y + img.ny - 4);
+        G.ctx.drawImage(this.noseGlow || (this.noseGlow = glowSprite(NOSE_GLOW, 8)), x + img.nx - 4, y + img.ny - 4);
         G.ctx.globalAlpha = 1;
       }
     }
@@ -179,17 +180,19 @@ mixin(
       if (back) {
         const s = EventCritters.sleigh(cw);
         if (!s) return;
-        const dfB = Math.round(((this.frameTheme || this.theme)._day || 0) * 10),
+        const dfB = Math.round(this.env.df * 10),
           img = this.critterSprite('sleigh', 'fly', dfB, false, s.dir < 0),
           sw = img.width * k,
           x = (s.dir > 0 ? s.u : 1 - s.u) * (w + sw) - sw;
+        const smooth = ctx.imageSmoothingEnabled;
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(img, Math.round(x), Math.round(H0 + Math.sin(s.u * 9) * 0.02 * h), sw, img.height * k);
+        ctx.imageSmoothingEnabled = smooth; // the sky's soft clouds are drawn smoothed
         return;
       }
       const el = this.wrapEl;
       if (this.world || !el || !cw.drop || !(cw.parcels[0].on || cw.parcels[1].on)) return;
-      const dfB = Math.round(((this.frameTheme || this.theme)._day || 0) * 10),
+      const dfB = Math.round(this.env.df * 10),
         cam = this.cam || { z: 1, tx: 0, ty: 0 },
         sc = (el.offsetWidth / LW) * cam.z,
         X = el.offsetLeft + cam.tx + DROP_X * sc,
@@ -202,8 +205,10 @@ mixin(
           x0 = (p.dir > 0 ? p.u : 1 - p.u) * w,
           x = x0 + (X - x0) * f + Math.sin(f * 9) * 6 * (1 - f),
           y = H0 + (Y - H0) * f;
+        const smooth = ctx.imageSmoothingEnabled;
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(img, Math.round(x - img.ax * z), Math.round(y - img.fh * z), img.width * z, img.height * z);
+        ctx.imageSmoothingEnabled = smooth;
       }
     }
   },
