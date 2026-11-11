@@ -3,6 +3,7 @@ import { SkyLogic } from './sky-logic.js';
 import { DogLogic } from './dog-logic.js';
 import { SmokeLogic } from './smoke-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
+import { PolarBears } from './polar-bears.js';
 import { EventCritters } from './event-critters.js';
 import { EventIdle } from './event-idle.js';
 export const h = React.createElement;
@@ -90,6 +91,11 @@ export const DOG_HOUSES = [0, 1, 2].map(i => {
 });
 const DOG_HOUSE_CELLS = DOG_HOUSES.map(h => h.x + ',' + Math.floor(h.y));
 DOG_HOUSE_CELLS.forEach(k => LAWN_WALK.delete(k));
+// The polar bears' igloo on the back lawn, right of the mountain (web/polar-bears.js). Their lawn and a ring round it
+// are taken off everyone else's ground below: off the people's lawn for good (nobody goes up there anyway), off the
+// dogs' in winter, when the bears are about, and off the Christmas critters' (the event is always winter).
+export const LAWN_WALK_ALL = new Set(LAWN_WALK);
+export const BEARS = PolarBears.layout({ walk: LAWN_WALK_ALL, at: [12, -8] });
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
 // The office dogs live on the lawn all round the office, by the lake and on the back lawn; never in the lake, the
@@ -159,12 +165,20 @@ export const DOG_PLACES = {
   ),
   rest: DogLogic.besideCell(DOG_ROAM, [REST.bench.x, REST.bench.y], DOG_CLEAR, [FISH_PT]),
 };
+const outOfReach = roam => new Set([...roam].filter(k => !BEARS.keep.has(k)));
+export const DOG_ROAM_WINTER = outOfReach(DOG_ROAM);
+export const DOG_PLACES_WINTER = {
+  ...DOG_PLACES,
+  roam: DOG_ROAM_WINTER,
+  roamList: [...DOG_ROAM_WINTER].map(k => k.split(',').map(Number)),
+};
+BEARS.keep.forEach(k => LAWN_WALK.delete(k));
 // Where the Christmas critters go (web/event-critters.js): the dogs' lawn, a spot for the presents by the front
 // stairs, the island's front edge, and the lake's ice away from the pavilion, its stepping stones and the bathers.
 const PAV = ISLAND.pavilion.pillar;
 export const CRITTER_PLACES = EventCritters.places({
-  roam: DOG_ROAM,
-  roamList: DOG_PLACES.roamList,
+  roam: DOG_ROAM_WINTER,
+  roamList: DOG_PLACES_WINTER.roamList,
   clear: DOG_CLEAR,
   houses: DOG_HOUSES,
   stairs: STAIRS,

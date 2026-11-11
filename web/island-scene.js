@@ -79,6 +79,10 @@ export const SCENE_METHODS = [
   'critterSprite',
   'drawCritter',
   'drawPile',
+  'stepBears',
+  'bearItems',
+  'drawBear',
+  'drawIgloo',
   'stepProps',
   'dogSprite',
   'drawDog',
@@ -159,6 +163,7 @@ export class IslandScene {
     this.agents.forEach(a => this.updateAgent(a, dt));
     this.stepDogs(dt);
     this.stepCritters(dt);
+    this.stepBears(dt);
     this.stepProps(dt);
     if (this.agents.some(a => a.gone)) {
       const gone = this.agents.filter(a => a.gone);
