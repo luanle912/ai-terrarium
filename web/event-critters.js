@@ -133,7 +133,7 @@ function route(w) {
 }
 const elfRoute = w => known(w).route;
 
-// Where Santa sits on Christmas Day: a lawn cell beside the presents, off the paths, as far as can be from where
+// Where Santa sits (all event long): a lawn cell beside the presents, off the paths, as far as can be from where
 // the elves set theirs down.
 function seat(w, r) {
   const { roam, clear, drop } = w;
