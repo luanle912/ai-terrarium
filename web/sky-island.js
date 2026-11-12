@@ -25,6 +25,9 @@ import { SeasonIsland } from './season-island.js';
 import { SeasonLogic } from './season-logic.js';
 import { SnowLogic } from './snow-logic.js';
 import { CANE_EXT, drawCandyCane } from './island-art-xmas.js';
+import { CATHEDRAL_EXT, drawCathedral } from './island-art-cathedral.js';
+import { drawOurLady, LADY_EXT } from './island-art-cathedral-yard.js';
+import { EventLandmark } from './event-landmark.js';
 import { drawIcicles, drawSnowEdge, drawSnowLawn, snowOnTop, snowTile } from './island-art-snow.js';
 export { hash, hex, mix, toHex, WATER_Z };
 // Night pulls every island colour toward the same deep blue the office uses after dark (web/island-art.js).
@@ -211,11 +214,19 @@ export function renderProps(island, frame, k, env) {
   if (look.frozen && env.block)
     for (const m of SeasonIsland.snowmanTiles(island, env.block.W, env.block.H))
       add(m.x, m.y, m.x + m.y + 0.5, SNOWMAN_EXT, pt => drawSnowman(pt, P, C, m), -1, false);
-  // the Christmas event's big tree (env.event is its level): it keeps more of its colour after dark than the lawn
+  // The Christmas event's outdoor pieces (env.event is its level): they keep more of their colour after dark than
+  // the lawn. The candy canes, and the cathedral with the statue before it where the back lawn is free.
   if (env.event && env.block) {
-    const T = c => night(c, 1 - (1 - env.df) * 0.55);
+    const T = c => night(c, 1 - (1 - env.df) * 0.55),
+      lm = EventLandmark.site(island, env.block);
     if (env.event >= 2)
       for (const l of island.lamps) add(l.x, l.y, l.x + l.y + 1.3, CANE_EXT, pt => drawCandyCane(pt, P, T, l));
+    if (lm) {
+      const [cx, cy] = lm.at,
+        [lx, ly] = lm.lady;
+      add(cx, cy, lm.z, CATHEDRAL_EXT, pt => drawCathedral(pt, P, T, S, depth, env.event, lm.at), -1, false);
+      add(lx, ly, lm.ladyZ, LADY_EXT, pt => drawOurLady(pt, P, T, S, depth, env.event, lm.lady), -1, false);
+    }
   }
   return out;
 }
