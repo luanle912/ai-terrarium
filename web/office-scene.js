@@ -202,6 +202,9 @@ export const FATE_PLACES = {
   ),
   lake: ISLAND.pond.spots.map(s => [s.x, s.y]),
 };
+// The lawn the Christmas landmark stands on (web/event-landmark.js): the very collections people and dogs path over,
+// which it rewrites in place while the event is on.
+export const EVENT_LAND = { walk: LAWN_WALK, roam: DOG_ROAM, roamList: DOG_PLACES.roamList };
 export const REAL_WEATHER_EVERY_MS = 15 * 60_000;
 export const WEATHER_LABEL = {
   clear: tr('weather.label.clear'),

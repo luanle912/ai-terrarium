@@ -73,7 +73,7 @@ const STRINGS = [];
   }
 }
 // One string's bulbs: a 2 px square each, and after dark a glow under every lit one.
-function drawString(ctx, at, t, glow, still, lit) {
+export function drawString(ctx, at, t, glow, still, lit) {
   for (let i = 0; i < at.length; i += 2) {
     const g = (i >> 1) % 4,
       on = groupLit(g, t, still);
@@ -85,6 +85,19 @@ function drawString(ctx, at, t, glow, still, lit) {
     ctx.fillStyle = on ? BULB[g] : BULB_OFF[g];
     ctx.fillRect(at[i], at[i + 1], 2, 2);
   }
+}
+// A lit star, its top middle at (x, sy): bright, with a twinkle (tw 0 or 1) and its own glow at night.
+export function litStar(ctx, x, sy, tw, glow) {
+  if (glow > 0.01) {
+    ctx.globalAlpha = glow;
+    ctx.drawImage(glowSprite('#fff3b0', 24), x - 12, sy - 10);
+    ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = '#ffe27a';
+  ctx.fillRect(x - 1, sy, 3, 5);
+  ctx.fillRect(x - 3, sy + 2, 7, 1);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x, sy + 1 + tw, 1, 2);
 }
 
 // A wreath, its middle at (x, y): a ring of fir with a red bow under it; `small` for a kennel's gable.
@@ -188,6 +201,7 @@ mixin(
           if (OWNED[i])
             items.push({ z: DESK_AT[i * 3 + 2], f: () => deskDecor(G.ctx, i, DESK_AT[i * 3], DESK_AT[i * 3 + 1]) });
       }
+      this.cathedralItems(G, items, ev);
     }
     // The strings on the office's own walls, drawn right after the walls so everything in the room is in front.
     xmasWallLights(G, ev) {
@@ -229,19 +243,7 @@ mixin(
         ctx.fillStyle = on ? BULB[g] : BULB_OFF[g];
         ctx.fillRect(bx, by, 2, 2);
       }
-      // the star: bright, with a twinkle and its own glow at night
-      const sy = TY - BIG_TREE_TOP - 5,
-        tw = still ? 0 : Math.floor(t * 2) % 2;
-      if (glow > 0.01) {
-        ctx.globalAlpha = glow;
-        ctx.drawImage(glowSprite('#fff3b0', 24), TX - 12, sy - 10);
-        ctx.globalAlpha = 1;
-      }
-      ctx.fillStyle = '#ffe27a';
-      ctx.fillRect(TX - 1, sy, 3, 5);
-      ctx.fillRect(TX - 3, sy + 2, 7, 1);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(TX, sy + 1 + tw, 1, 2);
+      litStar(ctx, TX, TY - BIG_TREE_TOP - 5, still ? 0 : Math.floor(t * 2) % 2, glow);
       ctx.imageSmoothingEnabled = smooth;
     }
   },

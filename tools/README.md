@@ -101,3 +101,24 @@ at the espresso machine, with the event's idle drawing and with it switched off 
 The difference is inside the run-to-run spread (about ±50 calls with snow falling). Counted in the code, all five
 activities in use at once add about 30 `fillRect` calls: the arms (about 2 more than the usual ones per person), the
 rolled snowball 6, the skater's trail 8, the snowball in the air 3, a puff of breath 2. The island is not baked again.
+
+## After the Christmas landmark, Notre-Dame of Saigon (2026-11-12)
+
+Same build, no agents, with the landmark and with it switched off in the page (`cathedralItems` stubbed,
+`EventLandmark.site` returning null, the island baked again), runs interleaved, two of each:
+
+| Scene | calls p50, on | calls p50, off | ms p50, on / off |
+|---|---|---|---|
+| 20 Dec 21:00, event level 3 | 16,081–16,098 | 16,044–16,060 | 3.6–3.7 / 3.4–3.6 |
+| 24 Dec 21:00, Christmas Eve | 16,100–16,104 | 16,042–16,049 | 3.3–3.5 / 3.3–3.4 |
+| 20 Dec 12:00, event level 3 | 16,082–16,090 | 16,067–16,074 | 3.3–3.4 / 3.3–3.5 |
+| 20 Jul 12:00, no event | 15,711–15,712 | 15,712 | 3.3 / 3.4 |
+
+So +20 to +55 calls a frame after dark, about +55 on Christmas Eve and +10 to +25 by day. Counted in the code at
+level 3: by day 24 bulb rectangles and the star's 3; after dark also one sprite for all the windows, 3 halos, the
+manger's light and a glow under each lit bulb (about 12). In July the frame is the same with and without.
+
+Bakes as `perf-frame.mjs` reports them (island + props; the island's is the same code either way): a later bake
+12–14 + 14–23 ms with the landmark and 13–14 + 12–18 ms without; the first bake of a page 36–51 + 11–24 ms and
+35–39 + 12–16 ms. The building is worked out once per event level and snow depth (about 1 ms) and only recoloured
+after that, so the difference stays inside the spread, under the 45 ms a later bake may take. GC 0.3–0.5 % either way.
