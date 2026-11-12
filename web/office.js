@@ -8,9 +8,11 @@ import { EventCritters } from './event-critters.js';
 import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import { EventLogic } from './event-logic.js';
+import { EventLandmark } from './event-landmark.js';
 import {
   BLOCK,
   DOG_PLACES,
+  EVENT_LAND,
   LH,
   LW,
   REAL_WEATHER_EVERY_MS,
@@ -404,6 +406,7 @@ export class ClaudeOffice extends React.Component {
       this.evPrev = p;
       this.evNow = EventLogic.active(new Date(now), c, p, now);
       EventLogic.block(BLOCK, !!this.evNow); // nobody walks through the big tree while it stands
+      EventLandmark.reserve(EVENT_LAND, !!this.evNow, this.dogs); // nor through the cathedral
     }
     return this.evNow;
   }
