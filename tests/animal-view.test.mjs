@@ -13,7 +13,9 @@ const { AnimalUI: U } = loadWeb('animal-ui')
 const { AnimalWalk: AW } = loadWeb('animal-walk')
 const { AnimalSprites } = loadWeb('animal-sprites')
 const { LH, LW, PA, PG, ISLAND } = loadWeb('office-scene')
-const { ANIMAL_PLACES } = loadWeb('animal-view-util')
+const { ANIMAL_PLACES, animalPlaces } = loadWeb('animal-view-util')
+const { EventLandmark } = loadWeb('event-landmark')
+const { DogLogic } = loadWeb('dog-logic')
 
 const SPECIES = [
   { id: 'hen', tier: 'common', cond: null }, { id: 'frog', tier: 'rare', cond: 'rain' },
@@ -192,6 +194,84 @@ test('the page walks animals on the real island: they arrive and leave on its co
   for (const c of ANIMAL_PLACES.settleList) assert.ok(land.has(k(c)), `settle cell ${c} is off the island`)
 })
 
+
+test('while the Christmas landmark stands the animals keep off its cells, and get them back after', () => {
+  const xmas = animalPlaces(true)
+  assert.equal(animalPlaces(false), ANIMAL_PLACES)
+  assert.equal(animalPlaces(true), xmas, 'worked out once')
+  for (const k of EventLandmark.ROAM_OFF) {
+    assert.ok(ANIMAL_PLACES.roam.has(k), k + ' is lawn without the event')
+    assert.ok(!xmas.roam.has(k) && !xmas.settle.has(k), k + ' is taken')
+  }
+  // 19,-13: a dog still shows behind the nave there, the smaller animals at rest do not.
+  assert.ok(!xmas.roam.has('19,-13'))
+  assert.equal(xmas.roam.size, ANIMAL_PLACES.roam.size - EventLandmark.ROAM_OFF.size - 1, 'nothing else is lost')
+  const gone = c => EventLandmark.ROAM_OFF.has(c.join()) || c.join() === '19,-13'
+  assert.deepEqual(xmas.settleList, ANIMAL_PLACES.settleList.filter(c => !gone(c)), 'paths stay walk-through only')
+  assert.deepEqual(xmas.edge, ANIMAL_PLACES.edge, 'they still arrive and leave on the same coast')
+  const cells = xmas.roamList
+  for (const c of cells) assert.ok(DogLogic.path(xmas.roam, cells[0], c).length > 0, c + ' unreachable')
+})
+
+test('an animal standing where the landmark goes up is moved off it on the next frame', () => {
+  const o = office({ animalView: view({ wild: { id: 'abc123', species: 'hen', stayLeftMs: 1 } }) })
+  o.animals = U.reconcile([], o.state.animalView, { places: ANIMAL_PLACES, rand, known: () => true })
+    .map(a => ({ ...a, x: 20.5, y: -8.5 }))
+  o.stepAnimals(0.016)
+  assert.equal(Math.floor(o.animals[0].x) + ',' + Math.floor(o.animals[0].y), '20,-9', 'no event: it stays')
+  o.evNow = { key: 'christmas', level: 1 }
+  o.stepAnimals(0.016)
+  const k = Math.floor(o.animals[0].x) + ',' + Math.floor(o.animals[0].y)
+  assert.ok(!EventLandmark.ROAM_OFF.has(k) && animalPlaces(true).settle.has(k), k)
+})
+
+const tileOf = a => Math.floor(a.x) + ',' + Math.floor(a.y)
+const OUT_VIEW = view({ caught: [{ id: 'c0', species: 'hen' }], out: ['c0'], wild: { id: 'abc123', species: 'hen', stayLeftMs: 1 } })
+
+test('released animals where the landmark goes up are moved off it too, each to a cell of its own', () => {
+  const o = office({ animalView: OUT_VIEW })
+  o.animals = U.reconcile([], OUT_VIEW, { places: ANIMAL_PLACES, rand, known: () => true }).map((a, i) => ({ ...a, x: 20.5 + i, y: -8.5 }))
+  assert.deepEqual(o.animals.map(a => a.kind).sort(), ['out', 'wild'])
+  o.evNow = { key: 'christmas', level: 1 }
+  o.stepAnimals(0.016)
+  const cells = o.animals.map(tileOf)
+  for (const k of cells) assert.ok(animalPlaces(true).settle.has(k), k)
+  assert.equal(new Set(cells).size, 2, cells.join(' '))
+})
+
+test('every frame steps the animals on the lawn of the moment: without the landmark cells during the event, with them after', t => {
+  const o = office({ animalView: OUT_VIEW })
+  o.animals = U.reconcile([], OUT_VIEW, { places: ANIMAL_PLACES, rand, known: () => true })
+  const step = t.mock.method(AW, 'step')
+  const roams = () => { const r = step.mock.calls.map(c => c.arguments[1].roam); step.mock.resetCalls(); return r }
+  o.evNow = { key: 'christmas', level: 1 }
+  o.stepAnimals(0.016); o.stepAnimals(0.016)
+  const during = roams()
+  assert.ok(during.length >= 2 && during.every(r => r === animalPlaces(true).roam), 'during the event')
+  o.evNow = null
+  o.stepAnimals(0.016); o.stepAnimals(0.016)
+  const after = roams()
+  assert.ok(after.length >= 2 && after.every(r => r === ANIMAL_PLACES.roam), 'after it')
+})
+
+test('syncWalkers gives newcomers the lawn without the landmark only while the event is on', () => {
+  const o = office(), seen = [], real = U.reconcile
+  U.reconcile = (ws, v, opts) => { seen.push(opts.places); return real(ws, v, opts) }
+  try {
+    for (const ev of [undefined, { key: 'christmas', level: 1 }, null]) { o.evNow = ev; o.syncWalkers(view()) }
+  } finally { U.reconcile = real }
+  assert.deepEqual(seen.map(p => p === ANIMAL_PLACES ? 'all' : p === animalPlaces(true) ? 'xmas' : '?'), ['all', 'xmas', 'all'])
+})
+
+test('an animal let out where it was caught comes out beside the landmark when that spot has been built on', () => {
+  const v = view({ caught: [{ id: 'c0', species: 'hen' }], out: ['c0'] })
+  const o = office({ animalView: v }, { animalHints: new Map([['out:c0', [20.5, -9.5]]]) })
+  o.syncWalkers(v)
+  assert.deepEqual([o.animals[0].x, o.animals[0].y], [20.5, -9.5], 'no event: exactly where the catch happened')
+  const x = office({ animalView: v }, { animalHints: new Map([['out:c0', [20.5, -9.5]]]), evNow: { key: 'christmas', level: 1 } })
+  x.syncWalkers(v)
+  assert.ok(animalPlaces(true).settle.has(tileOf(x.animals[0])), tileOf(x.animals[0]))
+})
 
 test('world islands borrow the animal draw helpers and carry no animals', () => {
   const { IslandScene, SCENE_METHODS } = loadWeb('island-scene')

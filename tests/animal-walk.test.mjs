@@ -293,6 +293,77 @@ test('pose shows sleep for a sleeper, rest for a rester and a hop for a moving r
   assert.ok(Array.from({ length: 40 }, (_, i) => Walk.pose({ ...moving, calm: true }, i / 20).dy).every(v => v === 0))
 })
 
+// ---- keepOn ----
+
+// The lawn loses a 3x2 block in front of the office (an event's building stands there).
+const TAKEN = new Set(['3,8', '4,8', '5,8', '3,9', '4,9', '5,9'])
+const smaller = Walk.places({ ...dogPlaces, roam: new Set([...roam].filter(k => !TAKEN.has(k))) })
+
+test('keepOn puts a walker left on a taken cell on the nearest settle cell and lets it start over', () => {
+  const d = deepFreeze({ ...at('hen', [4, 8]), act: 'rest', until: 99 })
+  const before = JSON.stringify(smaller.settleList)
+  const [out] = Walk.keepOn([d], smaller)
+  assert.ok(smaller.settle.has(tileKey(out)), tileKey(out) + ' is a settle cell')
+  assert.deepEqual([out.x, out.y], [4.5, 6.5], 'the nearest one, at its centre')
+  assert.equal(JSON.stringify(smaller.settleList), before, 'the places it was given are not reordered')
+  assert.deepEqual([out.act, out.path, out.until], ['idle', [], 0])
+  assert.equal(tileKey(d), '4,8', 'the walker it was given is not changed')
+})
+
+test('keepOn clears a path that crosses a taken cell and leaves every other walker as it is', () => {
+  const through = { ...at('fox', [2, 8]), act: 'wander', path: [[3.5, 8.5], [4.5, 8.5], [6.5, 8.5]], until: Infinity }
+  const round = { ...at('deer', [2, 10]), act: 'wander', path: [[3.5, 10.5], [4.5, 10.5]], until: Infinity }
+  const gone = { ...at('owl', [4, 9]), done: true }
+  const [a, b, c] = Walk.keepOn([through, round, gone], smaller)
+  assert.deepEqual([a.act, a.path, a.until, tileKey(a)], ['idle', [], 0, '2,8'])
+  assert.equal(b, round, 'a path clear of the taken cells is kept')
+  assert.equal(c, gone, 'a walker that has left is not touched')
+})
+
+test('keepOn clears a path with a single taken waypoint, wherever it is on the way', () => {
+  const paths = { first: [[3.5, 9.5], [3.5, 10.5], [4.5, 10.5]], middle: [[2.5, 9.5], [3.5, 9.5], [3.5, 10.5]], last: [[2.5, 9.5], [3.5, 9.5]] }
+  for (const [where, path] of Object.entries(paths)) {
+    assert.equal(path.filter(c => TAKEN.has(key(Math.floor(c[0]), Math.floor(c[1])))).length, 1, where + ': one taken waypoint')
+    const [out] = Walk.keepOn([{ ...at('fox', [2, 10]), act: 'wander', path, until: Infinity }], smaller)
+    assert.deepEqual([out.act, out.path, out.until], ['idle', [], 0], where)
+  }
+})
+
+test('keepOn leaves alone a walker on a garden path, and only stops one heading across a taken cell where it is', () => {
+  assert.ok(smaller.roam.has(key(...clearCell)) && !smaller.settle.has(key(...clearCell)), 'lawn, not a settle cell')
+  const onPath = { ...at('hen', clearCell), act: 'wander', path: [[4.5, 7.5], [5.5, 7.5]], until: Infinity }
+  assert.equal(Walk.keepOn([onPath], smaller)[0], onPath)
+  const striding = { ...at('fox', [2, 8]), x: 2.8, y: 8.3, act: 'wander', path: [[3.5, 8.5]], until: Infinity }
+  const [out] = Walk.keepOn([striding], smaller)
+  assert.deepEqual([out.x, out.y, out.path], [2.8, 8.3, []], 'stopped mid-stride, not snapped to a cell')
+  const held = { ...at('deer', [4, 9]), hold: true, act: 'hold' }
+  assert.equal(Walk.keepOn([held], smaller)[0].hold, true, 'an animal being caught stays held')
+})
+
+test('keepOn never puts two walkers on one cell, nor one onto a cell another stands on or heads for', () => {
+  const stander = at('owl', [4, 6], 9), heading = { ...at('fox', [8, 6], 8), act: 'wander', path: [[5.5, 6.5]], until: Infinity }
+  const a = at('hen', [4, 8], 1), b = at('duck', [4, 9], 2), c = at('rabbit', [5, 8], 3)
+  const out = Walk.keepOn([stander, a, heading, b, c], smaller)
+  const cells = [out[1], out[3], out[4]].map(tileKey)
+  assert.equal(new Set(cells).size, 3, cells.join(' '))
+  for (const k of cells) {
+    assert.ok(smaller.settle.has(k), k)
+    assert.ok(k !== '4,6' && k !== '5,6', k + ' is where another stands or is going')
+  }
+  assert.equal(out[0], stander); assert.equal(out[2], heading)
+})
+
+test('after keepOn a leaver sets off for the edge again and a sleeper goes back to sleep, never over a taken cell', () => {
+  const leaver = { ...at('fox', [4, 9], 3), leave: true, act: 'leaving', path: [[4.5, 8.5]], until: Infinity }
+  const sleeper = { ...at('hen', [5, 9], 4), act: 'sleep', until: Infinity }
+  const w = world({ ...smaller, hour: 23 })
+  let ws = Walk.keepOn([leaver, sleeper], smaller)
+  ws = simulate(ws, w, 1, all => { for (const d of all) assert.ok(!TAKEN.has(tileKey(d)), tileKey(d)) })
+  assert.equal(ws[0].act, 'leaving')
+  assert.ok(ws[0].path.length > 0 || ws[0].done)
+  assert.equal(ws[1].act, 'sleep')
+})
+
 // ---- the real island ----
 
 test('on the real island spawn cells are settle cells, never in the den or on a path or stair foot', () => {

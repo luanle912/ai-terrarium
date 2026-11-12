@@ -1,7 +1,6 @@
 // Animals: walkers that follow the server's view, and the one-off effects started by its events.
 import { AnimalWalk } from './animal-walk.js';
 import {
-  ANIMAL_PLACES,
   CATCH_S,
   FADE_S,
   KNOWN,
@@ -10,6 +9,7 @@ import {
   TIER_COLOR,
   TRAIL_S,
   U,
+  animalPlaces,
   nowS,
 } from './animal-view-util.js';
 import { LW, PG } from './office-scene.js';
@@ -20,20 +20,23 @@ mixin(
     // Walkers follow the view; a key under a running catch effect waits, then starts where the catch happened.
     syncWalkers(view) {
       const t = nowS(),
+        places = animalPlaces(!!this.evNow),
         block = new Map([...(this.animalBlock || new Map())].filter(([, until]) => until > t));
       const before = new Set((this.animals || []).map(a => a.key)),
         hints = this.animalHints || new Map();
       const next =
         view && !view.disabled
           ? U.reconcile(this.animals || [], view, {
-              places: ANIMAL_PLACES,
+              places,
               rand: Math.random,
               known: s => KNOWN.has(s),
               blocked: new Set(block.keys()),
             })
           : [];
       const fresh = a => !before.has(a.key) && hints.has(a.key);
-      this.animals = next.map(a => (fresh(a) ? { ...a, x: hints.get(a.key)[0], y: hints.get(a.key)[1] } : a));
+      // Where the catch happened, or the nearest lawn when the landmark has since been built on that spot.
+      const hinted = a => AnimalWalk.keepOn([{ ...a, x: hints.get(a.key)[0], y: hints.get(a.key)[1] }], places)[0];
+      this.animals = next.map(a => (fresh(a) ? hinted(a) : a));
       // A hint is spent once used, and dropped when its animal did not go out (e.g. 5 were already out).
       const want = new Set(U.wanted(view).map(x => x.key));
       this.animalHints = new Map(
@@ -172,12 +175,16 @@ mixin(
       const now = (this.animalNow = (this.animalNow || 0) + dt),
         d = new Date(),
         calm = this.animalReduced();
-      const w = { ...ANIMAL_PLACES, now, hour: d.getHours() + d.getMinutes() / 60, calm };
-      let next = AnimalWalk.step(list, w, dt);
+      const places = animalPlaces(!!this.evNow),
+        w = { ...places, now, hour: d.getHours() + d.getMinutes() / 60, calm };
+      // The lawn changed under them (the event began or ended).
+      const moved = places === this.animalPlacesWere ? list : AnimalWalk.keepOn(list, places);
+      this.animalPlacesWere = places;
+      let next = AnimalWalk.step(moved, w, dt);
       // The wild animal is stepped at an hour it is awake (the owl sleeps by day), so it never naps while catchable.
       const wild = list.find(a => a.kind === 'wild');
       if (wild) {
-        const ww = AnimalWalk.step(list, { ...w, hour: wild.species === 'owl' ? 0 : 12 }, dt);
+        const ww = AnimalWalk.step(moved, { ...w, hour: wild.species === 'owl' ? 0 : 12 }, dt);
         next = next.map((a, i) => (list[i].kind === 'wild' ? ww[i] : a));
       }
       this.animals = next

@@ -12,6 +12,7 @@ import './office-draw-fate-more.js';
 import './office-draw-fate-xmas.js';
 import './office-draw-winter.js';
 import './office-draw-xmas.js';
+import './office-draw-cathedral.js';
 import './office-draw-critters.js';
 import './office-draw-idle-xmas.js';
 import './office-draw-people.js';
@@ -57,6 +58,7 @@ export const SCENE_METHODS = [
   'startFate',
   'fateItems',
   'xmasItems',
+  'cathedralItems',
   'xmasTree',
   'xmasTreeLights',
   'xmasWallLights',

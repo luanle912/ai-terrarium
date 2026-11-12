@@ -303,6 +303,22 @@ function step(walkers, w, dt) {
   return walkers.map(d => stepOne(d, walkers, w, dt));
 }
 
+// When the lawn loses cells (an event's building): a walker left on one is put on the nearest settle cell and one
+// heading across one forgets its way. Both start over on their next step, so a leaver sets off again.
+function keepOn(walkers, p) {
+  const off = c => !p.roam.has(key(fl(c[0]), fl(c[1])));
+  return walkers.reduce((out, d, i) => {
+    const inside = off([d.x, d.y]);
+    if (d.done || (!inside && !(d.path || []).some(off))) return [...out, d];
+    const far = c => Math.hypot(c[0] + 0.5 - d.x, c[1] + 0.5 - d.y);
+    // Never onto a cell another stands on, heads for or was just given: sleepers would lie stacked till morning.
+    const busy = taken(d, [...out, ...walkers.slice(i + 1)]);
+    const free = p.settleList.filter(c => !busy.has(key(c[0], c[1])));
+    const c = inside ? [...(free.length ? free : p.settleList)].sort((a, b) => far(a) - far(b) || byYX(a, b))[0] : null;
+    return [...out, { ...d, ...(c ? { x: c[0] + 0.5, y: c[1] + 0.5 } : {}), act: 'idle', path: [], until: 0 }];
+  }, []);
+}
+
 // Frame, mirroring and lift in pixels. Reduced motion: no hops and no flicker between act and stand.
 function pose(d, t) {
   const ph = t + (d.phase || 0),
@@ -316,5 +332,5 @@ function pose(d, t) {
   return { frame: 'stand', flip, dy: 0 };
 }
 
-export { places, spawnCell, create, step, pose, SPEED };
-export const AnimalWalk = { places, spawnCell, create, step, pose, SPEED };
+export { places, spawnCell, create, step, keepOn, pose, SPEED };
+export const AnimalWalk = { places, spawnCell, create, step, keepOn, pose, SPEED };

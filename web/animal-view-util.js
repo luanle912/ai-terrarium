@@ -4,12 +4,25 @@ import { I18n, tr } from './i18n.js';
 import { AnimalSprites } from './animal-sprites.js';
 import { AnimalWalk } from './animal-walk.js';
 import { AnimalUI } from './animal-ui.js';
+import { EventLandmark } from './event-landmark.js';
 import { DOG_PLACES, ISLAND } from './office-scene.js';
 
 export const U = AnimalUI;
 export const TIER_COLOR = AnimalUI.TIER_COLOR;
 export const KNOWN = new Set(AnimalSprites.SPECIES_IDS);
 export const ANIMAL_PLACES = AnimalWalk.places({ ...DOG_PLACES, land: ISLAND.cells });
+// While the Christmas landmark stands the animals lose the cells the dogs lose to it (EventLandmark.reserve), and
+// 19,-13 behind the nave, where a dog still shows but the smaller animals at rest do not.
+const ANIMAL_SHADE = '19,-13';
+let landmarkPlaces = null;
+export const animalPlaces = landmark =>
+  landmark
+    ? (landmarkPlaces ||= AnimalWalk.places({
+        ...DOG_PLACES,
+        roam: new Set([...ANIMAL_PLACES.roam].filter(k => !EventLandmark.ROAM_OFF.has(k) && k !== ANIMAL_SHADE)),
+        land: ISLAND.cells,
+      }))
+    : ANIMAL_PLACES;
 const SPECIES_NAME = {
   hen: tr('animal.name.hen'),
   duck: tr('animal.name.duck'),
