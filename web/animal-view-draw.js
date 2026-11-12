@@ -4,7 +4,7 @@ import { DogLogic } from './dog-logic.js';
 import { SkyRender } from './sky-render.js';
 import { AnimalWalk } from './animal-walk.js';
 import { FADE_S, MANE, RAINBOW, TIER_COLOR, TRAIL_S, U, dot, nowS, rgba, safeFrame, star } from './animal-view-util.js';
-import { LW, PG } from './office-scene.js';
+import { DRAW_REACH, LW, PG, behindWalls } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 mixin(
   ClaudeOffice,
@@ -16,6 +16,17 @@ mixin(
     animalLive() {
       const v = this.state && this.state.animalView;
       return v && !v.disabled ? U.advance(v, performance.now() - (this.animalAt || 0)) : v || null;
+    }
+    // World islands (IslandScene) have no animals; "view as others" hides them like the hub would.
+    animalShown() {
+      return !(this.isLive && this.state.asOthers);
+    }
+    // One sorted pass's animals: back = the strip behind the office walls, drawn before them.
+    animalItems(G, list, back, dfB, snB) {
+      if (!this.animalShown()) return;
+      for (const a of this.animals || [])
+        if (behindWalls(Math.floor(a.x), Math.floor(a.y), DRAW_REACH) === back)
+          list.push({ z: a.x + a.y, f: () => this.drawAnimal(G, a, G.t, dfB, snB) });
     }
     animalTier(species) {
       return U.tierOf(this.state && this.state.animalView, species) || 'common';
@@ -111,8 +122,9 @@ mixin(
       ctx.restore();
       ctx.globalAlpha = 1;
     }
-    // After the storm tint: the one-off effects (spawn dust, catch, escape), which float above the scene.
+    // After the storm tint: the one-off effects (spawn dust, catch, escape), which glow through it.
     drawAnimalFx(G, t, dfB, snB) {
+      if (!this.animalShown() || !this.animalFx || !this.animalFx.length) return;
       const { ctx } = G;
       ctx.save();
       for (const fx of this.animalFx || []) this.drawAnimalBurst(ctx, fx, t, dfB, snB);

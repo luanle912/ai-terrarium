@@ -3,6 +3,8 @@ import { SkyLogic } from './sky-logic.js';
 import { DogLogic } from './dog-logic.js';
 import { SmokeLogic } from './smoke-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
+import { EventCritters } from './event-critters.js';
+import { EventIdle } from './event-idle.js';
 export const h = React.createElement;
 // Shared by both settings panels. A change reloads the page so tables built at load time pick up the new language;
 // when the choice could not be saved (storage blocked) it travels in ?lang= instead.
@@ -54,9 +56,12 @@ export const PA = (x, y, z = 0) =>
 // either wall, in a screen column the wall covers, is (partly) hidden by it, so the scene draws such sprites before the
 // walls (web/office-draw.js).
 export const WALL_REACH = Math.floor((WALL + 3 + FLOOR_Z) / (2 * TH));
-export const behindWalls = (x, y) =>
-  (x < 0 && x >= -WALL_REACH && y - x >= -1 && y - x <= H + 1) ||
-  (y < 0 && y >= -WALL_REACH && x - y >= -1 && x - y <= W + 1);
+// For the drawing order one row more: what stands on a cell has its foot at the cell's middle, and the walls' outer
+// faces are set back from the cells' edge, so a tree one row past WALL_REACH has its foot right at the wall's top edge;
+// drawn after the walls, its trunk and shadow would lie over the top of the wall.
+export const DRAW_REACH = WALL_REACH + 1;
+export const behindWalls = (x, y, reach = WALL_REACH) =>
+  (x < 0 && x >= -reach && y - x >= -1 && y - x <= H + 1) || (y < 0 && y >= -reach && x - y >= -1 && x - y <= W + 1);
 // The smoking corner fills the east-front outdoor spot, right beside the restroom block's east side, at the end of the
 // garden path that runs along the block's front. Only its planted trough (which faces the block) is taken off the
 // walkable lawn: seats, the ash bin and the posts are thin enough to step past, and an agent's own spot must stay
@@ -72,6 +77,19 @@ export const WC = RestroomLogic.layout(
   ),
   WC_WALK = new Set(WC.walk);
 WC.floor.forEach(k => LAWN_WALK.delete(k));
+// Out in the open: not on the office floor, not in the restroom block.
+export const outdoors = (x, y) => !(x >= 0 && y >= 0 && x < W && y < H) && !RestroomLogic.onFloor(WC, x, y);
+// The dogs' houses, one each (DogLogic.BREEDS order), in a row on the lawn right against the restroom block's east
+// wall from its back corner, a tile each, doors toward the viewer (+x). The smoking corner's pergola stands in front of
+// the wall's far end, so it partly hides the last house, as it would.
+// `x` is the wall, `y` a house's middle, `door` the lawn cell a dog walks to and `front` where it stops, at the door.
+// The dogs go in at night and in the rain; nobody walks over the houses (the way to the back lawn stays open beside).
+export const DOG_HOUSES = [0, 1, 2].map(i => {
+  const y = WC.y0 + 0.5 + i;
+  return { x: WC.x1, y, door: [WC.x1 + 1, Math.floor(y)], front: [WC.x1 + 1, y] };
+});
+const DOG_HOUSE_CELLS = DOG_HOUSES.map(h => h.x + ',' + Math.floor(h.y));
+DOG_HOUSE_CELLS.forEach(k => LAWN_WALK.delete(k));
 // Paving walks like the garden path: smokers stay on their pad.
 export const PAVED = new Set(SMOKE.paved);
 // The office dogs live on the lawn all round the office, by the lake and on the back lawn; never in the lake, the
@@ -101,6 +119,7 @@ export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
   avoid: [
     ...ISLAND.spots.filter(s => s.id === 'east-back' || s.id === 'east-front'),
     { x: REST.bench.x, y: REST.bench.y, w: 1, h: 1 },
+    { x: WC.x1, y: WC.y0, w: 1, h: 3 },
   ],
   wallReach: WALL_REACH,
   tall: [...M.cells].map(k => {
@@ -126,6 +145,7 @@ export const DOG_PLACES = {
   roamList: [...DOG_ROAM].map(k => k.split(',').map(Number)),
   clear: DOG_CLEAR,
   den: DogLogic.denCells(DOG_ROAM, [33, 8], DOG_CLEAR),
+  houses: DOG_HOUSES,
   // not at the pavilion's stepping stones or where an agent bathes
   drink: DogLogic.drinkSpots(
     DOG_ROAM,
@@ -138,6 +158,49 @@ export const DOG_PLACES = {
     DOG_CLEAR,
   ),
   rest: DogLogic.besideCell(DOG_ROAM, [REST.bench.x, REST.bench.y], DOG_CLEAR, [FISH_PT]),
+};
+// Where the Christmas critters go (web/event-critters.js): the dogs' lawn, a spot for the presents by the front
+// stairs, the island's front edge, and the lake's ice away from the pavilion, its stepping stones and the bathers.
+const PAV = ISLAND.pavilion.pillar;
+export const CRITTER_PLACES = EventCritters.places({
+  roam: DOG_ROAM,
+  roamList: DOG_PLACES.roamList,
+  clear: DOG_CLEAR,
+  houses: DOG_HOUSES,
+  stairs: STAIRS,
+  water: ISLAND.pond.cells,
+  skip: [
+    ...ISLAND.pavilion.path.map(p => p.x + ',' + p.y),
+    ...ISLAND.pond.spots.map(p => p.x + ',' + p.y),
+    ...[...ISLAND.pond.cells].filter(k => {
+      const [x, y] = k.split(',').map(Number);
+      return Math.abs(x - PAV.x) <= 2 && Math.abs(y - PAV.y) <= 2;
+    }),
+  ],
+});
+// Where people idle during the Christmas event (web/event-idle.js): a snowball pitch and a spot to roll a snowball
+// on the front lawn, a rink on the lake (stepped onto from the lawn beside it) and a place beside the big tree.
+export const EVENT_IDLE = EventIdle.layout({
+  ...CRITTER_PLACES,
+  H,
+  avoid: EventCritters.elfRoute({ ...CRITTER_PLACES }) || [],
+  huddle: EventCritters.huddle(CRITTER_PLACES.ice),
+});
+// Where a leaving person's fate plays out (web/fate-logic.js): open lawn in front of the office and beside it, in
+// view and off the paths, and the bathing spots in the lake.
+export const FATE_PLACES = {
+  lawn: DOG_PLACES.roamList.filter(
+    ([x, y]) =>
+      (x > W || y > H) &&
+      x >= 2 &&
+      y >= 2 &&
+      x <= W + 7 &&
+      y <= H + 7 &&
+      !DOG_CLEAR.has(x + ',' + y) &&
+      // not right behind the smoking corner's pergola or the other outdoor spot, which would hide the scene
+      !ISLAND.spots.some(s => x >= s.x - 3 && x < s.x + s.w + 1 && y >= s.y - 3 && y < s.y + s.h + 1),
+  ),
+  lake: ISLAND.pond.spots.map(s => [s.x, s.y]),
 };
 export const REAL_WEATHER_EVERY_MS = 15 * 60_000;
 export const WEATHER_LABEL = {
@@ -156,11 +219,14 @@ export const WEATHER_PREVIEW = [
   ['snow', tr('weather.preview.snow')],
   ['fog', tr('weather.preview.fog')],
 ];
+// The four desk zones, 8 tiles by 6. Between the left and the right pair runs a corridor three tiles wide (x 8..10),
+// between the back and the front pair one two tiles wide (y 6..7); east of the right pair a one-tile aisle (x 19)
+// runs along the pantry's planter.
 export const ZONES = [
   { zx: 0, zy: 0 },
-  { zx: 10, zy: 0 },
+  { zx: 11, zy: 0 },
   { zx: 0, zy: 8 },
-  { zx: 10, zy: 8 },
+  { zx: 11, zy: 8 },
 ];
 export const DESKS = [];
 ZONES.forEach((z, zi) =>
@@ -176,7 +242,7 @@ DESKS.forEach(d => {
   BLOCK.add(d.gx + ',' + d.gy);
   BLOCK.add(d.gx + 1 + ',' + d.gy);
 });
-['8,0', '9,0', '8,13', '19,13', '18,0', '26,13'].forEach(k => BLOCK.add(k));
+['9,0', '8,13', '19,13', '19,0', '26,13'].forEach(k => BLOCK.add(k));
 // Pantry furniture: the kitchen wall (row 0), the island (row 3), the tables by the bench and the sky-view bar.
 for (let x = 20; x < W; x++) BLOCK.add(x + ',0');
 for (let x = 22; x <= 25; x++) {
@@ -229,6 +295,8 @@ export const IDLE_SPOTS = [
     front: true,
   },
   { act: 'fish', tile: [REST.fish.x, REST.fish.y], pt: FISH_PT, front: true },
+  // the Christmas event's own (web/event-idle.js), last so that the others keep their numbers
+  ...EVENT_IDLE.spots,
 ];
 export const ACT_TXT = {
   table: tr('office.act.table'),
@@ -247,7 +315,14 @@ export const ACT_TXT = {
   bath: tr('office.act.bath'),
   bench: tr('office.act.bench'),
   fish: tr('office.act.fish'),
+  snowball: tr('office.act.snowball'),
+  snowman: tr('office.act.snowman'),
+  skate: tr('office.act.skate'),
+  gift: tr('office.act.gift'),
+  cocoa: tr('office.act.cocoa'),
 };
+// What someone is doing, in words: during the Christmas event (ev) the coffee is hot cocoa.
+export const actLabel = (act, ev) => (ev && act === 'coffee' ? ACT_TXT.cocoa : ACT_TXT[act]);
 export const SEGS = [],
   EDGE = new Set();
 export const addV = (zi, X, y) => {
@@ -262,7 +337,7 @@ export const addH = (zi, Y, x) => {
 };
 ZONES.forEach((z, zi) => {
   const Y = z.zy === 0 ? 6 : 8;
-  (z.zx === 0 ? [8] : [10, 18]).forEach(X => {
+  (z.zx === 0 ? [8] : [z.zx, z.zx + 8]).forEach(X => {
     for (let y = z.zy; y <= z.zy + 5; y++) if (y !== z.zy + 3) addV(zi, X, y);
   });
   for (let x = z.zx; x <= z.zx + 7; x++) if (x !== z.zx + 3 && x !== z.zx + 4) addH(zi, Y, x);

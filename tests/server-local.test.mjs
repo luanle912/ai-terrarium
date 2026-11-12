@@ -417,7 +417,8 @@ test('snapshot() carries no animal data', () => {
   const { snapshot } = require('../server.js');
   const snap = snapshot();
   assert.equal('animals' in snap, false);
-  assert.deepEqual(Object.keys(snap).sort(), ['at', 'sessions', 'usage', 'version']);
+  assert.ok(!Object.keys(snap).some(k => /animal/i.test(k)), Object.keys(snap).join());
+  assert.deepEqual(Object.keys(snap).sort(), ['at', 'pageSettings', 'sessions', 'usage', 'usagePlan', 'usageSource', 'version']);
 });
 
 function fileState(file, over = {}) {

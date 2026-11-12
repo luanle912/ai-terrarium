@@ -51,6 +51,7 @@ function routes(ctx) {
   const { MAX_ISLANDS } = db;
   const streams = new Set(); // {res, userId, tokenHash}
   const lastSent = new Map(); // island id -> ms (real clock, throttle only)
+  const lastFrame = new Map(); // island id -> the last `island` frame broadcast, so an unchanged one is not sent again
   const pending = new Map(); // island id -> timer
   // island id -> slot of every island that has one, so island events never read the DB. Slots only change when an
   // island is claimed (its first publish emits `world` before `island`) or deleted (a `remove`); every read of the
@@ -136,7 +137,11 @@ function routes(ctx) {
   function sendIsland(id) {
     if (!isSlotted(id)) return; // hidden islands are never sent
     lastSent.set(id, Date.now());
-    broadcast('island', islandPayload(id));
+    // A state that went A → B → A inside one throttle window ends in a trailing send equal to the last frame: skip it.
+    const f = frame('island', islandPayload(id));
+    if (lastFrame.get(id) === f) return;
+    lastFrame.set(id, f);
+    for (const s of streams) write(s, f);
   }
   function onChange(e) {
     if (closing) return;
@@ -148,6 +153,7 @@ function routes(ctx) {
       const t = pending.get(e.id);
       if (t) { clearTimeout(t); pending.delete(e.id); }
       lastSent.delete(e.id);
+      lastFrame.delete(e.id);
       // The row is still there (last device revoked, ban): the island stays in its slot, offline and empty.
       const row = db.getIsland(e.id);
       if (row) {
@@ -185,16 +191,21 @@ function routes(ctx) {
   helpers.onSessionEnd(({ tokenHash }) => { for (const s of [...streams]) if (s.tokenHash === tokenHash) endStream(s); });
 
   // The hourly cleanup deletes expired sessions without notifying, so also look at every stream every 60 s.
+  // One lookup per signed-in session, not per stream: a user with several tabs open is checked once.
   function check() {
     const now = deps.now();
+    const valid = new Map(); // tokenHash -> still signed in
     for (const s of [...streams]) {
-      let ok = false;
-      try {
-        const row = db.getSession(s.tokenHash);
-        const user = row && db.getUserById(row.user_id);
-        ok = !!row && row.expires_at > now && !!user && user.banned_at == null;
-      } catch { ok = false; }
-      if (!ok) endStream(s);
+      if (!valid.has(s.tokenHash)) {
+        let ok = false;
+        try {
+          const row = db.getSession(s.tokenHash);
+          const user = row && db.getUserById(row.user_id);
+          ok = !!row && row.expires_at > now && !!user && user.banned_at == null;
+        } catch { ok = false; }
+        valid.set(s.tokenHash, ok);
+      }
+      if (!valid.get(s.tokenHash)) endStream(s);
     }
   }
   ctx.streams = { check, count: () => streams.size };
@@ -338,7 +349,9 @@ function routes(ctx) {
     handler(req, res, rc) {
       const a = webAssets.readAsset(rc.path);
       if (!a) throw new HttpError(404, 'not found');
-      send(res, 200, a.body, { 'Content-Type': a.type, ...webAssets.HEADERS });
+      // ETag + 304 and gzip (lib/web-assets.js): a reload costs ~nothing, a first load ~a quarter of the bytes.
+      const r = webAssets.respond(a, req.headers);
+      send(res, r.status, r.body, r.headers);
     },
   });
 

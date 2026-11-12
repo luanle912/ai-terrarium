@@ -120,6 +120,7 @@ Object.assign(ClaudeOffice.prototype, {
       w.trans.swapped = true;
       this.applyView(w.trans.to);
     }
+    this.stepCritters(dt); // the sleigh crosses the world's sky too
     this.drawWorld(ts / 1000, dt, w.sw, w.sh);
     this.drawSky(ts / 1000);
     if (step.phase) this.drawClouds(this.frontCanvas.getContext('2d'), step.phase, w.sw, w.sh, ts / 1000);

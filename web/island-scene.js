@@ -6,6 +6,14 @@ import './office-draw.js';
 import './office-draw-furniture.js';
 import './office-draw-restroom.js';
 import './office-draw-smoking.js';
+import './office-draw-doghouse.js';
+import './office-draw-fate.js';
+import './office-draw-fate-more.js';
+import './office-draw-fate-xmas.js';
+import './office-draw-winter.js';
+import './office-draw-xmas.js';
+import './office-draw-critters.js';
+import './office-draw-idle-xmas.js';
 import './office-draw-people.js';
 import './office-render.js';
 import './animal-view-draw.js';
@@ -38,14 +46,46 @@ export const SCENE_METHODS = [
   'headPos',
   'hit',
   'smokingItems',
+  'doghouseItems',
+  'doghouseSleeper',
+  'doghouseZs',
+  'doghouseShingles',
+  'doghouseBowl',
+  'doghouseBone',
+  'doghouseLantern',
+  'fateCtx',
+  'startFate',
+  'fateItems',
+  'xmasItems',
+  'xmasTree',
+  'xmasTreeLights',
+  'xmasWallLights',
+  'xmasString',
+  'winterWalls',
+  'drawPrints',
+  'stepPrints',
   'restroomItems',
   'restroomPaint',
   'seasonNow',
+  'eventNow',
   'stepDogs',
+  'stepCritters',
+  'idleCtx',
+  'xmasArms',
+  'idleXmasItems',
+  'drawSnowball',
+  'drawRolled',
+  'drawTrail',
+  'critterItems',
+  'critterSprite',
+  'drawCritter',
+  'drawPile',
   'stepProps',
   'dogSprite',
   'drawDog',
   'drawAnimal',
+  'animalItems',
+  'animalShown',
   'drawAnimalFx',
   'drawAnimalAura',
   'drawAnimalTrail',
@@ -107,6 +147,12 @@ export class IslandScene {
   get seasonChoice() {
     return this.host.seasonChoice;
   }
+  get eventChoice() {
+    return this.host.eventChoice;
+  }
+  get eventPreview() {
+    return this.host.eventPreview;
+  }
   get seasonPreview() {
     return this.host.seasonPreview;
   }
@@ -135,10 +181,12 @@ export class IslandScene {
     this.doneSweep(Date.now());
     this.agents.forEach(a => this.updateAgent(a, dt));
     this.stepDogs(dt);
+    this.stepCritters(dt);
     this.stepProps(dt);
     if (this.agents.some(a => a.gone)) {
       const gone = this.agents.filter(a => a.gone);
       gone.forEach(a => this.goneSids.set(a.sid, a.leftWhy || 'missing'));
+      gone.forEach(a => a.fated && this.startFate(a));
       this.agents = this.agents.filter(a => !a.gone);
       const h_ = this.host;
       if (h_.state.selIsland === this.id && gone.some(a => a.id === h_.state.sel)) h_.setState({ sel: null });

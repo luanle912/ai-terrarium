@@ -1,28 +1,32 @@
 import { SkyRender } from './sky-render.js';
 import { DogLogic } from './dog-logic.js';
 import { DogSprites } from './dog-sprites.js';
+import { DogXmas } from './dog-sprites-xmas.js';
 import { SmokeLogic } from './smoke-logic.js';
-import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW } from './office-scene.js';
+import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW, outdoors } from './office-scene.js';
 import { WATER_Z } from './island-land.js';
 import { LOOK, PERSON } from './office-people.js';
+import { XMAS, breathAt, lookUnder, outfitOf, shirtOf } from './office-people-xmas.js';
 import { ICON, ST, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Drawing people (at desks, walking, asleep, in the pond) and the office dogs.
 mixin(
   ClaudeOffice,
   class {
+    // Where the status icon and the bubble hang: over the head, and over the Christmas hat when there is one.
     headPos(a) {
+      const hat = a.outfit && !a.sleeping ? 5 : 0;
       if (a.stool && !a.moving) {
         const [sx, sy] = PA(a.x, a.y);
-        return [sx, sy - (a.stool === 2 ? 30 : 25)];
+        return [sx, sy - (a.stool === 2 ? 30 : 25) - hat];
       }
       if (a.sleeping) {
         const [hx, hy] = P(a.x - 0.45, a.y, 4);
         return [hx, hy];
       }
       const [sx, sy] = PA(a.x, a.y);
-      if (a.actNow === 'bath' && !a.moving) return [sx, sy - 11];
-      return [sx, sy - (a.seated ? 23 : 21)];
+      if (a.actNow === 'bath' && !a.moving) return [sx, sy - 11 - hat];
+      return [sx, sy - (a.seated ? 23 : 21) - hat];
     }
 
     actArms(R, act, sx, by, t, sh, shD, sk) {
@@ -139,9 +143,10 @@ mixin(
     }
 
     drawPerson(G, a) {
-      const { ctx, poly, box, rect, th, t } = G;
+      const { ctx, poly, box, rect, th, t } = G,
+        o = outfitOf(a, G.ev);
       if (a.sleeping) return this.drawSleeper(G, a);
-      let [sx, sy] = a.seated ? P(a.x, a.y, 11.5) : PA(a.x, a.y);
+      let [sx, sy] = a.seated ? P(a.x, a.y, 11.5) : PA(a.x, a.y, a.actNow === 'skate' ? WATER_Z : 0);
       sx = Math.round(sx);
       sy = Math.round(sy);
       if (a.status === 'error' && !a.moving && !a.seated) sx += Math.floor(t * 16) % 2 ? 1 : -1;
@@ -162,8 +167,8 @@ mixin(
           ctx.ellipse(sx, sy + 1, 5 + p * 6, 2 + p * 2.5, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
-        R(sx - 4, y0 - 5, 8, 4, a.shirt);
-        R(sx + 2, y0 - 5, 2, 4, shade(a.shirt, -30));
+        R(sx - 4, y0 - 5, 8, 4, shirtOf(a));
+        R(sx + 2, y0 - 5, 2, 4, shade(shirtOf(a), -30));
         R(sx - 3, y0 - 11, 6, 6, a.skin);
         R(sx + 2, y0 - 11, 1, 6, shade(a.skin, -25));
         PERSON.hairBath(R, LOOK(a), sx, y0, a.skin);
@@ -173,9 +178,8 @@ mixin(
         ctx.beginPath();
         ctx.ellipse(sx, y0 - 1, 6, 2, 0, 0, Math.PI * 2);
         ctx.fill();
-        if (a.parent) {
-          R(sx - 3, y0 - 13, 6, 1, '#ffd166');
-        }
+        if (o) XMAS.hatEvent(R, o, sx, y0 - 11);
+        else if (a.parent) R(sx - 3, y0 - 13, 6, 1, '#ffd166');
         return;
       }
       if (!a.seated) {
@@ -185,12 +189,12 @@ mixin(
         ctx.fill();
       }
       const R = rect,
-        sh = a.shirt,
+        sh = shirtOf(a),
         shD = shade(sh, -30),
         shL = shade(sh, 30),
         sk = a.skin,
         skD = shade(sk, -25),
-        L = LOOK(a),
+        L = lookUnder(LOOK(a), o),
         st = a.status;
       if (a.seated) {
         const skey =
@@ -313,8 +317,10 @@ mixin(
         const hy = sy - 21 + (skey === 'reading' ? 1 : 0);
         if (skey === 'visitor' || skey === 'permission') PERSON.hairProfile(R, L, sx, hy, sh, sk);
         else PERSON.hairSeat(R, L, sx, hy, sh, sk);
+        if (o) XMAS.scarf(R, o, sx, sy - 13, 8);
         post.forEach(f => f());
-        if (a.parent) {
+        if (o) XMAS.hatEvent(R, o, sx, hy + 1, 8);
+        else if (a.parent) {
           R(sx - 3, hy - 1, 6, 2, '#ffd166');
           R(sx, hy - 4, 1, 3, '#ffd166');
           R(sx - 1, hy - 5, 3, 1, '#ffffff');
@@ -364,7 +370,7 @@ mixin(
         R(sx + 2, by - 11, 2, 7, shD);
         R(sx - 4, by - 11, 1, 7, shL);
         // the top (collar and tie, hoodie, open jacket or cardigan, blouse, dress) and its sleeve colour for the arms
-        const slv = PERSON.top(R, L, sx, by, sh, sk, skD, a.dirFront),
+        const slv = o && o.top ? XMAS.top(R, o, sx, by, a.dirFront) : PERSON.top(R, L, sx, by, sh, sk, skD, a.dirFront),
           slvD = shade(slv, -30);
         if (sit) PERSON.legsSit(R, L, sx, by, sh);
         else PERSON.legs(R, L, sx, by, sh, l1, l2, a.dirFront);
@@ -374,7 +380,8 @@ mixin(
         const act = !a.moving && st === 'idle' ? a.actNow : null;
         const tp = t + a.id * 1.37; // per-person phase, so a group of smokers never moves in step
         if (act && (!sit || act === 'smoke')) {
-          this.actArms(R, act, sx, by, act === 'smoke' ? tp : t, slv, slvD, sk);
+          if (!(G.ev && this.xmasArms(R, act, sx, by, tp, slv, slvD, sk, a)))
+            this.actArms(R, act, sx, by, act === 'smoke' ? tp : t, slv, slvD, sk);
         } else if (up) {
           R(sx - 6, by - 17, 2, 7, slv);
           R(sx + 4, by - 17, 2, 7, slv);
@@ -392,6 +399,7 @@ mixin(
           }
         }
         R(sx - 1, by - 12, 2, 1, skD);
+        if (o && a.dirFront) XMAS.scarf(R, o, sx, by - 12);
         const hy = by - 18;
         R(sx - 3, hy, 6, 6, sk);
         R(sx + 2, hy, 1, 6, skD);
@@ -415,6 +423,10 @@ mixin(
           R(sx - 4, hy + 1, 1, 3, '#1a1a1a');
           R(sx + 3, hy + 1, 1, 3, '#1a1a1a');
         }
+        // the hat goes over the headset's band; from behind the scarf goes over the hair
+        if (o && !a.dirFront) XMAS.scarf(R, o, sx, by - 12);
+        if (o) XMAS.hatEvent(R, o, sx, hy);
+        if (G.cold && a.dirFront && !a.moving && outdoors(a.x, a.y)) XMAS.breath(R, breathAt(t, a.id), sx, hy);
         if (act === 'smoke') {
           // ember at the cigarette tip (brighter during a drag), a thin wisp rising off it, a puff after each drag
           const { drag, exhale } = SmokeLogic.cycle(tp),
@@ -448,7 +460,7 @@ mixin(
           R(sx + 6, by - 8, 1, 1, '#ffffff');
           if (Math.floor(t * 2 + a.id) % 2) R(sx + 4, by - 12, 1, 2, '#c9cfdc');
         }
-        if (a.parent) {
+        if (a.parent && !o) {
           R(sx - 3, hy - 2, 6, 2, '#ffd166');
           R(sx, hy - 5, 1, 3, '#ffd166');
           R(sx - 1, hy - 6, 3, 1, '#ffffff');
@@ -504,16 +516,20 @@ mixin(
       }
     }
     // A dog's frame baked once per light level and snow level (like the island), then stamped with one drawImage.
-    dogSprite(breed, name, dfB, snB) {
-      const k = breed + '/' + name + '/' + dfB + '/' + snB,
+    // With `ev` (the event from its second week) the dog is dressed and the sprite is DogXmas.PAD rows taller (cv.pad).
+    dogSprite(breed, name, dfB, snB, ev) {
+      const x = ev && ev.level >= 2,
+        k = breed + '/' + name + '/' + dfB + '/' + snB + (x ? '/x' : ''),
         hit = this.dogSprites.get(k);
       if (hit) return hit;
       if (this.dogSprites.size > 300) this.dogSprites.clear();
-      const f = DogSprites.frame(breed, name),
-        pal = DogSprites.BREEDS[breed].pal,
+      const f0 = DogSprites.frame(breed, name),
+        f = x ? DogXmas.dress(breed, name, f0) : f0,
+        pal = x ? DogXmas.palFor(breed) : DogSprites.BREEDS[breed].pal,
         cv = document.createElement('canvas');
       cv.width = f.w;
       cv.height = f.h;
+      cv.pad = f.pad || 0;
       const c = cv.getContext('2d'),
         top = new Array(f.w).fill(-1);
       f.rows.forEach((row, y) =>
@@ -535,10 +551,12 @@ mixin(
       return cv;
     }
     drawDog(G, d, t, dfB, snB) {
+      // a dog in its house shows only in the doorway (doghouseItems)
+      if (d.act === 'inside') return;
       const { ctx, th, rect } = G,
         p = DogLogic.pose(d, t),
         f = DogSprites.frame(d.breed, p.frame),
-        img = this.dogSprite(d.breed, p.frame, dfB, snB);
+        img = this.dogSprite(d.breed, p.frame, dfB, snB, G.ev);
       let [sx, sy] = PG(d.x, d.y);
       sx = Math.round(sx);
       sy = Math.round(sy);
@@ -554,9 +572,9 @@ mixin(
         ctx.save();
         ctx.translate(sx + 1, 0);
         ctx.scale(-1, 1);
-        ctx.drawImage(img, -f.ax, top);
+        ctx.drawImage(img, -f.ax, top - img.pad);
         ctx.restore();
-      } else ctx.drawImage(img, sx - f.ax, top);
+      } else ctx.drawImage(img, sx - f.ax, top - img.pad);
       if (d.act === 'drink' && !d.path.length)
         for (let k = 0; k < 2; k++) {
           const q = (t * 0.7 + k * 0.5 + d.id * 0.3) % 1;
@@ -598,6 +616,7 @@ mixin(
     }
     drawSleeper(G, a) {
       const { ctx, poly, box, rect, th, t } = G,
+        o = outfitOf(a, G.ev),
         d = DESKS[a.desk],
         x = d.gx,
         y = d.gy;
@@ -631,9 +650,11 @@ mixin(
         box(x + 0.09, y + 0.44, 0.11, hs === 'bob' ? 0.32 : 0.38, 0.5, hs === 'bob' ? 4 : 3, a.hair);
       else if (hs === 'bun') box(x + 0.12, y + 0.56, 0.07, 0.12, 4, 6.5, a.hair);
       else if (hs === 'ponytail') box(x + 0.08, y + 0.58, 0.11, 0.08, 0.5, 2.5, shade(a.hair, -26));
-      if (a.parent) box(x + 0.18, y + 0.48, 0.08, 0.28, 6.5, 7, '#ffd166');
-      box(x + 0.4, y + 0.44, 0.34, 0.36, 0.5, 4.5 + br, a.shirt);
-      const bl = shade(a.shirt, -50) === a.shirt ? '#5b8def' : ['#3e8ed0', '#e5484d', '#46a758', '#8e4ec6'][a.id % 4];
+      if (o) XMAS.hatSleep(box, o, x, y);
+      else if (a.parent) box(x + 0.18, y + 0.48, 0.08, 0.28, 6.5, 7, '#ffd166');
+      box(x + 0.4, y + 0.44, 0.34, 0.36, 0.5, 4.5 + br, shirtOf(a));
+      const top = shirtOf(a),
+        bl = shade(top, -50) === top ? '#5b8def' : ['#3e8ed0', '#e5484d', '#46a758', '#8e4ec6'][a.id % 4];
       box(x + 0.6, y + 0.4, 0.62, 0.44, 0.5, 4 + br * 0.6, bl);
       [0.75, 0.92, 1.09].forEach(k =>
         poly(

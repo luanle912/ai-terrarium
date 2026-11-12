@@ -60,6 +60,7 @@ Open your browser → **http://localhost:4317** — that's it.
 | 🌅 | **Day/night cycle** | Smooth lighting with cosine interpolation based on your local clock — warm dawn and dusk, stars and moon at night, desk lamps glow after dark |
 | 🌦️ | **Weather** | Clear, cloudy, rain, storm, snow and fog — random every 20–40 min, or synced to the real weather of a city you choose via Open-Meteo. Rain runs down the windows, storms darken the office with lightning, snow whitens the lawn and the peaks, and a rainbow follows the rain |
 | 🎄 | **Seasonal events** | Vietnamese holidays and seasons get their own event tree on the lawn — Tết mai blossoms, Christmas tree with blinking lights, Halloween pumpkins, cherry blossoms in spring, and more |
+| ❄️ | **Winter and Christmas** | Winter snow lies with depth: drifts, icicles off the island's edge, snow on every roof and three different snowmen. From 1 to 26 December a big Christmas tree with presents stands at the crossing of the office's corridors, the island's trees turn into snowy firs, it snows, and strings of lights glow on the office, the kennels and the pavilion after dark. Everyone dresses for it too: Santa hats in the first week, then five outfits and elf sub-agents, a scarf in the department's colour on each, and the dogs in antlers, a scarf and a sweater. Reindeer graze on the lawn, elves carry presents to a pile by the front stairs, penguins slide on the frozen lake, and on Christmas Eve Santa's sleigh crosses the sky and parachutes presents down. People on a break throw snowballs, roll a snowman, skate on the lake or sip hot cocoa, and some leave by sleigh, gift-wrapped, or down a chimney. |
 | 🐕 | **Office dogs** | A corgi, a husky and a dalmatian roam the lawn: they stroll, drink at the lake, chase each other, greet people who come outside and sleep together under a tree at night |
 
 ### Sessions & Agents
@@ -106,6 +107,7 @@ Open your browser → **http://localhost:4317** — that's it.
 | 💬 | **Speech bubbles** | Agents show what they're doing in speech bubbles above their heads |
 | 📊 | **Whiteboard** | A wall-mounted board showing real Claude API usage (5-hour and 7-day quotas) |
 | 🔒 | **Private** | Reads local transcripts only; nothing leaves your machine unless you turn on Real weather, which sends the city name to Open-Meteo |
+| 🖼️ | **Live wallpaper (macOS)** | The office as your desktop wallpaper, with the server started for you: `node server.js wallpaper` (see below) |
 | 📦 | **Zero dependencies** | Pure Node.js — no `npm install`, no build step |
 
 ---
@@ -132,6 +134,7 @@ Still no build step and no dependencies: the browser runs the ES modules in `web
 |------|------------|
 | `server.js`, `lib/` | The local server (transcripts → SSE) and the publisher that sends your island to a hub |
 | `hub/` | The optional multi-island hub |
+| `wallpaper/` | The macOS app that shows the office as your desktop wallpaper (Swift; `node server.js wallpaper`) |
 | `claude-office.html` | A short shell page that loads `web/main.js` |
 | `web/main.js` | Entry point: imports every module in a fixed order, then mounts the page |
 | `web/*-logic.js` | DOM-free logic (sky, camera, dogs, people, restroom, bubbles, world layout); `tests/` imports each one |
@@ -179,6 +182,7 @@ Open the ⚙ panel in the bottom-right corner of the office:
 - *Real weather* asks for a city. The page looks it up with [Open-Meteo](https://open-meteo.com/) (free for non-commercial use, no key) and refreshes every 15 minutes. If the lookup fails, the panel says why and the page falls back to random weather.
 - The preview buttons (*Clear, Cloudy, Rain, Storm, Snow, Fog*) show a weather right away.
 - The mode and city are remembered in this browser. With "reduce motion" turned on in your OS, lightning does not flash and rain and snow are lighter.
+- **Event** (under *Season*) is the Christmas event: *Auto* shows it from 1 to 26 December, a little more each week; *On* shows all of it now (winter and snowfall included, whatever the date), *Off* never. The button previews it for a minute. The choice is shared with the wallpaper.
 
 ---
 
@@ -256,20 +260,112 @@ thú xuất hiện (`{"spawn":"dragon"}` hoặc `{"spawn":"legendary"}`) và tua
 
 ## 📊 Hiện mức dùng 5H/7D
 
-Bảng **USAGE** trên tường lấy số liệu từ statusLine của Claude Code (Claude Code không còn ghi file usage nào khác). Thêm một lần vào `~/.claude/settings.json`:
+Bảng **USAGE** trên tường hiện mức dùng gói claude.ai (5 giờ và 7 ngày). **Chỉ có với gói claude.ai** (Pro, Max,
+Team, Enterprise): máy dùng API key, Bedrock hay Vertex không có các giới hạn này nên bảng tự ẩn.
+
+Server lấy số liệu theo thứ tự (`lib/usage.js`):
+
+1. **Status line** của một phiên `claude` trong terminal, nếu bạn đã cài (xem dưới) và số liệu còn mới (≤ 10 phút).
+2. **Claude Code CLI của máy**: mỗi 5 phút server hỏi `claude` lệnh `get_usage` (chế độ SDK, không gửi prompt nên
+   không tốn lượt, không lưu phiên, không chạy hook). Cần CLI `claude` đăng nhập bằng tài khoản claude.ai:
+
+   ```bash
+   claude auth status                 # "authMethod": "claude.ai" là được
+   claude auth login --claudeai       # nếu đang là API key
+   ```
+
+   Đây là nguồn chính khi bạn dùng Claude Code trong **app desktop**: app chạy Claude Code không có status line, nên
+   cách 1 không bao giờ chạy ở đó.
+3. **Chạm trần**: mỗi lần bị chặn (429) transcript ghi cửa sổ và giờ reset; cửa sổ đó hiện **LIMIT** tới giờ reset.
+
+Bảng hiện khi một nguồn xác nhận có gói; CLI trả lời "không có giới hạn gói" thì bảng ẩn và server hỏi lại sau 1 giờ.
+Đặt `TERRARIUM_CLAUDE=/đường/dẫn/claude` nếu CLI nằm chỗ khác.
+
+**Status line (tuỳ chọn, cho ai dùng `claude` trong terminal):** thêm một lần vào `~/.claude/settings.json`, trỏ tới
+một bản repo cố định (không phải worktree tạm):
 
 ```json
-"statusLine": { "type": "command", "command": "node <đường dẫn plugin>/server.js statusline" }
+"statusLine": { "type": "command", "command": "node <đường dẫn repo>/server.js statusline" }
 ```
 
-Nếu bạn đã có status line riêng, giữ nó bằng `--chain`:
+Có status line riêng thì giữ bằng `--chain "<lệnh cũ>"`. Lệnh ghi `~/.claude-terrarium/usage.json` (quyền 0600) và in
+một dòng như `🏝 5H 23% · 7D 41%`.
 
-```json
-"statusLine": { "type": "command", "command": "node <đường dẫn plugin>/server.js statusline --chain \"<lệnh cũ>\"" }
+## 🖼️ Văn phòng làm hình nền (macOS)
+
+App `LiveWallpaper` (thư mục `wallpaper/`) đặt văn phòng làm hình nền máy Mac. Mỗi màn hình có một cửa sổ nằm ở tầng
+desktop (dưới icon, click xuyên qua) mở `http://localhost:4317/?wallpaper=1`. Ở chế độ này trang chỉ còn bầu trời và
+hòn đảo, phủ kín màn hình: không header, không nút ⚙, không panel. Bong bóng tên nhân vật vẫn hiện.
+
+### Cần có
+
+- macOS 14 trở lên.
+- Swift: Xcode hoặc Command Line Tools (`xcode-select --install`).
+- Node 18 trở lên (như server).
+
+### Cài và chạy
+
+```bash
+node <đường dẫn repo>/server.js wallpaper         # build, cài vào ~/Applications rồi mở app
+node <đường dẫn repo>/server.js wallpaper build   # chỉ build ra wallpaper/build/LiveWallpaper.app
 ```
 
-Lệnh ghi `~/.claude-terrarium/usage.json` (quyền 0600) và in một dòng như `🏝 5H 23% · 7D 41%`. Khi chưa có dữ liệu, bảng hiện `--` thay vì 0%.
-Chỉ chạy được với gói Pro/Max của claude.ai, Claude Code ≥ 2.1.80, và sau phản hồi đầu tiên của mỗi phiên.
+Xong là xong: app tự chạy server nếu chưa có ai chạy (xem dưới), biểu tượng hiện trên menu bar, hình nền đổi thành văn
+phòng sau vài giây. Muốn bật cùng máy: menu bar → **Khởi động cùng máy**.
+
+### Nó làm gì
+
+| Lúc | App làm gì |
+|---|---|
+| Cắm sạc | Chạy live, 15 khung/giây; mỗi phút chụp lại làm wallpaper hệ thống (để Mission Control, màn hình khoá thấy đúng cảnh) |
+| Chạy pin hoặc Low Power Mode | Chụp khung cuối làm ảnh tĩnh, đóng trang: gần như không tốn gì |
+| Khoá màn hình | macOS không cho app nào vẽ lên màn hình khoá, nên app chụp khung đang hiện làm wallpaper (màn hình khoá hiện ảnh này) rồi tạm dừng; mở khoá là chạy live lại |
+| Hình nền bị cửa sổ khác che kín | WebKit tự dừng vẽ |
+| Chưa có server ở `localhost:4317` | Tự chạy `node server.js` của repo đã cài app; server chết thì bật lại (3 s, rồi giãn dần tới 60 s); thoát app thì tắt server đó |
+| Đã có server khác (plugin của một phiên Claude Code, hay chạy tay) | Dùng luôn, không chạy thêm |
+| Server chưa trả lời | Ẩn cửa sổ (wallpaper tĩnh lộ ra), 5 giây thử lại một lần |
+
+Menu bar: trạng thái hình nền và server, **Tải lại trang**, **Chụp làm wallpaper ngay**, **Mở trong trình duyệt**
+(trang thường, có header và cài đặt), **Khởi động cùng máy**, **Thoát**.
+
+Đo trên MacBook + một màn ngoài khi cắm sạc: khoảng 65 % một lõi CPU (phần lớn là WebKit đưa hai màn retina lên GPU),
+server ~105 MB RAM.
+
+### Sau khi cập nhật repo
+
+App nhớ đường dẫn `node` và `server.js` **lúc build**. Sau `git pull` (hoặc khi chuyển repo sang chỗ khác) chạy lại
+`node server.js wallpaper` để app dùng code mới; lệnh này tắt app cũ đàng hoàng (kèm server do nó chạy) rồi mở bản mới.
+
+### Tuỳ chỉnh
+
+```bash
+defaults write local.kham.livewallpaper url "http://localhost:4317/?wallpaper=1"   # địa chỉ trang
+defaults write local.kham.livewallpaper node /đường/dẫn/node                       # node khác bản lúc build
+defaults write local.kham.livewallpaper server /đường/dẫn/server.js                # server.js khác
+```
+
+Thêm tham số vào `url` như ở trang thường, ví dụ `&lang=en`. Đổi xong thì thoát rồi mở lại app.
+
+### Gỡ bỏ
+
+Menu bar → **Khởi động cùng máy** (bỏ chọn) → **Thoát**, rồi:
+
+```bash
+rm -rf ~/Applications/LiveWallpaper.app ~/Library/Application\ Support/LiveWallpaper ~/Library/Logs/LiveWallpaper-server.log
+defaults delete local.kham.livewallpaper
+```
+
+Hình nền hệ thống giữ ảnh chụp cuối; đổi lại trong System Settings → Wallpaper.
+
+### Gặp trục trặc
+
+- **Hình nền đứng yên, menu báo "Không kết nối được server"**: xem `~/Library/Logs/LiveWallpaper-server.log`. Menu
+  báo "Server: không tìm thấy node" thì chạy lại `node server.js wallpaper` từ terminal có `node`, hoặc đặt
+  `defaults write … node`.
+- **Hình nền vẫn có header / nút ⚙**: server đang chạy là bản cũ (chưa có `?wallpaper=1`). Tắt server cũ, chạy lại
+  `node server.js wallpaper`.
+- **Màn hình khoá hiện ảnh cũ**: ảnh được chụp mỗi phút và lúc khoá; nếu macOS hiện màn hình khoá trước khi kịp áp ảnh
+  lúc khoá, lần khoá sau sẽ đúng.
 
 ## 🔄 Update
 

@@ -195,7 +195,7 @@ test('the page walks animals on the real island: they arrive and leave on its co
 
 test('world islands borrow the animal draw helpers and carry no animals', () => {
   const { IslandScene, SCENE_METHODS } = loadWeb('island-scene')
-  for (const m of ['drawAnimal', 'drawAnimalFx', 'animalSprite', 'animalOutline', 'animalAlpha', 'animalTier', 'animalLive'])
+  for (const m of ['drawAnimal', 'drawAnimalFx', 'animalItems', 'animalShown', 'animalSprite', 'animalOutline', 'animalAlpha', 'animalTier', 'animalLive'])
     assert.ok(SCENE_METHODS.includes(m), m + ' is borrowed')
   for (const m of SCENE_METHODS) assert.equal(typeof IslandScene.prototype[m], 'function', m + ' exists when copied')
   const scene = Object.create(IslandScene.prototype)

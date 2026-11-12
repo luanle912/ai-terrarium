@@ -12,38 +12,14 @@ const PERM_MS = (+process.env.PERM_SEC || 8) * 1e3;
 const MAX_CLIENTS = 20;
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 const DEFAULT_HUB = 'https://terrarium.openlabs.click';
-const USAGE_GLOB = path.join(os.homedir(), '.claude', 'plugins', 'store');
-let usageCache = []; let usageCacheTs = 0;
-// Sources, in order: <configDir>/usage.json (written by `server.js statusline`), then the legacy usage-quota* files.
-// An empty array means "unknown", which the page shows as "--" rather than 0%.
-// Passing opts (dir, legacyDir, now) bypasses the 5 s cache; used by tests.
-function readUsage(opts) {
-  const now = (opts && opts.now) || Date.now();
-  if (!opts && now - usageCacheTs < 5000) return usageCache;
-  let out = [];
-  try {
-    const cur = require('./lib/statusline.js').readUsageFile((opts && opts.dir) || require('./lib/terrarium-config.js').configDir(), now);
-    if (cur && cur.length) out = cur;
-  } catch {}
-  if (!out.length) {
-    const legacyDir = (opts && opts.legacyDir) || USAGE_GLOB;
-    try {
-      const files = fs.readdirSync(legacyDir).filter(f => f.startsWith('usage-quota'));
-      for (const f of files) {
-        const d = JSON.parse(fs.readFileSync(path.join(legacyDir, f), 'utf8'));
-        const lims = (d.limits && d.limits.limits) || (d.planLimits && d.planLimits.limits) || [];
-        out = lims.map(l => ({ kind: l.kind, pct: l.percentUsed || 0, resets: l.resetsAt }));
-        break;
-      }
-    } catch {}
-  }
-  if (opts) return out;
-  usageCacheTs = now; usageCache = out;
-  return usageCache;
-}
 const files = new Map();
 // Transcript parsing and the status decision live in lib/status.js (pure functions, tested with fixture transcripts).
-const { TRANSCRIPT_RE, newState, ingest, readRegistryDir, liveFromRegistry, defaultAlive, buildSessions } = require('./lib/status.js');
+const { TRANSCRIPT_RE, newState, ingest, readRegistryDir, liveFromRegistry, defaultAlive, buildSessions, quotaHits } = require('./lib/status.js');
+// The usage board's figures and whether to show it (lib/usage.js): status line, the CLI's get_usage, hit limits.
+let usageOf = null;
+const currentUsage = now => (usageOf ||= require('./lib/usage.js').createUsage({ dir: require('./lib/terrarium-config.js').configDir() }))(now, quotaHits(files.values(), quotaMemo));
+// Limit hits (429s) seen in any transcript, kept after the transcript goes quiet: {kind: resetsAt ms}.
+const quotaMemo = {};
 
 function walk(dir, out = []) {
   let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
@@ -60,17 +36,36 @@ function scan() {
     if (!st) { st = newState(f, stat.mtimeMs); files.set(f, st); }
     const wasIncremental = st.offset > 0;
     st.fileMtime = stat.mtimeMs;
-    if (stat.size < st.offset) { st.offset = 0; st.rest = ''; }
+    if (stat.size < st.offset) { st.offset = 0; st.restBuf = null; }
     if (stat.size === st.offset) continue;
-    const MAX_CHUNK = 64 * 1024 * 1024;
-    const remaining = stat.size - st.offset;
-    if (st.offset === 0 && remaining > MAX_CHUNK) { st.offset = Math.max(0, stat.size - MAX_CHUNK); st.rest = ''; }
-    const toRead = Math.min(MAX_CHUNK, stat.size - st.offset);
-    const fd = fs.openSync(f, 'r'); const buf = Buffer.alloc(toRead);
-    try { fs.readSync(fd, buf, 0, toRead, st.offset); } finally { fs.closeSync(fd); } st.offset += toRead;
-    const lines = (st.rest + buf.toString('utf8')).split('\n'); st.rest = lines.pop();
-    for (const l of lines) { if (!l.trim()) continue; try { ingest(st, JSON.parse(l), wasIncremental); } catch {} }
+    // A new file is read from its last 64 MB at most; what is new is read a megabyte at a time (readAppended).
+    const MAX_TAIL = 64 * 1024 * 1024;
+    if (st.offset === 0 && stat.size > MAX_TAIL) { st.offset = stat.size - MAX_TAIL; st.restBuf = null; }
+    try { readAppended(f, st, stat.size, l => { try { ingest(st, JSON.parse(l), wasIncremental); } catch {} }); } catch {}
   }
+}
+
+// Feeds each whole line appended to f between st.offset and size to onLine, reading `chunk` bytes at a time through
+// one reused buffer (a single 64 MB read used to leave the process holding ~250 MB it never gave back). Lines are cut
+// at the newline byte, which never occurs inside a UTF-8 character, so text is decoded only once a line is whole; the
+// bytes of a line still being written wait in st.restBuf for the next read.
+const READ_CHUNK = 1024 * 1024;
+let readBuf = null;
+function readAppended(f, st, size, onLine, chunk = READ_CHUNK) {
+  const buf = chunk === READ_CHUNK ? (readBuf ||= Buffer.alloc(READ_CHUNK)) : Buffer.alloc(chunk);
+  const fd = fs.openSync(f, 'r');
+  try {
+    while (st.offset < size) {
+      const n = fs.readSync(fd, buf, 0, Math.min(chunk, size - st.offset), st.offset);
+      if (n <= 0) break;
+      st.offset += n;
+      const data = st.restBuf && st.restBuf.length ? Buffer.concat([st.restBuf, buf.subarray(0, n)]) : buf.subarray(0, n);
+      const nl = data.lastIndexOf(10);
+      if (nl < 0) { st.restBuf = Buffer.from(data); continue; }
+      for (const l of data.toString('utf8', 0, nl).split('\n')) if (l.trim()) onLine(l);
+      st.restBuf = Buffer.from(data.subarray(nl + 1));
+    }
+  } finally { fs.closeSync(fd); }
 }
 
 // Live sessions: Claude Code writes ~/.claude/sessions/<pid>.json per process. With that directory only live sessions
@@ -84,9 +79,17 @@ function liveSessions() {
   return (liveCache = liveFromRegistry(readRegistryDir(SESSIONS_DIR), { prev: liveCache, alive: defaultAlive }));
 }
 
+// The weather chosen on any page this server serves, for every page (lib/page-settings.js): the wallpaper app's web
+// view has its own browser storage and no settings panel. Not part of what is published to a hub (lib/public-view.js).
+let settingsOf = null;
+const pageSettings = () => (settingsOf ||= require('./lib/page-settings.js').createPageSettings(path.join(require('./lib/terrarium-config.js').configDir(), 'page-settings.json')));
+
 function snapshot() {
   const now = Date.now();
-  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage: readUsage(), version: VERSION };
+  const u = currentUsage(now);
+  // usagePlan: true once a claude.ai plan is known, false with no plan limits (API key), null when unknown; the page
+  // shows the board only for true.
+  return { at: now, sessions: buildSessions(files.values(), liveSessions(), { now, permMs: PERM_MS, activeMs: ACTIVE_MS }), usage: u.windows, usagePlan: u.plan, usageSource: u.source, pageSettings: pageSettings().get(), version: VERSION };
 }
 
 const animalRootsLib = require('./lib/animal-roots.js');
@@ -240,7 +243,7 @@ function animalRoute(req, res, route, ctx) {
   animalPost(req, res, name, ctx);
 }
 
-function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, logLines = () => [], animals = null, animalsDev = false, now = () => performance.now() } = {}) {
+function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, logLines = () => [], settings = pageSettings, animals = null, animalsDev = false, now = () => performance.now() } = {}) {
   const animalCtx = { animals, animalsDev, port, allowedHosts, streams: new Set(),
     buckets: { act: makeBucket({ burst: 5, everyMs: 200, now }), env: makeBucket({ burst: 2, everyMs: 10e3, now }) } };
   return (req, res) => {
@@ -253,6 +256,19 @@ function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFil
       (action === 'join' ? joinFlow.start() : joinFlow.leave())
         .then(j => { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(j)); })
         .catch(() => { res.writeHead(500); res.end('error'); });
+      return;
+    }
+    // A page saving its settings: same guard as join (our own origin, an X-Terrarium header), a small JSON body.
+    if (route === '/api/settings' && req.method === 'POST') {
+      if (!joinRequestAllowed(req, port, allowedHosts, 'settings')) { res.writeHead(403); res.end('Forbidden'); return; }
+      let body = '';
+      req.on('data', d => { body += d; if (body.length > 4096) req.destroy(); });
+      req.on('end', () => {
+        let saved = null;
+        try { saved = settings().set(JSON.parse(body)); } catch {}
+        res.writeHead(saved ? 200 : 400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(saved ? { ok: true, settings: saved } : { ok: false }));
+      });
       return;
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD' }); res.end('Method Not Allowed'); return; }
@@ -275,7 +291,7 @@ function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFil
     }
     else if (route.startsWith('/web/')) {
       const a = webAssets.readAsset(route, webDir);
-      if (a) { res.writeHead(200, { 'Content-Type': a.type, ...webAssets.HEADERS }); res.end(a.body); }
+      if (a) { const r = webAssets.respond(a, req.headers); res.writeHead(r.status, r.headers); res.end(r.body || undefined); }
       else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); }
     }
     else { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); }
@@ -337,6 +353,8 @@ async function main() {
     try { await pub.join(hub, { name, dir: cfgLib.configDir() }); return 0; }
     catch (e) { console.log('join: ' + e.message); return 1; }
   };
+  // wallpaper [install|build]: build (and install) the macOS wallpaper app in wallpaper/ (lib/wallpaper.js).
+  if (process.argv[2] === 'wallpaper') process.exit(require('./lib/wallpaper.js').run(process.argv.slice(3)));
   if (process.argv[2] === 'statusline') process.exit(require('./lib/statusline.js').main(process.argv.slice(3), cfgLib.configDir()));
   const code = await cfgLib.runCommand(process.argv.slice(2), { join: joinCmd, revokeSelf: pub.revokeSelf });
   if (typeof code === 'number') process.exit(code);
@@ -366,5 +384,5 @@ function makeAnimalEngine(dir, dev, log = console.log) {
   return createAnimalEngine({ store, getRoots: animalRoots, log, dev });
 }
 
-module.exports = { hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, readUsage, makeJoinFlow, joinRequestAllowed, animalRootsFrom, holdPortThenStart };
+module.exports = { readAppended, hostAllowed, corsOrigin, createHandler, listenWithRetry, snapshot, scan, makePublicPreview, makeJoinFlow, joinRequestAllowed, animalRootsFrom, holdPortThenStart };
 if (require.main === module) main();

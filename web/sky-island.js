@@ -23,6 +23,9 @@ import { hash, WATER_Z } from './island-land.js';
 import { drawSeasonFlowers, drawSeasonTree, drawSnowman, seasonC, SNOWMAN_EXT, TREE_EXT } from './island-art-season.js';
 import { SeasonIsland } from './season-island.js';
 import { SeasonLogic } from './season-logic.js';
+import { SnowLogic } from './snow-logic.js';
+import { CANE_EXT, drawCandyCane } from './island-art-xmas.js';
+import { drawIcicles, drawSnowEdge, drawSnowLawn, snowOnTop, snowTile } from './island-art-snow.js';
 export { hash, hex, mix, toHex, WATER_Z };
 // Night pulls every island colour toward the same deep blue the office uses after dark (web/island-art.js).
 export { night };
@@ -37,8 +40,11 @@ function bakeTools(frame, env) {
   const { OX, OY } = frame,
     look = SeasonLogic.look(env.season),
     P = (x, y, z = 0) => [OX + (x - y) * TW, OY + (x + y) * TH - z],
-    C = seasonC((c, s = 0) => night(s ? mix(c, SNOW, env.snow * s) : c, env.df), look);
-  return { P, C, look };
+    C = seasonC((c, s = 0) => night(s ? mix(c, SNOW, env.snow * s) : c, env.df), look),
+    // Lying snow (web/island-art-snow.js): its own colours, dimmed less than the grass after dark.
+    depth = SnowLogic.depth(env.snow),
+    S = c => SnowLogic.night(c, env.df);
+  return { P, C, look, depth, S };
 }
 
 // The island as one image the size of the scene canvas. The land (underside, lawn, lake, mountain) is painted first on
@@ -57,7 +63,7 @@ export function renderIsland(island, frame, k, env) {
   };
   const [cv, ctx] = canvas(),
     [land, lctx] = canvas();
-  const { P, C, look } = bakeTools(frame, env),
+  const { P, C, look, depth, S } = bakeTools(frame, env),
     frozen = look.frozen;
   const lp = painter(lctx, P),
     pt = painter(ctx, P);
@@ -69,9 +75,17 @@ export function renderIsland(island, frame, k, env) {
   for (const c of island.list) {
     const { x, y } = c,
       grass = (x + y) % 2 ? '#5eae4a' : '#5aa847';
-    lp.poly([P(x, y, 0), P(x + 1, y, 0), P(x + 1, y + 1, 0), P(x, y + 1, 0)], C(grass, 0.85));
+    lp.poly(
+      [P(x, y, 0), P(x + 1, y, 0), P(x + 1, y + 1, 0), P(x, y + 1, 0)],
+      depth ? snowTile(S, C(grass), x, y, depth) : C(grass, 0.85),
+    );
     if (!has(x, y + 1)) shoreFace(lp, P, C, x, y, 'y', x === f.x && y === f.y);
     if (!has(x + 1, y)) shoreFace(lp, P, C, x, y, 'x');
+  }
+  // snow that lies: over the lawn and hanging over the edge (the water and the mountain are painted over it)
+  if (depth) {
+    drawSnowLawn(lp, P, S, C, island, env.block, depth);
+    drawSnowEdge(lp, P, S, island, depth, f);
   }
   drawWater(lp, P, C, island, frame, frozen);
   drawMountain(lp, P, C, island, env.snow);
@@ -96,6 +110,7 @@ export function renderIsland(island, frame, k, env) {
     ctx.restore();
     land.width = land.height = 0; // let the browser drop it now rather than at the next collection
   }
+  if (depth) drawIcicles(ctx, P, S, island, depth);
   // the small pool the mountain fall drops into, in its stone rim, against the rock of the gap
   drawPool(pt, P, C, island, frozen);
   drawLakeDecor(pt, P, C, island, frozen);
@@ -155,10 +170,11 @@ export function renderIsland(island, frame, k, env) {
 // (SeasonIsland.snowmanTiles).
 // Someone behind a lamp post, a bush, the bench, a tree, a snowman or the pavilion is hidden by it.
 export function renderProps(island, frame, k, env) {
-  const { P, C, look } = bakeTools(frame, env),
+  const { P, C, look, depth, S } = bakeTools(frame, env),
     out = [];
   // ext: [left, up, right, down] px round the point (x + 0.5, y + 0.5) on the lawn
-  const add = (x, y, z, ext, draw, lamp = -1) => {
+  // (snowy: lying snow settles on its top; the snowmen are snow already)
+  const add = (x, y, z, ext, draw, lamp = -1, snowy = true) => {
     const [ax, ay] = P(x + 0.5, y + 0.5, 0),
       dx = Math.floor((ax - ext[0]) * k),
       dy = Math.floor((ay - ext[1]) * k),
@@ -168,6 +184,7 @@ export function renderProps(island, frame, k, env) {
     const g = img.getContext('2d');
     g.setTransform(k, 0, 0, k, -dx, -dy);
     draw(painter(g, P), g);
+    if (snowy) snowOnTop(img, k, S, depth);
     out.push({ x, y, z, img, dx, dy, lamp });
   };
   const { pavilion, rest } = island;
@@ -183,13 +200,22 @@ export function renderProps(island, frame, k, env) {
   );
   for (const d of island.decor)
     if (d.kind === 'bush') add(d.x, d.y, d.x + d.y + 0.5, [11, 15, 11, 4], pt => drawBush(pt, P, C, d, look.fruit));
+  // During the Christmas event winter's bare trees are firs, lightly snowed (they bring their own snow).
+  const fir = !!env.event && look.trees === 'bare',
+    trees = fir ? 'fir' : look.trees;
   for (const d of island.decor)
     if (d.kind === 'tree') {
-      add(d.x, d.y, d.x + d.y + 0.5, TREE_EXT, pt => drawSeasonTree(pt, P, C, d, look.trees));
+      add(d.x, d.y, d.x + d.y + 0.5, TREE_EXT, pt => drawSeasonTree(pt, P, C, d, trees), -1, !fir);
       out[out.length - 1].tree = true;
     }
   if (look.frozen && env.block)
     for (const m of SeasonIsland.snowmanTiles(island, env.block.W, env.block.H))
-      add(m.x, m.y, m.x + m.y + 0.5, SNOWMAN_EXT, pt => drawSnowman(pt, P, C, m));
+      add(m.x, m.y, m.x + m.y + 0.5, SNOWMAN_EXT, pt => drawSnowman(pt, P, C, m), -1, false);
+  // the Christmas event's big tree (env.event is its level): it keeps more of its colour after dark than the lawn
+  if (env.event && env.block) {
+    const T = c => night(c, 1 - (1 - env.df) * 0.55);
+    if (env.event >= 2)
+      for (const l of island.lamps) add(l.x, l.y, l.x + l.y + 1.3, CANE_EXT, pt => drawCandyCane(pt, P, T, l));
+  }
   return out;
 }

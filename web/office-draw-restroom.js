@@ -7,6 +7,8 @@ import { RestroomLogic } from './restroom-logic.js';
 import { PropUse } from './prop-use.js';
 import { FLOOR_Z, IDLE_SPOTS, P, PG, STAIRS, W, WALL, WC, lerpHex } from './office-scene.js';
 import { RESTROOM_GLYPH, shade } from './office-util.js';
+import { SnowLogic } from './snow-logic.js';
+import { snowOnWall, snowTones } from './office-draw-winter.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Drawing the smoking corner and the restroom block.
 // Each room's two basins' prop indices (web/prop-use.js).
@@ -159,6 +161,7 @@ mixin(
         poly([P(X, Y, WALL), P(X1, Y, WALL), P(X1, Y, ZT), P(X, Y, ZT)], th.trim, null);
         poly([P(X, Y, 0), P(X1, Y, 0), P(X1, Y, 4), P(X, Y, 4)], th.trim, null);
         poly([P(X, Y - WT, ZT), P(X1, Y - WT, ZT), P(X1, Y, ZT), P(X, Y, ZT)], cap, null);
+        if (SnowLogic.depth(snow)) snowOnWall(poly, P, 'x', X, X1, Y, ZT, WT, SnowLogic.depth(snow) + 1, snowTones(df));
         poly([P(X1, Y - WT, 0), P(X1, Y, 0), P(X1, Y, ZT), P(X1, Y - WT, ZT)], shade(th.wr, -34), null);
         // hand dryer in the men's room corner, above the plant
         const [dx] = L.dryerM;
