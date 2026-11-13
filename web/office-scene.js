@@ -61,7 +61,8 @@ export const WALL_REACH = Math.floor((WALL + 3 + FLOOR_Z) / (2 * TH));
 // drawn after the walls, its trunk and shadow would lie over the top of the wall.
 export const DRAW_REACH = WALL_REACH + 1;
 export const behindWalls = (x, y, reach = WALL_REACH) =>
-  (x < 0 && x >= -reach && y - x >= -1 && y - x <= H + 1) || (y < 0 && y >= -reach && x - y >= -1 && x - y <= W + 1);
+  (x < 0 && x >= -reach && y - x >= -1 && y - x <= H + 1) ||
+  (y < 0 && y >= -reach && x - y >= -1 && x - y <= BACK_X1 + 1);
 // The smoking corner fills the east-front outdoor spot, right beside the restroom block's east side, at the end of the
 // garden path that runs along the block's front. Only its planted trough (which faces the block) is taken off the
 // walkable lawn: seats, the ash bin and the posts are thin enough to step past, and an agent's own spot must stay
@@ -77,6 +78,9 @@ export const WC = RestroomLogic.layout(
   ),
   WC_WALK = new Set(WC.walk);
 WC.floor.forEach(k => LAWN_WALK.delete(k));
+// The back wall runs on past the office along the block's back (web/office-draw-restroom.js), so the strip behind it
+// reaches as far as the block's east end. Declared here, after WC; behindWalls reads it when called.
+export const BACK_X1 = WC.x1;
 // Out in the open: not on the office floor, not in the restroom block.
 export const outdoors = (x, y) => !(x >= 0 && y >= 0 && x < W && y < H) && !RestroomLogic.onFloor(WC, x, y);
 // The dogs' houses, one each (DogLogic.BREEDS order), in a row on the lawn right against the restroom block's east
@@ -122,6 +126,7 @@ export const DOG_ROAM = DogLogic.roamCells(LAWN_WALK, {
     { x: WC.x1, y: WC.y0, w: 1, h: 3 },
   ],
   wallReach: WALL_REACH,
+  backX1: BACK_X1,
   tall: [...M.cells].map(k => {
     const [x, y] = k.split(',').map(Number);
     return [x, y, Math.max(2, Math.ceil(stoneH(x + 0.5, y + 0.5) / TH))];
