@@ -158,7 +158,8 @@ mixin(
           n: this.agents.filter(a => a.dept === Dp.key && !a.leaving).length,
         }))
         .filter(d => d.n > 0);
-      const s = sel && this.byId(sel);
+      const animalSlot = this.animalSlot();
+      const s = sel && !animalSlot && this.byId(sel);
       const par = s && s.parent && this.byId(s.parent);
       const selDept = s ? this.depts.get(s.dept) : null;
       const selData = s
@@ -417,6 +418,8 @@ mixin(
               display: 'block',
             },
           }),
+          this.animalArrow(),
+          this.animalPanelEl(animalSlot),
 
           // As others see it the panel carries only what the hub gets: no name, folder, activity text or history.
           !wp && this.renderOthersPanel({ others, s, selData }),

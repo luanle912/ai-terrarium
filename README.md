@@ -141,6 +141,7 @@ Still no build step and no dependencies: the browser runs the ES modules in `web
 | `web/office.js`, `web/office-*.js` | The page component: `office.js` holds the class, each `office-*.js` adds its methods with `mixin(ClaudeOffice, class { ... })` (agents, drawing, header, panels, settings) |
 | `web/world-*.js` | World mode (several islands from a hub) and the World section of ⚙ Settings |
 | `web/island-*.js`, `sky-*.js`, `decor-*.js`, `pantry-*.js`, `season-*.js` | The island (its land as data, its still art, what moves on it) and drawing: sky, office decor, pantry pieces, event trees |
+| `web/animal-*.js` | Wild animals on the page: sprites, walking, pure UI helpers, and the `animal-view-*.js` mixins (feed, drawing, taps, chip, panels); the rules and encrypted storage live in `lib/animals.js`, `lib/animal-store.js` and `lib/animal-engine.js` |
 | `web/i18n.js`, `web/i18n/<lang>.js` | `tr()` and one translation table per language; `tests/i18n.test.mjs` checks they match |
 
 Each module imports exactly what it uses. After editing `web/`, run `npx prettier@3.3.3 --write web` (settings in `.prettierrc.json`); `tests/web-style.test.mjs` keeps files under 700 lines and lines under 120 characters. After pulling a new version, restart `node server.js`: an older server does not know about `web/` and the page says so.
@@ -232,6 +233,28 @@ giữa là "chỗ của bạn" (bấm để xem cách ghép máy); hub đủ 8 �
 
 Muốn dựng hub riêng (giới hạn theo tên miền công ty, owner, sao lưu): [docs/hub-setup.md](docs/hub-setup.md).
 Đặt `TERRARIUM_HUB=<url>` để nút Tham gia trỏ về hub của bạn.
+
+---
+
+## 🐾 Thú hoang
+
+Thỉnh thoảng một con thú hoang xuất hiện trên bãi cỏ: 14 loài, 4 bậc hiếm (Thường, Hiếm, Sử thi, Huyền thoại), có
+hiệu ứng riêng theo bậc. Ếch hay ra khi trời mưa, cáo tuyết khi có tuyết, cú chỉ ra ban đêm.
+
+- **Bắt:** bấm vào con vật (hoặc nút **Bắt** trong bảng 🐾 trên header). Muốn bắt được phải **làm việc thật với Claude
+  Code** đủ thời gian trước hạn chót: Thường 3 phút (hạn 20), Hiếm 8 (40), Sử thi 15 (75), Huyền thoại 30 phút (150).
+  Thời gian chỉ tính khi có session đang chạy (không tính lúc chờ bạn duyệt quyền), và vẫn tính khi trang đóng.
+- **Bộ sưu tập:** tối đa 50 con, thả tối đa 5 con ra đảo. Bộ sưu tập đầy thì mỗi lần bắt thêm sẽ hỏi bạn thả tự do con
+  nào.
+- **Đồng hồ:** thú chỉ xuất hiện và chỉ hết giờ khi bạn đang xem trang. Server tắt hay máy ngủ thì mọi đồng hồ dừng.
+
+Dữ liệu do server local giữ, mã hoá và ký bằng AES-256-GCM, trong `~/.claude-terrarium/animals.dat` với khoá
+`~/.claude-terrarium/animals.key` (quyền 0600). Sửa file thì server phát hiện và khôi phục bản trước. **Muốn giữ bộ sưu
+tập khi đổi máy hay cài lại, sao lưu cả hai file**; mất khoá là mất bộ sưu tập. Đây là chống sửa dữ liệu thông thường,
+không phải chống gian lận tuyệt đối: ai đọc được khoá hay sửa code trên máy mình thì vẫn làm được.
+
+Thử nghiệm: `TERRARIUM_DEV=1 node server.js` dùng bộ dữ liệu riêng (`animals-dev.*`) và mở `POST /api/animals/dev` để ép
+thú xuất hiện (`{"spawn":"dragon"}` hoặc `{"spawn":"legendary"}`) và tua nhanh thời gian làm việc (`{"work":60000}`).
 
 ---
 

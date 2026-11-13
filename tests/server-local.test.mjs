@@ -211,6 +211,342 @@ test('preview works before joining', () => {
   assert.equal(p3.view, mine); assert.equal(p3.share, 'kin');
 });
 
+// ---------- animals (spec 8) ----------
+
+const UUID_A = 'aaaaaaaa-0000-4000-8000-000000000001', UUID_B = 'bbbbbbbb-0000-4000-8000-000000000002';
+
+function sendBody(port, { method = 'POST', path, headers = {}, body, chunks }) {
+  return new Promise((resolve, reject) => {
+    const data = body === undefined ? null : (typeof body === 'string' ? body : JSON.stringify(body));
+    const h = { ...headers };
+    if (data !== null && !chunks) h['Content-Length'] = Buffer.byteLength(data);
+    const req = http.request({ host: '127.0.0.1', port, method, path, headers: h }, res => {
+      let out = ''; res.setEncoding('utf8');
+      res.on('data', c => out += c); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: out }));
+    });
+    req.on('error', reject);
+    if (chunks) for (const c of chunks) req.write(c); else if (data !== null) req.write(data);
+    req.end();
+  });
+}
+
+function fakeEngine({ view = { caught: [], wild: null, notice: null }, act } = {}) {
+  const calls = [], subs = new Set();
+  return {
+    calls, subs, current: view,
+    view() { return this.current; },
+    act(a) { calls.push(['act', a]); return act ? act(a) : { status: 200, body: { did: a.type } }; },
+    report(b) { calls.push(['report', b]); return { status: 200, body: { ok: true } }; },
+    devAct(b) { calls.push(['dev', b]); return { status: 200, body: { dev: true } }; },
+    subscribe(fn) { subs.add(fn); return () => subs.delete(fn); },
+  };
+}
+
+async function animalServer(opts = {}) {
+  const server = http.createServer();
+  const port = await listen(server);
+  const clock = { t: 1000 };
+  server.on('request', createHandler({ snapshot: () => ({ sessions: [] }), scan: () => {}, htmlFile: '/nonexistent.html', port, allowedHosts: [], allowedOrigin: '', now: () => clock.t, ...opts }));
+  const own = { Origin: `http://localhost:${port}`, 'X-Terrarium': 'animals' };
+  return { server, port, clock, own, post: (name, body, headers = own) => sendBody(port, { path: '/api/animals/' + name, headers, body }) };
+}
+
+test('animals: 404 everywhere without an engine', async () => {
+  const { server, port, own } = await animalServer();
+  try {
+    assert.equal((await request(port, { path: '/api/animals' })).status, 404);
+    assert.equal((await request(port, { path: '/api/animals/events' })).status, 404);
+    assert.equal((await sendBody(port, { path: '/api/animals/catch', headers: own, body: { wildId: 'abc123' } })).status, 404);
+  } finally { await close(server); }
+});
+
+test('GET /api/animals returns the view; a disabled engine answers 503', async () => {
+  const animals = fakeEngine({ view: { caught: [], wild: { id: 'abc123', species: 'fox' }, notice: null } });
+  const { server, port } = await animalServer({ animals });
+  try {
+    const ok = await request(port, { path: '/api/animals' });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.headers['cache-control'], 'no-store');
+    assert.equal(ok.headers['access-control-allow-origin'], undefined);
+    assert.equal(JSON.parse(ok.body).wild.species, 'fox');
+    animals.current = { disabled: true, error: 'key-missing' };
+    const off = await request(port, { path: '/api/animals' });
+    assert.equal(off.status, 503);
+    assert.deepEqual(JSON.parse(off.body), { disabled: true, error: 'key-missing' });
+    assert.equal((await request(port, { path: '/api/animals', headers: { Host: 'evil.example' } })).status, 403);
+    assert.equal((await request(port, { path: '/api/animalsX' })).status, 404);
+  } finally { await close(server); }
+});
+
+test('POST /api/animals/*: host, header, origin, size and JSON guards; nothing reaches the engine', async () => {
+  const animals = fakeEngine();
+  const { server, port, own, post } = await animalServer({ animals });
+  try {
+    assert.equal((await sendBody(port, { path: '/api/animals/catch', headers: { ...own, Host: 'evil.example' }, body: {} })).status, 403);
+    assert.equal((await post('catch', { wildId: 'abc123' }, { Origin: own.Origin })).status, 403, 'header missing');
+    assert.equal((await post('catch', { wildId: 'abc123' }, { ...own, 'X-Terrarium': 'join' })).status, 403, 'join header');
+    assert.equal((await post('catch', { wildId: 'abc123' }, { ...own, Origin: 'https://evil.example' })).status, 403, 'foreign origin');
+    assert.equal((await post('catch', { wildId: 'x'.repeat(2000) })).status, 413, 'content-length over 1 KB');
+    const chunked = await sendBody(port, { path: '/api/animals/catch', headers: own, chunks: ['{"wildId":"', 'y'.repeat(1500), '"}'] });
+    assert.equal(chunked.status, 413, 'chunked body over 1 KB');
+    assert.equal((await post('catch', '{nope')).status, 400);
+    assert.equal((await post('catch', '[1,2]')).status, 400);
+    assert.equal((await post('catch', '')).status, 400);
+    assert.deepEqual(animals.calls, []);
+    assert.equal((await post('catch', { wildId: 'abc123' }, { 'X-Terrarium': 'animals' })).status, 200, 'no Origin (curl) passes like /api/join');
+  } finally { await close(server); }
+});
+
+test('POST routes: method, unknown paths, route type wins, engine errors map through', async () => {
+  const animals = fakeEngine({ act: a => a.wildId === 'bad' ? { status: 400, body: { error: 'wrong_wild' } } : { status: 200, body: { did: a.type } } });
+  const { server, port, clock, post } = await animalServer({ animals });
+  try {
+    assert.equal((await request(port, { path: '/api/animals/catch' })).status, 405);
+    assert.equal((await request(port, { method: 'POST', path: '/api/animals' })).status, 405);
+    assert.equal((await post('teleport', {})).status, 404);
+    assert.equal((await post('dev', { spawn: 'dragon' })).status, 404, 'dev route is off by default');
+    const bad = await post('catch', { wildId: 'bad' });
+    assert.equal(bad.status, 400);
+    assert.deepEqual(JSON.parse(bad.body), { error: 'wrong_wild' });
+    for (const name of ['catch', 'giveup', 'release', 'recall', 'free', 'resolve']) {
+      clock.t += 1000;
+      const r = await post(name, { type: 'free', id: '000001' });
+      assert.equal(r.status, 200, name);
+      assert.deepEqual(JSON.parse(r.body), { did: name });
+    }
+    assert.equal((await post('env', { weather: 'rain', visible: true })).status, 200);
+    assert.deepEqual(animals.calls.at(-1), ['report', { weather: 'rain', visible: true }]);
+  } finally { await close(server); }
+});
+
+test('engine exceptions become 500', async () => {
+  const animals = fakeEngine({ act: () => { throw new Error('boom'); } });
+  const { server, post } = await animalServer({ animals });
+  try { assert.equal((await post('catch', { wildId: 'abc123' })).status, 500); } finally { await close(server); }
+});
+
+test('dev route only with animalsDev', async () => {
+  const animals = fakeEngine();
+  const { server, post } = await animalServer({ animals, animalsDev: true });
+  try {
+    const r = await post('dev', { spawn: 'dragon' });
+    assert.equal(r.status, 200);
+    assert.deepEqual(animals.calls.at(-1), ['dev', { spawn: 'dragon' }]);
+  } finally { await close(server); }
+});
+
+test('rate limit: 5 actions/s, counted only after the guards', async () => {
+  const animals = fakeEngine();
+  const { server, clock, own, post } = await animalServer({ animals });
+  try {
+    for (let i = 0; i < 10; i++) assert.equal((await post('catch', { wildId: 'a' }, { Origin: own.Origin })).status, 403);
+    for (let i = 0; i < 5; i++) assert.equal((await post('catch', { wildId: 'x'.repeat(2000) })).status, 413);
+    for (let i = 0; i < 5; i++) assert.equal((await post('catch', '{bad')).status, 400);
+    for (let i = 0; i < 5; i++) assert.equal((await post('release', { id: '000001' })).status, 200, 'call ' + i);
+    const limited = await post('release', { id: '000001' });
+    assert.equal(limited.status, 429);
+    assert.equal(animals.calls.length, 5);
+    clock.t += 200;
+    assert.equal((await post('release', { id: '000001' })).status, 200, 'one token back after 200 ms');
+    assert.equal((await post('release', { id: '000001' })).status, 429);
+  } finally { await close(server); }
+});
+
+test('rate limit: env has its own bucket (burst 2, one per 10 s)', async () => {
+  const animals = fakeEngine();
+  const { server, clock, post } = await animalServer({ animals });
+  const env = { weather: 'clear', visible: true };
+  try {
+    assert.equal((await post('env', env)).status, 200);
+    assert.equal((await post('env', env)).status, 200);
+    assert.equal((await post('env', env)).status, 429);
+    assert.equal((await post('catch', { wildId: 'abc123' })).status, 200, 'actions are not affected');
+    clock.t += 9000;
+    assert.equal((await post('env', env)).status, 429);
+    clock.t += 1000;
+    assert.equal((await post('env', env)).status, 200);
+  } finally { await close(server); }
+});
+
+function openStream(port, path = '/api/animals/events') {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path }, res => {
+      const msgs = []; let buf = '';
+      res.setEncoding('utf8');
+      res.on('data', c => { buf += c; let i; while ((i = buf.indexOf('\n\n')) >= 0) { msgs.push(JSON.parse(buf.slice(0, i).replace(/^data: /, ''))); buf = buf.slice(i + 2); } });
+      resolve({ res, msgs, close: () => req.destroy() });
+    });
+    req.on('error', () => {}); req.on('error', reject); req.end();
+  });
+}
+const until = async (cond, ms = 1000) => { const end = Date.now() + ms; while (!cond()) { if (Date.now() > end) throw new Error('timeout'); await new Promise(r => setTimeout(r, 5)); } };
+
+test('GET /api/animals/events streams the view and engine broadcasts; unsubscribes on close', async () => {
+  const animals = fakeEngine({ view: { caught: [], wild: null, notice: null } });
+  const { server, port } = await animalServer({ animals });
+  try {
+    const s = await openStream(port);
+    assert.equal(s.res.statusCode, 200);
+    assert.equal(s.res.headers['content-type'], 'text/event-stream');
+    await until(() => s.msgs.length === 1);
+    assert.deepEqual(s.msgs[0], { caught: [], wild: null, notice: null, events: [] });
+    assert.equal(animals.subs.size, 1);
+    for (const fn of animals.subs) fn({ caught: [], wild: { id: 'abc123' }, events: [{ type: 'spawn' }] });
+    await until(() => s.msgs.length === 2);
+    assert.equal(s.msgs[1].events[0].type, 'spawn');
+    s.close();
+    await until(() => animals.subs.size === 0);
+  } finally { await close(server); }
+});
+
+test('animal streams are capped like /events and refused when disabled', async () => {
+  const animals = fakeEngine();
+  const { server, port } = await animalServer({ animals });
+  const open = [];
+  try {
+    for (let i = 0; i < 20; i++) open.push(await openStream(port));
+    assert.equal((await request(port, { path: '/api/animals/events' })).status, 429);
+    for (const s of open) s.close();
+    await until(() => animals.subs.size === 0);
+    animals.current = { disabled: true, error: 'key-length' };
+    assert.equal((await request(port, { path: '/api/animals/events' })).status, 503);
+  } finally { await close(server); }
+});
+
+test('snapshot() carries no animal data', () => {
+  const { snapshot } = require('../server.js');
+  const snap = snapshot();
+  assert.equal('animals' in snap, false);
+  assert.ok(!Object.keys(snap).some(k => /animal/i.test(k)), Object.keys(snap).join());
+  assert.deepEqual(Object.keys(snap).sort(), ['at', 'pageSettings', 'sessions', 'usage', 'usagePlan', 'usageSource', 'version']);
+});
+
+function fileState(file, over = {}) {
+  return { offset: 1, rest: '', tokens: 0, pending: new Map(), recent: [], file, fileMtime: over.lastTs || 0, ...over };
+}
+
+test('animalRootsFrom: transcript roots only, with registry busy, status and active kids', () => {
+  const { animalRootsFrom } = require('../server.js');
+  const now = 10_000_000;
+  const a = fileState(`/p/proj/${UUID_A}.jsonl`, { sessionId: UUID_A, lastTs: now - 1000, last: 'prompt', cwd: '/w/a' });
+  const b = fileState(`/p/proj/${UUID_B}.jsonl`, { sessionId: UUID_B, lastTs: now - 2000, last: 'assistant', cwd: '/w/b',
+    pending: new Map([['t1', { name: 'Task', detail: '', t: now - 2000 }]]) });
+  const kid = fileState(`/p/proj/${UUID_B}/subagents/agent-x1.jsonl`, { sessionId: UUID_B, lastTs: now - 500, last: 'assistant',
+    pending: new Map([['t2', { name: 'Bash', detail: 'npm test', t: now - 500 }]]) });
+
+  const noRegistry = animalRootsFrom([a, b, kid], null, now);
+  assert.deepEqual(noRegistry.find(r => r.status === 'thinking'), { hasTranscript: true, lastTs: now - 1000, regBusy: null, status: 'thinking', kidsActive: false });
+  // B's freshness follows its newer sub-agent line.
+  assert.deepEqual(noRegistry.find(r => r.status === 'waiting'), { hasTranscript: true, lastTs: now - 500, regBusy: null, status: 'waiting', kidsActive: true });
+  assert.equal(noRegistry.length, 2, 'sub-agents are not roots');
+
+  const live = new Map([
+    [UUID_A, { pid: 1, name: '', status: 'idle', cwd: '/w/a' }],
+    [UUID_B, { pid: 2, name: '', status: 'busy', cwd: '/w/b' }],
+    ['cccccccc-0000-4000-8000-000000000003', { pid: 3, name: 'reg-only', status: 'busy', cwd: '/w/c' }],
+  ]);
+  const withRegistry = animalRootsFrom([a, b, kid], live, now);
+  assert.equal(withRegistry.length, 2, 'registry-only sessions are left out');
+  assert.equal(withRegistry.find(r => r.status === 'done').regBusy, false);
+  assert.equal(withRegistry.find(r => r.status === 'waiting').regBusy, true);
+});
+
+test('animalRootsFrom: a root missing from a non-empty registry falls back to its display status (spec 5.2 rule 3)', () => {
+  const { animalRootsFrom } = require('../server.js');
+  const { isWorking } = require('../lib/animals.js');
+  const now = 10_000_000;
+  const a = fileState(`/p/proj/${UUID_A}.jsonl`, { sessionId: UUID_A, lastTs: now - 1000, last: 'prompt', cwd: '/w/a' });
+  const b = fileState(`/p/proj/${UUID_B}.jsonl`, { sessionId: UUID_B, lastTs: now - 2000, last: 'assistant', stop: 'end_turn', cwd: '/w/b' });
+  const kid = fileState(`/p/proj/${UUID_A}/subagents/agent-x1.jsonl`, { sessionId: UUID_A, lastTs: now - 500, last: 'assistant',
+    pending: new Map([['t2', { name: 'Bash', detail: 'npm test', t: now - 500 }]]) });
+  const live = new Map([[UUID_B, { pid: 2, name: '', status: 'idle', cwd: '/w/b' }]]);
+  const roots = animalRootsFrom([a, b, kid], live, now);
+  assert.equal(roots.length, 2);
+  const unlisted = roots.find(r => r.regBusy === null);
+  assert.equal(unlisted.status, 'thinking');
+  assert.equal(unlisted.kidsActive, true, 'sub-agents of an unlisted root are kept');
+  assert.equal(roots.find(r => r.regBusy !== null).regBusy, false);
+  assert.equal(isWorking(roots, now), true);
+});
+
+test('animalRootsFrom: freshness spans sub-agents and pending calls; registry busy allows 60 minutes', () => {
+  const { animalRootsFrom } = require('../server.js');
+  const { isWorking } = require('../lib/animals.js');
+  const now = 100_000_000, MIN = 60e3;
+  const busy = new Map([[UUID_A, { pid: 1, name: '', status: 'busy', cwd: '/w/a' }]]);
+  const idle = new Map([[UUID_A, { pid: 1, name: '', status: 'idle', cwd: '/w/a' }]]);
+  const root = (age, over = {}) => fileState(`/p/proj/${UUID_A}.jsonl`, { sessionId: UUID_A, lastTs: now - age, last: 'assistant', cwd: '/w/a',
+    pending: new Map([['t1', { name: 'Bash', detail: 'npm run build', t: now - age }]]), ...over });
+  const kid = age => fileState(`/p/proj/${UUID_A}/subagents/agent-k1.jsonl`, { sessionId: UUID_A, lastTs: now - age, last: 'assistant',
+    pending: new Map([['t2', { name: 'Read', detail: 'x', t: now - age }]]) });
+  const working = (states, live) => isWorking(animalRootsFrom(states, live, now), now);
+
+  assert.equal(working([root(50 * MIN)], busy), true, 'long Bash call while the registry says busy');
+  assert.equal(working([root(61 * MIN)], busy), false, 'busy window is capped at 60 minutes');
+  assert.equal(working([root(11 * MIN)], idle), false);
+  assert.equal(working([root(11 * MIN)], null), false);
+  // Foreground Agent call: the root writes nothing, its sub-agent keeps going.
+  const agentRoot = root(11 * MIN, { pending: new Map([['t1', { name: 'Agent', detail: 'review', t: now - 11 * MIN }]]) });
+  assert.equal(working([agentRoot, kid(MIN)], null), true, 'a fresh sub-agent line keeps the root fresh');
+  assert.equal(animalRootsFrom([agentRoot, kid(MIN)], null, now)[0].lastTs, now - MIN);
+  // A finished sub-agent (dropped from the office view) still counts toward freshness.
+  const doneKid = fileState(`/p/proj/${UUID_A}/subagents/agent-k2.jsonl`, { sessionId: UUID_A, lastTs: now - 2 * MIN, last: 'assistant', stop: 'end_turn', finished: true });
+  assert.equal(animalRootsFrom([agentRoot, doneKid], null, now)[0].lastTs, now - 2 * MIN);
+  // The live server passes a one-shot iterator.
+  const once = new Map([['r', root(50 * MIN)], ['k', kid(MIN)]]).values();
+  assert.equal(animalRootsFrom(once, null, now)[0].lastTs, now - MIN);
+});
+
+test('animalRootsFrom: a kid on a permission prompt is not active; busy wins over a permission display', () => {
+  const { animalRootsFrom } = require('../server.js');
+  const now = 10_000_000;
+  const b = fileState(`/p/proj/${UUID_B}.jsonl`, { sessionId: UUID_B, lastTs: now - 30000, last: 'assistant',
+    pending: new Map([['t1', { name: 'Task', detail: '', t: now - 30000 }]]) });
+  const kid = fileState(`/p/proj/${UUID_B}/subagents/agent-x1.jsonl`, { sessionId: UUID_B, lastTs: now - 20000, last: 'assistant',
+    pending: new Map([['t2', { name: 'Bash', detail: 'rm -rf build', t: now - 20000 }]]) });
+  const [root] = animalRootsFrom([b, kid], null, now);
+  assert.equal(root.status, 'waiting', 'snapshot still shows the root waiting on its kid');
+  assert.equal(root.kidsActive, false, 'but a kid waiting for permission is not work');
+
+  const a = fileState(`/p/proj/${UUID_A}.jsonl`, { sessionId: UUID_A, lastTs: now - 20000, last: 'assistant',
+    pending: new Map([['t3', { name: 'Bash', detail: 'npm test', t: now - 20000 }]]) });
+  const [busy] = animalRootsFrom([a], new Map([[UUID_A, { pid: 1, name: '', status: 'busy', cwd: '/w/a' }]]), now);
+  assert.equal(busy.status, 'permission');
+  assert.equal(busy.regBusy, true);
+});
+
+test('holdPortThenStart: the animal engine starts only after the port is held', async () => {
+  const { holdPortThenStart } = require('../server.js');
+  const { EventEmitter } = await import('node:events');
+  let resolveListen;
+  const listenFn = () => new Promise(r => { resolveListen = r; });
+  const engine = { started: 0, flushed: 0, start() { this.started++; }, flush() { this.flushed++; } };
+  const proc = new EventEmitter();
+  proc.exitCodes = []; proc.exit = code => proc.exitCodes.push(code);
+  let published = 0;
+  const done = holdPortThenStart({ server: {}, port: 1, host: '127.0.0.1', listen: listenFn, startPublisher: () => { published++; return 'pub'; }, animals: engine, log: () => {}, proc });
+  await new Promise(r => setImmediate(r));
+  assert.equal(engine.started, 0, 'waiting for the port: no engine');
+  assert.equal(proc.listenerCount('SIGTERM'), 0);
+  resolveListen();
+  assert.equal(await done, 'pub');
+  assert.equal(engine.started, 1);
+  assert.equal(published, 1);
+  proc.emit('SIGTERM');
+  assert.deepEqual(proc.exitCodes, [143]);
+  proc.emit('SIGINT');
+  assert.deepEqual(proc.exitCodes, [143, 130]);
+  proc.emit('exit');
+  assert.equal(engine.flushed, 1);
+});
+
+test('holdPortThenStart: a failed listen never starts the engine', async () => {
+  const { holdPortThenStart } = require('../server.js');
+  const engine = { started: 0, start() { this.started++; }, flush() {} };
+  await assert.rejects(holdPortThenStart({ server: {}, port: 1, host: 'x', listen: () => Promise.reject(new Error('EACCES')), startPublisher: () => null, animals: engine, log: () => {}, proc: { once() {}, exit() {} } }));
+  assert.equal(engine.started, 0);
+});
+
 test('GET /api/log returns the ring buffer and never a token', async () => {
   const { createLogBuffer } = require('../lib/logbuf.js');
   const buf = createLogBuffer({ sink: () => {} });

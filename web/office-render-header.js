@@ -174,6 +174,7 @@ mixin(
               },
               h('div', { title: tr('header.logoTitle'), style: { flex: 'none' } }, logo),
               oneRow ? strip('1 1 0') : h('div', { style: { flex: '1 1 0', minWidth: 0 } }),
+              this.animalChip(true),
               srcPill(
                 isLive
                   ? ls === 'ok'
@@ -228,6 +229,7 @@ mixin(
                 },
                 seasonChip,
                 this.worldChip(),
+                this.animalChip(false),
                 summaryChips,
               ),
               h(

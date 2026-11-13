@@ -80,6 +80,8 @@ mixin(
         if (cv === this.backCanvas) this.drawFallers(ctx, t, hh);
         this.drawSleigh(ctx, cv === this.backCanvas, w, hh);
       }
+      if (this.frontCanvas && this.animalFx && this.animalFx.length && !(this.isLive && this.state.asOthers))
+        this.drawAnimalSky(this.frontCanvas.getContext('2d'), w, hh, b);
       // The island bobs a few pixels; moving the wrapper (not a transform) keeps bubbles, clicks and layering intact.
       if (this.wrapEl) {
         const top = env.reduced ? 0 : Math.round(Math.sin(t * 0.7) * 3);
@@ -339,6 +341,7 @@ mixin(
       this.drawPrints(G, this.printNow || 0);
       for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
       this.critterItems(G, behind, true, dfB);
+      this.animalItems(G, behind, true, dfB, snB);
       for (const a of this.agents)
         if (walker(a) && backOf(a)) behind.push({ z: a.x + a.y, f: () => this.drawPerson(G, a) });
       behind.sort((p, q) => p.z - q.z).forEach(it => it.f());
@@ -650,6 +653,7 @@ mixin(
       });
 
       for (const d of this.dogs) if (!backOf(d)) items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
+      this.animalItems(G, items, false, dfB, snB);
       this.critterItems(G, items, false, dfB);
       this.idleXmasItems(G, items);
       this.agents.forEach(a => {
@@ -689,6 +693,7 @@ mixin(
         ctx.fillRect(0, 0, LW, LH);
         ctx.restore();
       }
+      this.drawAnimalFx(G, t, dfB, snB);
     }
   },
 );

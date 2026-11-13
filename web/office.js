@@ -128,18 +128,28 @@ export class ClaudeOffice extends React.Component {
     this.kZoom = 1;
     this.drag = null;
     this.dragged = false;
+    // Animals win a tap unless an agent is nearer (tapAt); the agent and animal panels share one slot.
     this.onClick = e => {
       if (this.dragged) {
         this.dragged = false;
         return;
       }
-      const a = this.hit(e);
-      this.setState({ sel: a ? a.id : null });
+      const tap = this.tapAt(e);
+      if (tap.animal) {
+        this.clickAnimal(tap.animal);
+        return;
+      }
+      const a = tap.agent;
+      this.setState(
+        a
+          ? { sel: a.id, animalPanel: null, selAnimal: null }
+          : { sel: null, ...(this.state.animalPanel === 'animal' ? { animalPanel: null, selAnimal: null } : {}) },
+      );
     };
     this.onMove = e => {
       if (this.drag) return;
       const a = this.hit(e);
-      e.currentTarget.style.cursor = a ? 'pointer' : 'grab';
+      e.currentTarget.style.cursor = this.hitAnimal(e) || a ? 'pointer' : 'grab';
       this.hoverId = a ? a.id : null;
     };
     this.onLeave = () => {
@@ -357,6 +367,7 @@ export class ClaudeOffice extends React.Component {
     if (this.onWorldKey) window.removeEventListener('keydown', this.onWorldKey);
     if (this.world) this.stopWorld(this.world);
     if (this.onWorldVisible) document.removeEventListener('visibilitychange', this.onWorldVisible);
+    this.stopAnimals();
     if (this.onShown) document.removeEventListener('visibilitychange', this.onShown);
     if (this.onPreviewVis) document.removeEventListener('visibilitychange', this.onPreviewVis);
     if (this.onWorldOnline) window.removeEventListener('online', this.onWorldOnline);
@@ -530,6 +541,7 @@ export class ClaudeOffice extends React.Component {
         if (goneIds.includes(this.state.sel)) this.setState({ sel: null });
       }
     }
+    this.stepAnimals(dt);
     this.doneSweep(Date.now());
     this.env = this.envNow();
     this.draw(ts / 1000);

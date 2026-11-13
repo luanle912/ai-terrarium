@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Wild animals to catch** — Now and then a wild animal appears on the lawn: 14 original species in 4 rarities, each with its own effects. Catching one takes real Claude Code work time before a deadline (3 to 30 minutes by rarity), measured by the local server; the collection keeps up to 50 and up to 5 roam the island. The local server holds the rules and keeps the state AES-256-GCM encrypted and authenticated in `~/.claude-terrarium/animals.dat`; the page only sends actions. Translated into all 7 page languages
+
 ## [2.5.0] - 2026-11-12
 
 Notre-Dame of Saigon comes to the island for Christmas. Deploy the hub too, so islands in the world view show it as well.

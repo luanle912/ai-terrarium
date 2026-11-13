@@ -30,6 +30,8 @@ mixin(
   ClaudeOffice,
   class {
     startSource() {
+      // Only the local page gets here (boot picks world or local); animals run in both data sources.
+      this.startAnimals();
       this.es && this.es.close();
       this.es = null;
       this.agents = [];

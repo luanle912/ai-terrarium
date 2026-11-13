@@ -17,6 +17,7 @@ import './office-draw-critters.js';
 import './office-draw-idle-xmas.js';
 import './office-draw-people.js';
 import './office-render.js';
+import './animal-view-draw.js';
 import { DogLogic } from './dog-logic.js';
 import { DOG_PLACES } from './office-scene.js';
 import { ClaudeOffice } from './office.js';
@@ -84,12 +85,29 @@ export const SCENE_METHODS = [
   'stepProps',
   'dogSprite',
   'drawDog',
+  'drawAnimal',
+  'animalItems',
+  'animalShown',
+  'drawAnimalFx',
+  'drawAnimalAura',
+  'drawAnimalTrail',
+  'drawAnimalRing',
+  'drawAnimalBurst',
+  'drawCatchFx',
+  'animalSprite',
+  'animalOutline',
+  'animalAlpha',
+  'animalTier',
+  'animalLive',
 ];
 // Every island bakes the same ground for a given resolution, light, snow and season, so one bake per k serves them
 // all.
 export const SCENE_ISLAND_CACHE = new Map();
 // Dog sprites depend only on breed, frame and light, so all islands share one cache.
 export const SCENE_DOG_SPRITES = new Map();
+// World islands carry no animals in this phase; the caches only keep the borrowed draw helpers safe.
+export const SCENE_ANIMAL_SPRITES = new Map(),
+  SCENE_ANIMAL_OUTLINES = new Map();
 export class IslandScene {
   constructor(host, id) {
     this.host = host;
@@ -113,6 +131,11 @@ export class IslandScene {
     this.dogWorld = { ...DOG_PLACES, agents: [], hour: 12, snow: 0, calm: false, now: 0, rand: Math.random };
     this.dogs = DogLogic.create(this.dogWorld);
     this.dogSprites = SCENE_DOG_SPRITES;
+    this.animals = [];
+    this.animalFx = [];
+    this.animalNow = 0;
+    this.animalSprites = SCENE_ANIMAL_SPRITES;
+    this.animalOutlines = SCENE_ANIMAL_OUTLINES;
   }
   get theme() {
     return this.host.frameTheme || this.host.theme;
