@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Wild animals to catch** — Now and then a wild animal appears on the lawn: 14 original species in 4 rarities, each with its own effects. Catching one takes real Claude Code work time before a deadline (3 to 30 minutes by rarity), measured by the local server; the collection keeps up to 50 and up to 5 roam the island. The local server holds the rules and keeps the state AES-256-GCM encrypted and authenticated in `~/.claude-terrarium/animals.dat`; the page only sends actions. Translated into all 7 page languages
+
+## [2.5.0] - 2026-11-12
+
+Notre-Dame of Saigon comes to the island for Christmas. Deploy the hub too, so islands in the world view show it as well.
+
+### Added
+
 - **Notre-Dame of Saigon for Christmas** — While the Christmas event is on, a scale model of Saigon's Notre-Dame Cathedral stands on the back lawn, behind the office: red brick, two bell towers with pale zinc spires and crosses, the clock on the gable, the rose window, three arched doors and four arched windows down the nave, with the white statue of Our Lady on her pedestal in a round bed before it. It dresses up with the event, a little more each week: from the 1st a wreath on the main door and a string of lights across the facade, and after dark warm windows, a lit clock face and a soft glow on the rose window and the statue; from the 8th fir garlands with red bows, two small firs by the door, a thatched crib beside the statue with its manger lit, and a second string along the nave's eave; from the 15th a star over the gable that lights up and twinkles, and a ring of bulbs round the rose window. On Christmas Eve every bulb burns and a wide warm halo stands behind the building. Snow lies on it by the depth of the cover: on the roof, the tower tops and the ledges, against the foot of the walls and on the statue's bed. Nobody walks through it and the dogs keep off, also off the few cells where it would hide them: its lawn cells are closed while the event is on and handed back in their old order when it ends, so outside the event the island is exactly as before. The building and the statue are each worked out once per event level and snow depth and only recoloured at a bake; a frame adds its bulbs as rectangles and, after dark, one sprite for all the windows and the same stamped glows the other lights use. With reduced motion the bulbs stay lit and the star does not twinkle. Every island in the world view has it
 
 ## [2.4.0] - 2026-11-11
@@ -439,7 +446,8 @@ A major version because the source layout changes completely (the page moved fro
 - Zero dependencies — pure Node.js server, no build step
 - Claude Code plugin integration with auto-start on `session.start`
 
-[Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/luanle912/ai-terrarium/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/luanle912/ai-terrarium/compare/v2.4.0...v2.5.0
 [2.4.0]: https://github.com/luanle912/ai-terrarium/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/luanle912/ai-terrarium/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/luanle912/ai-terrarium/compare/v2.1.0...v2.2.0
