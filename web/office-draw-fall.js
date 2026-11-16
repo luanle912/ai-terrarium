@@ -11,7 +11,7 @@ import { ClaudeOffice, mixin } from './office.js';
 // into the depth below it: on screen their speed dies away by e^(-SLOW·τ) (at most MAX_V / SLOW more scene px, so they
 // stay in view even where little sky shows under the island), they shrink by 1 / (1 + SHRINK·τ) and fade over the
 // last second of AWAY_S. The figure is drawn SIZE× the scene's people so it reads against the sky.
-const G_ACC = 900,
+export const G_ACC = 900,
   MAX_V = 330,
   SLOW = 2,
   SHRINK = 1.2,

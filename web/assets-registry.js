@@ -18,6 +18,8 @@
 //     catalogueOnly: true,               // the code exists but the live game never draws it
 //     source: [{ file: 'web/island-art.js', fn: 'drawBush' }],
 //     axes: [{ id: 'kind', label: () => tr(KEY), values: [{ id: 'big', label: () => tr(KEY) }, …] }],
+//     sweep: ['status', 'act'],          // optional, for an item with too many axes to cross (a person): the grid
+//                                        // steps through these axes one at a time, each value counts once
 //     uses: ['light', 'season', 'snow', 'event'],   // the global controls it reacts to (only those reach it)
 //     palette: () => ['#…'],             // optional: colours to show when the draw only stamps sprites
 //     draw(ctx, view, t) {…},            // view = {ox, oy, env, pick}: draw the item standing at (ox, oy)
@@ -47,6 +49,8 @@ import { OFFICE } from './assets-cat-office.js';
 import { PANTRY } from './assets-cat-pantry.js';
 import { ANIMALS } from './assets-cat-animals.js';
 import { EVENT } from './assets-cat-event.js';
+import { PEOPLE } from './assets-cat-people.js';
+import { ROOMS } from './assets-cat-rooms.js';
 
 // The categories in rail order, each with the accent its cards and chips wear.
 const CAT_NAMES = {
@@ -116,6 +120,8 @@ function check(e) {
   for (const a of e.axes || [])
     if (!a.id || typeof a.label !== 'function' || !Array.isArray(a.values) || !a.values.length)
       return e.id + ': bad axis ' + a.id;
+  if (e.sweep && (!Array.isArray(e.sweep) || e.sweep.some(id => !(e.axes || []).some(a => a.id === id))))
+    return e.id + ': sweep names an axis it does not have';
   return null;
 }
 function normalize(e) {
@@ -157,5 +163,7 @@ register(OFFICE);
 register(PANTRY);
 register(ANIMALS);
 register(EVENT);
+register(PEOPLE);
+register(ROOMS);
 
 export const AssetsRegistry = { CATS, TAGS, TAG_LABEL, WHERE, entries, byId, cat, register, problems };

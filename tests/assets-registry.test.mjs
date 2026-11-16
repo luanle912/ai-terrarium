@@ -31,6 +31,12 @@ const { DogSprites } = loadWeb('dog-sprites')
 const { CritterSprites } = loadWeb('critter-sprites')
 const { DOG_HOUSES } = loadWeb('office-scene')
 const { DogLogic } = loadWeb('dog-logic')
+// people and rooms (Task 5)
+const { PeopleLogic } = loadWeb('people-logic')
+const { OutfitLogic } = loadWeb('outfit-logic')
+const { FateLogic } = loadWeb('fate-logic')
+const { ST, ICON } = loadWeb('office-util')
+const { ACT_TXT } = loadWeb('office-scene')
 
 const ENTRIES = R.entries()
 const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase())
@@ -202,6 +208,18 @@ const SOURCES = [
     drawIgloo: 'animals.igloo', doghouseLantern: 'animals.kennel-lantern', drawPile: 'event.gift-pile',
     drawString: 'event.string-lights', drawCandyCane: 'event.candy-cane', drawCathedral: 'event.cathedral',
     drawOurLady: 'event.our-lady' })[k]],
+  // people and rooms (Task 5): the looks (PeopleLogic.STYLE, SKIN), the statuses, the acts, the Christmas outfits
+  // and hats, the ways out of the island, the marks over a head, and the two rooms
+  ...['hair', 'top', 'beard', 'acc'].map(k => [`PeopleLogic.STYLE ${k}`,
+    [...new Set([...PeopleLogic.STYLE.m[k], ...PeopleLogic.STYLE.f[k]].filter(Boolean))], v => ['people.person', k, v]]),
+  ['PeopleLogic.SKIN', PeopleLogic.SKIN.map((c, i) => 'skin-' + (i + 1)), k => ['people.person', 'skin', k]],
+  ['ST', Object.keys(ST), k => ['people.person', 'status', k]],
+  ['ACT_TXT', Object.keys(ACT_TXT), k => ['people.person', 'act', k]],
+  ['OutfitLogic.KINDS', OutfitLogic.KINDS, k => ['people.person', 'outfit', k]],
+  ['OutfitLogic.HATS', OutfitLogic.HATS, k => ['people.person', 'hat', k]],
+  ['FateLogic.FATES', Object.keys(FateLogic.FATES), k => ['people.fate', 'fate', k]],
+  ['ICON', Object.keys(ICON), k => ['people.status-bubble', 'status', k]],
+  ['rooms', ['restroom', 'smoking'], k => 'rooms.' + k],
 ]
 
 test('every item the game knows has an entry in the catalogue', () => {

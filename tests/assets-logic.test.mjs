@@ -86,6 +86,23 @@ test('combos lists every variant worth a cell, at most 48, the item axes first',
   assert.deepEqual(L.combos(ENTRIES[3], L.DEFAULTS), [{ pick: {}, controls: L.DEFAULTS }], 'a plain item is one cell')
 })
 
+test('an entry with sweep steps through those axes one at a time instead of crossing every axis', () => {
+  const person = entry('people.person', {
+    axes: [AXIS('gender', 'm', 'f'), AXIS('status', 'a', 'b', 'c'), AXIS('act', ...'abcdefghijklmnopqrstu')],
+    uses: ['light', 'season'],
+    sweep: ['status', 'act'],
+  })
+  assert.equal(L.variantCount(person), (1 + 1 + 2 + 20) * 2 * 4, 'each value of each axis counted once')
+  const cells = L.combos(person, L.DEFAULTS)
+  assert.equal(cells.length, 1 + 2 + 20, 'the default, then the other values of each swept axis; scene dropped')
+  assert.deepEqual(cells[0].pick, { gender: 'm', status: 'a', act: 'a' })
+  assert.deepEqual(cells[1].pick, { gender: 'm', status: 'b', act: 'a' }, 'the other axes stay at their first value')
+  assert.deepEqual(cells[3].pick, { gender: 'm', status: 'a', act: 'b' })
+  assert.equal(new Set(cells.map(x => JSON.stringify(x))).size, cells.length, 'no cell twice')
+  const small = { ...person, axes: person.axes.slice(0, 2), sweep: ['status'], uses: ['light'] }
+  assert.equal(L.combos(small, L.DEFAULTS).length, 3 * 2, 'scene controls still cross when they fit')
+})
+
 test('defaultPick takes the first value of every axis, and fixPick drops values the item does not have', () => {
   assert.deepEqual(L.defaultPick(ENTRIES[0]), { screen: 'code' })
   assert.deepEqual(L.fixPick(ENTRIES[0], { screen: 'off', nope: 1 }), { screen: 'off' })

@@ -70,10 +70,12 @@ function counts(entries) {
   return out;
 }
 
-// The item's own axes times the scene controls it reacts to (day and night count as two, dusk being a blend).
+// The item's own axes times the scene controls it reacts to (day and night count as two, dusk being a blend). An
+// entry with `sweep` (too many axes to cross, like a person) counts each value of each of its axes once.
 function variantCount(e) {
   let n = 1;
-  for (const a of e.axes) n *= a.values.length;
+  if (e.sweep) for (const a of e.axes) n += a.values.length - 1;
+  else for (const a of e.axes) n *= a.values.length;
   for (const u of e.uses) n *= CELL_VALUES[u].length;
   return n;
 }
@@ -101,18 +103,28 @@ function fixPick(e, pick) {
 
 // The cells of the "all variants" grid: every value of every axis of the item, times the scene controls it uses,
 // at most MAX_CELLS. Scene controls are fixed at their current value one by one (the event first) until it fits;
-// past that the item's own combinations are cut at MAX_CELLS.
+// past that the item's own combinations are cut at MAX_CELLS. An entry with `sweep: [axisId…]` does not cross its
+// axes: its cells are the first value of every axis, then each other value of each swept axis on its own.
+function sweepPicks(e) {
+  const base = defaultPick(e),
+    out = [base];
+  for (const a of e.axes)
+    if (e.sweep.includes(a.id)) for (const v of a.values.slice(1)) out.push({ ...base, [a.id]: v.id });
+  return out;
+}
 function combos(e, controls) {
   const used = SCENE.filter(u => e.uses.includes(u));
   const size = list => list.reduce((n, u) => n * CELL_VALUES[u].length, 1);
+  const picks = e.sweep ? sweepPicks(e) : null;
   let axesN = 1;
-  for (const a of e.axes) axesN *= a.values.length;
+  if (picks) axesN = picks.length;
+  else for (const a of e.axes) axesN *= a.values.length;
   for (const u of DROP) if (axesN * size(used) > MAX_CELLS && used.includes(u)) used.splice(used.indexOf(u), 1);
   const dims = [
-    ...e.axes.map(a => a.values.map(v => ['pick', a.id, v.id])),
+    ...(picks ? [] : e.axes.map(a => a.values.map(v => ['pick', a.id, v.id]))),
     ...used.map(u => CELL_VALUES[u].map(v => ['controls', u, v])),
   ];
-  let cells = [{ pick: {}, controls }];
+  let cells = picks ? picks.map(pick => ({ pick, controls })) : [{ pick: {}, controls }];
   for (const d of dims) {
     const next = [];
     for (const c of cells)
