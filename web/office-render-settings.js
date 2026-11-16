@@ -3,7 +3,7 @@ import { tr } from './i18n.js';
 import { BubbleLogic } from './bubble-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { EventLogic } from './event-logic.js';
-import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker } from './office-scene.js';
+import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker, assetsLink } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 mixin(
   ClaudeOffice,
@@ -148,6 +148,7 @@ mixin(
             tr('settings.title'),
           ),
           languagePicker(),
+          assetsLink(),
           h(
             'label',
             null,

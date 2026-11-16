@@ -4,7 +4,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { hostAllowed, corsOrigin, createHandler, listenWithRetry } = require('../server.js');
-import { moduleGraph } from './web.mjs';
+import { moduleGraph, allModuleGraphs } from './web.mjs';
 
 function listen(server, port = 0) {
   return new Promise(r => server.listen(port, '127.0.0.1', () => r(server.address().port)));
@@ -55,7 +55,7 @@ test('the page and every web/ file it loads are served, never cached stale, and 
     assert.equal(page.status, 200);
     assert.equal(page.headers['cache-control'], 'no-cache');
     assert.match(page.body, /<script type="module" src="web\/main\.js"><\/script>/);
-    const assets = ['/web/styles.css', ...moduleGraph().map(n => `/web/${n}.js`)];
+    const assets = ['/web/styles.css', ...allModuleGraphs().map(n => `/web/${n}.js`)];
     assert.ok(assets.length > 30);
     for (const a of assets) {
       const r = await request(port, { path: a });
@@ -257,4 +257,24 @@ test('public-preview carries the publisher fields and marks a stale view', () =>
   }
   const fb = makePublicPreview({ publisher: { state: () => ({ state: 'offline', ...fields }), view: () => null }, getSnapshot: () => snapshot, salt })();
   assert.equal(fb.view.stale, true); assert.equal(fb.failures, 2);
+});
+
+test('/assets serves the assets shell, and the office page does not load any assets-* module', async () => {
+  const server = http.createServer();
+  const port = await listen(server);
+  server.on('request', createHandler({ snapshot: () => ({ sessions: [] }), scan: () => {}, port, allowedHosts: [], allowedOrigin: '' }));
+  try {
+    const page = await request(port, { path: '/assets' });
+    assert.equal(page.status, 200);
+    assert.equal(page.headers['cache-control'], 'no-cache');
+    assert.match(page.headers['content-type'], /^text\/html/);
+    assert.match(page.body, /<script type="module" src="web\/assets-main\.js"><\/script>/);
+    assert.equal((await request(port, { path: '/assets', method: 'POST' })).status, 405);
+    assert.deepEqual(moduleGraph().filter(n => n.startsWith('assets-')), []);
+    assert.ok(moduleGraph('claude-assets.html').includes('assets-main'));
+  } finally { await close(server); }
+  const missing = http.createServer();
+  const p2 = await listen(missing);
+  missing.on('request', createHandler({ snapshot: () => ({ sessions: [] }), scan: () => {}, assetsFile: '/nonexistent.html', port: p2, allowedHosts: [], allowedOrigin: '' }));
+  try { assert.equal((await request(p2, { path: '/assets' })).status, 404); } finally { await close(missing); }
 });

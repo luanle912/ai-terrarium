@@ -1,5 +1,7 @@
 // ja strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
 export default {
+"assets.title":"アセット",
+"assets.back":"オフィスに戻る",
 "seasonTree.newyear.label":"元日",
 "seasonTree.tet.label":"テト（旧正月）",
 "seasonTree.valentine.label":"バレンタイン",
@@ -169,6 +171,7 @@ export default {
 "detail.field.recent":"最近のアクティビティ",
 "settings.title":"設定",
 "settings.language":"言語",
+"settings.assets":"アセット",
 "settings.toggleTitle":"設定：データソース、速度、吹き出し",
 "settings.viewingAsOthers":"他の人の視点で表示中（{level}レベル）",
 "settings.othersLevel.basic":"基本",

@@ -3,11 +3,11 @@ import assert from 'node:assert/strict'
 import fs, { readFileSync } from 'node:fs'
 
 import { loadI18n } from './load-i18n.mjs'
-import { PAGE, readWeb, loadWeb, moduleGraph } from './web.mjs'
+import { PAGE, ASSETS_PAGE, readWeb, loadWeb, allModuleGraphs } from './web.mjs'
 
 // The page's own code: the shell plus every web/ script except the translation tables and the lookup itself.
-const SOURCES = [['claude-office.html', readFileSync(PAGE, 'utf8')],
-  ...moduleGraph().filter(n => n !== 'i18n' && !n.startsWith('i18n/')).map(n => [`web/${n}.js`, readWeb(n)])]
+const SOURCES = [['claude-office.html', readFileSync(PAGE, 'utf8')], ['claude-assets.html', readFileSync(ASSETS_PAGE, 'utf8')],
+  ...allModuleGraphs().filter(n => n !== 'i18n' && !n.startsWith('i18n/')).map(n => [`web/${n}.js`, readWeb(n)])]
 const I18n = loadI18n('vi')
 const { I18N_STRINGS: STRINGS, tr } = loadWeb('i18n')
 const LANGS = I18n.CODES
@@ -92,8 +92,8 @@ test('no Vietnamese text is hard-coded in the page outside the translation table
   assert.deepEqual(hits.map(([at, l]) => `${at}: ${l.trim().slice(0, 120)}`), [])
 })
 
-test('the page reaches every web/ module from main.js, with one translation table per language', () => {
-  const names = moduleGraph()
+test('the two pages reach every web/ module between them, with one translation table per language', () => {
+  const names = allModuleGraphs()
   const files = []
   const walk = (dir, pre) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { if (e.isDirectory()) walk(dir + '/' + e.name, pre + e.name + '/'); else if (e.name.endsWith('.js')) files.push(pre + e.name.slice(0, -3)) } }
   walk(new URL('../web', import.meta.url).pathname, '')

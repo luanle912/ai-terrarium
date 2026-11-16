@@ -1,5 +1,7 @@
 // ko strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
 export default {
+"assets.title":"에셋",
+"assets.back":"오피스로 돌아가기",
 "seasonTree.newyear.label":"신정",
 "seasonTree.tet.label":"설날 (뗏)",
 "seasonTree.valentine.label":"밸런타인데이",
@@ -169,6 +171,7 @@ export default {
 "detail.field.recent":"최근 활동",
 "settings.title":"설정",
 "settings.language":"언어",
+"settings.assets":"에셋",
 "settings.toggleTitle":"설정: 데이터 소스, 속도, 말풍선",
 "settings.viewingAsOthers":"다른 사람 시점으로 보는 중 ({level} 수준)",
 "settings.othersLevel.basic":"기본",

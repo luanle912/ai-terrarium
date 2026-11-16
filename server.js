@@ -93,6 +93,7 @@ function snapshot() {
 }
 
 const HTML_FILE = path.join(__dirname, 'claude-office.html');
+const ASSETS_FILE = path.join(__dirname, 'claude-assets.html');
 const webAssets = require('./lib/web-assets.js');
 const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS || '').split(',').map(h => h.trim()).filter(Boolean);
 const clients = new Set();
@@ -156,7 +157,7 @@ function makeJoinFlow({ join, leave, readCfg, openBrowser, hub, name, now = Date
   };
 }
 
-function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, logLines = () => [], settings = pageSettings } = {}) {
+function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFile = HTML_FILE, assetsFile = ASSETS_FILE, webDir = webAssets.WEB_DIR, port = PORT, allowedHosts = ALLOWED_HOSTS, allowedOrigin = ALLOWED_ORIGIN, publicPreview = () => ({ state: 'off' }), joinFlow = null, logLines = () => [], settings = pageSettings } = {}) {
   return (req, res) => {
     if (!hostAllowed(req.headers.host, port, allowedHosts)) { res.writeHead(403); res.end('Forbidden'); return; }
     const route = (req.url || '').split('?')[0];
@@ -198,6 +199,10 @@ function createHandler({ snapshot: snap = snapshot, scan: doScan = scan, htmlFil
     else if (route === '/' || route === '/index.html') {
       try { const html = fs.readFileSync(htmlFile, 'utf8'); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }); res.end(html); }
       catch { res.writeHead(404); res.end('claude-office.html not found — place it next to this script'); }
+    }
+    else if (route === '/assets') {
+      try { const html = fs.readFileSync(assetsFile, 'utf8'); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }); res.end(html); }
+      catch { res.writeHead(404); res.end('claude-assets.html not found — place it next to this script'); }
     }
     else if (route.startsWith('/web/')) {
       const a = webAssets.readAsset(route, webDir);

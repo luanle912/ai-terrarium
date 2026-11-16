@@ -1,5 +1,7 @@
 // th strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
 export default {
+"assets.title":"แอสเซ็ต",
+"assets.back":"กลับไปที่ออฟฟิศ",
 "seasonTree.newyear.label":"วันขึ้นปีใหม่",
 "seasonTree.tet.label":"ตรุษเวียดนาม",
 "seasonTree.valentine.label":"วาเลนไทน์",
@@ -168,6 +170,7 @@ export default {
 "detail.field.recent":"กิจกรรมล่าสุด",
 "settings.title":"ตั้งค่า",
 "settings.language":"ภาษา",
+"settings.assets":"แอสเซ็ต",
 "settings.toggleTitle":"ตั้งค่า: แหล่งข้อมูล, ความเร็ว, ข้อความในบับเบิล",
 "settings.viewingAsOthers":"กำลังดูแบบที่คนอื่นเห็น (ระดับ {level})",
 "settings.othersLevel.basic":"พื้นฐาน",

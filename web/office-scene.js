@@ -34,6 +34,11 @@ export function languagePicker() {
   );
 }
 
+// The link from the settings panel to the assets page.
+export function assetsLink() {
+  return h('a', { href: '/assets', style: { color: '#9cf' } }, tr('settings.assets'));
+}
+
 export const W = 27,
   H = 14,
   TW = 16,

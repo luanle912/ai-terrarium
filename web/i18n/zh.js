@@ -1,5 +1,7 @@
 // zh strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
 export default {
+"assets.title":"素材",
+"assets.back":"返回办公室",
 "seasonTree.newyear.label":"元旦",
 "seasonTree.tet.label":"春节",
 "seasonTree.valentine.label":"情人节",
@@ -169,6 +171,7 @@ export default {
 "detail.field.recent":"最近活动",
 "settings.title":"设置",
 "settings.language":"语言",
+"settings.assets":"素材",
 "settings.toggleTitle":"设置：数据源、速度、气泡文字",
 "settings.viewingAsOthers":"正在以他人视角查看（{level}级别）",
 "settings.othersLevel.basic":"基础",

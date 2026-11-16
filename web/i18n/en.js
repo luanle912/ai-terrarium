@@ -1,5 +1,7 @@
 // en strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
 export default {
+"assets.title":"Assets",
+"assets.back":"Back to the office",
 "seasonTree.newyear.label":"New Year's Day",
 "seasonTree.tet.label":"Lunar New Year",
 "seasonTree.valentine.label":"Valentine's Day",
@@ -169,6 +171,7 @@ export default {
 "detail.field.recent":"RECENT ACTIVITY",
 "settings.title":"Settings",
 "settings.language":"Language",
+"settings.assets":"Assets",
 "settings.toggleTitle":"Settings: data source, speed, bubble text",
 "settings.viewingAsOthers":"Viewing as others ({level} level)",
 "settings.othersLevel.basic":"Basic",

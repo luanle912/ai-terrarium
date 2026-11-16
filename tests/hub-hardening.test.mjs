@@ -6,7 +6,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { startDevHub, devLogin, pairDevice } from './hub-helpers.mjs';
-import { moduleGraph } from './web.mjs';
+import { allModuleGraphs } from './web.mjs';
 
 const require = createRequire(import.meta.url);
 const { createOfficePage, inlineScriptHashes } = require('../hub/csp.js');
@@ -32,7 +32,7 @@ test('the page runs only its own web/ files and the pinned CDN scripts', async (
 });
 
 test('the hub serves every web/ module and the stylesheet the page loads, without the general limit, and nothing outside web/', async () => {
-  const assets = ['/web/styles.css', ...moduleGraph().map((n) => `/web/${n}.js`)];
+  const assets = ['/web/styles.css', ...allModuleGraphs().map((n) => `/web/${n}.js`)];
   assert.ok(assets.length > 30);
   const h = await startDevHub();
   try {
@@ -216,5 +216,23 @@ test('the hub-wide stream cap is 503', async () => {
     open[0].close();
     await settle();
     assert.equal((await openRaw(h.url, d.cookie)).status, 200);
+  } finally { await h.close(); }
+});
+
+test('/assets needs a session like /, and signed in gets the shell under the office CSP', async () => {
+  const h = await startDevHub();
+  try {
+    const anon = await fetch(h.url + '/assets');
+    const home = await fetch(h.url + '/');
+    const anonBody = await anon.text();
+    assert.equal(anon.status, home.status);
+    assert.equal(anonBody, await home.text());
+    assert.ok(!anonBody.includes('assets-main.js'));
+    const login = await devLogin(h.url, 'a@example.com');
+    const r = await fetch(h.url + '/assets', { headers: { cookie: login.cookie } });
+    assert.equal(r.status, 200);
+    assert.ok((await r.text()).includes('web/assets-main.js'));
+    const scriptSrc = /script-src ([^;]*)/.exec(r.headers.get('content-security-policy'))[1];
+    assert.deepEqual(scriptSrc.split(' '), ["'self'", 'https://cdnjs.cloudflare.com']);
   } finally { await h.close(); }
 });

@@ -1,5 +1,7 @@
 // vi strings. Translations, one table per language. Keys are flat "area.thing" ids; {name} marks a parameter.
 export default {
+"assets.title":"Danh mục tài nguyên",
+"assets.back":"Về văn phòng",
 "seasonTree.newyear.label":"Tết Dương lịch",
 "seasonTree.tet.label":"Tết Nguyên Đán",
 "seasonTree.valentine.label":"Valentine",
@@ -169,6 +171,7 @@ export default {
 "detail.field.recent":"HOẠT ĐỘNG GẦN ĐÂY",
 "settings.title":"Cài đặt",
 "settings.language":"Ngôn ngữ",
+"settings.assets":"Tài nguyên",
 "settings.toggleTitle":"Cài đặt: nguồn dữ liệu, tốc độ, bubble text",
 "settings.viewingAsOthers":"Đang xem như người khác (mức {level})",
 "settings.othersLevel.basic":"Cơ bản",
