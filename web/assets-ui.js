@@ -12,9 +12,6 @@ import { Detail } from './assets-ui-detail.js';
 const { useEffect, useMemo, useRef, useState } = React;
 const L = AssetsLogic,
   R = AssetsRegistry;
-// The box a card's preview fits in (css px): the zoom goes down from the chosen one until the item fits.
-const CARD_W = 188,
-  CARD_H = 124;
 const FILTER_TAGS = ['season', 'event', 'night', 'animated', 'state', 'catalogue-only'];
 const CARD_TAGS = ['season', 'event', 'animated', 'state', 'catalogue-only'];
 const PICKS = new Map();
@@ -218,8 +215,6 @@ function Rail({ s, set, counts }) {
 // ---- grid ----
 function Card({ e, s, controls, onOpen }) {
   const cat = R.cat(e.cat),
-    f = AssetsPaint.frameOf(e),
-    zoom = AssetsPaint.fitZoom(f, CARD_W, CARD_H, s.zoom),
     n = L.variantCount(e),
     name = e.name();
   return h(
@@ -227,7 +222,7 @@ function Card({ e, s, controls, onOpen }) {
     {
       className: 'as-card' + (s.id === e.id ? ' on' : ''),
       href: hrefOf(s, { id: e.id, pick: {} }),
-      style: { '--accent': cat.accent, '--cell': 4 * zoom + 'px' },
+      style: { '--accent': cat.accent },
       'data-id': e.id,
       onClick: ev => {
         if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button) return;
@@ -238,7 +233,8 @@ function Card({ e, s, controls, onOpen }) {
     h(
       'div',
       { className: 'as-card-stage' },
-      h(Preview, { entry: e, pick: firstPick(e), controls, zoom, fps: 15 }),
+      // the chosen zoom, or less when the item would not fit the card (a scene card is shrunk to fit)
+      h(Preview, { entry: e, pick: firstPick(e), controls, fit: s.zoom, fps: 15 }),
       n > 1 && h('span', { className: 'as-count', title: tr('assets.variants', { n }) }, '×' + n),
     ),
     h(
@@ -339,6 +335,14 @@ export function AssetsApp() {
     const card = document.querySelector(`.as-card[data-id="${next.id}"]`);
     if (card) card.scrollIntoView({ block: 'nearest' });
   };
+  // Closing the drawer (Esc, its close button, the grab handle) gives the focus back to the item's card, or to the
+  // search box when a filter hides it.
+  const close = () => {
+    const card = sel && document.querySelector(`.as-card[data-id="${sel.id}"]`);
+    set({ id: null, pick: {} });
+    if (card) card.focus();
+    else if (searchRef.current) searchRef.current.focus();
+  };
   useEffect(() => {
     const onKey = e => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target && e.target.tagName) || '');
@@ -346,9 +350,7 @@ export function AssetsApp() {
         e.preventDefault();
         if (searchRef.current) searchRef.current.focus();
       } else if (e.key === 'Escape' && sel) {
-        set({ id: null, pick: {} });
-        const card = document.querySelector(`.as-card[data-id="${sel.id}"]`);
-        if (card) card.focus();
+        close();
       } else if (sel && !typing && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         e.preventDefault();
         step(e.key === 'ArrowLeft' ? -1 : 1);
@@ -374,7 +376,7 @@ export function AssetsApp() {
           set,
           controls,
           narrow,
-          onClose: () => set({ id: null, pick: {} }),
+          onClose: close,
           onStep: ring && ring.length > 1 ? step : null,
           position: ring ? [ring.indexOf(sel) + 1, ring.length] : null,
         }),

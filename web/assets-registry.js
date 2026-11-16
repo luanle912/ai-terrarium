@@ -45,6 +45,7 @@
 // tr() keys to all seven tables in web/i18n/ as one block.
 import { tr } from './i18n.js';
 import { AssetsLogic } from './assets-logic.js';
+import { SeasonTree } from './season-tree.js';
 import { OFFICE } from './assets-cat-office.js';
 import { PANTRY } from './assets-cat-pantry.js';
 import { ANIMALS } from './assets-cat-animals.js';
@@ -121,6 +122,15 @@ function check(e) {
   if (!WHERE[e.where]) return e.id + ': unknown where ' + e.where;
   if (!Array.isArray(e.source) || !e.source.length) return e.id + ': needs a source';
   if ((e.uses || []).some(u => !AssetsLogic.SCENE.includes(u))) return e.id + ': unknown control in uses';
+  const w = e.when;
+  if (w !== undefined) {
+    if (!w || typeof w !== 'object') return e.id + ': bad when';
+    if (w.seasons && (!Array.isArray(w.seasons) || w.seasons.some(k => !AssetsLogic.CHOICES.season.includes(k))))
+      return e.id + ': unknown season in when';
+    if (w.event && (typeof w.event.key !== 'string' || !AssetsLogic.CHOICES.event.includes(w.event.level)))
+      return e.id + ': bad event in when';
+    if (w.holiday && !SeasonTree.SEASONS[w.holiday]) return e.id + ': unknown holiday in when';
+  }
   for (const a of e.axes || [])
     if (!a.id || typeof a.label !== 'function' || !Array.isArray(a.values) || !a.values.length)
       return e.id + ': bad axis ' + a.id;
@@ -175,4 +185,4 @@ register(OUTDOOR);
 register(ISLAND_SKY);
 register(WORLD);
 
-export const AssetsRegistry = { CATS, TAGS, TAG_LABEL, WHERE, entries, byId, cat, register, problems };
+export const AssetsRegistry = { CATS, TAGS, TAG_LABEL, WHERE, entries, byId, cat, check, register, problems };

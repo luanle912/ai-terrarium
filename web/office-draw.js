@@ -33,7 +33,7 @@ import {
   mix,
   zoneAt,
 } from './office-scene.js';
-import { shade, text3 } from './office-util.js';
+import { isCold, officeG, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 // Drawing the office: sky, camera, the floor, walls, planters, pantry and desks.
 // The night tint over event trees, in 1/50 steps of its strength (built once, no string per frame).
@@ -252,23 +252,8 @@ mixin(
           f: () => this.drawEventTree(ctx, d, holiday, t, k, dusk),
         });
       }
-      const poly = (pts, fill, stroke) => {
-        ctx.beginPath();
-        pts.forEach((p, i) =>
-          i ? ctx.lineTo(Math.round(p[0]), Math.round(p[1])) : ctx.moveTo(Math.round(p[0]), Math.round(p[1])),
-        );
-        ctx.closePath();
-        if (fill) {
-          ctx.fillStyle = fill;
-          ctx.fill();
-        }
-        const s = stroke === undefined ? th.stroke : stroke;
-        if (s) {
-          ctx.strokeStyle = s;
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
-      };
+      const G = officeG(ctx, P, th),
+        { poly, box, rect } = G;
       {
         // The plinth: a soft shadow on the lawn around it, then its two visible stone faces and a lit top lip.
         const WT_ = 0.35,
@@ -324,18 +309,10 @@ mixin(
             else step(s.x, s.x + s.len, H + a, H + b, zt, top);
           }
       }
-      const box = (x, y, w, hh, z0, z1, top, l, r) => {
-        poly([P(x, y + hh, z0), P(x + w, y + hh, z0), P(x + w, y + hh, z1), P(x, y + hh, z1)], l || shade(top, -22));
-        poly([P(x + w, y, z0), P(x + w, y + hh, z0), P(x + w, y + hh, z1), P(x + w, y, z1)], r || shade(top, -38));
-        poly([P(x, y, z1), P(x + w, y, z1), P(x + w, y + hh, z1), P(x, y + hh, z1)], top);
-      };
-      const rect = (x, y, w, hh, col) => {
-        ctx.fillStyle = col;
-        ctx.fillRect(Math.round(x), Math.round(y), w, hh);
-      };
-      // cold: breath shows (deep enough snow, daylight, motion allowed)
-      const cold = SnowLogic.depth(snow) >= 2 && df >= 0.6 && !(env && env.reduced),
-        G = { ctx, poly, box, rect, th, t, df, ev, cold };
+      G.t = t;
+      G.df = df;
+      G.ev = ev;
+      G.cold = isCold(snow, df, env);
       this.drawPrints(G, this.printNow || 0);
       for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
       this.critterItems(G, behind, true, dfB);

@@ -1,7 +1,7 @@
 // The /assets catalogue: the Christmas event. Santa by the tree, his sleigh and the parcels it drops, the elves and
 // the pile of presents they make (critter sprites, web/critter-sprites.js, through the office's own methods), the
-// strings of lights (web/office-draw-xmas.js), the candy canes by the lamps (web/island-art-xmas.js), and the
-// landmark: Notre-Dame of Saigon and the statue with the crib before it, baked by web/island-art-cathedral.js and
+// strings of lights (web/office-draw-xmas.js; the candy canes by the lamps are in outdoor), and the landmark:
+// Notre-Dame of Saigon and the statue with the crib before it, baked by web/island-art-cathedral.js and
 // web/island-art-cathedral-yard.js and lit by web/office-draw-cathedral.js. The pieces that change with the event's
 // level follow the page's Event control; with the event off they show its last level, so they are never empty.
 import { tr } from './i18n.js';
@@ -12,10 +12,9 @@ import { EventCritters } from './event-critters.js';
 import { EventLandmark } from './event-landmark.js';
 import { PILE } from './office-draw-critters.js';
 import { STRINGS, drawString, glowAt } from './office-draw-xmas.js';
-import { drawCandyCane } from './island-art-xmas.js';
 import { drawCathedral } from './island-art-cathedral.js';
 import { drawOurLady } from './island-art-cathedral-yard.js';
-import { night } from './island-art.js';
+import { eventTone } from './sky-island.js';
 
 const axis = (id, label, values) => ({ id, label, values });
 const dfB = view => Math.round(view.env.df * 10);
@@ -23,11 +22,11 @@ const XMAS = level => ({ key: 'christmas', level });
 // The event's level an env shows: the page's Event control, or the full event (level 3) while it is off.
 const DEFAULT_LEVEL = 3;
 const levelOf = env => env.event || DEFAULT_LEVEL;
-// The outdoor Christmas pieces keep more of their colour after dark than the lawn (web/sky-island.js renderProps).
+// The outdoor Christmas pieces' colours (web/sky-island.js eventTone), one function per daylight.
 const TONES = new Map();
 const tonesOf = df => {
   let T = TONES.get(df);
-  if (!T) TONES.set(df, (T = c => night(c, 1 - (1 - df) * 0.55)));
+  if (!T) TONES.set(df, (T = eventTone(df)));
   return T;
 };
 // One sprite of a critter from the office's cache (light, facing), its feet on (ox, oy) as drawCritter stands it.
@@ -126,7 +125,7 @@ const GIFT_PILE = {
   },
 };
 
-// ---- lights and canes ----
+// ---- the strings of lights ----
 // One string of each kind the office hangs (a dozen bulbs of the long one under the back wall's cap), laid out by
 // EventLogic.lightString in the scene and shown from its first bulb.
 const atOf = (s, n) => s && (n ? s.at.subarray(0, n * 2) : s.at);
@@ -166,20 +165,6 @@ const STRING_LIGHTS = {
     ctx.translate(view.ox - at[0], view.oy - at[1]);
     drawString(ctx, at, t, glow, false, glow > 0.01);
     ctx.restore();
-  },
-};
-const CANE_AT = { x: 0, y: 0 };
-const CANDY_CANE = {
-  id: 'event.candy-cane',
-  cat: 'event',
-  name: () => tr('assets.item.event.candy-cane'),
-  when: { event: XMAS(2) },
-  where: 'lawn',
-  source: [{ file: 'web/island-art-xmas.js', fn: 'drawCandyCane' }],
-  uses: ['light'],
-  draw(ctx, view) {
-    const s = AssetsStage.stage(ctx, view);
-    drawCandyCane(s.pt, s.PG, tonesOf(view.env.df), CANE_AT);
   },
 };
 
@@ -254,4 +239,4 @@ const OUR_LADY = {
   },
 };
 
-export const EVENT = [SANTA, SLEIGH, PARCEL, ELF, GIFT_PILE, STRING_LIGHTS, CANDY_CANE, CATHEDRAL, OUR_LADY];
+export const EVENT = [SANTA, SLEIGH, PARCEL, ELF, GIFT_PILE, STRING_LIGHTS, CATHEDRAL, OUR_LADY];

@@ -4,8 +4,9 @@
 // winter. The lotus, the duckweed and the stepping stones only exist in the lake's bake and life, so they are scene
 // cards cut from the baked island (summer by default; in winter the lake freezes and they go, as in the game).
 import { tr } from './i18n.js';
-import { AssetsScene, AssetsStage } from './assets-stage.js';
-import { drawBench, drawLamp, drawRock, night } from './island-art.js';
+import { AssetsScene } from './assets-scene.js';
+import { drawBench, drawLamp, drawRock } from './island-art.js';
+import { eventTone } from './sky-island.js';
 import { CANE_EXT, drawCandyCane } from './island-art-xmas.js';
 import { drawPavilion, PAVILION_EXT } from './island-art-lake.js';
 import { drawSnowman, SNOWMAN_EXT } from './island-art-season.js';
@@ -71,13 +72,8 @@ const LAMP = {
     ctx.restore();
   },
 };
-// The event's pieces keep more of their colour after dark than the lawn (web/sky-island.js renderProps).
-let caneDf = 1;
-const caneT = c => night(c, 1 - (1 - caneDf) * 0.55);
-const paintCane = s => {
-  caneDf = s.env.df;
-  drawCandyCane(s.pt, s.PG, caneT, LAMP0);
-};
+// The event's pieces keep more of their colour after dark than the lawn (web/sky-island.js eventTone).
+const paintCane = s => drawCandyCane(s.pt, s.PG, eventTone(s.env.df), LAMP0);
 const CANE = {
   id: 'outdoor.candy-cane',
   cat: 'outdoor',
@@ -156,9 +152,9 @@ const SNOWMAN = {
 };
 
 // ---- the lake's lotus, duckweed and stepping stones: scene cards ----
-const LOTUS_BED = { x: 586, y: 584, w: 64, h: 40 },
-  WEED_BED = { x: 392, y: 626, w: 72, h: 46 },
-  STONES = { x: 584, y: 606, w: 96, h: 76 };
+const LOTUS_BED = AssetsScene.region(586, 584, 64, 40),
+  WEED_BED = AssetsScene.region(392, 626, 72, 46),
+  STONES = AssetsScene.region(584, 606, 96, 76);
 const lakeCard = (key, name, region, source, more) => ({
   id: 'outdoor.' + key,
   cat: 'outdoor',
@@ -187,4 +183,22 @@ const STEPPING = lakeCard(
   },
 );
 
-export const OUTDOOR = [ROCK, LAMP, CANE, BENCH, PAVILION, SNOWMAN, LOTUS, DUCKWEED, STEPPING];
+// The garden paths' flat stones (island.paths, SkyLogic.lawnPaths) are painted inside the island's bake with the worn
+// strip under them, not by a painter of their own: a scene card of the path down the east side of the office.
+const PATH_AT = AssetsScene.region(636, 470, 144, 64);
+const PATH_STONES = {
+  id: 'outdoor.path-stones',
+  cat: 'outdoor',
+  name: () => tr('assets.item.outdoor.path-stones'),
+  tags: ['animated'],
+  when: { always: true },
+  where: 'lawn',
+  source: [
+    { file: 'web/sky-island.js', fn: 'renderIsland' },
+    { file: 'web/island-land.js', fn: 'lawnPaths' },
+  ],
+  uses: ['light', 'season', 'snow', 'event'],
+  draw: (ctx, view, t) => AssetsScene.islandScene(ctx, view, t, PATH_AT),
+};
+
+export const OUTDOOR = [ROCK, LAMP, CANE, BENCH, PAVILION, SNOWMAN, LOTUS, DUCKWEED, STEPPING, PATH_STONES];

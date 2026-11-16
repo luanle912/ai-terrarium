@@ -13,8 +13,6 @@ const { useEffect, useMemo, useRef, useState } = React;
 const L = AssetsLogic,
   R = AssetsRegistry;
 const ZOOMS = ['fit', 1, 2, 3, 4, 6];
-const CELL_W = 104,
-  CELL_H = 76;
 const SEASON_NAME = {
   spring: () => tr('season.spring'),
   summer: () => tr('season.summer'),
@@ -25,11 +23,14 @@ const EVENT_NAME = { christmas: () => tr('assets.event.christmas') };
 
 // When an item shows up, read off its structured `when` (and the game's own calendars), one line per fact.
 function whenLines(e) {
-  const w = e.when,
+  const w = e.when || {},
     out = [];
   if (e.catalogueOnly) out.push(tr('assets.when.catalogue'));
-  if (w.seasons) out.push(tr('assets.when.seasons', { list: w.seasons.map(k => SEASON_NAME[k]()).join(', ') }));
-  if (w.event) {
+  if (Array.isArray(w.seasons))
+    out.push(
+      tr('assets.when.seasons', { list: w.seasons.map(k => (SEASON_NAME[k] ? SEASON_NAME[k]() : k)).join(', ') }),
+    );
+  if (w.event && w.event.key) {
     const win = L.eventWindow(w.event.key, w.event.level),
       name = (EVENT_NAME[w.event.key] || (() => w.event.key))();
     out.push(tr('assets.when.event', { name, level: w.event.level, span: win ? L.span(win) : '' }));
@@ -70,10 +71,6 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
     [zoomMode, setZoomMode] = useState('fit'),
     [copied, setCopied] = useState(false),
     ref = useRef(null);
-  const f = AssetsPaint.frameOf(e),
-    boxW = narrow ? Math.max(200, (typeof innerWidth !== 'undefined' ? innerWidth : 360) - 40) : 404,
-    fit = AssetsPaint.fitZoom(f, boxW, narrow ? 220 : 248, 8),
-    zoom = zoomMode === 'fit' ? fit : zoomMode;
   const env = AssetsStage.envOf(L.sceneOf(e, controls));
   const info = useMemo(() => AssetsPaint.inspect(e, { env, pick }), [e, env, pick]);
   const cells = useMemo(() => L.combos(e, controls), [e, controls]);
@@ -96,10 +93,23 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
     setZoomMode('fit');
     if (ref.current) ref.current.focus({ preventScroll: true });
   }, [e.id]);
+  // a zoom larger than the stage opens on the middle of the item
+  const stageRef = useRef(null);
+  useEffect(() => {
+    const el = stageRef.current;
+    if (el)
+      requestAnimationFrame(() => {
+        el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+        el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+      });
+  }, [zoomMode, e.id]);
+  const timer = useRef(0);
+  useEffect(() => () => clearTimeout(timer.current), []);
   const copy = () => {
     const done = () => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1600);
     };
     try {
       navigator.clipboard.writeText(location.href).then(done, done);
@@ -163,8 +173,23 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
     ),
     h(
       'div',
-      { className: 'as-stage', style: { '--cell': 4 * zoom + 'px' } },
-      h(Preview, { entry: e, pick, controls, zoom, fps: 60, className: 'as-big' }),
+      { className: 'as-stage' },
+      // Fit: the item fills the stage; at ×N it is drawn that large and the stage scrolls
+      h(
+        'div',
+        { className: 'as-stage-in', ref: stageRef },
+        h(Preview, {
+          key: zoomMode === 'fit' ? 'fit' : 'zoom',
+          entry: e,
+          pick,
+          controls,
+          zoom: zoomMode === 'fit' ? 0 : zoomMode,
+          fit: zoomMode === 'fit' ? 8 : 0,
+          inset: 14,
+          fps: 30,
+          className: 'as-big',
+        }),
+      ),
       h(
         'div',
         { className: 'as-zoom' },
@@ -212,8 +237,7 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
         'div',
         { className: 'as-cells' },
         cells.map((c, i) => {
-          const label = cellLabel(e, c, varying),
-            z = AssetsPaint.fitZoom(f, CELL_W - 8, CELL_H - 8, 4);
+          const label = cellLabel(e, c, varying);
           return h(
             'button',
             {
@@ -221,7 +245,6 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
               type: 'button',
               className: 'as-cell' + (isCurrent(c) ? ' on' : ''),
               title: label,
-              style: { '--cell': 4 * z + 'px' },
               onClick: () =>
                 set({
                   pick: c.pick,
@@ -231,7 +254,7 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
                   event: c.controls.event,
                 }),
             },
-            h(Preview, { entry: e, pick: c.pick, controls: c.controls, zoom: z, still: true }),
+            h(Preview, { entry: e, pick: c.pick, controls: c.controls, fit: 4, inset: 2, still: true }),
             h('span', { className: 'as-cell-l' }, label),
           );
         }),

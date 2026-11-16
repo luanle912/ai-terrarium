@@ -137,21 +137,21 @@ const THEME_AXIS = axis('theme', () => tr('assets.axis.theme'), [
   { id: 'light', label: () => tr('assets.theme.light') },
   { id: 'blueprint', label: () => tr('assets.theme.blueprint') },
 ]);
-// Runs fn with the blueprint theme in G when the pick asks for it, putting the scene's own theme back after.
-function themed(s, view, fn) {
-  const th = s.G.th;
+// The stage of the draw under way and what it shows: the office methods below run in scene() through fixed functions,
+// so a card drawn frame after frame makes no closures. A stage starts every draw with the scene's own theme and a
+// clean host (AssetsStage.stage), so nothing set here outlives the draw.
+const NOW = { s: null, own: null };
+function aim(ctx, view, t) {
+  const s = (NOW.s = AssetsStage.stage(ctx, view, t));
   if (view.pick.theme === 'blueprint') s.G.th = THEMES.blueprint;
-  try {
-    fn();
-  } finally {
-    s.G.th = th;
-  }
+  return s;
 }
 // A glass wall along x, between two zones of desks; owned, its cap takes the department's colour.
 const SEG = SEGS.find(sg => !sg.v && sg.zi < 4),
   TEAM_DEPTS = new Map([['team', { color: DEPT_PAL[2] }]]),
   OWN_TEAM = ['team', 'team', 'team', 'team'],
   OWN_FREE = [null, null, null, null];
+const drawSeg = () => NOW.s.host.drawSeg(NOW.s.G, SEG, NOW.own);
 const GLASS = {
   id: 'office.glass-wall',
   cat: 'office',
@@ -169,13 +169,15 @@ const GLASS = {
   ],
   uses: ['light'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t);
+    const s = aim(ctx, view, t);
     s.host.depts = TEAM_DEPTS;
-    const own = view.pick.owner === 'free' ? OWN_FREE : OWN_TEAM;
-    themed(s, view, () => s.scene(SEG.x + 0.5, SEG.Y, 0, () => s.host.drawSeg(s.G, SEG, own)));
+    NOW.own = view.pick.owner === 'free' ? OWN_FREE : OWN_TEAM;
+    s.scene(SEG.x + 0.5, SEG.Y, 0, drawSeg);
   },
 };
 // The desk the office drew before the kit desk (still in the code, no longer called): who sits there, if anyone.
+const DESK = DESKS[0];
+const drawDesk = () => NOW.s.host.drawDesk(NOW.s.G, DESK, 0);
 const OCCUPANTS = ['working', 'thinking', 'permission', 'error', 'done', 'idle'];
 const SITTERS = {
   vacant: [],
@@ -212,14 +214,9 @@ const OLD_DESK = {
   ],
   uses: ['light'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
-      d = DESKS[0];
+    const s = aim(ctx, view, t);
     s.host.agents = SITTERS[view.pick.occupant] || SITTERS.vacant;
-    try {
-      themed(s, view, () => s.scene(d.gx + 1, d.gy + 1, 0, () => s.host.drawDesk(s.G, d, 0)));
-    } finally {
-      s.host.agents = SITTERS.vacant;
-    }
+    s.scene(DESK.gx + 1, DESK.gy + 1, 0, drawDesk);
   },
 };
 

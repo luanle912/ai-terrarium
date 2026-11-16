@@ -1,6 +1,7 @@
 import { tr } from './i18n.js';
 import { SkyLogic } from './sky-logic.js';
 import { RestroomLogic } from './restroom-logic.js';
+import { SnowLogic } from './snow-logic.js';
 import { BLOCK, EDGE, H, ISLAND, LAWN_WALK, PAVED, STAIRS, W, WC, WC_WALK } from './office-scene.js';
 // Shared look-up tables and small helpers of the office page.
 export const SHIRT = [
@@ -63,6 +64,41 @@ export const shade = (hh, p) => {
     ((1 << 24) + (c((n >> 16) + p) << 16) + (c(((n >> 8) & 255) + p) << 8) + c((n & 255) + p)).toString(16).slice(1)
   );
 };
+// The G the office's draw methods take, for canvas ctx in projection P with theme th: poly (outlined in G.th's stroke
+// unless told otherwise), box (an iso box with shaded sides) and rect, plus the clock, daylight, the event and the
+// cold, which the caller sets each frame (web/office-draw.js, and the /assets page's web/assets-stage.js).
+export function officeG(ctx, P, th) {
+  const G = { ctx, poly: null, box: null, rect: null, th, t: 0, df: 1, ev: null, cold: false };
+  const poly = (G.poly = (pts, fill, stroke) => {
+    ctx.beginPath();
+    pts.forEach((p, i) =>
+      i ? ctx.lineTo(Math.round(p[0]), Math.round(p[1])) : ctx.moveTo(Math.round(p[0]), Math.round(p[1])),
+    );
+    ctx.closePath();
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    const s = stroke === undefined ? G.th.stroke : stroke;
+    if (s) {
+      ctx.strokeStyle = s;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  });
+  G.box = (x, y, w, hh, z0, z1, top, l, r) => {
+    poly([P(x, y + hh, z0), P(x + w, y + hh, z0), P(x + w, y + hh, z1), P(x, y + hh, z1)], l || shade(top, -22));
+    poly([P(x + w, y, z0), P(x + w, y + hh, z0), P(x + w, y + hh, z1), P(x + w, y, z1)], r || shade(top, -38));
+    poly([P(x, y, z1), P(x + w, y, z1), P(x + w, y + hh, z1), P(x, y + hh, z1)], top);
+  };
+  G.rect = (x, y, w, hh, col) => {
+    ctx.fillStyle = col;
+    ctx.fillRect(Math.round(x), Math.round(y), w, hh);
+  };
+  return G;
+}
+// Cold enough for breath to show: snow lying deep enough, daylight, and motion allowed (env.reduced off).
+export const isCold = (snow, df, env) => SnowLogic.depth(snow) >= 2 && df >= 0.6 && !(env && env.reduced);
 // Màu của bàn trống: khử bão hoà rồi chỉnh độ sáng. Tính sẵn bằng màu thay cho ctx.filter — filter trên canvas
 // bắt Chrome dựng một layer riêng cho từng lệnh vẽ và kéo cả trang xuống ~1 FPS.
 export const greyHex = (hh, sat, bri) => {

@@ -113,21 +113,41 @@ export function Seg({ label, value, options, onChange, compact, className }) {
 export const TagChip = ({ tag, label }) => h('span', { className: 'as-tag as-tag-' + tag }, label);
 
 // A preview canvas of one variant of an entry. When the draw throws it turns into a "can't draw" tile whose title
-// carries the error. fps 15 in the grid; `still` for the variants grid (painted once per change).
-export function Preview({ entry, pick, controls, zoom, fps, still, className }) {
+// carries the error. fps 15 in the grid; `still` for the variants grid (painted once per change). With `fit` (the
+// largest zoom to use) it fills its box and fits the item in it, `inset` px clear of the edges (AssetsPaint.fitZoom:
+// a whole zoom when it fits at ×1, else shrunk); otherwise it is drawn at `zoom` at its own size.
+export function Preview({ entry, pick, controls, zoom, fit, inset = 6, fps, still, className }) {
   const ref = useRef(null),
+    box = useRef(null),
     slot = useRef(null),
-    [err, setErr] = useState(null);
+    [err, setErr] = useState(null),
+    [size, setSize] = useState(null);
   useEffect(() => {
     slot.current = AssetsPaint.attach(ref.current, { fps, still, onError: e => setErr(e) });
-    return () => AssetsPaint.detach(slot.current);
+    const measure = () => {
+      const b = box.current;
+      if (b)
+        setSize(s => (s && s[0] === b.clientWidth && s[1] === b.clientHeight ? s : [b.clientWidth, b.clientHeight]));
+    };
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (ro) ro.observe(box.current);
+    return () => {
+      AssetsPaint.detach(slot.current);
+      if (ro) ro.disconnect();
+    };
   }, []);
+  const z = fit
+    ? size && size[0] > 0 && size[1] > 0
+      ? AssetsPaint.fitZoom(AssetsPaint.frameOf(entry, pick), size[0] - 2 * inset, size[1] - 2 * inset, fit)
+      : 0
+    : zoom;
   useEffect(() => {
-    if (AssetsPaint.setSlot(slot.current, entry, pick, controls, zoom)) setErr(null);
-  }, [entry, pick, controls, zoom]);
+    if (z > 0 && AssetsPaint.setSlot(slot.current, entry, pick, controls, z)) setErr(null);
+  }, [entry, pick, controls, z]);
   return h(
     'div',
-    { className: 'as-preview' + (className ? ' ' + className : '') },
+    { className: 'as-preview' + (fit ? ' as-fit' : '') + (className ? ' ' + className : ''), ref: box },
     h('canvas', { ref, className: 'as-canvas', hidden: !!err }),
     err &&
       h(

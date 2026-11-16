@@ -1,6 +1,6 @@
 // Painting the /assets previews: one loop for every canvas on the page. A slot is a canvas showing one variant of one
 // entry. Only slots on screen are painted (IntersectionObserver); a still entry is painted again only when what it
-// shows changes, a moving one at most `fps` times a second (15 in the grid, every frame in the drawer) while motion
+// shows changes, a moving one at most `fps` times a second (15 in the grid, 30 in the drawer) while motion
 // is on; nothing runs while the tab is hidden. A draw that throws marks its slot broken instead of stopping the
 // loop. The loop itself allocates nothing per frame.
 import { AssetsLogic } from './assets-logic.js';
@@ -18,18 +18,23 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 // ---- the frame an entry is drawn in ----
 // Measured, not declared: the box everything the entry draws covers (with the game's own code, on a counting canvas)
 // over a spread of its variants and two moments, so the frame holds every variant without jumping between them.
+// An entry that sweeps its axes (a person: poses as different as lying asleep and standing) is framed per pick, over
+// the scenes it reacts to, so each pose fills its card instead of sitting small in the union of them all.
 const FRAMES = new Map();
-function frameOf(e) {
-  let f = FRAMES.get(e.id);
+function frameOf(e, pick) {
+  const own = e.sweep && pick ? AssetsLogic.fixPick(e, pick) : null,
+    key = own ? e.id + '|' + JSON.stringify(own) : e.id;
+  let f = FRAMES.get(key);
   if (f) return f;
-  const cells = AssetsLogic.combos(e, AssetsLogic.DEFAULTS),
+  const all = AssetsLogic.combos(e, AssetsLogic.DEFAULTS),
+    cells = own ? AssetsLogic.combos({ ...e, axes: [], sweep: null }, AssetsLogic.DEFAULTS) : all,
     step = Math.max(1, Math.floor(cells.length / 12)),
     rec = AssetsStage.recordingCtx(),
     view = { ox: 0, oy: 0, env: null, pick: null };
   for (let i = 0; i < cells.length; i += step)
     for (const t of [0.4, STILL_T, 2.6]) {
       view.env = AssetsStage.envOf(AssetsLogic.sceneOf(e, cells[i].controls));
-      view.pick = AssetsLogic.fixPick(e, cells[i].pick);
+      view.pick = own || AssetsLogic.fixPick(e, cells[i].pick);
       try {
         e.draw(rec, view, t);
       } catch (err) {
@@ -40,11 +45,16 @@ function frameOf(e) {
   f = b
     ? { x0: b.x0 - PAD, y0: b.y0 - PAD, w: b.x1 - b.x0 + 2 * PAD, h: b.y1 - b.y0 + 2 * PAD }
     : { x0: -16, y0: -16, w: 32, h: 32 };
-  FRAMES.set(e.id, f);
+  FRAMES.set(key, f);
   return f;
 }
-// The largest whole zoom (at most `max`) at which a frame fits a box of css px.
-const fitZoom = (f, boxW, boxH, max) => Math.max(1, Math.min(max, Math.floor(Math.min(boxW / f.w, boxH / f.h))));
+// The zoom at which a frame fits a box of css px, its aspect kept: the largest whole one (at most `max`) when it fits
+// at ×1 or more, otherwise the fraction that shrinks it to fit.
+function fitZoom(f, boxW, boxH, max) {
+  const fit = Math.min(boxW / f.w, boxH / f.h);
+  if (!(fit > 0)) return 1;
+  return fit >= 1 ? Math.min(max, Math.floor(fit)) : fit;
+}
 
 // What one variant looks like on the counting canvas: its palette (most-drawn solid colours) and its size in px.
 function inspect(e, view, t = STILL_T) {
@@ -76,6 +86,7 @@ function attach(canvas, opts = {}) {
     view: { ox: 0, oy: 0, env: null, pick: {} },
     frame: null,
     k: 1,
+    zoom: 0,
     fps: opts.fps || 15,
     still: !!opts.still,
     onError: opts.onError || null,
@@ -114,21 +125,32 @@ const samePick = (a, b) => {
   return true;
 };
 // Shows entry e in the scene of `controls` (only the controls it uses reach it) with `pick`, at `zoom` css px per
-// pixel; the canvas gets the screen's own resolution so it stays sharp.
+// pixel (a fraction shrinks it); the canvas gets the screen's own resolution so it stays sharp, and below ×1 it is
+// drawn at one device px per pixel or more and shrunk by css (pixelated), its aspect kept.
 function setSlot(slot, e, pick, controls, zoom) {
-  const f = frameOf(e),
+  const p = AssetsLogic.fixPick(e, pick),
+    f = frameOf(e, p),
     dpr = (typeof devicePixelRatio !== 'undefined' && devicePixelRatio) || 1,
     k = Math.max(1, Math.round(zoom * dpr)),
-    env = AssetsStage.envOf(AssetsLogic.sceneOf(e, controls)),
-    p = AssetsLogic.fixPick(e, pick);
+    env = AssetsStage.envOf(AssetsLogic.sceneOf(e, controls));
   // the same variant in the same scene at the same size: nothing to paint again (a still card stays as it is)
-  if (slot.entry === e && slot.view.env === env && slot.k === k && samePick(slot.view.pick, p)) return false;
-  if (slot.k !== k || slot.frame !== f) {
+  if (
+    slot.entry === e &&
+    slot.view.env === env &&
+    slot.zoom === zoom &&
+    slot.frame === f &&
+    samePick(slot.view.pick, p)
+  )
+    return false;
+  if (slot.k !== k || slot.frame !== f || slot.zoom !== zoom) {
+    const css = zoom >= 1 ? k / dpr : zoom;
     slot.canvas.width = f.w * k;
     slot.canvas.height = f.h * k;
-    slot.canvas.style.width = (f.w * k) / dpr + 'px';
-    slot.canvas.style.height = (f.h * k) / dpr + 'px';
+    slot.canvas.style.width = f.w * css + 'px';
+    slot.canvas.style.height = f.h * css + 'px';
+    slot.canvas.style.setProperty('--cell', 4 * css + 'px');
     slot.k = k;
+    slot.zoom = zoom;
     slot.frame = f;
   }
   slot.entry = e;

@@ -85,18 +85,13 @@ const RESTROOM = {
   draw(ctx, view, t) {
     const s = AssetsStage.stage(ctx, view, t),
       host = s.host,
-      busy = view.pick.state === 'busy',
-      { agents, propLit } = host;
+      busy = view.pick.state === 'busy';
+    // (the stage hands the next draw a clean host: nothing to put back)
     host.agents = busy ? BUSY_WC : NOBODY;
     host.propLit = busy ? TAP : null;
-    try {
-      s.scene(WC_MID[0], WC_MID[1], 0, () =>
-        paint(s, busy ? SHOWN_WC : NOBODY, items => host.restroomItems(s.G, items, view.env.snow)),
-      );
-    } finally {
-      host.agents = agents;
-      host.propLit = propLit;
-    }
+    s.scene(WC_MID[0], WC_MID[1], 0, () =>
+      paint(s, busy ? SHOWN_WC : NOBODY, items => host.restroomItems(s.G, items, view.env.snow)),
+    );
   },
 };
 

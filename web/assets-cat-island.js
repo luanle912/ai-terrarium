@@ -6,7 +6,8 @@
 // stars, cloud bands and sea of mist, the six weathers with what falls in front, and the far islands
 // (web/sky-mist.js).
 import { tr } from './i18n.js';
-import { AssetsScene, AssetsStage } from './assets-stage.js';
+import { AssetsStage } from './assets-stage.js';
+import { AssetsScene } from './assets-scene.js';
 import { IslandLife } from './island-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SkyRender } from './sky-render.js';
@@ -21,12 +22,12 @@ const ALL = ['light', 'season', 'snow', 'event'];
 // ---- the island: scene cards ----
 // Regions of the scene, in its px (web/office-scene.js LW × LH, the island's origin at OX, OY).
 const REGION = {
-  shore: { x: 24, y: 380, w: 112, h: 92 },
-  underside: { x: 400, y: 736, w: 140, h: 136 },
-  mountain: { x: 440, y: 34, w: 148, h: 136 },
-  lake: { x: 480, y: 600, w: 160, h: 128 },
-  waterfall: { x: 492, y: 736, w: 112, h: 128 },
-  fall: { x: 520, y: 180, w: 128, h: 96 },
+  shore: AssetsScene.region(24, 380, 112, 92),
+  underside: AssetsScene.region(400, 736, 140, 136),
+  mountain: AssetsScene.region(440, 34, 148, 136),
+  lake: AssetsScene.region(480, 600, 160, 128),
+  waterfall: AssetsScene.region(492, 736, 112, 128),
+  fall: AssetsScene.region(520, 180, 128, 96),
 };
 const islandCard = (key, name, source, more) => ({
   id: 'island.' + key,
@@ -75,7 +76,7 @@ function rainbowOver(ctx, view) {
   IslandLife.drawRainbow(ctx, IslandLife.geometry(ISLAND, PG), IslandLife.rainbowLevel(RAINBOW_ARGS));
   ctx.imageSmoothingEnabled = smooth;
 }
-const RAINBOW_AT = { x: 520, y: 764, w: 144, h: 132 };
+const RAINBOW_AT = AssetsScene.region(520, 764, 144, 132);
 const RAINBOW = islandCard(
   'rainbow',
   () => tr('assets.item.island.rainbow'),
@@ -128,7 +129,8 @@ function skyIn(ctx, view) {
   ctx.rect(0, 0, SKY_W, SKY_H);
   ctx.clip();
 }
-const SKY_USES = ['light'];
+// the far islands in the back sky wear the season's trees and, from the event's second level, its lights
+const SKY_USES = ['light', 'season', 'event'];
 const SKY = {
   id: 'island.sky',
   cat: 'island',

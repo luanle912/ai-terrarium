@@ -8,11 +8,23 @@ import { loadWeb } from './web.mjs'
 import { loadI18n } from './load-i18n.mjs'
 
 const I18n = loadI18n('vi')
+// The office's wall clock shows the time of day (web/decor-wall.js clockDraw): pin "now", so a draw is the same
+// every time it is made.
+const RealDate = Date
+globalThis.Date = class extends RealDate {
+  constructor(...a) {
+    super(...(a.length ? a : [2026, 5, 1, 10, 8, 30]))
+  }
+  static now() {
+    return new RealDate(2026, 5, 1, 10, 8, 30).getTime()
+  }
+}
 globalThis.React ??= { createElement: () => null, Component: class {} }
 // Sprites and glows are painted on canvases of their own: give them counting contexts too.
 let Stage = null
 globalThis.document ??= {
   documentElement: {},
+  addEventListener() {},
   createElement: () => {
     const cv = { width: 0, height: 0 }, ctx = Stage.recordingCtx(cv)
     cv.getContext = () => ctx
@@ -193,7 +205,9 @@ test('every entry is well formed: id, category, name in every language, where, w
 // Add a source here when a category comes in: one line each.
 const SOURCES = [
   ['OfficeDecor.ITEMS', OfficeDecor.ITEMS.map(i => i.key), k => 'office.' + kebab(k)],
-  ['desk screens', ['code', 'read', 'term', 'think', 'perm', 'error', 'done', 'off'], k => ['office.desk', 'screen', k]],
+  // every screen a status shows (OfficeDecor.SCREEN_MAP), 'term' for a Bash tool and 'off' for an empty desk
+  ['desk screens', [...new Set([...Object.values(OfficeDecor.SCREEN_MAP), 'term', 'off'])],
+    k => ['office.desk', 'screen', k]],
   ['usage boards', Object.keys(BOARDS), k => ['office.usage-board', 'variant', k]],
   ['PantryItems.I', Object.keys(PantryItems.I), k => 'pantry.' + k],
   ['PantryItems.ORDER', PantryItems.ORDER, k => 'pantry.' + k],
@@ -216,7 +230,7 @@ const SOURCES = [
     'drawIgloo', 'doghouseLantern', 'drawPile', 'drawString', 'drawCandyCane', 'drawCathedral', 'drawOurLady'],
   k => ({ drawDucks: 'animals.duck', drawFish: 'animals.fish', drawBirds: 'animals.bird', drawFlies: 'animals.firefly',
     drawIgloo: 'animals.igloo', doghouseLantern: 'animals.kennel-lantern', drawPile: 'event.gift-pile',
-    drawString: 'event.string-lights', drawCandyCane: 'event.candy-cane', drawCathedral: 'event.cathedral',
+    drawString: 'event.string-lights', drawCandyCane: 'outdoor.candy-cane', drawCathedral: 'event.cathedral',
     drawOurLady: 'event.our-lady' })[k]],
   // people and rooms (Task 5): the looks (PeopleLogic.STYLE, SKIN), the statuses, the acts, the Christmas outfits
   // and hats, the ways out of the island, the marks over a head, and the two rooms
@@ -267,28 +281,40 @@ function* variants(e) {
   const scenes = dims.reduce((acc, d) => acc.flatMap(s => d.map(([u, v]) => ({ ...s, [u]: v }))), [{ ...L.DEFAULTS }])
   for (const pick of picks) for (const sc of scenes) yield { pick, scene: L.sceneOf(e, sc) }
 }
+// What one variant draws at time t: {drawn, sig}. A draw is the same every time (the counting canvas sees only what
+// is on a sprite now), so the tests below share one look per variant instead of drawing it again.
+const LOOKS = new Map()
 const drawLog = (e, pick, scene, t = 1.25) => {
-  const ctx = AssetsStage.recordingCtx()
-  e.draw(ctx, { ox: 64, oy: 64, env: AssetsStage.envOf(scene), pick }, t)
-  return ctx
+  const key = e.id + '|' + JSON.stringify(pick) + '|' + JSON.stringify(scene) + '|' + t
+  let look = LOOKS.get(key)
+  if (!look) {
+    const ctx = AssetsStage.recordingCtx()
+    e.draw(ctx, { ox: 64, oy: 64, env: AssetsStage.envOf(scene), pick }, t)
+    LOOKS.set(key, (look = { drawn: ctx.drawn, sig: ctx.signature(), signature: () => look.sig }))
+  }
+  return look
+}
+const envKey = scene => {
+  const env = AssetsStage.envOf(scene)
+  return env.df + '|' + env.season + '|' + env.snow + '|' + env.event
 }
 
 test('every entry draws in every variant under every scene it reacts to, without throwing', () => {
   const blank = [], threw = []
-  let n = 0
-  for (const e of ENTRIES)
-    for (const { pick, scene } of variants(e)) {
-      n++
-      const at = `${e.id} ${JSON.stringify(pick)} ${JSON.stringify(scene)}`
-      try {
-        if (drawLog(e, pick, scene).drawn < 1) blank.push(at)
-      } catch (err) {
-        threw.push(at + ': ' + err.message)
-      }
+  // scene by scene, so the island is baked once per scene for all the cards cut from it
+  const jobs = ENTRIES.flatMap(e => [...variants(e)].map(v => ({ e, ...v, env: envKey(v.scene) })))
+  jobs.sort((a, b) => (a.env < b.env ? -1 : a.env > b.env ? 1 : 0))
+  for (const { e, pick, scene } of jobs) {
+    const at = `${e.id} ${JSON.stringify(pick)} ${JSON.stringify(scene)}`
+    try {
+      if (drawLog(e, pick, scene).drawn < 1) blank.push(at)
+    } catch (err) {
+      threw.push(at + ': ' + err.message)
     }
+  }
   assert.deepEqual(threw, [])
   assert.deepEqual(blank, [])
-  assert.ok(n > ENTRIES.length)
+  assert.ok(jobs.length > ENTRIES.length)
 })
 
 test('a control an entry says it uses changes how it looks, for some variant', () => {
@@ -332,4 +358,87 @@ test('the animated tag says whether an entry moves with the clock, in some varia
     if (moves !== e.tags.includes('animated')) wrong.push(`${e.id}: ${moves ? 'moves' : 'still'}`)
   }
   assert.deepEqual(wrong, [])
+})
+
+test('every draw gets a clean host: an entry drawn after another on the same canvas looks as it does alone', () => {
+  // entries that set the host's people, departments, dogs or lit props, or G's theme, for their draw
+  const ids = ['office.glass-wall', 'office.old-desk', 'rooms.restroom', 'animals.kennel', 'people.person',
+    'rooms.smoking', 'office.desk']
+  const varied = e => {
+    const p = L.defaultPick(e)
+    for (const a of e.axes) p[a.id] = a.values[a.values.length - 1].id
+    return p
+  }
+  const scene = { ...L.DEFAULTS, light: 'night', snow: true, season: 'winter' }
+  const sigOf = (ctx, e, pick) => {
+    ctx.reset()
+    e.draw(ctx, { ox: 64, oy: 64, env: AssetsStage.envOf(L.sceneOf(e, scene)), pick }, 1.25)
+    return ctx.signature()
+  }
+  // and a draw that leaves everything set: someone at the first desk, every prop lit, a department, the blueprint
+  const { THEMES } = loadWeb('office-scene'), { PropUse } = loadWeb('prop-use')
+  const LIT = new Float32Array(PropUse.DARK.length).fill(1)
+  const polluter = { id: 'test.polluter', axes: [], uses: [], draw(ctx, view) {
+    const s = AssetsStage.stage(ctx, view)
+    s.host.agents = [{ desk: 0, seated: true, status: 'working', leaving: false, parent: null }]
+    s.host.propLit = LIT
+    s.host.depts = new Map([['team', { color: '#ff00ff' }]])
+    s.G.th = THEMES.blueprint
+  } }
+  // and one that sets nothing and reads it all: the first desk as the office's people and theme leave it
+  const { DESKS } = loadWeb('office-scene')
+  const reader = { id: 'test.reader', axes: [], uses: [], draw(ctx, view, t) {
+    const s = AssetsStage.stage(ctx, view, t)
+    s.scene(DESKS[0].gx + 1, DESKS[0].gy + 1, 0, () => s.host.drawDesk(s.G, DESKS[0], 0))
+  } }
+  const own = { [polluter.id]: polluter, [reader.id]: reader }
+  for (const a of [polluter.id, ...ids])
+    for (const b of [reader.id, ...ids]) {
+      if (a === b) continue
+      const A = own[a] || R.byId(a), B = own[b] || R.byId(b), shared = AssetsStage.recordingCtx()
+      sigOf(shared, A, varied(A))
+      assert.equal(sigOf(shared, B, L.defaultPick(B)), sigOf(AssetsStage.recordingCtx(), B, L.defaultPick(B)),
+        `${b} after ${a}`)
+    }
+})
+
+test('a draw that throws turns its slot into the error tile, tells the page once, and the loop skips it', () => {
+  const { AssetsPaint } = loadWeb('assets-ui-paint')
+  let frame = null, calls = 0
+  const errors = []
+  globalThis.requestAnimationFrame = f => ((frame = f), 1)
+  const boom = { id: 'test.boom', tags: ['animated'], axes: [], uses: [], draw() {
+    calls++
+    throw new Error('boom')
+  } }
+  const canvas = { width: 0, height: 0, style: { setProperty() {} } }, ctx = AssetsStage.recordingCtx(canvas)
+  canvas.getContext = () => ctx
+  try {
+    const slot = AssetsPaint.attach(canvas, { fps: 15, onError: err => errors.push(err.message) })
+    AssetsPaint.setSlot(slot, boom, {}, L.DEFAULTS, 2)
+    calls = 0
+    assert.equal(typeof frame, 'function', 'the loop is woken')
+    frame()
+    assert.equal(calls, 1)
+    assert.equal(slot.broken.message, 'boom')
+    assert.deepEqual(errors, ['boom'])
+    slot.dirty = true
+    frame()
+    assert.equal(calls, 1, 'a broken slot is not drawn again')
+    assert.deepEqual(errors, ['boom'])
+    AssetsPaint.detach(slot)
+  } finally {
+    delete globalThis.requestAnimationFrame
+  }
+})
+
+test('the registry refuses an entry whose `when` names what the game does not have', () => {
+  const ok = { id: 'plants.test-when', cat: 'plants', name: () => 'x', draw() {}, where: 'lawn',
+    source: [{ file: 'web/island-art.js', fn: 'drawBush' }] }
+  assert.equal(R.check(ok), null)
+  assert.equal(R.check({ ...ok, when: { seasons: ['winter'] } }), null)
+  assert.match(R.check({ ...ok, when: { seasons: ['monsoon'] } }), /season/)
+  assert.match(R.check({ ...ok, when: { event: { key: 'christmas', level: 9 } } }), /event/)
+  assert.match(R.check({ ...ok, when: { holiday: 'nope' } }), /holiday/)
+  assert.match(R.check({ ...ok, when: 'always' }), /when/)
 })

@@ -4,7 +4,8 @@
 // the lawn (a scene card cut from the baked island). Bushes and mushrooms pick their look by their tile (hash), so each
 // look here stands on a tile that gives it.
 import { tr } from './i18n.js';
-import { AssetsScene, AssetsStage } from './assets-stage.js';
+import { AssetsStage } from './assets-stage.js';
+import { AssetsScene } from './assets-scene.js';
 import { drawSeasonTree, TREE_EXT } from './island-art-season.js';
 import { drawBush, drawMushroom, night } from './island-art.js';
 import { drawBigTree } from './island-art-xmas.js';
@@ -271,7 +272,7 @@ const MUSHROOM = {
 // ---- the flowers on the lawn: a scene card ----
 // A patch of the back lawn where flowers grow (fewer in a season with look.flowers below 1, more in spring, none
 // under the snow), cut from the baked island.
-const FLOWER_BED = { x: 848, y: 212, w: 96, h: 60 };
+const FLOWER_BED = AssetsScene.region(848, 212, 96, 60);
 const FLOWERS = {
   id: 'plants.flowers',
   cat: 'plants',

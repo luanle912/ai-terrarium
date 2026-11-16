@@ -39,7 +39,7 @@ export const SNOW = '#eef3f7';
 // (SeasonLogic; summer, the standard, when missing), env.block the office block {W, H} the island is built round.
 const TW = 16,
   TH = 8;
-function bakeTools(frame, env) {
+export function bakeTools(frame, env) {
   const { OX, OY } = frame,
     look = SeasonLogic.look(env.season),
     P = (x, y, z = 0) => [OX + (x - y) * TW, OY + (x + y) * TH - z],
@@ -49,6 +49,10 @@ function bakeTools(frame, env) {
     S = c => SnowLogic.night(c, env.df);
   return { P, C, look, depth, S };
 }
+
+// The colour function of the Christmas event's outdoor pieces under daylight df: they keep more of their colour after
+// dark than the lawn does.
+export const eventTone = df => c => night(c, 1 - (1 - df) * 0.55);
 
 // The island as one image the size of the scene canvas. The land (underside, lawn, lake, mountain) is painted first on
 // its own canvas so it can be ringed with the 1 px outline; the pool at the mountain's foot, the stepping stones,
@@ -217,7 +221,7 @@ export function renderProps(island, frame, k, env) {
   // The Christmas event's outdoor pieces (env.event is its level): they keep more of their colour after dark than
   // the lawn. The candy canes, and the cathedral with the statue before it where the back lawn is free.
   if (env.event && env.block) {
-    const T = c => night(c, 1 - (1 - env.df) * 0.55),
+    const T = eventTone(env.df),
       lm = EventLandmark.site(island, env.block);
     if (env.event >= 2)
       for (const l of island.lamps) add(l.x, l.y, l.x + l.y + 1.3, CANE_EXT, pt => drawCandyCane(pt, P, T, l));

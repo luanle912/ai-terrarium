@@ -3,22 +3,18 @@
 // island bake uses, the furniture and pantry kits, the G of the office's draw methods, and a stand-in host that
 // borrows ClaudeOffice's methods the way web/island-scene.js does. recordingCtx() is a canvas that only counts and
 // measures what it is told: the tests draw every entry on it, and the page uses it to size cards and read palettes.
+// Sprites, props and scene cards cut from the baked island are in web/assets-scene.js.
 import { SCENE_DOG_SPRITES, SCENE_METHODS } from './island-scene.js';
 import { ClaudeOffice } from './office.js';
 import { DOG_PLACES, FLOOR_Z, P as SCENE_P, PG as SCENE_PG, THEMES, TH, TW, lerpTheme } from './office-scene.js';
 import { OfficeDecor } from './office-decor.js';
 import { PantryItems } from './pantry-items.js';
-import { mix, night, painter } from './island-art.js';
-import { seasonC } from './island-art-season.js';
-import { SNOW } from './sky-island.js';
+import { painter } from './island-art.js';
+import { bakeTools } from './sky-island.js';
 import { SeasonLogic } from './season-logic.js';
-import { SnowLogic } from './snow-logic.js';
 import { SkyLogic } from './sky-logic.js';
 import { EventLogic } from './event-logic.js';
-import { H as SCENE_H, ISLAND, LH, LW, OX, OY, W as SCENE_W } from './office-scene.js';
-import { SkyRender } from './sky-render.js';
-import { IslandLife } from './island-life.js';
-import { snowOnTop } from './island-art-snow.js';
+import { isCold, officeG } from './office-util.js';
 
 // ---- the scene ----
 // Daylight (df) and the clock hour each light stands for: noon, the middle of the evening fade, late night.
@@ -57,22 +53,45 @@ const eventOf = env => EVENTS[(env && env.event) || 0] || null;
 
 // ---- a stand-in office ----
 // What the office's draw methods read off `this`, answered from the view's env; the methods themselves are
-// ClaudeOffice's (the list island-scene.js borrows, and every other method of the class).
+// ClaudeOffice's (the list island-scene.js borrows, and every other method of the class). An entry may set the
+// office's people, dogs, departments and the like for its draw: stage() hands every draw a clean host (clean()), so
+// what one entry set never shows in the next one drawn on the same canvas. Only real caches live on.
+const DOG_WORLD = { ...DOG_PLACES, agents: [], hour: 12, snow: 0, calm: true, now: 0, rand: () => 0.5 };
 class StageHost {
   constructor() {
     this.view = null;
-    this.agents = [];
-    this.depts = new Map();
-    this.state = { sel: null, paused: false, weatherMode: 'off' };
-    this.dogs = [];
     this.dogSprites = SCENE_DOG_SPRITES;
-    this.dogWorld = { ...DOG_PLACES, agents: [], hour: 12, snow: 0, calm: true, now: 0, rand: () => 0.5 };
-    this.critters = [];
-    this.bears = [];
+    this.cache = null;
+    this.blank = {
+      agents: [],
+      depts: new Map(),
+      state: { sel: null, paused: false, weatherMode: 'off' },
+      dogs: [],
+      dogWorld: { ...DOG_WORLD },
+      critters: [],
+      bears: [],
+    };
+    this.clean();
+  }
+  // Back to an empty office: nobody in it, no departments, no dogs or critters, nothing lit, no event tree.
+  clean() {
+    const b = this.blank;
+    b.agents.length = b.dogs.length = b.critters.length = b.bears.length = 0;
+    b.depts.clear();
+    b.state.sel = null;
+    b.state.paused = false;
+    b.state.weatherMode = 'off';
+    Object.assign(b.dogWorld, DOG_WORLD);
+    this.agents = b.agents;
+    this.depts = b.depts;
+    this.state = b.state;
+    this.dogs = b.dogs;
+    this.dogWorld = b.dogWorld;
+    this.critters = b.critters;
+    this.bears = b.bears;
     this.noUsage = true;
     this.propLit = null;
     this.holiday = 'default'; // the event tree's key (web/season-tree.js); 'default' for none
-    this.cache = null;
   }
   get env() {
     return this.view && this.view.env;
@@ -110,45 +129,11 @@ for (const name of new Set([...SCENE_METHODS, ...Object.getOwnPropertyNames(Clau
 }
 
 // ---- the stage ----
-// The G the office's draw methods take (web/office-draw.js builds it per frame): shapes in the scene's own projection,
-// the theme, the clock, daylight and the event. A polygon is outlined in the theme's stroke when it has one, as there.
-function makeG(ctx) {
-  const G = { ctx, poly: null, box: null, rect: null, th: null, t: 0, df: 1, ev: null, cold: false };
-  G.poly = (pts, fill, stroke) => {
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      const x = Math.round(pts[i][0]),
-        y = Math.round(pts[i][1]);
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-    }
-    ctx.closePath();
-    if (fill) {
-      ctx.fillStyle = fill;
-      ctx.fill();
-    }
-    const s = stroke === undefined ? G.th.stroke : stroke;
-    if (s) {
-      ctx.strokeStyle = s;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-  };
-  const P = SCENE_P,
-    shade = OfficeDecor.shade;
-  G.box = (x, y, w, h, z0, z1, top, l, r) => {
-    G.poly([P(x, y + h, z0), P(x + w, y + h, z0), P(x + w, y + h, z1), P(x, y + h, z1)], l || shade(top, -22));
-    G.poly([P(x + w, y, z0), P(x + w, y + h, z0), P(x + w, y + h, z1), P(x + w, y, z1)], r || shade(top, -38));
-    G.poly([P(x, y, z1), P(x + w, y, z1), P(x + w, y + h, z1), P(x, y + h, z1)], top);
-  };
-  G.rect = (x, y, w, h, c) => {
-    ctx.fillStyle = c;
-    ctx.fillRect(Math.round(x), Math.round(y), w, h);
-  };
-  return G;
-}
-
-// One stage per canvas, rebuilt only when the anchor or the env changes: drawing a card frame after frame makes
-// nothing new. The kits are made the first time they are asked for.
+// One stage per canvas: the projection, the island painter, the kits and the colours are rebuilt only when the anchor
+// or the env changes, so drawing a card frame after frame makes nothing new. The G is the office's own (officeG, in
+// the scene's projection), set from the env for every draw as the office sets it every frame: the theme, daylight,
+// the event and the cold (breath shows); t when given.
+const NO_FRAME = { OX: 0, OY: 0 };
 class Stage {
   constructor(ctx) {
     this.ctx = ctx;
@@ -160,9 +145,10 @@ class Stage {
     this.PG = lawn;
     this.P = (x, y, z = 0) => lawn(x, y, z + FLOOR_Z);
     this.pt = painter(ctx, lawn);
-    this.G = makeG(ctx);
+    this.G = officeG(ctx, SCENE_P, null);
     this.host = new StageHost();
-    this._kit = this._pantryKit = this._C = this._S = null;
+    this.at = { x: NaN, y: NaN, z: NaN, lawn: false, sx: 0, sy: 0 };
+    this._kit = this._pantryKit = this._tools = null;
   }
   aim(view) {
     if (view.ox !== this.ox || view.oy !== this.oy) {
@@ -172,13 +158,17 @@ class Stage {
     }
     if (view.env !== this.env) {
       this.env = view.env;
-      this._C = this._S = null;
-      this.G.th = this.env.theme;
-      this.G.df = this.env.df;
-      this.G.ev = eventOf(this.env);
+      this._tools = null;
     }
+    const env = this.env,
+      G = this.G;
+    G.th = env.theme;
+    G.df = env.df;
+    G.ev = eventOf(env);
+    G.cold = isCold(env.snow, env.df, env);
     this.view = view;
     this.host.view = view;
+    this.host.clean();
   }
   // The furniture kit (web/decor-kit.js) and the pantry kit (web/pantry-kit.js), both standing at (ox, oy).
   get kit() {
@@ -187,31 +177,42 @@ class Stage {
   get pantryKit() {
     return this._pantryKit || (this._pantryKit = PantryItems.kit(this.ctx, this.ox, this.oy));
   }
-  // The island's colours, as web/sky-island.js bakeTools makes them: C(colour, snowAmount) through the season's
-  // grass tint, the snow cover and the night; S for lying snow; look the season; depth the snow's depth level.
+  // The island's colours, from web/sky-island.js bakeTools: C(colour, snowAmount) through the season's grass tint,
+  // the snow cover and the night; S for lying snow; look the season; depth the snow's depth level.
+  get tools() {
+    return this._tools || (this._tools = bakeTools(NO_FRAME, this.env));
+  }
   get look() {
-    return SeasonLogic.look(this.env.season);
+    return this.tools.look;
   }
   get C() {
-    if (this._C) return this._C;
-    const env = this.env;
-    return (this._C = seasonC((c, s = 0) => night(s ? mix(c, SNOW, env.snow * s) : c, env.df), this.look));
+    return this.tools.C;
   }
   get S() {
-    if (this._S) return this._S;
-    const df = this.env.df;
-    return (this._S = c => SnowLogic.night(c, df));
+    return this.tools.S;
   }
   get depth() {
-    return SnowLogic.depth(this.env.snow);
+    return this.tools.depth;
   }
   // Runs fn with the canvas moved so the office scene's point (x, y, z) lands on (ox, oy): what the office's draw
-  // methods need, as they draw in the scene's own projection (on the office floor; `lawn` for the lawn level).
+  // methods need, as they draw in the scene's own projection (on the office floor; `lawn` for the lawn level). The
+  // point last asked for is kept, so a card asking for the same one every frame makes nothing new.
   scene(x, y, z, fn, lawn) {
-    const [sx, sy] = (lawn ? SCENE_PG : SCENE_P)(x, y, z || 0),
-      ctx = this.ctx;
+    const a = this.at,
+      ctx = this.ctx,
+      zz = z || 0,
+      ll = !!lawn;
+    if (a.x !== x || a.y !== y || a.z !== zz || a.lawn !== ll) {
+      const p = (ll ? SCENE_PG : SCENE_P)(x, y, zz);
+      a.x = x;
+      a.y = y;
+      a.z = zz;
+      a.lawn = ll;
+      a.sx = p[0];
+      a.sy = p[1];
+    }
     ctx.save();
-    ctx.translate(this.ox - sx, this.oy - sy);
+    ctx.translate(this.ox - a.sx, this.oy - a.sy);
     try {
       fn();
     } finally {
@@ -220,7 +221,7 @@ class Stage {
   }
 }
 const STAGES = new WeakMap();
-// view = {ox, oy, env, pick}; t (optional) is the clock for G.t.
+// view = {ox, oy, env, pick}; t (optional) is the clock for G.t. Every call hands the draw a clean host.
 function stage(ctx, view, t) {
   let s = STAGES.get(ctx);
   if (!s) STAGES.set(ctx, (s = new Stage(ctx)));
@@ -247,8 +248,10 @@ function solid(c) {
   if (m && (m[4] == null || +m[4] >= 0.99)) return '#' + hex2(+m[1]) + hex2(+m[2]) + hex2(+m[3]);
   return null;
 }
-// The counting canvases made for a canvas object (the tests' sprite canvases): a drawImage of one folds what was
-// drawn on it into the signature, so sprites that differ only in their pixels tell apart.
+// The counting canvases made for a canvas object (the tests' sprite canvases): a drawImage of one folds what is on it
+// now into the signature, so sprites that differ only in their pixels tell apart. What is on it is what was drawn
+// since it was last cleared (a clearRect over all of it, or a new width or height), as on a real canvas, so a sprite
+// cache that paints its canvas again shows only the new picture.
 const COUNTING = new WeakMap();
 function recordingCtx(canvas) {
   const cv = canvas || { width: 1024, height: 1024 };
@@ -304,6 +307,12 @@ function recordingCtx(canvas) {
     if (s && area > 0) tally.set(s, (tally.get(s) || 0) + area * o.globalAlpha);
   };
   const area = b => (b ? (b[2] - b[0]) * (b[3] - b[1]) : 0);
+  const wipe = () => {
+    box = null;
+    drawn = 0;
+    sig = 2166136261;
+    tally.clear();
+  };
   const o = {
     canvas: cv,
     fillStyle: '#000000',
@@ -332,11 +341,9 @@ function recordingCtx(canvas) {
     },
     reset() {
       m = [1, 0, 0, 1, 0, 0];
-      clip = path = box = null;
-      drawn = 0;
-      sig = 2166136261;
+      clip = path = null;
       stack = [];
-      tally.clear();
+      wipe();
     },
     save() {
       stack.push([m.slice(), clip, STATE.map(k => o[k])]);
@@ -420,8 +427,20 @@ function recordingCtx(canvas) {
       const b = corners(null, x, y, w, h);
       mark('strokeRect', b, o.strokeStyle, 0, [x, y, w, h]);
     },
-    clearRect() {},
+    // Clearing all that was drawn (within the canvas) wipes it: a sprite cache painting its canvas again.
+    clearRect(x, y, w, h) {
+      const b = corners(null, x, y, w, h);
+      if (
+        !box ||
+        (b[0] <= Math.max(0, box[0]) &&
+          b[1] <= Math.max(0, box[1]) &&
+          b[2] >= Math.min(cv.width, box[2]) &&
+          b[3] >= Math.min(cv.height, box[3]))
+      )
+        wipe();
+    },
     drawImage(img, ...a) {
+      // a canvas that counts as well (a sprite of the tests) adds what is on it now
       const src = img && typeof img === 'object' ? COUNTING.get(img) : null;
       if (src) mixStr(src.signature());
       const [dx, dy, dw, dh] =
@@ -430,8 +449,6 @@ function recordingCtx(canvas) {
           : a.length >= 4
             ? a
             : [a[0], a[1], (img && img.width) || 0, (img && img.height) || 0];
-      // a canvas made by sprite() below carries the signature of what was painted on it
-      if (img && typeof img.assetsSig === 'string') mixStr(img.assetsSig);
       mark('drawImage', corners(null, dx, dy, dw, dh), null, 0, [dx, dy, dw, dh]);
     },
     putImageData(img, dx, dy) {
@@ -465,155 +482,23 @@ function recordingCtx(canvas) {
   // Any other method a draw calls is taken and ignored, so the game can use more of the canvas than listed here.
   const NOOP = () => {};
   const ctx = new Proxy(o, { get: (t, k) => (k in t ? t[k] : NOOP) });
-  if (canvas && typeof canvas === 'object') COUNTING.set(canvas, ctx);
+  if (canvas && typeof canvas === 'object') {
+    COUNTING.set(canvas, ctx);
+    // a plain stand-in canvas (the tests'): setting its size clears it, as on a real one
+    if (Object.getPrototypeOf(canvas) === Object.prototype)
+      for (const k of ['width', 'height']) {
+        let v = canvas[k] || 0;
+        Object.defineProperty(canvas, k, {
+          get: () => v,
+          set: n => {
+            v = n;
+            ctx.reset();
+          },
+          enumerable: true,
+        });
+      }
+  }
   return ctx;
 }
 
-export const AssetsStage = { envOf, eventOf, stage, recordingCtx, solid, StageHost };
-
-// ---- sprites, the island's props and the baked island (Task 3: plants, outdoor props, island & sky, world) ----
-// One string per scene, for caches: the light, season, snow and event an env stands for.
-const envKey = env => env.df + '|' + env.season + '|' + env.snow + '|' + env.event;
-// The light control an env was made from ('day', 'dusk' or 'night').
-const lightOf = env => Object.keys(LIGHT).find(k => LIGHT[k][0] === env.df) || 'day';
-const sigOf = c => {
-  const g = c && c.width ? c.getContext('2d') : null;
-  return g && typeof g.signature === 'function' ? g.signature() : '';
-};
-// A canvas of w × h px painted once by paint(g, canvas) and kept by key (the least recently used goes first). On the
-// counting canvas of the tests it carries what was painted on it (assetsSig, plus any string paint returns), so a
-// card that stamps it still changes with what it shows. read: a canvas the paint reads back (getImageData).
-const SPRITES = new Map(),
-  SPRITE_MAX = 400;
-function sprite(key, w, h, paint, read) {
-  let c = SPRITES.get(key);
-  if (c) {
-    SPRITES.delete(key);
-    SPRITES.set(key, c);
-    return c;
-  }
-  c = document.createElement('canvas');
-  c.width = Math.max(1, Math.ceil(w));
-  c.height = Math.max(1, Math.ceil(h));
-  const g = read ? c.getContext('2d', { willReadFrequently: true }) : c.getContext('2d'),
-    more = paint(g, c);
-  c.assetsSig = sigOf(c) + (typeof more === 'string' ? more : '');
-  if (SPRITES.size >= SPRITE_MAX) SPRITES.delete(SPRITES.keys().next().value);
-  SPRITES.set(key, c);
-  return c;
-}
-// Something that stands up off the lawn, as web/sky-island.js renderProps bakes it: paint(s) draws it standing on the
-// island's tile (x, y) (s a stage on the sprite whose PG puts that tile where the sprite's foot is), in a sprite of
-// ext = [left, up, right, down] px round its foot; lying snow settles on its top when snowy. Stamped with its foot at
-// (ox, oy). key names what paint draws (the env is added).
-function prop(ctx, view, key, x, y, ext, paint, snowy = true) {
-  const env = view.env,
-    img = sprite('prop|' + key + '|' + envKey(env), ext[0] + ext[2], ext[1] + ext[3], (g, c) => {
-      const s = stage(g, { ox: ext[0] - (x - y) * TW, oy: ext[1] - (x + y + 1) * TH, env, pick: view.pick });
-      paint(s);
-      if (snowy) snowOnTop(c, 1, s.S, s.depth);
-    });
-  ctx.drawImage(img, view.ox - ext[0], view.oy - ext[1]);
-}
-
-// The island baked as the game bakes it (web/office-draw.js: SkyRender.renderIsland, and renderProps stamped back to
-// front) at one canvas px per scene px, once per scene. Every region a scene card shows ({x, y, w, h} in scene px,
-// the same object each time) is cut out of it right away, the land and the props apart (what moves on the island goes
-// between them); the whole images are let go. The cuts of the last CUT_ENVS scenes are kept.
-const REGIONS = [],
-  CUTS = new Map(),
-  CUT_ENVS = 24;
-function bake(env) {
-  const frame = { LW, LH, OX, OY },
-    light = { df: env.df, snow: env.snow, season: env.season, block: { W: SCENE_W, H: SCENE_H }, event: env.event },
-    land = SkyRender.renderIsland(ISLAND, frame, 1, light),
-    props = SkyRender.renderProps(ISLAND, frame, 1, light).sort((a, b) => a.z - b.z),
-    landSig = sigOf(land),
-    out = new Map();
-  for (const r of REGIONS) {
-    const id = '|' + r.x + ',' + r.y + ',' + r.w + ',' + r.h;
-    const cut = paint => {
-      const c = document.createElement('canvas');
-      c.width = r.w;
-      c.height = r.h;
-      c.assetsSig = paint(c.getContext('2d')) + id;
-      return c;
-    };
-    out.set(r, {
-      land: cut(g => {
-        g.drawImage(land, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
-        return landSig;
-      }),
-      props: cut(g => {
-        let sig = '';
-        for (const p of props)
-          if (p.dx < r.x + r.w && p.dy < r.y + r.h && p.dx + p.img.width > r.x && p.dy + p.img.height > r.y) {
-            g.drawImage(p.img, p.dx - r.x, p.dy - r.y);
-            sig += sigOf(p.img);
-          }
-        return sig;
-      }),
-    });
-  }
-  land.width = land.height = 0;
-  for (const p of props) p.img.width = p.img.height = 0;
-  return out;
-}
-// The land and the props of region r in the scene of env, as two canvases of r.w × r.h px.
-function bakeCut(env, r) {
-  const key = envKey(env);
-  let cuts = CUTS.get(key);
-  if (cuts && cuts.has(r)) {
-    CUTS.delete(key);
-    CUTS.set(key, cuts);
-    return cuts.get(r);
-  }
-  if (!REGIONS.includes(r)) REGIONS.push(r);
-  cuts = bake(env);
-  CUTS.delete(key);
-  CUTS.set(key, cuts);
-  if (CUTS.size > CUT_ENVS) {
-    const old = CUTS.keys().next().value;
-    for (const c of CUTS.get(old).values()) c.land.width = c.props.width = 0;
-    CUTS.delete(old);
-  }
-  return cuts.get(r);
-}
-// Clips to region r of the scene shown with its top left at (ox, oy), the canvas moved so scene px land there.
-function enter(ctx, view, r) {
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(view.ox, view.oy, r.w, r.h);
-  ctx.clip();
-  ctx.translate(view.ox - r.x, view.oy - r.y);
-}
-// A scene card: region r of the island with its top left at (ox, oy), as the game shows it at time t: the baked land,
-// what moves on it (IslandLife.drawLife: water, falls, mist, vines, lamp pools, birds, fireflies), the props, the
-// lamps' and the lantern's light, then over(ctx, view, t) if given, in scene px.
-function islandScene(ctx, view, t, r, over) {
-  const env = view.env,
-    c = bakeCut(env, r);
-  ctx.drawImage(c.land, view.ox, view.oy);
-  enter(ctx, view, r);
-  IslandLife.drawLife(ctx, ISLAND, SCENE_PG, t, env);
-  ctx.restore();
-  ctx.drawImage(c.props, view.ox, view.oy);
-  enter(ctx, view, r);
-  for (let i = 0; i < ISLAND.lamps.length; i++) IslandLife.drawLampLight(ctx, ISLAND, SCENE_PG, i, t, env);
-  IslandLife.drawLanternLight(ctx, ISLAND, SCENE_PG, t, env);
-  if (over) over(ctx, view, t);
-  ctx.restore();
-}
-// env under one of the weathers of SkyLogic.FX (its fx and the sky colours that go with it), one object each.
-const WEATHER_ENVS = new WeakMap();
-function weatherEnv(env, w) {
-  let m = WEATHER_ENVS.get(env);
-  if (!m) WEATHER_ENVS.set(env, (m = {}));
-  if (!m[w]) {
-    const fx = { ...SkyLogic.FX[w] };
-    m[w] = { ...env, fx, col: SkyLogic.skyColors(env.df, env.hour, fx) };
-  }
-  return m[w];
-}
-
-export const AssetsScene = { envKey, lightOf, sprite, prop, bakeCut, enter, islandScene, weatherEnv };
+export const AssetsStage = { LIGHT, envOf, eventOf, stage, recordingCtx, solid, StageHost };

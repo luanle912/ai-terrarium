@@ -3,7 +3,7 @@
 // the viewer's own, the season on its lawn and roof), and the tile of a place with no island yet. Both are painted on
 // a sprite of their own, as the world view caches them (the outline pass reads the sprite back).
 import { tr } from './i18n.js';
-import { AssetsScene } from './assets-stage.js';
+import { AssetsScene } from './assets-scene.js';
 import { ART_H, ART_W, ISL, paintIsland, paintTile } from './world-ui.js';
 
 const axis = (id, label, values) => ({ id, label, values });

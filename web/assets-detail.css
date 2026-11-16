@@ -77,21 +77,25 @@
 .as-stage {
   position: relative;
   margin-top: 14px;
-  min-height: 292px;
-  padding: 20px 16px 52px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: auto;
+  height: 292px;
   background: #0b0e14;
   border: 2px solid var(--line);
   box-shadow: 4px 4px 0 var(--shadow);
 }
-.as-stage .as-preview {
-  max-width: none;
+/* the box the item is shown in, clear of the zoom buttons: Fit fills it, a larger zoom scrolls inside it */
+.as-stage-in {
+  position: absolute;
+  inset: 0 0 38px 0;
+  display: flex;
+  overflow: auto;
 }
-.as-stage .as-canvas {
-  max-width: none;
+.as-stage-in > .as-preview {
+  flex: none;
+  margin: auto;
+  padding: 14px;
+}
+.as-stage-in > .as-preview.as-fit {
+  padding: 0;
 }
 .as-zoom {
   position: absolute;
@@ -162,6 +166,9 @@
 }
 .as-cell .as-preview {
   height: 72px;
+}
+.as-cells .as-cell {
+  overflow: hidden;
 }
 .as-cell:hover {
   border-color: var(--fg);
@@ -328,7 +335,7 @@
     font-size: 23px;
   }
   .as-stage {
-    min-height: 240px;
+    height: 240px;
   }
   .as-row {
     flex-direction: column;

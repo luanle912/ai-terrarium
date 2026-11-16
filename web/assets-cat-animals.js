@@ -11,7 +11,7 @@ import { DogLogic } from './dog-logic.js';
 import { CritterSprites } from './critter-sprites.js';
 import { BEARS, DOG_HOUSES, FLOOR_Z } from './office-scene.js';
 import { IslandLakeLife } from './island-lake-life.js';
-import { IslandLife, drawBirds, drawFlies, lifePalette } from './island-life.js';
+import { IslandLife, drawBirds, drawFlies, lifePalette, vRank, vSide, wingAt } from './island-life.js';
 import { WATER } from './island-art-lake.js';
 import { night } from './island-art.js';
 import { WATER_Z } from './sky-island.js';
@@ -304,10 +304,9 @@ const BIRD = {
     SKY.sky.x1 = view.ox + 100;
     SKY.sky.y = view.oy - 25;
     for (const b of FLOCK) {
-      const rank = (b.j + 1) >> 1;
-      b.x = 0.3 - rank * 0.07;
-      b.y = (b.j % 2 ? -1 : 1) * rank * 5;
-      b.wing = w === 'flap' ? Math.floor(t * 4 + b.j * 0.6) & 1 : w === 'up' ? 0 : 1;
+      b.x = 0.3 - vRank(b.j) * 0.07;
+      b.y = vSide(b.j);
+      b.wing = w === 'flap' ? wingAt(t, b.j) : w === 'up' ? 0 : 1;
     }
     ctx.fillStyle = DAY_SKY;
     ctx.fillRect(view.ox + 6, view.oy - 22, 34, 34);
