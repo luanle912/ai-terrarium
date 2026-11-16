@@ -71,12 +71,16 @@ function counts(entries) {
 }
 
 // The item's own axes times the scene controls it reacts to (day and night count as two, dusk being a blend). An
-// entry with `sweep` (too many axes to cross, like a person) counts each value of each of its axes once.
+// entry with `sweep` (too many axes to cross, like a person) counts each value of each of its axes once. The event
+// brings winter (EventLogic.season), so an item that reacts to both counts every season with the event off and
+// winter alone under each of its levels.
+const heldByEvent = e => e.uses.includes('season') && e.uses.includes('event');
 function variantCount(e) {
   let n = 1;
   if (e.sweep) for (const a of e.axes) n += a.values.length - 1;
   else for (const a of e.axes) n *= a.values.length;
-  for (const u of e.uses) n *= CELL_VALUES[u].length;
+  for (const u of e.uses) if (!(heldByEvent(e) && (u === 'event' || u === 'season'))) n *= CELL_VALUES[u].length;
+  if (heldByEvent(e)) n *= CELL_VALUES.season.length + CELL_VALUES.event.length - 1;
   return n;
 }
 // The scene an item is drawn in: the controls it uses as chosen, the rest at their defaults, so a card that ignores
@@ -114,7 +118,17 @@ function sweepPicks(e) {
 }
 function combos(e, controls) {
   const used = SCENE.filter(u => e.uses.includes(u));
-  const size = list => list.reduce((n, u) => n * CELL_VALUES[u].length, 1);
+  // how many distinct cells the controls in `list` make (under the event every season is the one winter)
+  const size = list => {
+    let n = list.reduce((k, u) => k * CELL_VALUES[u].length, 1);
+    if (heldByEvent(e) && list.includes('season'))
+      if (list.includes('event'))
+        n =
+          (n / (CELL_VALUES.season.length * CELL_VALUES.event.length)) *
+          (CELL_VALUES.season.length + CELL_VALUES.event.length - 1);
+      else if (controls.event > 0) n /= CELL_VALUES.season.length;
+    return n;
+  };
   const picks = e.sweep ? sweepPicks(e) : null;
   let axesN = 1;
   if (picks) axesN = picks.length;
@@ -135,6 +149,15 @@ function combos(e, controls) {
         );
       }
     cells = next;
+  }
+  // under the event every season is winter: those cells are one cell, shown as winter
+  if (heldByEvent(e)) {
+    const seen = new Set();
+    cells = cells.filter(c => {
+      if (c.controls.event > 0 && c.controls.season !== 'winter') c.controls = { ...c.controls, season: 'winter' };
+      const key = JSON.stringify(c.pick) + JSON.stringify(sceneOf(e, c.controls));
+      return !seen.has(key) && seen.add(key);
+    });
   }
   return cells.slice(0, MAX_CELLS);
 }

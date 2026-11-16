@@ -270,6 +270,11 @@ test('/assets serves the assets shell, and the office page does not load any ass
     assert.match(page.headers['content-type'], /^text\/html/);
     assert.match(page.body, /<script type="module" src="web\/assets-main\.js"><\/script>/);
     assert.equal((await request(port, { path: '/assets', method: 'POST' })).status, 405);
+    // a query string is ignored; with a trailing slash the shell's relative web/ URLs would miss, so it is not served
+    const q = await request(port, { path: '/assets?x=1' });
+    assert.equal(q.status, 200);
+    assert.equal(q.body, page.body);
+    assert.equal((await request(port, { path: '/assets/' })).status, 404);
     assert.deepEqual(moduleGraph().filter(n => n.startsWith('assets-')), []);
     assert.ok(moduleGraph('claude-assets.html').includes('assets-main'));
   } finally { await close(server); }

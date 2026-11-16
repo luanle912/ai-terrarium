@@ -22,11 +22,12 @@
 //                                        // steps through these axes one at a time, each value counts once
 //     uses: ['light', 'season', 'snow', 'event'],   // the global controls it reacts to (only those reach it)
 //     palette: () => ['#…'],             // optional: colours to show when the draw only stamps sprites
+//     frame: { w: 160, h: 100 },         // optional, for a scene card clipped to a box from (ox, oy): its frame
 //     draw(ctx, view, t) {…},            // view = {ox, oy, env, pick}: draw the item standing at (ox, oy)
 //   }
-// The card is sized from what draw() actually paints (AssetsStage.recordingCtx bounds), so (ox, oy) only has to be
-// somewhere on the item. A throw shows a "can't draw" tile instead of the item. One example per drawing style
-// (s = AssetsStage.stage(ctx, view, t)):
+// The card is sized from `frame`, or else from what draw() actually paints (AssetsStage.recordingCtx bounds), so
+// (ox, oy) only has to be somewhere on the item. A throw shows a "can't draw" tile instead of the item. One example
+// per drawing style (s = AssetsStage.stage(ctx, view, t)):
 //   K  furniture kit   draw: (ctx, v, t) => OfficeDecor.F.chair(AssetsStage.stage(ctx, v).kit, t)
 //   PK pantry kit      draw(ctx, v, t) { const k = AssetsStage.stage(ctx, v).pantryKit
 //                        PantryItems.I.arcade.draw(k, t, { night: v.env.df < 0.5, use: v.pick.use === 'use' ? 1 : 0 })
@@ -134,6 +135,7 @@ function check(e) {
   for (const a of e.axes || [])
     if (!a.id || typeof a.label !== 'function' || !Array.isArray(a.values) || !a.values.length)
       return e.id + ': bad axis ' + a.id;
+  if (e.frame && !(e.frame.w > 0 && e.frame.h > 0)) return e.id + ': bad frame';
   if (e.sweep && (!Array.isArray(e.sweep) || e.sweep.some(id => !(e.axes || []).some(a => a.id === id))))
     return e.id + ': sweep names an axis it does not have';
   return null;
@@ -168,6 +170,8 @@ function register(entries) {
     list.push(e);
     byIdMap.set(e.id, e);
   }
+  // "Everything" lists the categories in the rail's order (a stable sort keeps each module's own order)
+  list.sort((a, b) => AssetsLogic.CAT_IDS.indexOf(a.cat) - AssetsLogic.CAT_IDS.indexOf(b.cat));
 }
 const entries = () => list;
 const byId = id => byIdMap.get(id) || null;

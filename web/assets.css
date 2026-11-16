@@ -195,8 +195,22 @@ kbd {
 .as-seg-held .as-seg-btn.on {
   background: #9fd3ff;
 }
-.as-seg-held .as-seg-btn:not(.on) {
-  opacity: 0.45;
+.as-seg-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--soft);
+}
+/* "Winter while Xmas is on", next to the label of a season row the event holds */
+.as-held-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  color: #9fd3ff;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  white-space: nowrap;
 }
 .as-swatch {
   width: 8px;
@@ -496,9 +510,12 @@ kbd {
   font-weight: 600;
   line-height: 1.15;
   color: #ffffff;
+  /* a long name wraps to a second line instead of being cut */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* ---- previews ---- */

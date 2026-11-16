@@ -54,6 +54,8 @@ const ISLAND_TREE = {
   id: 'plants.island-tree',
   cat: 'plants',
   name: () => tr('assets.item.plants.island-tree'),
+  // its kind is the season's (the axis below), so the Seasonal filter finds it
+  tags: ['season'],
   when: { always: true },
   where: 'lawn',
   source: [
@@ -61,9 +63,10 @@ const ISLAND_TREE = {
     { file: 'web/island-art-snow.js', fn: 'snowOnTop' },
   ],
   axes: [
+    // summer's green first, as the page opens on summer
     axis('kind', () => tr('assets.axis.kind'), [
-      { id: 'fresh', label: () => tr('assets.tree.fresh') },
       { id: 'green', label: () => tr('assets.tree.green') },
+      { id: 'fresh', label: () => tr('assets.tree.fresh') },
       { id: 'gold', label: () => tr('assets.tree.gold') },
       { id: 'bare', label: () => tr('assets.tree.bare') },
       { id: 'fir', label: () => tr('assets.tree.fir') },
@@ -193,6 +196,7 @@ const WORLD_TREE = {
   id: 'plants.world-tree',
   cat: 'plants',
   name: () => tr('assets.item.plants.world-tree'),
+  tags: ['season'],
   when: { always: true },
   where: 'world',
   source: [{ file: 'web/world-ui.js', fn: 'tree' }],
@@ -285,6 +289,7 @@ const FLOWERS = {
     { file: 'web/island-art-season.js', fn: 'drawSeasonFlowers' },
   ],
   uses: ['light', 'season', 'snow', 'event'],
+  frame: AssetsScene.frameOf(FLOWER_BED),
   draw: (ctx, view, t) => AssetsScene.islandScene(ctx, view, t, FLOWER_BED),
 };
 

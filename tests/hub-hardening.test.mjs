@@ -231,7 +231,13 @@ test('/assets needs a session like /, and signed in gets the shell under the off
     const login = await devLogin(h.url, 'a@example.com');
     const r = await fetch(h.url + '/assets', { headers: { cookie: login.cookie } });
     assert.equal(r.status, 200);
-    assert.ok((await r.text()).includes('web/assets-main.js'));
+    const body = await r.text();
+    assert.ok(body.includes('web/assets-main.js'));
+    // as on the local server: a query string is ignored, a trailing slash is not the page
+    const q = await fetch(h.url + '/assets?x=1', { headers: { cookie: login.cookie } });
+    assert.equal(q.status, 200);
+    assert.equal(await q.text(), body);
+    assert.equal((await fetch(h.url + '/assets/', { headers: { cookie: login.cookie } })).status, 404);
     const scriptSrc = /script-src ([^;]*)/.exec(r.headers.get('content-security-policy'))[1];
     assert.deepEqual(scriptSrc.split(' '), ["'self'", 'https://cdnjs.cloudflare.com']);
   } finally { await h.close(); }

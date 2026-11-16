@@ -138,6 +138,9 @@ function islandScene(ctx, view, t, r, over) {
   if (over) over(ctx, view, t);
   ctx.restore();
 }
+// The frame of a scene card showing region r (an entry's `frame`): what it draws is clipped to the region, so there is
+// nothing to measure (measuring would bake the island once per scene for every card).
+const frameOf = r => ({ w: r.w, h: r.h });
 // env under one of the weathers of SkyLogic.FX (its fx and the sky colours that go with it), one object each.
 const WEATHER_ENVS = new WeakMap();
 function weatherEnv(env, w) {
@@ -150,4 +153,4 @@ function weatherEnv(env, w) {
   return m[w];
 }
 
-export const AssetsScene = { envKey, lightOf, sprite, prop, region, bakeCut, enter, islandScene, weatherEnv };
+export const AssetsScene = { envKey, lightOf, sprite, prop, region, frameOf, bakeCut, enter, islandScene, weatherEnv };

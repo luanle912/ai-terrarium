@@ -350,6 +350,26 @@ test('the variants grid of every entry draws every cell', () => {
   }
 })
 
+test('"Everything" lists the entries category by category, in the rail order', () => {
+  const order = R.entries().map(e => L.CAT_IDS.indexOf(e.cat))
+  assert.deepEqual(order, [...order].sort((a, b) => a - b))
+})
+
+test('a scene card that declares its frame draws nothing outside it (the page does not measure it)', () => {
+  const framed = ENTRIES.filter(e => e.frame)
+  assert.ok(framed.length >= 12, 'the island, lake, lawn and sky scene cards declare their frames')
+  const out = []
+  for (const e of framed)
+    for (const c of L.combos(e, L.DEFAULTS))
+      for (const t of [0.4, 2.6]) {
+        const ctx = AssetsStage.recordingCtx()
+        e.draw(ctx, { ox: 0, oy: 0, env: AssetsStage.envOf(L.sceneOf(e, c.controls)), pick: L.fixPick(e, c.pick) }, t)
+        const b = ctx.bounds()
+        if (!b || b.x0 < 0 || b.y0 < 0 || b.x1 > e.frame.w || b.y1 > e.frame.h) out.push(`${e.id} ${JSON.stringify(b)}`)
+      }
+  assert.deepEqual([...new Set(out)], [])
+})
+
 test('the animated tag says whether an entry moves with the clock, in some variant', () => {
   const wrong = []
   for (const e of ENTRIES) {

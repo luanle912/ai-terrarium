@@ -86,6 +86,20 @@ test('combos lists every variant worth a cell, at most 48, the item axes first',
   assert.deepEqual(L.combos(ENTRIES[3], L.DEFAULTS), [{ pick: {}, controls: L.DEFAULTS }], 'a plain item is one cell')
 })
 
+test('the event brings winter: an item that reacts to season and event has no cells of other seasons under it', () => {
+  const lake = entry('island.lake', { uses: ['season', 'event'] })
+  assert.equal(L.variantCount(lake), 4 + 3, 'four seasons with the event off, winter under each level')
+  const all = L.combos(lake, L.DEFAULTS)
+  assert.equal(all.length, 7)
+  assert.ok(all.every(c => c.controls.event === 0 || c.controls.season === 'winter'))
+  // too many to cross: the event is held at the level chosen, so every season there is the same winter
+  const big = entry('island.big', { axes: [AXIS('a', ...'abcd')], uses: ['light', 'season', 'snow', 'event'] })
+  const held = L.combos(big, { ...L.DEFAULTS, event: 2 })
+  assert.equal(held.length, 4 * 2 * 2, 'the axis x day/night x snow, winter only')
+  assert.ok(held.every(c => c.controls.season === 'winter' && c.controls.event === 2))
+  assert.equal(L.variantCount(entry('island.sky', { uses: ['season'] })), 4, 'season alone keeps all four')
+})
+
 test('an entry with sweep steps through those axes one at a time instead of crossing every axis', () => {
   const person = entry('people.person', {
     axes: [AXIS('gender', 'm', 'f'), AXIS('status', 'a', 'b', 'c'), AXIS('act', ...'abcdefghijklmnopqrstu')],

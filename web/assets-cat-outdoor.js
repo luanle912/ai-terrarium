@@ -164,6 +164,7 @@ const lakeCard = (key, name, region, source, more) => ({
   where: 'lake',
   source,
   uses: ['light', 'season', 'snow', 'event'],
+  frame: AssetsScene.frameOf(region),
   draw: (ctx, view, t) => AssetsScene.islandScene(ctx, view, t, region),
   ...more,
 });
@@ -198,6 +199,7 @@ const PATH_STONES = {
     { file: 'web/island-land.js', fn: 'lawnPaths' },
   ],
   uses: ['light', 'season', 'snow', 'event'],
+  frame: AssetsScene.frameOf(PATH_AT),
   draw: (ctx, view, t) => AssetsScene.islandScene(ctx, view, t, PATH_AT),
 };
 

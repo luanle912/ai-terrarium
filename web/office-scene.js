@@ -28,7 +28,12 @@ export function languagePicker() {
     tr('settings.language'),
     h(
       'select',
-      { 'aria-label': tr('settings.language'), value: I18n.lang, onChange: e => switchLanguage(e.target.value) },
+      {
+        name: 'lang',
+        'aria-label': tr('settings.language'),
+        value: I18n.lang,
+        onChange: e => switchLanguage(e.target.value),
+      },
       I18n.LANGS.map(([code, name]) => h('option', { key: code, value: code, lang: code }, name)),
     ),
   );

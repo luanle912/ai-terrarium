@@ -77,7 +77,8 @@
 .as-stage {
   position: relative;
   margin-top: 14px;
-  height: 292px;
+  /* tall enough that the island's scene cards (up to 132 px high) fit at ×2 */
+  height: 340px;
   background: #0b0e14;
   border: 2px solid var(--line);
   box-shadow: 4px 4px 0 var(--shadow);
@@ -135,6 +136,17 @@
   gap: 10px;
   margin: 7px 0;
 }
+.as-row-r {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+.as-row-r .as-held-hint {
+  margin-left: 0;
+  font-size: 10px;
+}
 .as-row-l {
   width: 72px;
   flex: none;
@@ -191,7 +203,8 @@
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  /* every part of a label is what tells the cells apart: room for all of them */
+  -webkit-line-clamp: 4;
   min-height: 2.5em;
 }
 .as-info {

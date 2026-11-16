@@ -6,7 +6,19 @@ import { languagePicker } from './office-scene.js';
 import { AssetsLogic } from './assets-logic.js';
 import { AssetsRegistry } from './assets-registry.js';
 import { AssetsPaint } from './assets-ui-paint.js';
-import { EVENTS, Icon, LIGHTS, Preview, SEASONS, SNOWS, Seg, TagChip, h } from './assets-ui-parts.js';
+import {
+  EVENTS,
+  Icon,
+  LIGHTS,
+  Preview,
+  SEASONS,
+  SNOWS,
+  SeasonHint,
+  Seg,
+  TagChip,
+  h,
+  heldSeasons,
+} from './assets-ui-parts.js';
 import { Detail } from './assets-ui-detail.js';
 
 const { useEffect, useMemo, useRef, useState } = React;
@@ -51,8 +63,8 @@ const hrefOf = (s, patch) => L.toHash({ ...s, ...patch });
 
 // ---- header ----
 function Header({ s, set, searchRef, narrow }) {
-  const group = (key, node) =>
-    h('div', { className: 'as-ctl', key }, h('span', { className: 'as-ctl-label' }, key), node);
+  const group = (key, node, hint) =>
+    h('div', { className: 'as-ctl', key }, h('span', { className: 'as-ctl-label' }, key, hint), node);
   const winter = s.event > 0;
   return h(
     'header',
@@ -79,6 +91,7 @@ function Header({ s, set, searchRef, narrow }) {
         h('input', {
           ref: searchRef,
           type: 'search',
+          name: 'q',
           value: s.q,
           placeholder: tr('assets.search'),
           'aria-label': tr('assets.search'),
@@ -113,10 +126,11 @@ function Header({ s, set, searchRef, narrow }) {
         h(Seg, {
           label: tr('assets.ctl.season'),
           value: winter ? 'winter' : s.season,
-          options: SEASONS().map(o => (winter ? { ...o, title: tr('assets.eventWinter') } : o)),
+          options: winter ? heldSeasons() : SEASONS(),
           onChange: v => set({ season: v }),
           className: winter ? 'as-seg-held' : '',
         }),
+        winter && h(SeasonHint),
       ),
       group(
         tr('assets.ctl.snow'),

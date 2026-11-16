@@ -25,6 +25,17 @@ export const SEASONS = () =>
     }[k],
     swatch: SeasonLogic.seasonChip(k).accent,
   }));
+// The season buttons while a Christmas level is on: the event brings winter (AssetsStage.envOf), so the other seasons
+// cannot be chosen until it is off; the hint says why.
+export const heldSeasons = () =>
+  SEASONS().map(o => (o.id === 'winter' ? { ...o, title: tr('assets.eventWinter') } : { ...o, disabled: true }));
+export const SeasonHint = () =>
+  h(
+    'span',
+    { className: 'as-held-hint', title: tr('assets.eventWinter') },
+    h(Icon, { name: 'snow', size: 9 }),
+    tr('assets.heldWinter'),
+  );
 export const SNOWS = () => [
   { id: false, label: tr('assets.snow.off') },
   { id: true, label: tr('assets.snow.on'), icon: 'snow' },
@@ -81,7 +92,7 @@ export function Icon({ name, size = 14 }) {
   );
 }
 
-// A row of pixel buttons, one pressed. options: [{id, label, icon?, swatch?, title?}].
+// A row of pixel buttons, one pressed. options: [{id, label, icon?, swatch?, title?, disabled?}].
 export function Seg({ label, value, options, onChange, compact, className }) {
   return h(
     'div',
@@ -98,6 +109,7 @@ export function Seg({ label, value, options, onChange, compact, className }) {
           type: 'button',
           className: 'as-seg-btn' + (o.id === value ? ' on' : ''),
           'aria-pressed': o.id === value,
+          disabled: !!o.disabled,
           title: o.title || (compact && o.icon ? o.label : undefined),
           onClick: () => onChange(o.id),
         },
@@ -114,16 +126,23 @@ export const TagChip = ({ tag, label }) => h('span', { className: 'as-tag as-tag
 
 // A preview canvas of one variant of an entry. When the draw throws it turns into a "can't draw" tile whose title
 // carries the error. fps 15 in the grid; `still` for the variants grid (painted once per change). With `fit` (the
-// largest zoom to use) it fills its box and fits the item in it, `inset` px clear of the edges (AssetsPaint.fitZoom:
-// a whole zoom when it fits at ×1, else shrunk); otherwise it is drawn at `zoom` at its own size.
+// largest zoom to use) it fills its box and fits the item in it once it comes near the screen, `inset` px clear of
+// the edges (AssetsPaint.fitZoom: a whole zoom when it fits at ×1, else shrunk); otherwise it is drawn at `zoom` at
+// its own size.
 export function Preview({ entry, pick, controls, zoom, fit, inset = 6, fps, still, className }) {
   const ref = useRef(null),
     box = useRef(null),
     slot = useRef(null),
     [err, setErr] = useState(null),
-    [size, setSize] = useState(null);
+    [size, setSize] = useState(null),
+    [shown, setShown] = useState(false);
   useEffect(() => {
-    slot.current = AssetsPaint.attach(ref.current, { fps, still, onError: e => setErr(e) });
+    slot.current = AssetsPaint.attach(ref.current, {
+      fps,
+      still,
+      onError: e => setErr(e),
+      onShow: () => setShown(true),
+    });
     const measure = () => {
       const b = box.current;
       if (b)
@@ -137,8 +156,9 @@ export function Preview({ entry, pick, controls, zoom, fit, inset = 6, fps, stil
       if (ro) ro.disconnect();
     };
   }, []);
+  // a fitted preview is measured (AssetsPaint.frameOf draws every variant once) only when it comes near the screen
   const z = fit
-    ? size && size[0] > 0 && size[1] > 0
+    ? shown && size && size[0] > 0 && size[1] > 0
       ? AssetsPaint.fitZoom(AssetsPaint.frameOf(entry, pick), size[0] - 2 * inset, size[1] - 2 * inset, fit)
       : 0
     : zoom;
@@ -148,7 +168,7 @@ export function Preview({ entry, pick, controls, zoom, fit, inset = 6, fps, stil
   return h(
     'div',
     { className: 'as-preview' + (fit ? ' as-fit' : '') + (className ? ' ' + className : ''), ref: box },
-    h('canvas', { ref, className: 'as-canvas', hidden: !!err }),
+    h('canvas', { ref, className: 'as-canvas', width: 0, height: 0, hidden: !!err }),
     err &&
       h(
         'div',

@@ -28,6 +28,7 @@ const REGION = {
   lake: AssetsScene.region(480, 600, 160, 128),
   waterfall: AssetsScene.region(492, 736, 112, 128),
   fall: AssetsScene.region(520, 180, 128, 96),
+  rainbow: AssetsScene.region(520, 764, 144, 132),
 };
 const islandCard = (key, name, source, more) => ({
   id: 'island.' + key,
@@ -38,6 +39,7 @@ const islandCard = (key, name, source, more) => ({
   where: 'lawn',
   source: [{ file: 'web/sky-island.js', fn: 'renderIsland' }, ...source],
   uses: ALL,
+  frame: AssetsScene.frameOf(REGION[key]),
   draw: (ctx, view, t) => AssetsScene.islandScene(ctx, view, t, REGION[key]),
   ...more,
 });
@@ -76,7 +78,7 @@ function rainbowOver(ctx, view) {
   IslandLife.drawRainbow(ctx, IslandLife.geometry(ISLAND, PG), IslandLife.rainbowLevel(RAINBOW_ARGS));
   ctx.imageSmoothingEnabled = smooth;
 }
-const RAINBOW_AT = AssetsScene.region(520, 764, 144, 132);
+const RAINBOW_AT = REGION.rainbow;
 const RAINBOW = islandCard(
   'rainbow',
   () => tr('assets.item.island.rainbow'),
@@ -121,7 +123,8 @@ const FALL = islandCard(
 
 // ---- the sky (web/sky-render.js), on a stage of SKY_W × SKY_H px ----
 const SKY_W = 160,
-  SKY_H = 100;
+  SKY_H = 100,
+  SKY_FRAME = { w: SKY_W, h: SKY_H };
 function skyIn(ctx, view) {
   ctx.save();
   ctx.translate(view.ox, view.oy);
@@ -140,6 +143,7 @@ const SKY = {
   where: 'sky',
   source: [{ file: 'web/sky-render.js', fn: 'drawBack' }],
   uses: SKY_USES,
+  frame: SKY_FRAME,
   draw(ctx, view, t) {
     skyIn(ctx, view);
     SkyRender.drawBack(ctx, SKY_W, SKY_H, t, view.env);
@@ -169,10 +173,15 @@ const WEATHER = {
     axis(
       'weather',
       () => tr('assets.axis.weather'),
-      SkyLogic.WEATHERS.map(w => ({ id: w, label: WEATHER_NAME[w] || (() => w) })),
+      // rain first: the card shows a weather (clear would look just like the sky card next to it)
+      [...SkyLogic.WEATHERS.filter(w => w === 'rain'), ...SkyLogic.WEATHERS.filter(w => w !== 'rain')].map(w => ({
+        id: w,
+        label: WEATHER_NAME[w] || (() => w),
+      })),
     ),
   ],
   uses: SKY_USES,
+  frame: SKY_FRAME,
   draw(ctx, view, t) {
     const env = AssetsScene.weatherEnv(view.env, SkyLogic.FX[view.pick.weather] ? view.pick.weather : 'clear');
     skyIn(ctx, view);

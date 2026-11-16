@@ -7,7 +7,17 @@ import { AssetsLogic } from './assets-logic.js';
 import { AssetsRegistry } from './assets-registry.js';
 import { AssetsStage } from './assets-stage.js';
 import { AssetsPaint } from './assets-ui-paint.js';
-import { CONTROL_LABEL, CONTROL_OPTIONS, Icon, Preview, Seg, TagChip, h } from './assets-ui-parts.js';
+import {
+  CONTROL_LABEL,
+  CONTROL_OPTIONS,
+  Icon,
+  Preview,
+  SeasonHint,
+  Seg,
+  TagChip,
+  h,
+  heldSeasons,
+} from './assets-ui-parts.js';
 
 const { useEffect, useMemo, useRef, useState } = React;
 const L = AssetsLogic,
@@ -44,14 +54,17 @@ function whenLines(e) {
   return out;
 }
 
-// The label of a cell of the variants grid: the values that change from cell to cell.
-function cellLabel(e, cell, varying) {
+// The label of a cell of the variants grid: the values that change from cell to cell. A swept entry (a person) steps
+// one axis at a time away from its first look, so a cell names only the value it changes (the first cell its first
+// varying axis), not the whole first look again.
+function cellLabel(e, cell, varying, base) {
   const parts = [];
-  for (const a of e.axes)
-    if (varying.has('pick.' + a.id)) {
-      const v = a.values.find(x => x.id === cell.pick[a.id]);
-      if (v) parts.push(v.label());
-    }
+  const axes = e.axes.filter(a => varying.has('pick.' + a.id));
+  const shown = e.sweep ? axes.filter(a => cell.pick[a.id] !== base[a.id]) : axes;
+  for (const a of e.sweep && !shown.length ? axes.slice(0, 1) : shown) {
+    const v = a.values.find(x => x.id === cell.pick[a.id]);
+    if (v) parts.push(v.label());
+  }
   for (const u of L.SCENE)
     if (varying.has('controls.' + u)) {
       const o = CONTROL_OPTIONS[u]().find(x => x.id === cell.controls[u]);
@@ -60,8 +73,13 @@ function cellLabel(e, cell, varying) {
   return parts.join(' · ');
 }
 
-function Row({ label, children }) {
-  return h('div', { className: 'as-row' }, h('div', { className: 'as-row-l' }, label), children);
+function Row({ label, hint, children }) {
+  return h(
+    'div',
+    { className: 'as-row' },
+    h('div', { className: 'as-row-l' }, label),
+    hint ? h('div', { className: 'as-row-r' }, children, hint) : children,
+  );
 }
 
 export function Detail({ e, s, set, controls, narrow, onClose, onStep, position }) {
@@ -219,11 +237,11 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
       ? e.uses.map(u =>
           h(
             Row,
-            { key: u, label: CONTROL_LABEL[u]() },
+            { key: u, label: CONTROL_LABEL[u](), hint: u === 'season' && s.event ? h(SeasonHint) : null },
             h(Seg, {
               label: CONTROL_LABEL[u](),
               value: u === 'season' && s.event ? 'winter' : s[u],
-              options: CONTROL_OPTIONS[u](),
+              options: u === 'season' && s.event ? heldSeasons() : CONTROL_OPTIONS[u](),
               onChange: v => set({ [u]: v }),
               className: u === 'season' && s.event ? 'as-seg-held' : '',
             }),
@@ -237,7 +255,7 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
         'div',
         { className: 'as-cells' },
         cells.map((c, i) => {
-          const label = cellLabel(e, c, varying);
+          const label = cellLabel(e, c, varying, cells[0].pick);
           return h(
             'button',
             {
