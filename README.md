@@ -108,6 +108,7 @@ Open your browser → **http://localhost:4317** — that's it.
 | 📊 | **Whiteboard** | A wall-mounted board showing real Claude API usage (5-hour and 7-day quotas) |
 | 🔒 | **Private** | Reads local transcripts only; nothing leaves your machine unless you turn on Real weather, which sends the city name to Open-Meteo |
 | 🖼️ | **Live wallpaper (macOS)** | The office as your desktop wallpaper, with the server started for you: `node server.js wallpaper` (see below) |
+| 📚 | **Assets wiki** | Every item of the game drawn by its own code, with all its variants by season, light, snow and event: open `/assets` (or ⚙ Settings → Assets) |
 | 📦 | **Zero dependencies** | Pure Node.js — no `npm install`, no build step |
 
 ---
