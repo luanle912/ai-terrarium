@@ -51,6 +51,10 @@ import { ANIMALS } from './assets-cat-animals.js';
 import { EVENT } from './assets-cat-event.js';
 import { PEOPLE } from './assets-cat-people.js';
 import { ROOMS } from './assets-cat-rooms.js';
+import { PLANTS } from './assets-cat-plants.js';
+import { OUTDOOR } from './assets-cat-outdoor.js';
+import { ISLAND_SKY } from './assets-cat-island.js';
+import { WORLD } from './assets-cat-world.js';
 
 // The categories in rail order, each with the accent its cards and chips wear.
 const CAT_NAMES = {
@@ -165,5 +169,10 @@ register(ANIMALS);
 register(EVENT);
 register(PEOPLE);
 register(ROOMS);
+// Task 3: plants, outdoor props, the island and sky, the world view
+register(PLANTS);
+register(OUTDOOR);
+register(ISLAND_SKY);
+register(WORLD);
 
 export const AssetsRegistry = { CATS, TAGS, TAG_LABEL, WHERE, entries, byId, cat, register, problems };

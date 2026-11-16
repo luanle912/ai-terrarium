@@ -212,7 +212,7 @@ export function farIsland(ctx, x, y, sc, col, kind = 'plain', trees = 'green', s
   ctx.globalAlpha = prevAlpha;
 }
 // The far island round (0, 0), the middle of its grass top, in whole pixels.
-function paintFarIsland(g, sc, haze, kind, trees, snowy, festive) {
+export function paintFarIsland(g, sc, haze, kind, trees, snowy, festive) {
   const far = farness(sc),
     hz = c => mix(c, haze, 0.12 + 0.38 * far),
     R = (x, y, w, h, c) => {

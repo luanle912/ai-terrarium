@@ -678,4 +678,7 @@ export const IslandLife = {
   drawLife,
   drawLampLight,
   drawLanternLight,
+  // for the /assets catalogue: the scene px of the island's moving parts, and the rainbow over the main fall
+  geometry,
+  drawRainbow,
 };

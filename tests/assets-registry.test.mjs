@@ -37,6 +37,16 @@ const { OutfitLogic } = loadWeb('outfit-logic')
 const { FateLogic } = loadWeb('fate-logic')
 const { ST, ICON } = loadWeb('office-util')
 const { ACT_TXT } = loadWeb('office-scene')
+// Task 3: plants, outdoor props, the island and sky, the world view
+const { SeasonTree } = loadWeb('season-tree')
+const { SeasonLogic } = loadWeb('season-logic')
+const { SkyLogic } = loadWeb('sky-logic')
+const { SeasonIsland } = loadWeb('season-island')
+const { ISLAND, W, H } = loadWeb('office-scene')
+const DECOR_ENTRY = { tree: 'plants.island-tree', bush: 'plants.bush', mushroom: 'plants.mushroom',
+  flower: 'plants.flowers', rock: 'outdoor.rock' }
+const HUB_COLORS = JSON.parse(/const ISLAND_COLORS = (\[[^\]]*\])/.exec(
+  readFileSync(new URL('../hub/pages.js', import.meta.url), 'utf8'))[1].replace(/'/g, '"'))
 
 const ENTRIES = R.entries()
 const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase())
@@ -220,6 +230,19 @@ const SOURCES = [
   ['FateLogic.FATES', Object.keys(FateLogic.FATES), k => ['people.fate', 'fate', k]],
   ['ICON', Object.keys(ICON), k => ['people.status-bubble', 'status', k]],
   ['rooms', ['restroom', 'smoking'], k => 'rooms.' + k],
+  // Task 3: plants, outdoor props, the island and sky, the world view
+  ['SeasonTree.SEASONS', Object.keys(SeasonTree.SEASONS), k => 'plants.holiday-' + k],
+  ['island decor kinds', [...new Set(ISLAND.decor.map(d => d.kind))], k => DECOR_ENTRY[k] || 'missing.' + k],
+  ['island tree kinds', [...new Set(L.CHOICES.season.map(s => SeasonLogic.look(s).trees)), 'fir'],
+    k => ['plants.island-tree', 'kind', k]],
+  ['world tree kinds', [...new Set(L.CHOICES.season.map(s => SeasonLogic.look(s).trees))],
+    k => ['plants.world-tree', 'kind', k]],
+  ['season falls', [...new Set(L.CHOICES.season.map(s => SeasonLogic.look(s).fall).filter(Boolean))],
+    k => ['island.fall', 'kind', k]],
+  ['SkyLogic.WEATHERS', SkyLogic.WEATHERS, k => ['island.weather', 'weather', k]],
+  ['snowman looks', SeasonIsland.snowmanTiles(ISLAND, W, H).map(m => m.look % 3),
+    k => ['outdoor.snowman', 'look', ['tall', 'stout', 'small'][k]]],
+  ['hub ISLAND_COLORS', HUB_COLORS, k => ['world.island', 'colour', k.slice(1)]],
 ]
 
 test('every item the game knows has an entry in the catalogue', () => {
