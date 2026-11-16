@@ -271,8 +271,11 @@ test('nobody walks through it while the event is on, and everything else is wher
     assert.equal(S.DOG_ROAM.size, was.roam.length - 30)
     assert.deepEqual(S.DOG_PLACES.roamList.map(c => key(...c)), [...S.DOG_ROAM], 'the list and the set still agree')
     assert.ok(S.EVENT_LAND.walk === S.LAWN_WALK && S.EVENT_LAND.roam === S.DOG_ROAM)
-    assert.ok(S.DOG_ROAM === S.CRITTER_PLACES.roam && S.DOG_ROAM === S.DOG_PLACES.roam, 'one set, shared')
-    assert.ok(S.EVENT_LAND.roamList === S.DOG_PLACES.roamList && S.CRITTER_PLACES.roamList === S.DOG_PLACES.roamList)
+    assert.ok(S.DOG_ROAM === S.DOG_PLACES.roam && S.EVENT_LAND.roamList === S.DOG_PLACES.roamList, 'one set, shared')
+    // the critters roam the winter ground (the dogs' without the polar bears' corner): the site is off it too
+    assert.ok(S.CRITTER_PLACES.roam === S.DOG_ROAM_WINTER)
+    for (const k of L.ROAM_OFF) assert.ok(!S.DOG_ROAM_WINTER.has(k), `${k} still roamed in winter`)
+    assert.ok(S.DOG_PLACES_WINTER.roamList.every(c => !L.ROAM_OFF.has(key(...c))))
     assert.equal(pieces(S.DOG_ROAM, true), 1, 'the dogs get everywhere')
     assert.equal(pieces(S.LAWN_WALK, false), 1, 'and so do people')
     assert.deepEqual(facts(), today)
