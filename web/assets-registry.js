@@ -45,6 +45,8 @@ import { tr } from './i18n.js';
 import { AssetsLogic } from './assets-logic.js';
 import { OFFICE } from './assets-cat-office.js';
 import { PANTRY } from './assets-cat-pantry.js';
+import { ANIMALS } from './assets-cat-animals.js';
+import { EVENT } from './assets-cat-event.js';
 
 // The categories in rail order, each with the accent its cards and chips wear.
 const CAT_NAMES = {
@@ -153,5 +155,7 @@ const cat = id => CATS.find(c => c.id === id) || null;
 
 register(OFFICE);
 register(PANTRY);
+register(ANIMALS);
+register(EVENT);
 
 export const AssetsRegistry = { CATS, TAGS, TAG_LABEL, WHERE, entries, byId, cat, register, problems };

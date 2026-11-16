@@ -666,6 +666,9 @@ function drawLife(ctx, island, PG, t, env) {
   if (!still && fx.rain < 0.5 && fx.storm < 0.3) drawBirds(ctx, g, P, life);
 }
 
+// for the /assets catalogue (web/assets-cat-animals.js): the flock and the fireflies on their own
+export { drawBirds, drawFlies, palette as lifePalette };
+
 export const IslandLife = {
   lampGlow,
   fallFlow,

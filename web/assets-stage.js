@@ -243,6 +243,9 @@ function solid(c) {
   if (m && (m[4] == null || +m[4] >= 0.99)) return '#' + hex2(+m[1]) + hex2(+m[2]) + hex2(+m[3]);
   return null;
 }
+// The counting canvases made for a canvas object (the tests' sprite canvases): a drawImage of one folds what was
+// drawn on it into the signature, so sprites that differ only in their pixels tell apart.
+const COUNTING = new WeakMap();
 function recordingCtx(canvas) {
   const cv = canvas || { width: 1024, height: 1024 };
   let m = [1, 0, 0, 1, 0, 0],
@@ -415,6 +418,8 @@ function recordingCtx(canvas) {
     },
     clearRect() {},
     drawImage(img, ...a) {
+      const src = img && typeof img === 'object' ? COUNTING.get(img) : null;
+      if (src) mixStr(src.signature());
       const [dx, dy, dw, dh] =
         a.length >= 8
           ? a.slice(4, 8)
@@ -425,7 +430,11 @@ function recordingCtx(canvas) {
     },
     putImageData(img, dx, dy) {
       const w = (img && img.width) || 0,
-        h = (img && img.height) || 0;
+        h = (img && img.height) || 0,
+        d = img && img.data;
+      // the pixels too, so pixel layers that differ only in colour tell apart
+      if (d)
+        for (let i = 0; i + 3 < d.length; i += 4) mix32(d[i] | (d[i + 1] << 8) | (d[i + 2] << 16) | (d[i + 3] << 24));
       mark('putImageData', w && h ? [dx, dy, dx + w, dy + h] : null, null, 0, [dx, dy, w, h]);
     },
     fillText(text, x, y) {
@@ -449,7 +458,9 @@ function recordingCtx(canvas) {
   };
   // Any other method a draw calls is taken and ignored, so the game can use more of the canvas than listed here.
   const NOOP = () => {};
-  return new Proxy(o, { get: (t, k) => (k in t ? t[k] : NOOP) });
+  const ctx = new Proxy(o, { get: (t, k) => (k in t ? t[k] : NOOP) });
+  if (canvas && typeof canvas === 'object') COUNTING.set(canvas, ctx);
+  return ctx;
 }
 
 export const AssetsStage = { envOf, eventOf, stage, recordingCtx, solid, StageHost };

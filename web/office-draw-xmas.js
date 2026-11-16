@@ -37,7 +37,7 @@ export const groupLit = (g, t, still) => still || (Math.floor(t) + g) % 4 < 2;
 // The strings of lights, laid out once: each { at: Float32Array of x, y, level: the event level it comes with, z: its
 // depth among the scene's sprites (null: on the office walls, drawn right after them) }. In all never more than
 // EventLogic.MAX_BULBS: the shares below add up to 114.
-const STRINGS = [];
+export const STRINGS = [];
 {
   const add = (pts, gap, max, level, z) => {
     const at = EventLogic.lightString(pts, gap, max);

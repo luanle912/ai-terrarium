@@ -26,6 +26,11 @@ const { AssetsLogic: L } = loadWeb('assets-logic')
 const { OfficeDecor } = loadWeb('office-decor')
 const { PantryItems } = loadWeb('pantry-items')
 const { BOARDS } = loadWeb('decor-boards')
+// Task 4: animals and the Christmas event
+const { DogSprites } = loadWeb('dog-sprites')
+const { CritterSprites } = loadWeb('critter-sprites')
+const { DOG_HOUSES } = loadWeb('office-scene')
+const { DogLogic } = loadWeb('dog-logic')
 
 const ENTRIES = R.entries()
 const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase())
@@ -176,6 +181,27 @@ const SOURCES = [
   ['usage boards', Object.keys(BOARDS), k => ['office.usage-board', 'variant', k]],
   ['PantryItems.I', Object.keys(PantryItems.I), k => 'pantry.' + k],
   ['PantryItems.ORDER', PantryItems.ORDER, k => 'pantry.' + k],
+  // Task 4: animals and the Christmas event
+  ['DogSprites.BREEDS', Object.keys(DogSprites.BREEDS), k => ['animals.dog', 'breed', k]],
+  ['dog frames', [...new Set(Object.keys(DogSprites.BREEDS).flatMap(DogSprites.frameNames))],
+    k => ['animals.dog', 'frame', k]],
+  ['dog acts', ['walk', 'run', 'stand', 'sit', 'rest', 'sleep', 'drink', 'bow', 'play'],
+    k => ['animals.dog-life', 'act', k]],
+  ['DOG_HOUSES', DOG_HOUSES.map((h, i) => DogLogic.BREEDS[i]), k => ['animals.kennel', 'kennel', k]],
+  ['CritterSprites.KINDS', Object.keys(CritterSprites.KINDS).flatMap(k =>
+    CritterSprites.frameNames(k).map(f => k + '/' + f)), k => {
+    const [kind, f] = k.split('/')
+    return { reindeer: ['animals.reindeer', 'act', f], penguin: ['animals.penguin', 'act', f],
+      bear: ['animals.polar-bear', 'frame', f], cub: ['animals.polar-bear', 'frame', f],
+      elf: ['event.elf', 'act', f], santa: ['event.santa', 'pose', f], parcel: ['event.parcel', 'frame', f],
+      sleigh: 'event.sleigh' }[kind] || 'unknown kind ' + kind
+  }],
+  ['painters of the lake, the sky and the Christmas event', ['drawDucks', 'drawFish', 'drawBirds', 'drawFlies',
+    'drawIgloo', 'doghouseLantern', 'drawPile', 'drawString', 'drawCandyCane', 'drawCathedral', 'drawOurLady'],
+  k => ({ drawDucks: 'animals.duck', drawFish: 'animals.fish', drawBirds: 'animals.bird', drawFlies: 'animals.firefly',
+    drawIgloo: 'animals.igloo', doghouseLantern: 'animals.kennel-lantern', drawPile: 'event.gift-pile',
+    drawString: 'event.string-lights', drawCandyCane: 'event.candy-cane', drawCathedral: 'event.cathedral',
+    drawOurLady: 'event.our-lady' })[k]],
 ]
 
 test('every item the game knows has an entry in the catalogue', () => {

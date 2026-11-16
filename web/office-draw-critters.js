@@ -66,7 +66,7 @@ function paint(kind, name, dfB, red, flip) {
 
 // The pile of presents at CRITTER_PLACES.drop: up to PLACED_MAX the elves brought and LANDED_MAX from the sleigh,
 // each [x, y] px from the pile's middle (y up) with its paper and ribbon; painted back to front.
-const PILE = [
+export const PILE = [
   [-9, 4, '#3e8ed0', '#f4f1e8'],
   [0, 5, '#c8323a', '#ffd166'],
   [8, 4, '#46a758', '#c8323a'],
