@@ -16,7 +16,7 @@ import { SeasonLogic } from './season-logic.js';
 import { paintFarIsland } from './sky-mist.js';
 import { ISLAND, PG } from './office-scene.js';
 
-const axis = (id, label, values) => ({ id, label, values });
+const { axis } = AssetsStage;
 const ALL = ['light', 'season', 'snow', 'event'];
 
 // ---- the island: scene cards ----
@@ -93,6 +93,14 @@ const FALLS = [
   ['snow', 'winter'],
 ];
 const FV = { ox: 0, oy: 0, env: null, pick: null };
+// The scene a fall is shown in: the page's light and snow, in the fall's own season (looked up once per scene).
+const FALL_ENVS = new WeakMap();
+function fallEnv(env, i) {
+  let m = FALL_ENVS.get(env);
+  if (!m)
+    FALL_ENVS.set(env, (m = FALLS.map(f => AssetsStage.envOf({ light: env.light, season: f[1], snow: !!env.snow }))));
+  return m[i];
+}
 function fallOver(ctx, view, t) {
   IslandSeasonLife.drawFall(ctx, ISLAND, PG, t, view.env);
 }
@@ -111,11 +119,12 @@ const FALL = islandCard(
     ],
     uses: ['light', 'snow'],
     draw(ctx, view, t) {
-      const f = FALLS.find(x => x[0] === view.pick.kind) || FALLS[0];
+      let i = FALLS.length - 1;
+      while (i > 0 && FALLS[i][0] !== view.pick.kind) i--;
       FV.ox = view.ox;
       FV.oy = view.oy;
       FV.pick = view.pick;
-      FV.env = AssetsStage.envOf({ light: AssetsScene.lightOf(view.env), season: f[1], snow: !!view.env.snow });
+      FV.env = fallEnv(view.env, i);
       AssetsScene.islandScene(ctx, FV, t, REGION.fall, fallOver);
     },
   },

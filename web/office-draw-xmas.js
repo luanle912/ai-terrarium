@@ -140,18 +140,24 @@ export function deskDecor(ctx, i, x, y) {
   }
 }
 const OWNED = new Uint8Array(DESKS.length);
+// Where a desk's decoration sits, off the desk's cell (gx, gy) and up from the floor, and the EXIT door's wreath,
+// in the scene (P).
+export const DECOR_SPOT = [1.55, 0.25, 15],
+  WREATH_SPOT = [0, 7.05, 24];
 // Where each desk's decoration sits (x, y px) and its depth among the sprites, and the wreaths, worked out once.
 const DESK_AT = new Float32Array(DESKS.length * 3);
 DESKS.forEach((d, i) => {
-  const [x, y] = P(d.gx + 1.55, d.gy + 0.25, 15);
+  const [x, y] = P(d.gx + DECOR_SPOT[0], d.gy + DECOR_SPOT[1], DECOR_SPOT[2]);
   DESK_AT.set([Math.round(x), Math.round(y), d.gx + d.gy + 1.52], i * 3);
 });
-const WREATHS = [(([x, y]) => ({ x: Math.round(x), y: Math.round(y), z: 7.6, small: false }))(P(0, 7.05, 24))];
+const WREATHS = [(([x, y]) => ({ x: Math.round(x), y: Math.round(y), z: 7.6, small: false }))(P(...WREATH_SPOT))];
 for (const h of DOG_HOUSES) {
   const [x, y] = PG(h.x + KENNEL.X1, h.y, 19);
   WREATHS.push({ x: Math.round(x) + 1, y: Math.round(y), z: h.x + KENNEL.X1 + h.y + KENNEL.HW + 0.02, small: true });
 }
 
+// Indoors the big tree keeps most of its colour after dark: colour c at light level dfB (0..10).
+export const treeNight = (c, dfB) => night(c, 1 - (1 - dfB / 10) * 0.45);
 // The big tree stands indoors, in the middle of the crossing of the two corridors (EventLogic.TREE_AT).
 const TREE = EventLogic.TREE_AT,
   [TX, TY] = P(TREE[0], TREE[1], 0).map(Math.round),
@@ -171,11 +177,10 @@ function treeSprite(level, dfB) {
   const g = treeImg.getContext('2d'),
     foot = [TL, TU];
   g.clearRect(0, 0, treeImg.width, treeImg.height);
-  // indoors the tree keeps most of its colour after dark
   drawBigTree(
     { ctx: g },
     () => foot,
-    c => night(c, 1 - (1 - dfB / 10) * 0.45),
+    c => treeNight(c, dfB),
     [0, 0],
     level,
   );

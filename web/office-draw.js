@@ -40,6 +40,11 @@ import { ClaudeOffice, mixin } from './office.js';
 const NIGHT_TINT = Array.from({ length: 31 }, (_, i) => 'rgba(13,19,34,' + i / 50 + ')');
 // On a holiday these few trees by the office turn into the holiday's tree; the rest keep the season's.
 const HOLIDAY_TREES = SeasonIsland.holidayTrees(ISLAND, W, H);
+// How strongly a holiday tree takes the lawn's night tint at light level dfB (0..10): SkyRender.night's
+// (1 - light) x 0.6.
+export const treeDusk = dfB => (1 - dfB / 10) * 0.6;
+// The floor cell the EXIT door's kit stands on (OfficeDecor.kit at P of it).
+export const DOOR_KIT = [0, 5.5];
 mixin(
   ClaudeOffice,
   class {
@@ -240,7 +245,7 @@ mixin(
       const tk = SeasonTree && this.treeOn ? this.season : null,
         info = tk && SeasonTree.SEASONS[tk],
         holiday = info && (info.type === 'event' || info.type === 'lunar') ? tk : null,
-        dusk = (1 - dfB / 10) * 0.6,
+        dusk = treeDusk(dfB),
         // (not at Christmas: one big tree stands on the front lawn instead, web/island-art-xmas.js)
         held = d => holiday && holiday !== 'christmas' && HOLIDAY_TREES.has(d.x + ',' + d.y);
       for (const p of this.islandCache.props)
@@ -433,7 +438,7 @@ mixin(
       }
       {
         const OD = OfficeDecor;
-        if (OD) OD.F.door(OD.kit(ctx, ...P(0, 5.5)), t);
+        if (OD) OD.F.door(OD.kit(ctx, ...P(DOOR_KIT[0], DOOR_KIT[1])), t);
       }
       for (let y = 0; y < H; y++)
         for (let x = 0; x < W; x++) {

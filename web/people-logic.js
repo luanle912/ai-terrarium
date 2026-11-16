@@ -62,13 +62,23 @@ const STYLE = {
   },
 };
 const LAYERED = new Set(['jacket', 'cardigan']);
+// What goes with a top, into `out`: a layer over a jacket or a cardigan, the bottom (a dress is a skirt; a woman wears
+// one when `skirt` says so, a man never) and the legs' colour (none under a dress). pick(salt, list) chooses from a
+// palette: the session's own roll in look(), a fixed one in the /assets catalogue.
+function clothes(out, g, top, skirt, pick) {
+  const bottom = top === 'dress' || (g === 'f' && skirt) ? 'skirt' : 'pants';
+  out.layer = LAYERED.has(top) ? pick('layer', LAYER) : null;
+  out.bottom = bottom;
+  out.legs = bottom === 'pants' ? pick('pants', PANTS) : top === 'dress' ? null : pick('skirt', SKIRT);
+  return out;
+}
 // The whole look of one session. `shirt` (the department colour) is not part of it: it stays the team's colour.
 function look(sid) {
   sid = String(sid);
   const g = genderOf(sid),
     S = STYLE[g],
-    top = take(sid, 'top', S.top);
-  const bottom = g === 'm' ? 'pants' : top === 'dress' || roll(sid, 'bottom', 3) < 2 ? 'skirt' : 'pants';
+    top = take(sid, 'top', S.top),
+    w = clothes({}, g, top, roll(sid, 'bottom', 3) < 2, (salt, list) => take(sid, salt, list));
   return {
     gender: g,
     skin: take(sid, 'skin', SKIN),
@@ -76,11 +86,11 @@ function look(sid) {
     hairStyle: take(sid, 'hairStyle', S.hair),
     beard: take(sid, 'beard', S.beard),
     top,
-    layer: LAYERED.has(top) ? take(sid, 'layer', LAYER) : null,
-    bottom,
-    legs: bottom === 'pants' ? take(sid, 'pants', PANTS) : top === 'dress' ? null : take(sid, 'skirt', SKIRT),
+    layer: w.layer,
+    bottom: w.bottom,
+    legs: w.legs,
     shoes: take(sid, 'shoes', S.shoes),
     acc: take(sid, 'acc', S.acc),
   };
 }
-export const PeopleLogic = { hash, genderOf, look, SKIN, HAIR, PANTS, SKIRT, LAYER, STYLE };
+export const PeopleLogic = { hash, genderOf, look, clothes, SKIN, HAIR, PANTS, SKIRT, LAYER, STYLE };

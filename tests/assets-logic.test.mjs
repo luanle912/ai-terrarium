@@ -140,6 +140,36 @@ test('the deep link round-trips, leaves defaults out and ignores what it does no
     assert.deepEqual(L.fromHash(L.toHash(st)), st)
 })
 
+test('the deep link is the screen: an item open over another category keeps both, a category with no item is just it',
+  () => {
+    // the drawer opened from "Everything" or a search, then another category picked on the rail
+    const over = { ...L.DEFAULTS, cat: 'office', id: 'plants.bush', pick: { look: 'small' } }
+    assert.equal(L.toHash(over), '#/office/plants.bush?v.look=small')
+    assert.deepEqual(L.fromHash(L.toHash(over)), over)
+    const fromAll = { ...L.DEFAULTS, cat: 'all', id: 'plants.bush' }
+    assert.equal(L.toHash(fromAll), '#/all/plants.bush')
+    assert.deepEqual(L.fromHash(L.toHash(fromAll)), fromAll)
+    // a category clicked on the rail closes the drawer: no item, no variant in the link
+    const rail = { ...L.DEFAULTS, cat: 'office', id: null, pick: { look: 'small' } }
+    assert.equal(L.toHash(rail), '#/office')
+    assert.deepEqual(L.fromHash(L.toHash(rail)), { ...L.DEFAULTS, cat: 'office' })
+    const own = { ...L.DEFAULTS, cat: 'plants', id: 'plants.bush' }
+    assert.equal(L.toHash(own), '#/plants/bush')
+    assert.deepEqual(L.fromHash(L.toHash(own)), own)
+  })
+
+test('the deep link leaves out the open item\'s first variant and motion that only follows the system', () => {
+  const s = { ...L.DEFAULTS, cat: 'pantry', id: 'pantry.microwave', pick: { use: 'idle', x: 'b' } }
+  assert.equal(L.toHash(s, { pick: { use: 'idle', x: 'a' } }), '#/pantry/microwave?v.x=b')
+  const first = { use: 'idle', x: 'a' }
+  assert.equal(L.toHash({ ...s, pick: first }, { pick: first }), '#/pantry/microwave')
+  // under prefers-reduced-motion the page starts with motion off: off is not worth a link, on is
+  const still = { ...L.DEFAULTS, motion: false }
+  assert.equal(L.toHash(still, { motion: false }), '#/')
+  assert.equal(L.toHash({ ...L.DEFAULTS, motion: true }, { motion: false }), '#/?motion=1')
+  assert.equal(L.toHash(still), '#/?motion=0')
+})
+
 test('the event windows come from the event calendar; a holiday window reads day/month', () => {
   assert.deepEqual(L.eventWindow('christmas', 1), { from: '12-01', to: '12-26' })
   assert.deepEqual(L.eventWindow('christmas', 2), { from: '12-08', to: '12-26' })

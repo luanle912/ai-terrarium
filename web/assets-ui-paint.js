@@ -177,35 +177,42 @@ const samePick = (a, b) => {
   for (const k in a) if (!(k in b)) return false;
   return true;
 };
+const dprNow = () => (typeof devicePixelRatio !== 'undefined' && devicePixelRatio) || 1;
+const kOf = zoom => Math.max(1, Math.round(zoom * dprNow()));
+// Sizes the slot's canvas for frame f at `zoom` on the screen it is on now; true when it changed (and was cleared).
+function size(slot, f, zoom) {
+  const k = kOf(zoom);
+  if (slot.k === k && slot.frame === f && slot.zoom === zoom) return false;
+  const css = zoom >= 1 ? k / dprNow() : zoom;
+  slot.canvas.width = f.w * k;
+  slot.canvas.height = f.h * k;
+  slot.canvas.style.width = f.w * css + 'px';
+  slot.canvas.style.height = f.h * css + 'px';
+  slot.canvas.style.setProperty('--cell', 4 * css + 'px');
+  slot.k = k;
+  slot.zoom = zoom;
+  slot.frame = f;
+  return true;
+}
 // Shows entry e in the scene of `controls` (only the controls it uses reach it) with `pick`, at `zoom` css px per
 // pixel (a fraction shrinks it); the canvas gets the screen's own resolution so it stays sharp, and below ×1 it is
 // drawn at one device px per pixel or more and shrunk by css (pixelated), its aspect kept.
 function setSlot(slot, e, pick, controls, zoom) {
   const p = AssetsLogic.fixPick(e, pick),
     f = frameOf(e, p),
-    dpr = (typeof devicePixelRatio !== 'undefined' && devicePixelRatio) || 1,
-    k = Math.max(1, Math.round(zoom * dpr)),
     env = AssetsStage.envOf(AssetsLogic.sceneOf(e, controls));
-  // the same variant in the same scene at the same size: nothing to paint again (a still card stays as it is)
+  // the same variant in the same scene at the same size and resolution: nothing to paint again (a still card stays
+  // as it is)
   if (
     slot.entry === e &&
     slot.view.env === env &&
     slot.zoom === zoom &&
+    slot.k === kOf(zoom) &&
     slot.frame === f &&
     samePick(slot.view.pick, p)
   )
     return false;
-  if (slot.k !== k || slot.frame !== f || slot.zoom !== zoom) {
-    const css = zoom >= 1 ? k / dpr : zoom;
-    slot.canvas.width = f.w * k;
-    slot.canvas.height = f.h * k;
-    slot.canvas.style.width = f.w * css + 'px';
-    slot.canvas.style.height = f.h * css + 'px';
-    slot.canvas.style.setProperty('--cell', 4 * css + 'px');
-    slot.k = k;
-    slot.zoom = zoom;
-    slot.frame = f;
-  }
+  size(slot, f, zoom);
   slot.entry = e;
   slot.view.ox = -f.x0;
   slot.view.oy = -f.y0;
@@ -262,6 +269,19 @@ function setMotion(on) {
   for (const s of slots) s.dirty = true;
   wake();
 }
+// The window moved to a screen of another pixel ratio (or the page was zoomed): every canvas takes the new resolution.
+function watchRatio() {
+  if (typeof matchMedia === 'undefined') return;
+  const mq = matchMedia('(resolution: ' + dprNow() + 'dppx)'),
+    on = () => {
+      mq.removeEventListener('change', on);
+      for (const s of slots) if (s.entry && size(s, s.frame, s.zoom)) s.dirty = true;
+      wake();
+      watchRatio();
+    };
+  if (mq && mq.addEventListener) mq.addEventListener('change', on);
+}
+watchRatio();
 if (typeof document !== 'undefined')
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) {

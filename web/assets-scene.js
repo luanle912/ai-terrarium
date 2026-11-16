@@ -8,11 +8,6 @@ import { SkyLogic } from './sky-logic.js';
 import { IslandLife } from './island-life.js';
 import { snowOnTop } from './island-art-snow.js';
 
-// One string per scene, for caches: the light, season, snow and event an env stands for.
-const envKey = env => env.df + '|' + env.season + '|' + env.snow + '|' + env.event;
-// The light control an env was made from ('day', 'dusk' or 'night').
-const lightOf = env => Object.keys(AssetsStage.LIGHT).find(k => AssetsStage.LIGHT[k][0] === env.df) || 'day';
-
 // A canvas of w × h px painted once by paint(g, canvas) and kept by key (the least recently used goes first). On the
 // counting canvas of the tests, stamping it folds what was painted on it into the signature (AssetsStage.recordingCtx).
 // read: a canvas the paint reads back (getImageData).
@@ -39,7 +34,7 @@ function sprite(key, w, h, paint, read) {
 // (ox, oy). key names what paint draws (the env is added).
 function prop(ctx, view, key, x, y, ext, paint, snowy = true) {
   const env = view.env,
-    img = sprite('prop|' + key + '|' + envKey(env), ext[0] + ext[2], ext[1] + ext[3], (g, c) => {
+    img = sprite('prop|' + key + '|' + env.key, ext[0] + ext[2], ext[1] + ext[3], (g, c) => {
       const s = AssetsStage.stage(g, {
         ox: ext[0] - (x - y) * TW,
         oy: ext[1] - (x + y + 1) * TH,
@@ -93,7 +88,7 @@ function bake(env) {
 }
 // The land and the props of region r in the scene of env, as two canvases of r.w × r.h px.
 function bakeCut(env, r) {
-  const key = envKey(env);
+  const key = env.key;
   let cuts = CUTS.get(key);
   if (cuts && cuts.has(r)) {
     CUTS.delete(key);
@@ -153,4 +148,4 @@ function weatherEnv(env, w) {
   return m[w];
 }
 
-export const AssetsScene = { envKey, lightOf, sprite, prop, region, frameOf, bakeCut, enter, islandScene, weatherEnv };
+export const AssetsScene = { sprite, prop, region, frameOf, bakeCut, enter, islandScene, weatherEnv };

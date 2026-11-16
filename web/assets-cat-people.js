@@ -13,13 +13,8 @@ import { OfficeDecor } from './office-decor.js';
 import { DEPT_PAL, DESKS, IDLE_SPOTS, P, PA } from './office-scene.js';
 import { SCENES } from './office-draw-fate.js';
 import { SIZE as FALL_SIZE } from './office-draw-fall.js';
-import './office-draw-fate-more.js';
-import './office-draw-fate-xmas.js';
-import './office-draw-idle-xmas.js';
-import './office-draw-people.js';
-import { ClaudeOffice } from './office.js';
 
-const axis = (id, label, values) => ({ id, label, values });
+const { axis, valueIndex, xmasEvent } = AssetsStage;
 const val = (id, label, more) => ({ id, label, ...more });
 // Where a person stands for the catalogue: a cell of the office floor (indoors, so no breath in the cold).
 // Fishing happens on the lake's bank, where the line reaches the water (web/office-draw-people.js drawRod).
@@ -27,9 +22,10 @@ const FISH = IDLE_SPOTS.find(sp => sp.act === 'fish').pt;
 const SPOT = [3.5, 3.5],
   DESK = DESKS[0],
   SEAT = [DESK.gx + 1, DESK.gy + 1.45];
-// Runs fn with the canvas moved so the scene point where a person standing at (x, y) has their feet lands on (ox, oy).
-function atFeet(ctx, view, x, y, fn) {
-  const [sx, sy] = PA(x, y);
+// Runs fn(x, y) with the canvas moved so the scene point (x, y px) where a person standing at (ax, ay) has their feet
+// lands on (ox, oy). fn is a fixed function (it reads what it draws from NOW), so a card makes no closure per frame.
+function atFeet(ctx, view, ax, ay, fn) {
+  const [sx, sy] = PA(ax, ay);
   ctx.save();
   ctx.translate(view.ox - Math.round(sx), view.oy - Math.round(sy));
   try {
@@ -38,8 +34,16 @@ function atFeet(ctx, view, x, y, fn) {
     ctx.restore();
   }
 }
+// The draw under way: its stage, canvas, clock and who is drawn (read by the fixed functions handed out below).
+const NOW = { s: null, ctx: null, t: 0, who: null, kind: '', dur: 1 };
+const aim = (ctx, view, t) => {
+  NOW.ctx = ctx;
+  NOW.t = t;
+  return (NOW.s = AssetsStage.stage(ctx, view, t));
+};
+const drawWho = () => NOW.s.host.drawPerson(NOW.s.G, NOW.who);
 // The event objects (as EventLogic.active gives them) an outfit needs: level 1 is the Santa hat only, 2 the outfit.
-const EV = [null, 1, 2].map(l => l && { key: 'christmas', level: l, eve: true, day: true });
+const EV = [null, xmasEvent(1), xmasEvent(2)];
 
 // ---- the axes of a person ----
 const STYLE = PeopleLogic.STYLE;
@@ -219,11 +223,7 @@ function outfitOf(oi, di, hi) {
 }
 
 // ---- the person ----
-const index = (ax, id) =>
-  Math.max(
-    0,
-    ax.values.findIndex(v => v.id === id),
-  );
+const index = valueIndex;
 // One person and one look, filled in place for each draw (the drawing code caches on them, as on a live agent).
 const LOOK0 = PeopleLogic.look('assets');
 const A = {
@@ -253,20 +253,24 @@ const set = (o, k, v) => {
   o[k] = v;
   return true;
 };
+// What goes with each top is PeopleLogic's rule (clothes), in fixed colours: a woman in a skirt, a man in trousers.
+const COLOUR = { layer: 0, pants: 0, skirt: 2 },
+  fixedColour = (salt, list) => list[COLOUR[salt]],
+  CLOTHES = { layer: null, bottom: 'pants', legs: null };
 function dress(pick) {
   const L = A.look,
     g = pick.gender === 'f' ? 'f' : 'm',
     hair = !pick.hair || pick.hair === 'auto' ? STYLE[g].hair[0] : pick.hair,
     top = !pick.top || pick.top === 'auto' ? STYLE[g].top[0] : pick.top,
-    skirt = g === 'f' || top === 'dress',
+    w = PeopleLogic.clothes(CLOTHES, g, top, true, fixedColour),
     skin = PeopleLogic.SKIN[index(SKIN, pick.skin)],
     acc = pick.acc && pick.acc !== 'none' ? pick.acc : null;
   let changed = set(L, 'gender', g);
   changed = set(L, 'hairStyle', hair) || changed;
   changed = set(L, 'top', top) || changed;
-  changed = set(L, 'layer', top === 'jacket' || top === 'cardigan' ? PeopleLogic.LAYER[0] : null) || changed;
-  changed = set(L, 'bottom', skirt ? 'skirt' : 'pants') || changed;
-  changed = set(L, 'legs', top === 'dress' ? null : skirt ? PeopleLogic.SKIRT[2] : PeopleLogic.PANTS[0]) || changed;
+  changed = set(L, 'layer', w.layer) || changed;
+  changed = set(L, 'bottom', w.bottom) || changed;
+  changed = set(L, 'legs', w.legs) || changed;
   changed = set(L, 'beard', pick.beard && pick.beard !== 'none' ? pick.beard : null) || changed;
   changed = set(L, 'acc', acc) || changed;
   changed = set(L, 'skin', skin) || changed;
@@ -301,25 +305,23 @@ function wear(pick, G) {
   A.outfit = oi ? outfitOf(oi, index(SHIRT, pick.colour), hi) : null;
   G.ev = EV[A.outfitL];
 }
-// The person's draw handed to the workstation, made once per stage (the host and G are the stage's own).
-const SITTER = new WeakMap();
-const sitter = s => SITTER.get(s) || (SITTER.set(s, () => s.host.drawPerson(s.G, A)), SITTER.get(s));
+// At the desk, as the office draws it: the desk, the chair, the person and the backrest over them.
+function atDesk() {
+  for (const it of OfficeDecor.deskWorkstation(NOW.ctx, P, DESK, A, NOW.t, drawWho, 1)) it.f();
+}
 function drawA(ctx, view, t) {
-  const s = AssetsStage.stage(ctx, view, t),
+  const s = aim(ctx, view, t),
     G = s.G,
     ev = G.ev,
     pick = view.pick;
   dress(pick);
   const pose = place(pick);
   wear(pick, G);
+  NOW.who = A;
   try {
-    if (pose === 'seated' || pose === 'asleep')
-      // at the desk, as the office draws it: the desk, the chair, the person and the backrest over them
-      s.scene(SEAT[0], SEAT[1], 0, () => {
-        if (pose === 'asleep') return s.host.drawPerson(G, A);
-        for (const it of OfficeDecor.deskWorkstation(ctx, P, DESK, A, t, sitter(s), 1)) it.f();
-      });
-    else atFeet(ctx, view, A.x, A.y, () => s.host.drawPerson(G, A));
+    if (pose === 'seated') s.scene(SEAT[0], SEAT[1], 0, atDesk);
+    else if (pose === 'asleep') s.scene(SEAT[0], SEAT[1], 0, drawWho);
+    else atFeet(ctx, view, A.x, A.y, drawWho);
   } finally {
     G.ev = ev;
   }
@@ -381,12 +383,13 @@ const SUB_AGENT = {
   ],
   uses: ['light', 'event'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
-      pose = view.pick.pose || 'front';
+    const pose = view.pick.pose || 'front';
+    aim(ctx, view, t);
     SUB.moving = pose === 'walk';
     SUB.dirFront = pose !== 'back';
     SUB.status = view.pick.status || 'working';
-    atFeet(ctx, view, SUB.x, SUB.y, () => s.host.drawPerson(s.G, SUB));
+    NOW.who = SUB;
+    atFeet(ctx, view, SUB.x, SUB.y, drawWho);
   },
 };
 
@@ -419,14 +422,30 @@ const WHO = { ...A, id: 3, sid: 'assets-who', look: PeopleLogic.look('assets-who
 WHO.skin = WHO.look.skin;
 WHO.acc = WHO.look.acc;
 const FATE = { kind: 'exit', seed: 3, who: WHO };
-// The EXIT door's faller, as startFall records them, once per event level (their hat, at Christmas).
+// The EXIT door's faller, as the office's startFall records them, once per event level (their hat, at Christmas):
+// recorded on a host of its own that answers the stage host's event, so the stage host keeps no fallers.
 const FALLERS = [];
-function fallerOf(ev) {
-  const l = ev ? ev.level : 0;
+function fallerOf(host) {
+  const ev = host.eventNow(),
+    l = ev ? ev.level : 0;
   if (FALLERS[l]) return FALLERS[l];
-  const rec = { eventNow: () => ev };
-  ClaudeOffice.prototype.startFall.call(rec, { ...WHO, outfit: null, outfitL: undefined }, 0);
+  const rec = Object.create(host);
+  rec.fallers = null;
+  rec.startFall({ ...WHO, outfit: null, outfitL: undefined }, 0);
   return (FALLERS[l] = rec.fallers[0]);
+}
+// One of the twenty scenes, clipped round the person (x, y px: their feet).
+function fateScene(x, y) {
+  const ctx = NOW.ctx;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x - CROP.left, y - CROP.up, CROP.w, CROP.h);
+  ctx.clip();
+  try {
+    SCENES[NOW.kind](NOW.s.host, NOW.s.G, FATE, NOW.t % NOW.dur, x, y);
+  } finally {
+    ctx.restore();
+  }
 }
 // A scene can reach far (a bolt from the sky, a rocket): the card shows the part round the person.
 const CROP = { left: 64, up: 112, w: 128, h: 126 };
@@ -453,24 +472,13 @@ const FATES = {
   ],
   uses: ['light', 'event'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
-      kind = view.pick.fate || 'exit',
-      dur = FateLogic.FATES[kind].dur;
-    // (the stage's host borrowed the office's methods before web/office-draw-fall.js was loaded: call it from there)
+    const s = aim(ctx, view, t),
+      kind = view.pick.fate || 'exit';
     if (kind === 'exit' || !SCENES[kind])
-      return ClaudeOffice.prototype.drawFaller.call(s.host, ctx, fallerOf(s.G.ev), view.ox, view.oy, FALL_SIZE, t);
-    FATE.kind = kind;
-    atFeet(ctx, view, WHO.x, WHO.y, (x, y) => {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x - CROP.left, y - CROP.up, CROP.w, CROP.h);
-      ctx.clip();
-      try {
-        SCENES[kind](s.host, s.G, FATE, t % dur, x, y);
-      } finally {
-        ctx.restore();
-      }
-    });
+      return s.host.drawFaller(ctx, fallerOf(s.host), view.ox, view.oy, FALL_SIZE, t);
+    FATE.kind = NOW.kind = kind;
+    NOW.dur = FateLogic.FATES[kind].dur;
+    atFeet(ctx, view, WHO.x, WHO.y, fateScene);
   },
 };
 

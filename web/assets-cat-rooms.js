@@ -8,9 +8,6 @@ import { AssetsStage } from './assets-stage.js';
 import { PeopleLogic } from './people-logic.js';
 import { PropUse } from './prop-use.js';
 import { DEPT_PAL, IDLE_SPOTS, SMOKE, WC } from './office-scene.js';
-import './office-draw-restroom.js';
-import './office-draw-smoking.js';
-import './office-draw-people.js';
 
 const STATE = {
   id: 'state',
@@ -47,13 +44,16 @@ function someone(id, spot, more) {
 }
 const NOBODY = [];
 const byDepth = (p, q) => p.z - q.z;
-// The office's way: the method pushes its pieces (and people go in among them), then everything by depth.
+// The draw under way (read by the fixed functions handed to the stage's scene(), so a card makes no closures).
+const NOW = { s: null, view: null, people: NOBODY };
+// Each person's piece among the room's, made once: drawn by the office's drawPerson on the stage under way.
+const pieceOf = a => ({ z: a.x + a.y, f: () => NOW.s.host.drawPerson(NOW.s.G, a) });
+// The office's way: the method has pushed its pieces, the people go in among them, then everything by depth.
 const ITEMS = [];
-function paint(s, people, fill) {
-  ITEMS.length = 0;
-  fill(ITEMS);
-  for (const a of people) ITEMS.push({ z: a.x + a.y, f: () => s.host.drawPerson(s.G, a) });
-  ITEMS.sort(byDepth).forEach(it => it.f());
+function paint() {
+  for (const a of NOW.people) ITEMS.push(a.piece);
+  ITEMS.sort(byDepth);
+  for (let i = 0; i < ITEMS.length; i++) ITEMS[i].f();
 }
 
 // ---- the restroom ----
@@ -66,9 +66,16 @@ const WASH_SPOT = WC.spots.find(sp => sp.room === 'f').wash;
 const WASHER = someone(12, { ...WASH_SPOT, act: 'wc', front: false });
 const BUSY_WC = [...INSIDE, WASHER],
   SHOWN_WC = [WASHER];
+WASHER.piece = pieceOf(WASHER);
 const TAP = new Float32Array(PropUse.DARK.length);
 TAP[PropUse.ID[WASH_SPOT.prop]] = 1;
 const WC_MID = [(WC.x0 + WC.x1) / 2, (WC.y0 + WC.y1) / 2];
+function restroom() {
+  const { s, view } = NOW;
+  ITEMS.length = 0;
+  s.host.restroomItems(s.G, ITEMS, view.env.snow);
+  paint();
+}
 const RESTROOM = {
   id: 'rooms.restroom',
   cat: 'rooms',
@@ -83,21 +90,27 @@ const RESTROOM = {
   axes: [STATE],
   uses: ['light', 'snow', 'event'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
-      host = s.host,
+    const s = (NOW.s = AssetsStage.stage(ctx, view, t)),
       busy = view.pick.state === 'busy';
+    NOW.view = view;
+    NOW.people = busy ? SHOWN_WC : NOBODY;
     // (the stage hands the next draw a clean host: nothing to put back)
-    host.agents = busy ? BUSY_WC : NOBODY;
-    host.propLit = busy ? TAP : null;
-    s.scene(WC_MID[0], WC_MID[1], 0, () =>
-      paint(s, busy ? SHOWN_WC : NOBODY, items => host.restroomItems(s.G, items, view.env.snow)),
-    );
+    s.host.agents = busy ? BUSY_WC : NOBODY;
+    s.host.propLit = busy ? TAP : null;
+    s.scene(WC_MID[0], WC_MID[1], 0, restroom);
   },
 };
 
 // ---- the smoking corner ----
 const SMOKERS = [SMOKE.spots[1], SMOKE.spots[3], SMOKE.spots[4]].map((sp, i) => someone(20 + i, sp));
+for (const a of SMOKERS) a.piece = pieceOf(a);
 const SMOKE_MID = [SMOKE.x + 2, SMOKE.y + 1.5];
+function smoking() {
+  const { s, view } = NOW;
+  ITEMS.length = 0;
+  s.host.smokingItems(s.G, ITEMS, view.env.snow);
+  paint();
+}
 const SMOKING = {
   id: 'rooms.smoking',
   cat: 'rooms',
@@ -112,15 +125,10 @@ const SMOKING = {
   axes: [STATE],
   uses: ['light', 'snow', 'event'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
-      busy = view.pick.state === 'busy';
-    s.scene(
-      SMOKE_MID[0],
-      SMOKE_MID[1],
-      0,
-      () => paint(s, busy ? SMOKERS : NOBODY, items => s.host.smokingItems(s.G, items, view.env.snow)),
-      true,
-    );
+    const s = (NOW.s = AssetsStage.stage(ctx, view, t));
+    NOW.view = view;
+    NOW.people = view.pick.state === 'busy' ? SMOKERS : NOBODY;
+    s.scene(SMOKE_MID[0], SMOKE_MID[1], 0, smoking, true);
   },
 };
 

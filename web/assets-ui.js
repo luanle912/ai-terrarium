@@ -59,7 +59,10 @@ function stateOf(hash) {
   if (s.cat !== 'all' && !R.CATS.some(c => c.id === s.cat)) s.cat = 'all';
   return s;
 }
-const hrefOf = (s, patch) => L.toHash({ ...s, ...patch });
+// The link of a state: without what the page shows anyway (the open item's first variant, motion as the system wants).
+const linkOf = s =>
+  L.toHash(s, { pick: s.id && R.byId(s.id) ? firstPick(R.byId(s.id)) : null, motion: !reducedMotion() });
+const hrefOf = (s, patch) => linkOf({ ...s, ...patch });
 
 // ---- header ----
 function Header({ s, set, searchRef, narrow }) {
@@ -174,11 +177,12 @@ function Rail({ s, set, counts }) {
       'a',
       {
         key: id,
-        href: hrefOf(s, { cat: id, id: null }),
+        href: hrefOf(s, { cat: id, id: null, pick: {} }),
         className: 'as-cat' + (s.cat === id ? ' on' : '') + (counts[id] ? '' : ' none'),
         style: { '--accent': accent },
         'aria-current': s.cat === id ? 'page' : undefined,
-        onClick: e => (e.preventDefault(), set({ cat: id })),
+        // a category closes the drawer, as its link says
+        onClick: e => (e.preventDefault(), set({ cat: id, id: null, pick: {} })),
       },
       h('span', { className: 'as-cat-dot' }),
       h('span', { className: 'as-cat-name' }, label),
@@ -327,7 +331,7 @@ export function AssetsApp() {
   }, []);
   // the hash follows the state without adding history entries
   useEffect(() => {
-    const hash = L.toHash(s);
+    const hash = linkOf(s);
     if (hash !== (location.hash || '#/')) history.replaceState(null, '', hash === '#/' ? location.pathname : hash);
   }, [s]);
   useEffect(() => AssetsPaint.setMotion(s.motion), [s.motion]);

@@ -5,14 +5,15 @@ import { tr } from './i18n.js';
 import { AssetsStage } from './assets-stage.js';
 import { OfficeDecor } from './office-decor.js';
 import { drawUsageBoard } from './decor-boards.js';
-import { deskDecor, wreath } from './office-draw-xmas.js';
+import { DECOR_SPOT, WREATH_SPOT, deskDecor, wreath } from './office-draw-xmas.js';
+import { DOOR_KIT } from './office-draw.js';
 import { DEPT_PAL, DESKS, SEGS, THEMES } from './office-scene.js';
 
 const F = OfficeDecor.F;
 const kitOf = (ctx, view) => AssetsStage.stage(ctx, view).kit;
 const FURN = 'web/decor-furniture.js',
   WALL = 'web/decor-wall.js';
-const axis = (id, label, values) => ({ id, label, values });
+const { axis } = AssetsStage;
 
 // ---- the kit furniture (OfficeDecor.ITEMS) ----
 // One options object per piece, filled in place before each draw.
@@ -249,7 +250,8 @@ const DESK_DECOR = {
   draw(ctx, view, t) {
     const K = kitOf(ctx, view);
     F.desk(K, t, DECOR_DESK);
-    const [x, y] = K.P(1.55, 0.25, 15);
+    // the kit desk stands on cell (0, 0): the spot is the game's, off a desk's cell
+    const [x, y] = K.P(DECOR_SPOT[0], DECOR_SPOT[1], DECOR_SPOT[2]);
     deskDecor(ctx, Math.max(0, DECOR.indexOf(view.pick.kind)), Math.round(x), Math.round(y));
   },
 };
@@ -272,7 +274,8 @@ const WREATH = {
     if (view.pick.size === 'kennel') return wreath(ctx, view.ox, view.oy, true);
     const K = kitOf(ctx, view);
     F.door(K, t);
-    const [x, y] = K.P(0, 7.05 - 5.5, 24);
+    // the kit stands where the game stands the door's (DOOR_KIT): the wreath's spot is the game's, off that cell
+    const [x, y] = K.P(WREATH_SPOT[0] - DOOR_KIT[0], WREATH_SPOT[1] - DOOR_KIT[1], WREATH_SPOT[2]);
     wreath(ctx, Math.round(x), Math.round(y), false);
   },
 };

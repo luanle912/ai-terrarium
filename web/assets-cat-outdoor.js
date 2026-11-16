@@ -4,6 +4,7 @@
 // winter. The lotus, the duckweed and the stepping stones only exist in the lake's bake and life, so they are scene
 // cards cut from the baked island (summer by default; in winter the lake freezes and they go, as in the game).
 import { tr } from './i18n.js';
+import { AssetsStage } from './assets-stage.js';
 import { AssetsScene } from './assets-scene.js';
 import { drawBench, drawLamp, drawRock } from './island-art.js';
 import { eventTone } from './sky-island.js';
@@ -16,7 +17,7 @@ import { hash } from './island-land.js';
 import { ISLAND, H, PG, W } from './office-scene.js';
 import { findTile, onTile, paletteOf } from './assets-cat-plants.js';
 
-const axis = (id, label, values) => ({ id, label, values });
+const { axis } = AssetsStage;
 // Runs a light of web/island-life.js (drawn in scene px) with the scene's point (x, y, z) at (ox, oy).
 function inScene(ctx, view, x, y, z) {
   const [sx, sy] = PG(x, y, z);

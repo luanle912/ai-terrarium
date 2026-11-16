@@ -163,19 +163,28 @@ function combos(e, controls) {
 }
 
 // ---- the deep link: #/<cat>/<name>?light=night&season=winter&v.use=use… (only what differs from the defaults) ----
+// The path is the category shown and the open item: #/<cat>/<name> when the item is of that category, else
+// #/<cat>/<full id> (an item opened from "Everything", or from a search), so a reload shows the same screen.
+// base: what the page would show anyway, left out of the link: pick, the open item's first variant (defaultPick);
+// motion, motion as the page starts without a choice (off under prefers-reduced-motion).
 const ID = /^[a-z]+\.[a-z0-9-]+$/;
 const enc = encodeURIComponent;
-function toHash(s) {
+function toHash(s, base = {}) {
   const id = s.id && ID.test(s.id) ? s.id : null,
-    cat = id ? id.split('.')[0] : s.cat && s.cat !== 'all' ? s.cat : '';
-  let path = '#/' + (id ? cat + '/' + id.slice(cat.length + 1) : cat);
-  if (id && s.cat === 'all') path = '#/all/' + id;
-  const q = [];
+    own = id ? id.split('.')[0] : '',
+    cat = s.cat && s.cat !== 'all' ? s.cat : '';
+  let path = '#/' + cat;
+  if (id) path = own === s.cat ? '#/' + own + '/' + id.slice(own.length + 1) : '#/' + (cat || 'all') + '/' + id;
+  const q = [],
+    motion = base.motion === undefined ? DEFAULTS.motion : base.motion;
   for (const k of ['light', 'season', 'snow', 'event', 'zoom', 'motion'])
-    if (s[k] !== DEFAULTS[k]) q.push(k + '=' + (typeof s[k] === 'boolean' ? (s[k] ? 1 : 0) : s[k]));
+    if (s[k] !== (k === 'motion' ? motion : DEFAULTS[k]))
+      q.push(k + '=' + (typeof s[k] === 'boolean' ? (s[k] ? 1 : 0) : s[k]));
   if (s.q) q.push('q=' + enc(s.q));
   if (s.tags && s.tags.length) q.push('tags=' + s.tags.map(enc).join(','));
-  for (const [k, v] of Object.entries(s.pick || {})) q.push('v.' + enc(k) + '=' + enc(v));
+  if (id)
+    for (const [k, v] of Object.entries(s.pick || {}))
+      if (!base.pick || base.pick[k] !== v) q.push('v.' + enc(k) + '=' + enc(v));
   return path + (q.length ? '?' + q.join('&') : '');
 }
 const asValue = (k, raw) => {

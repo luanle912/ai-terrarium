@@ -8,15 +8,23 @@ import { loadWeb } from './web.mjs'
 import { loadI18n } from './load-i18n.mjs'
 
 const I18n = loadI18n('vi')
-// The office's wall clock shows the time of day (web/decor-wall.js clockDraw): pin "now", so a draw is the same
-// every time it is made.
+// The office's wall clock and the pantry's show the time of day (web/decor-wall.js clockDraw, web/pantry-kitchen.js):
+// the tests that compare draws pin "now" while they draw, so a draw is the same every time it is made.
 const RealDate = Date
-globalThis.Date = class extends RealDate {
+class PinnedDate extends RealDate {
   constructor(...a) {
     super(...(a.length ? a : [2026, 5, 1, 10, 8, 30]))
   }
   static now() {
     return new RealDate(2026, 5, 1, 10, 8, 30).getTime()
+  }
+}
+const atPinnedClock = fn => {
+  globalThis.Date = PinnedDate
+  try {
+    return fn()
+  } finally {
+    globalThis.Date = RealDate
   }
 }
 globalThis.React ??= { createElement: () => null, Component: class {} }
@@ -32,6 +40,7 @@ globalThis.document ??= {
   },
 }
 const { AssetsStage } = loadWeb('assets-stage')
+const { ClaudeOffice } = loadWeb('office')
 Stage = AssetsStage
 const { AssetsRegistry: R } = loadWeb('assets-registry')
 const { AssetsLogic: L } = loadWeb('assets-logic')
@@ -68,7 +77,10 @@ const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase())
 test('envOf has the shape of the game env, plus snow and the theme', () => {
   const env = AssetsStage.envOf({ light: 'night', season: 'spring', snow: true, event: 0 })
   assert.deepEqual(Object.keys(env).sort(),
-    ['col', 'df', 'event', 'flash', 'frozen', 'fx', 'hour', 'reduced', 'season', 'snow', 'theme'].sort())
+    ['col', 'df', 'event', 'flash', 'frozen', 'fx', 'hour', 'key', 'light', 'reduced', 'season', 'snow', 'theme']
+      .sort())
+  assert.equal(env.light, 'night')
+  assert.notEqual(env.key, AssetsStage.envOf({ light: 'day', season: 'spring', snow: true, event: 0 }).key)
   assert.equal(env.df, 0)
   assert.equal(env.snow, 1)
   assert.equal(env.season, 'spring')
@@ -117,6 +129,30 @@ test('the host borrows the office methods and answers from the view env', () => 
   assert.deepEqual(G.ev, host.eventNow())
   assert.equal(host.season, 'default', 'no event tree unless an entry picks one (host.holiday)')
   assert.deepEqual(host.agents, [])
+})
+
+test('every ClaudeOffice method is reachable on the host, whenever its mixin was loaded', () => {
+  const { host } = AssetsStage.stage(AssetsStage.recordingCtx(), { ox: 0, oy: 0, env: AssetsStage.envOf({}), pick: {} })
+  const own = new Set(Object.getOwnPropertyNames(AssetsStage.StageHost.prototype)), missing = []
+  for (const name of Object.getOwnPropertyNames(ClaudeOffice.prototype)) {
+    if (name === 'constructor' || own.has(name)) continue
+    const d = Object.getOwnPropertyDescriptor(ClaudeOffice.prototype, name)
+    if (!(name in host) || ('value' in d && host[name] !== d.value)) missing.push(name)
+  }
+  assert.deepEqual(missing, [])
+  // the mixins the catalogue draws with that load after web/assets-stage.js would once have been missed
+  const late = ['stepBears', 'dogOut', 'bearItems', 'drawBear', 'drawIgloo', 'startFall', 'drawFallers', 'drawFaller']
+  for (const m of late)
+    assert.equal(typeof host[m], 'function', m)
+  // and one added to the class from now on
+  ClaudeOffice.prototype.assetsTestLate = function () {
+    return this.env
+  }
+  try {
+    assert.equal(host.assetsTestLate(), host.env)
+  } finally {
+    delete ClaudeOffice.prototype.assetsTestLate
+  }
 })
 
 test('scene() puts a point of the office scene at (ox, oy) for the office methods', () => {
@@ -185,8 +221,11 @@ test('every entry is well formed: id, category, name in every language, where, w
     assert.ok(e.when && (e.when.always || e.when.seasons || e.when.event || e.when.holiday), e.id + ' when')
     assert.ok(e.source.length > 0)
     for (const s of e.source) {
-      const code = readFileSync(new URL('../' + s.file, import.meta.url), 'utf8')
-      assert.ok(code.includes(s.fn.replace(/^[A-Za-z]+\./, '').replace(/\(.*$/, '')), `${e.id}: ${s.fn} in ${s.file}`)
+      const code = readFileSync(new URL('../' + s.file, import.meta.url), 'utf8'),
+        name = s.fn.replace(/^[A-Za-z]+\./, '').replace(/\(.*$/, '')
+      // the identifier itself, not a longer one that contains it (drawBear in drawBears)
+      assert.match(code, new RegExp('(?<![\\w$])' + name.replace(/[$]/g, '\\$') + '(?![\\w$])'),
+        `${e.id}: ${s.fn} in ${s.file}`)
     }
     assert.ok(e.uses.every(u => L.SCENE.includes(u)), e.id + ' uses known controls')
     const axisIds = e.axes.map(a => a.id)
@@ -222,8 +261,8 @@ const SOURCES = [
     CritterSprites.frameNames(k).map(f => k + '/' + f)), k => {
     const [kind, f] = k.split('/')
     return { reindeer: ['animals.reindeer', 'act', f], penguin: ['animals.penguin', 'act', f],
-      bear: ['animals.polar-bear', 'frame', f], cub: ['animals.polar-bear', 'frame', f],
-      elf: ['event.elf', 'act', f], santa: ['event.santa', 'pose', f], parcel: ['event.parcel', 'frame', f],
+      bear: ['animals.polar-bear', 'act', f], cub: ['animals.polar-bear', 'act', f],
+      elf: ['event.elf', 'act', f], santa: ['event.santa', 'act', f], parcel: ['event.parcel', 'frame', f],
       sleigh: 'event.sleigh' }[kind] || 'unknown kind ' + kind
   }],
   ['painters of the lake, the sky and the Christmas event', ['drawDucks', 'drawFish', 'drawBirds', 'drawFlies',
@@ -289,15 +328,12 @@ const drawLog = (e, pick, scene, t = 1.25) => {
   let look = LOOKS.get(key)
   if (!look) {
     const ctx = AssetsStage.recordingCtx()
-    e.draw(ctx, { ox: 64, oy: 64, env: AssetsStage.envOf(scene), pick }, t)
+    atPinnedClock(() => e.draw(ctx, { ox: 64, oy: 64, env: AssetsStage.envOf(scene), pick }, t))
     LOOKS.set(key, (look = { drawn: ctx.drawn, sig: ctx.signature(), signature: () => look.sig }))
   }
   return look
 }
-const envKey = scene => {
-  const env = AssetsStage.envOf(scene)
-  return env.df + '|' + env.season + '|' + env.snow + '|' + env.event
-}
+const envKey = scene => AssetsStage.envOf(scene).key
 
 test('every entry draws in every variant under every scene it reacts to, without throwing', () => {
   const blank = [], threw = []
@@ -332,14 +368,18 @@ test('a control an entry says it uses changes how it looks, for some variant', (
 })
 
 test('an entry declares every control that would change it (so no variant is hidden from the page)', () => {
-  const undeclared = []
-  for (const e of ENTRIES)
-    for (const u of L.SCENE.filter(c => !e.uses.includes(c))) {
-      const pick = L.defaultPick(e)
-      const looks = new Set(L.CHOICES[u].map(v => drawLog(e, pick, { ...L.sceneOf(e, L.DEFAULTS), [u]: v }).signature()))
-      if (looks.size > 1) undeclared.push(`${e.id} ${u}`)
-    }
-  assert.deepEqual(undeclared, [])
+  const undeclared = new Set()
+  for (const e of ENTRIES) {
+    // every choice of every axis, the others at their first value
+    const picks = [L.defaultPick(e)]
+    for (const a of e.axes) for (const v of a.values.slice(1)) picks.push({ ...picks[0], [a.id]: v.id })
+    for (const u of L.SCENE.filter(c => !e.uses.includes(c)))
+      for (const pick of picks) {
+        const looks = new Set(L.CHOICES[u].map(v => drawLog(e, pick, { ...L.sceneOf(e, L.DEFAULTS), [u]: v }).sig))
+        if (looks.size > 1) undeclared.add(`${e.id} ${u}`)
+      }
+  }
+  assert.deepEqual([...undeclared], [])
 })
 
 test('the variants grid of every entry draws every cell', () => {
@@ -392,7 +432,7 @@ test('every draw gets a clean host: an entry drawn after another on the same can
   const scene = { ...L.DEFAULTS, light: 'night', snow: true, season: 'winter' }
   const sigOf = (ctx, e, pick) => {
     ctx.reset()
-    e.draw(ctx, { ox: 64, oy: 64, env: AssetsStage.envOf(L.sceneOf(e, scene)), pick }, 1.25)
+    atPinnedClock(() => e.draw(ctx, { ox: 64, oy: 64, env: AssetsStage.envOf(L.sceneOf(e, scene)), pick }, 1.25))
     return ctx.signature()
   }
   // and a draw that leaves everything set: someone at the first desk, every prop lit, a department, the blueprint

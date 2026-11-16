@@ -3,10 +3,11 @@
 // the viewer's own, the season on its lawn and roof), and the tile of a place with no island yet. Both are painted on
 // a sprite of their own, as the world view caches them (the outline pass reads the sprite back).
 import { tr } from './i18n.js';
+import { AssetsStage } from './assets-stage.js';
 import { AssetsScene } from './assets-scene.js';
 import { ART_H, ART_W, ISL, paintIsland, paintTile } from './world-ui.js';
 
-const axis = (id, label, values) => ({ id, label, values });
+const { axis } = AssetsStage;
 // The roof colours the hub hands out to islands (hub/pages.js ISLAND_COLORS; a test keeps the two the same).
 export const ISLAND_COLORS = ['#e76f51', '#f4a261', '#e9c46a', '#8ab17d', '#2a9d8f', '#4a90d9', '#7b6cd9', '#d96ca8'];
 const COLOR_LABEL = [

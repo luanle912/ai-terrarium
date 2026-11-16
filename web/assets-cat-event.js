@@ -16,9 +16,9 @@ import { drawCathedral } from './island-art-cathedral.js';
 import { drawOurLady } from './island-art-cathedral-yard.js';
 import { eventTone } from './sky-island.js';
 
-const axis = (id, label, values) => ({ id, label, values });
-const dfB = view => Math.round(view.env.df * 10);
-const XMAS = level => ({ key: 'christmas', level });
+const { axis, dfB, xmasEvent } = AssetsStage;
+// The event an entry shows up with (its `when`), at a level.
+const XMAS = level => xmasEvent(level);
 // The event's level an env shows: the page's Event control, or the full event (level 3) while it is off.
 const DEFAULT_LEVEL = 3;
 const levelOf = env => env.event || DEFAULT_LEVEL;
@@ -49,10 +49,10 @@ const SANTA = {
     { file: 'web/critter-sprites.js', fn: 'KINDS.santa' },
     { file: 'web/event-critters.js', fn: 'pose' },
   ],
-  axes: [axis('pose', () => tr('assets.axis.pose'), frames(['moving', 'sit', 'wave'], ACT))],
+  axes: [axis('act', () => tr('assets.axis.act'), frames(['moving', 'sit', 'wave'], ACT))],
   uses: ['light'],
   draw(ctx, view, t) {
-    const f = view.pick.pose === 'moving' ? EventCritters.pose(SANTA_NOW, t).frame : view.pick.pose;
+    const f = view.pick.act === 'moving' ? EventCritters.pose(SANTA_NOW, t).frame : view.pick.act;
     stamp(ctx, view, 'santa', f, false);
   },
 };
@@ -99,6 +99,13 @@ const ELF = critterEntry({
 });
 // The pile by the front stairs, as many presents as the elves and the sleigh have brought.
 const DROP = CRITTER_PLACES.drop || [0, 0];
+// The draw under way, read by the fixed functions handed to the stage's scene() (no closure per frame).
+const NOW = { s: null, view: null, n: 0, ev: null, level: 1 };
+const aim = (ctx, view, t) => {
+  NOW.view = view;
+  return (NOW.s = AssetsStage.stage(ctx, view, t));
+};
+const drawPile = () => NOW.s.host.drawPile(NOW.s.G, NOW.n, 0, dfB(NOW.view));
 const GIFT_PILE = {
   id: 'event.gift-pile',
   cat: 'event',
@@ -119,9 +126,9 @@ const GIFT_PILE = {
   ],
   uses: ['light'],
   draw(ctx, view) {
-    const s = AssetsStage.stage(ctx, view),
-      n = Math.max(1, Math.min(PILE.length, +view.pick.count || 1));
-    s.scene(DROP[0] + 0.5, DROP[1] + 0.5, 0, () => s.host.drawPile(s.G, n, 0, dfB(view)), true);
+    const s = aim(ctx, view);
+    NOW.n = Math.max(1, Math.min(PILE.length, +view.pick.count || 1));
+    s.scene(DROP[0] + 0.5, DROP[1] + 0.5, 0, drawPile, true);
   },
 };
 
@@ -172,7 +179,6 @@ const STRING_LIGHTS = {
 const SITE = EventLandmark.SITE;
 // The event as cathedralItems takes it, per level, on an ordinary night or on Christmas Eve (every bulb burning, a
 // halo round the building).
-const EVS = [1, 2, 3].map(level => [false, true].map(eve => ({ key: 'christmas', level, eve, day: true })));
 const LIT = [];
 // The office's lights of the landmark for ev, those for the building (back: the halo behind it) or for the yard.
 function lights(s, ev, part) {
@@ -183,6 +189,17 @@ function lights(s, ev, part) {
       it.f();
 }
 const LANDMARK_SOURCE = { file: 'web/office-draw-cathedral.js', fn: 'cathedralItems' };
+function drawChurch() {
+  const { s, view, ev, level } = NOW;
+  lights(s, ev, 'back');
+  drawCathedral(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, level, SITE.at);
+  lights(s, ev, 'front');
+}
+function drawLady() {
+  const { s, view, level } = NOW;
+  drawOurLady(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, level, SITE.lady);
+  lights(s, xmasEvent(level, false), 'yard');
+}
 const CATHEDRAL = {
   id: 'event.cathedral',
   cat: 'event',
@@ -199,20 +216,10 @@ const CATHEDRAL = {
   ],
   uses: ['light', 'snow', 'event'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
-      level = levelOf(view.env),
-      ev = EVS[level - 1][view.pick.eve === 'eve' ? 1 : 0];
-    s.scene(
-      SITE.at[0] + 0.5,
-      SITE.at[1] + 0.5,
-      0,
-      () => {
-        lights(s, ev, 'back');
-        drawCathedral(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, level, SITE.at);
-        lights(s, ev, 'front');
-      },
-      true,
-    );
+    const s = aim(ctx, view, t);
+    NOW.level = levelOf(view.env);
+    NOW.ev = xmasEvent(NOW.level, view.pick.eve === 'eve');
+    s.scene(SITE.at[0] + 0.5, SITE.at[1] + 0.5, 0, drawChurch, true);
   },
 };
 const OUR_LADY = {
@@ -224,18 +231,9 @@ const OUR_LADY = {
   source: [{ file: 'web/island-art-cathedral-yard.js', fn: 'drawOurLady' }, LANDMARK_SOURCE],
   uses: ['light', 'snow', 'event'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
-      level = levelOf(view.env);
-    s.scene(
-      SITE.lady[0] + 0.5,
-      SITE.lady[1] + 0.5,
-      0,
-      () => {
-        drawOurLady(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, level, SITE.lady);
-        lights(s, EVS[level - 1][0], 'yard');
-      },
-      true,
-    );
+    const s = aim(ctx, view, t);
+    NOW.level = levelOf(view.env);
+    s.scene(SITE.lady[0] + 0.5, SITE.lady[1] + 0.5, 0, drawLady, true);
   },
 };
 

@@ -1,11 +1,31 @@
 // The stage the /assets page draws every item on, with the game's own code: the scene an item is shown in (env, as
 // the game's envNow builds it), a small iso projection round any point, the island painter and colour function the
 // island bake uses, the furniture and pantry kits, the G of the office's draw methods, and a stand-in host that
-// borrows ClaudeOffice's methods the way web/island-scene.js does. recordingCtx() is a canvas that only counts and
-// measures what it is told: the tests draw every entry on it, and the page uses it to size cards and read palettes.
-// Sprites, props and scene cards cut from the baked island are in web/assets-scene.js.
-import { SCENE_DOG_SPRITES, SCENE_METHODS } from './island-scene.js';
+// inherits ClaudeOffice's methods. recordingCtx() is a canvas that only counts and measures what it is told: the tests
+// draw every entry on it, and the page uses it to size cards and read palettes. The small helpers the catalogue
+// modules share (axis, valueIndex, dfB, xmasEvent) are here too. Sprites, props and scene cards cut from the baked
+// island are in web/assets-scene.js.
+import { SCENE_DOG_SPRITES } from './island-scene.js';
 import { ClaudeOffice } from './office.js';
+// The office's draw methods, every module that adds them to ClaudeOffice (the page's main.js loads them for the game;
+// the host reaches them through the class, whenever they were added).
+import './office-agents.js';
+import './office-draw.js';
+import './office-draw-furniture.js';
+import './office-draw-restroom.js';
+import './office-draw-smoking.js';
+import './office-draw-doghouse.js';
+import './office-draw-fall.js';
+import './office-draw-fate.js';
+import './office-draw-fate-more.js';
+import './office-draw-fate-xmas.js';
+import './office-draw-winter.js';
+import './office-draw-xmas.js';
+import './office-draw-cathedral.js';
+import './office-draw-critters.js';
+import './office-draw-bears.js';
+import './office-draw-idle-xmas.js';
+import './office-draw-people.js';
 import { DOG_PLACES, FLOOR_Z, P as SCENE_P, PG as SCENE_PG, THEMES, TH, TW, lerpTheme } from './office-scene.js';
 import { OfficeDecor } from './office-decor.js';
 import { PantryItems } from './pantry-items.js';
@@ -16,19 +36,35 @@ import { SkyLogic } from './sky-logic.js';
 import { EventLogic } from './event-logic.js';
 import { isCold, officeG } from './office-util.js';
 
+// ---- shared by the catalogue modules ----
+// An axis of an entry's variants: {id, label() , values: [{id, label(), swatch?}]}.
+const axis = (id, label, values) => ({ id, label, values });
+// Where the value `id` is among an axis's values (the first when it is not one of them).
+const valueIndex = (ax, id) => {
+  for (let i = 0; i < ax.values.length; i++) if (ax.values[i].id === id) return i;
+  return 0;
+};
+// The light level (0..10) the office's sprite caches are keyed on, as its draw() rounds it.
+const dfB = view => Math.round(view.env.df * 10);
+// The Christmas event as EventLogic.active gives it ({key, level, eve, day}), one object per level and eve.
+const XMAS = [false, true].map(eve => [1, 2, 3].map(level => ({ key: 'christmas', level, eve, day: true })));
+const xmasEvent = (level, eve = true) => XMAS[eve ? 1 : 0][level - 1] || null;
+
 // ---- the scene ----
 // Daylight (df) and the clock hour each light stands for: noon, the middle of the evening fade, late night.
 const LIGHT = { day: [1, 12], dusk: [0.5, 17.25], night: [0, 22.5] };
-const EVENTS = [null, 1, 2, 3].map(l => l && { key: 'christmas', level: l, eve: true, day: true });
+const EVENTS = [null, 1, 2, 3].map(l => l && xmasEvent(l));
 const ENVS = new Map();
 // The env the game would hand its draw code under these controls ({light, season, snow, event}), the same object
 // for the same controls so caches keyed on it hold. As in the game the Christmas event brings winter. On top of
-// envNow's shape: snow (0 or 1, the cover lying on the lawn) and theme (the office colours lerped day to night).
+// envNow's shape: snow (0 or 1, the cover lying on the lawn), theme (the office colours lerped day to night), light
+// (the control it was made from) and key (one string per scene, for caches).
 function envOf({ light = 'day', season = 'summer', snow = false, event = 0 } = {}) {
   const key = light + '|' + season + '|' + (snow ? 1 : 0) + '|' + event;
   let env = ENVS.get(key);
   if (env) return env;
-  const [df, hour] = LIGHT[light] || LIGHT.day,
+  if (!LIGHT[light]) light = 'day';
+  const [df, hour] = LIGHT[light],
     fx = { ...SkyLogic.FX.clear },
     ev = EVENTS[event] || null,
     s = EventLogic.season(ev, season);
@@ -44,6 +80,8 @@ function envOf({ light = 'day', season = 'summer', snow = false, event = 0 } = {
     event: ev ? ev.level : 0,
     snow: snow ? 1 : 0,
     theme: df >= 1 ? { _day: 1, ...THEMES.day } : df <= 0 ? { _day: 0, ...THEMES.night } : lerpTheme(df),
+    light,
+    key,
   };
   ENVS.set(key, env);
   return env;
@@ -53,7 +91,7 @@ const eventOf = env => EVENTS[(env && env.event) || 0] || null;
 
 // ---- a stand-in office ----
 // What the office's draw methods read off `this`, answered from the view's env; the methods themselves are
-// ClaudeOffice's (the list island-scene.js borrows, and every other method of the class). An entry may set the
+// ClaudeOffice's, inherited (so a method a mixin adds after this module loads is there too). An entry may set the
 // office's people, dogs, departments and the like for its draw: stage() hands every draw a clean host (clean()), so
 // what one entry set never shows in the next one drawn on the same canvas. Only real caches live on.
 const DOG_WORLD = { ...DOG_PLACES, agents: [], hour: 12, snow: 0, calm: true, now: 0, rand: () => 0.5 };
@@ -120,13 +158,8 @@ class StageHost {
   setState() {}
   forceUpdate() {}
 }
-const OWN = new Set(Object.getOwnPropertyNames(StageHost.prototype));
-const SKIP = /^(constructor|render|component\w*|getSnapshotBeforeUpdate|shouldComponentUpdate)$/;
-for (const name of new Set([...SCENE_METHODS, ...Object.getOwnPropertyNames(ClaudeOffice.prototype)])) {
-  if (OWN.has(name) || SKIP.test(name)) continue;
-  const d = Object.getOwnPropertyDescriptor(ClaudeOffice.prototype, name);
-  if (d) Object.defineProperty(StageHost.prototype, name, d);
-}
+// The host's own getters and methods above come first; everything else is the office's.
+Object.setPrototypeOf(StageHost.prototype, ClaudeOffice.prototype);
 
 // ---- the stage ----
 // One stage per canvas: the projection, the island painter, the kits and the colours are rebuilt only when the anchor
@@ -148,7 +181,7 @@ class Stage {
     this.G = officeG(ctx, SCENE_P, null);
     this.host = new StageHost();
     this.at = { x: NaN, y: NaN, z: NaN, lawn: false, sx: 0, sy: 0 };
-    this._kit = this._pantryKit = this._tools = null;
+    this._kit = this._pantryKit = this._tools = this._framed = null;
   }
   aim(view) {
     if (view.ox !== this.ox || view.oy !== this.oy) {
@@ -219,6 +252,41 @@ class Stage {
       ctx.restore();
     }
   }
+  // Runs fn(c) with c the canvas as a game draw that sets its own transform expects it: c.setTransform(m) is m on top
+  // of the transform in force when framed() is called (the scene's, in scene()), as if that were the canvas's own,
+  // and puts back the rest of the canvas state as it was then. Everything else goes straight to the canvas.
+  framed(fn) {
+    const ctx = this.ctx;
+    ctx.save();
+    try {
+      fn(this._framed || (this._framed = framedCtx(ctx)));
+    } finally {
+      ctx.restore();
+    }
+  }
+}
+// (see Stage.framed) The canvas's methods bound once each, so handing it out frame after frame makes nothing new.
+function framedCtx(ctx) {
+  const bound = new Map(),
+    setTransform = (a, b, c, d, e, f) => {
+      ctx.restore();
+      ctx.save();
+      ctx.transform(a, b, c, d, e, f);
+    };
+  return new Proxy(ctx, {
+    get(t, k) {
+      if (k === 'setTransform') return setTransform;
+      const v = t[k];
+      if (typeof v !== 'function') return v;
+      let f = bound.get(k);
+      if (!f) bound.set(k, (f = v.bind(t)));
+      return f;
+    },
+    set(t, k, v) {
+      t[k] = v;
+      return true;
+    },
+  });
 }
 const STAGES = new WeakMap();
 // view = {ox, oy, env, pick}; t (optional) is the clock for G.t. Every call hands the draw a clean host.
@@ -501,4 +569,16 @@ function recordingCtx(canvas) {
   return ctx;
 }
 
-export const AssetsStage = { LIGHT, envOf, eventOf, stage, recordingCtx, solid, StageHost };
+export const AssetsStage = {
+  LIGHT,
+  envOf,
+  eventOf,
+  stage,
+  recordingCtx,
+  solid,
+  StageHost,
+  axis,
+  valueIndex,
+  dfB,
+  xmasEvent,
+};

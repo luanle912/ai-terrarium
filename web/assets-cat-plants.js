@@ -7,14 +7,16 @@ import { tr } from './i18n.js';
 import { AssetsStage } from './assets-stage.js';
 import { AssetsScene } from './assets-scene.js';
 import { drawSeasonTree, TREE_EXT } from './island-art-season.js';
-import { drawBush, drawMushroom, night } from './island-art.js';
+import { drawBush, drawMushroom } from './island-art.js';
 import { drawBigTree } from './island-art-xmas.js';
 import { hash } from './island-land.js';
 import { SeasonTree } from './season-tree.js';
 import { EventLogic } from './event-logic.js';
 import { tree as miniTree } from './world-ui.js';
+import { treeDusk } from './office-draw.js';
+import { treeNight } from './office-draw-xmas.js';
 
-const axis = (id, label, values) => ({ id, label, values });
+const { axis, dfB, xmasEvent } = AssetsStage;
 // The first tile (x, y in 0..59) whose hashes give a look: ok(x, y) says whether it does.
 export function findTile(ok) {
   for (let y = 0; y < 60; y++) for (let x = 0; x < 60; x++) if (ok(x, y)) return { x, y };
@@ -88,8 +90,9 @@ const ISLAND_TREE = {
 };
 
 // ---- the holiday trees (web/season-tree.js SEASONS), one entry each ----
-// After dark the game tints them through a scratch canvas (ClaudeOffice drawEventTree); the stand-in host does that
-// here and the card stamps the host's tinted tree, its foot at (24, 48).
+// Drawn as the game draws one on the lawn: the office's drawEventTree on the stage's host, standing on a tile whose
+// middle is at (ox, oy), at the lawn's night tint (treeDusk; after dark it goes through the host's scratch canvas). The
+// method sets the canvas's transform itself, so it gets the canvas framed in the scene (Stage.framed).
 const HOLIDAY_NAME = {
   newyear: () => tr('seasonTree.newyear.label'),
   tet: () => tr('seasonTree.tet.label'),
@@ -108,8 +111,10 @@ const HOLIDAY_NAME = {
   christmas: () => tr('seasonTree.christmas.label'),
   default: () => tr('seasonTree.default.label'),
 };
-const NO_CTX = { setTransform() {}, drawImage() {} },
-  ANY_TILE = { x: 0, y: 0 };
+const ANY_TILE = { x: 0, y: 0 },
+  TREE_NOW = { s: null, key: '', t: 0, dusk: 0 };
+const tintedTree = c => TREE_NOW.s.host.drawEventTree(c, ANY_TILE, TREE_NOW.key, TREE_NOW.t, 1, TREE_NOW.dusk);
+const eventTree = () => TREE_NOW.s.framed(tintedTree);
 // Holidays whose tree art never moves with the clock.
 const STILL_TREES = new Set(['teachers', 'default']);
 const holidayTree = key => {
@@ -131,11 +136,11 @@ const holidayTree = key => {
     uses: ['light'],
     palette: () => S.colors.slice(),
     draw(ctx, view, t) {
-      const dusk = (1 - Math.round(view.env.df * 10) / 10) * 0.6;
-      if (dusk < 0.02) return SeasonTree.drawSeasonTree(ctx, view.ox, view.oy, key, t);
-      const host = AssetsStage.stage(ctx, view, t).host;
-      host.drawEventTree(NO_CTX, ANY_TILE, key, t, 1, dusk);
-      ctx.drawImage(host.treeScratch, view.ox - 24, view.oy - 48);
+      const s = (TREE_NOW.s = AssetsStage.stage(ctx, view, t));
+      TREE_NOW.key = key;
+      TREE_NOW.t = t;
+      TREE_NOW.dusk = treeDusk(dfB(view));
+      s.scene(ANY_TILE.x + 0.5, ANY_TILE.y + 0.5, 0, eventTree, true);
     },
   };
 };
@@ -143,15 +148,14 @@ const HOLIDAY = SeasonTree.ORDER.map(holidayTree);
 
 // ---- the big Christmas tree in the office (web/island-art-xmas.js, web/office-draw-xmas.js) ----
 // Its presents come with the event's level; lit, the office draws its blinking bulbs, star and glow over it.
-const LEVEL_EV = [1, 2, 3].map(level => ({ key: 'christmas', level, eve: true, day: true })),
-  TREE_AT = EventLogic.TREE_AT,
+const TREE_AT = EventLogic.TREE_AT,
   FOOT = [0, 0],
   footAt = () => FOOT,
   PT = { ctx: null };
-let treeDf = 1,
+let treeDfB = 10,
   treeStage = null,
   treeEv = null;
-const treeT = c => night(c, 1 - (1 - treeDf) * 0.45);
+const treeT = c => treeNight(c, treeDfB);
 const litTree = () => treeStage.host.xmasTree(treeStage.G, treeEv);
 const BIG_TREE = {
   id: 'plants.big-tree',
@@ -179,14 +183,14 @@ const BIG_TREE = {
   draw(ctx, view, t) {
     const level = Math.min(3, Math.max(1, +view.pick.level || 1));
     if (view.pick.lights === 'off') {
-      treeDf = Math.round(view.env.df * 10) / 10;
+      treeDfB = dfB(view);
       PT.ctx = ctx;
       FOOT[0] = view.ox;
       FOOT[1] = view.oy;
       return drawBigTree(PT, footAt, treeT, FOOT, level);
     }
     treeStage = AssetsStage.stage(ctx, view, t);
-    treeEv = LEVEL_EV[level - 1];
+    treeEv = xmasEvent(level);
     treeStage.scene(TREE_AT[0], TREE_AT[1], 0, litTree);
   },
 };

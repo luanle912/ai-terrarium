@@ -56,6 +56,8 @@ function fill(arr, pool, n) {
 }
 // Bird j of a flock's V: its rank behind the leader, its px off the flight line (alternate sides, 5 px per rank), and
 // its wing at time t while flapping (0 up, 1 spread).
+// The V of a flock: how far each rank trails the one before it, as a share of the crossing's width.
+const V_GAP = 0.014;
 const vRank = j => (j + 1) >> 1,
   vSide = j => (j % 2 ? -1 : 1) * vRank(j) * 5,
   wingAt = (t, j) => Math.floor(t * 4 + j * 0.6) & 1;
@@ -86,7 +88,7 @@ function creatures(t, df, seed) {
       // a loose V: the leader in front, the others trailing on alternate sides
       const b = LIFE.birds[j],
         rank = vRank(j),
-        p = u - rank * 0.014 - hash(fi, j, 25) * 0.006;
+        p = u - rank * V_GAP - hash(fi, j, 25) * 0.006;
       b.x = dir > 0 ? p : 1 - p;
       b.y = vSide(j) + Math.sin(t * 1.1 + j * 1.7) * 1.5;
       b.lane = lane;
@@ -671,7 +673,7 @@ function drawLife(ctx, island, PG, t, env) {
 }
 
 // for the /assets catalogue (web/assets-cat-animals.js): the flock and the fireflies on their own
-export { drawBirds, drawFlies, palette as lifePalette, vRank, vSide, wingAt };
+export { drawBirds, drawFlies, palette as lifePalette, V_GAP, vRank, vSide, wingAt };
 
 export const IslandLife = {
   lampGlow,

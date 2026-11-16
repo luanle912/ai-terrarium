@@ -3,28 +3,31 @@
 // lantern over them, the ducks and fish of the lake (web/island-lake-life.js), the flock and the fireflies
 // (web/island-life.js), the reindeer and the penguins of the Christmas event and winter's polar bears and igloo (the
 // critter sprites of web/critter-sprites.js, drawn by the office's own methods on the stage's stand-in host).
-// Every draw sets what it borrows on the host back as it found it (the host is shared by the entries of a canvas).
+// The stage hands every draw a clean host, so what a draw sets on it never reaches the next. The office methods run
+// in the stage's scene() through fixed functions reading NOW, so a card drawn frame after frame makes no closures.
 import { tr } from './i18n.js';
 import { AssetsStage } from './assets-stage.js';
 import { DogSprites } from './dog-sprites.js';
 import { DogLogic } from './dog-logic.js';
 import { CritterSprites } from './critter-sprites.js';
-import { BEARS, DOG_HOUSES, FLOOR_Z } from './office-scene.js';
+import { BEARS, DOG_HOUSES, FLOOR_Z, ISLAND, PG } from './office-scene.js';
 import { IslandLakeLife } from './island-lake-life.js';
-import { IslandLife, drawBirds, drawFlies, lifePalette, vRank, vSide, wingAt } from './island-life.js';
+import { IslandLife, V_GAP, drawBirds, drawFlies, lifePalette, vRank, vSide, wingAt } from './island-life.js';
 import { WATER } from './island-art-lake.js';
 import { night } from './island-art.js';
 import { WATER_Z } from './sky-island.js';
-import { ClaudeOffice } from './office.js';
-// The bears' methods join ClaudeOffice only here (the page's main.js loads them for the game), after the stage's
-// host has borrowed the class's methods: they are called on the host straight from the class.
-import './office-draw-bears.js';
 
-const axis = (id, label, values) => ({ id, label, values });
-const dfB = view => Math.round(view.env.df * 10);
+const { axis, dfB, valueIndex } = AssetsStage;
 const snB = view => Math.round(view.env.snow * 10);
 // What a dog is dressed by (DogXmas from the event's second level), whatever the page's event control says.
-const DRESSED = { key: 'christmas', level: 2, eve: false, day: false };
+const DRESSED = AssetsStage.xmasEvent(2);
+// The draw under way: its stage and view, and what it shows (read by the fixed functions handed to scene()).
+const NOW = { s: null, view: null, t: 0, dog: null, i: 0, dogs: null, critter: null, bear: null };
+const aim = (ctx, view, t) => {
+  NOW.view = view;
+  NOW.t = t;
+  return (NOW.s = AssetsStage.stage(ctx, view, t));
+};
 
 // ---- names (shared with web/assets-cat-event.js) ----
 export const FRAME = {
@@ -80,16 +83,6 @@ export const critterActs = (kind, moving) => [
   ...frames(moving, ACT),
   ...frames(CritterSprites.frameNames(kind), FRAME),
 ];
-// Runs fn with a field of the stage's host set, and puts it back.
-export function borrow(host, key, value, fn) {
-  const was = host[key];
-  host[key] = value;
-  try {
-    fn();
-  } finally {
-    host[key] = was;
-  }
-}
 
 // ---- dogs ----
 const BREEDS = DogLogic.BREEDS;
@@ -138,7 +131,8 @@ const dogDoing = (breed, act) => ({
   playing: act === 'play',
   greet: null,
 });
-const DOGS = new Map(BREEDS.flatMap(b => DOG_ACTS.map(a => [b + '/' + a, dogDoing(b, a)])));
+const DOGS = new Map(BREEDS.map(b => [b, DOG_ACTS.map(a => dogDoing(b, a))]));
+const drawDog = () => NOW.s.host.drawDog(NOW.s.G, NOW.dog, NOW.t, dfB(NOW.view), snB(NOW.view));
 const DOG_LIFE = {
   id: 'animals.dog-life',
   cat: 'animals',
@@ -153,9 +147,9 @@ const DOG_LIFE = {
   axes: [BREED_AXIS, axis('act', () => tr('assets.axis.act'), frames(DOG_ACTS, ACT))],
   uses: ['light', 'snow', 'event'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
-      d = DOGS.get(view.pick.breed + '/' + view.pick.act);
-    s.scene(0, 0, 0, () => s.host.drawDog(s.G, d, t, dfB(view), snB(view)), true);
+    const s = aim(ctx, view, t);
+    NOW.dog = DOGS.get(view.pick.breed)[Math.max(0, DOG_ACTS.indexOf(view.pick.act))];
+    s.scene(0, 0, 0, drawDog, true);
   },
 };
 
@@ -166,22 +160,21 @@ const HOME = axis('dog', () => tr('assets.axis.dog'), [
   { id: 'awake', label: () => tr('assets.home.awake') },
   { id: 'asleep', label: () => tr('assets.home.asleep') },
 ]);
-// The dogs list the kennels read: nobody home, or the kennel's own dog inside, awake or napping.
+// The dogs list the kennels read: nobody home, or the kennel's own dog inside, awake or napping (by HOME's order).
 const AT_HOME = new Map(
-  BREEDS.flatMap((breed, id) => [
-    [breed + '/out', []],
-    [breed + '/awake', [{ id, breed, act: 'inside', nap: false }]],
-    [breed + '/asleep', [{ id, breed, act: 'inside', nap: true }]],
+  BREEDS.map((breed, id) => [
+    breed,
+    [[], [{ id, breed, act: 'inside', nap: false }], [{ id, breed, act: 'inside', nap: true }]],
   ]),
 );
 const ITEMS = [];
-// The office's doghouseItems lays out the three kennels and the lantern (in that order); fn draws the one asked for.
-function kennels(s, view, t, dogs, k) {
+// The office's doghouseItems lays out the three kennels and the lantern (in that order); NOW.i is the one drawn.
+function kennels() {
+  const { s, view } = NOW;
   ITEMS.length = 0;
-  borrow(s.host, 'dogs', dogs, () => {
-    s.host.doghouseItems(s.G, ITEMS, view.env.snow, dfB(view), snB(view));
-    ITEMS[k].f();
-  });
+  s.host.dogs = NOW.dogs;
+  s.host.doghouseItems(s.G, ITEMS, view.env.snow, dfB(view), snB(view));
+  ITEMS[NOW.i].f();
 }
 const KENNEL = {
   id: 'animals.kennel',
@@ -194,10 +187,12 @@ const KENNEL = {
   axes: [KENNEL_AXIS, HOME],
   uses: ['light', 'snow', 'event'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
+    const s = aim(ctx, view, t),
       i = Math.max(0, BREEDS.indexOf(view.pick.kennel)),
       h = DOG_HOUSES[i];
-    s.scene(h.x + 0.5, h.y, 0, () => kennels(s, view, t, AT_HOME.get(view.pick.kennel + '/' + view.pick.dog), i), true);
+    NOW.i = i;
+    NOW.dogs = AT_HOME.get(BREEDS[i])[valueIndex(HOME, view.pick.dog)];
+    s.scene(h.x + 0.5, h.y, 0, kennels, true);
   },
 };
 const LANTERN = {
@@ -210,9 +205,11 @@ const LANTERN = {
   source: [{ file: 'web/office-draw-doghouse.js', fn: 'doghouseLantern' }],
   uses: ['light'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
+    const s = aim(ctx, view, t),
       [a, b] = DOG_HOUSES;
-    s.scene(a.x, (a.y + b.y) / 2, FLOOR_Z + 30, () => kennels(s, view, t, AT_HOME.get('corgi/out'), 3), true);
+    NOW.i = 3;
+    NOW.dogs = AT_HOME.get(BREEDS[0])[0];
+    s.scene(a.x, (a.y + b.y) / 2, FLOOR_Z + 30, kennels, true);
   },
 };
 
@@ -278,9 +275,13 @@ const FISH = {
 
 // ---- the sky over the island, and the lotus at night ----
 // A V of five, the leader in front, flapping as the game's flock does or held on one wing position; on the day sky.
+// The V is the game's: its ranks trail by V_GAP of the width the flock crosses (IslandLife.geometry's sky).
 const FLOCK = [0, 1, 2, 3, 4].map(j => ({ x: 0, y: 0, lane: 0, dir: 1, wing: 0, j }));
 const LIFE_BIRDS = { birds: FLOCK };
-const SKY = { sky: { x0: 0, x1: 100, y: 0 } },
+const GAME_SKY = IslandLife.geometry(ISLAND, PG).sky,
+  SKY_W = GAME_SKY.x1 - GAME_SKY.x0,
+  LEAD = 0.3,
+  SKY = { sky: { x0: 0, x1: SKY_W, y: 0 } },
   DAY_SKY = AssetsStage.envOf({}).col.horizon;
 const BIRD = {
   id: 'animals.bird',
@@ -300,16 +301,17 @@ const BIRD = {
   palette: () => [lifePalette(1).bird, DAY_SKY],
   draw(ctx, view, t) {
     const w = view.pick.wing;
-    SKY.sky.x0 = view.ox;
-    SKY.sky.x1 = view.ox + 100;
+    // the leader 50 px right of ox, the last rank (two V_GAPs behind it) a few px right of ox
+    SKY.sky.x0 = view.ox + 50 - LEAD * SKY_W;
+    SKY.sky.x1 = SKY.sky.x0 + SKY_W;
     SKY.sky.y = view.oy - 25;
     for (const b of FLOCK) {
-      b.x = 0.3 - vRank(b.j) * 0.07;
+      b.x = LEAD - vRank(b.j) * V_GAP;
       b.y = vSide(b.j);
       b.wing = w === 'flap' ? wingAt(t, b.j) : w === 'up' ? 0 : 1;
     }
     ctx.fillStyle = DAY_SKY;
-    ctx.fillRect(view.ox + 6, view.oy - 22, 34, 34);
+    ctx.fillRect(view.ox, view.oy - 24, 56, 34);
     drawBirds(ctx, SKY, lifePalette(1), LIFE_BIRDS);
   },
 };
@@ -342,6 +344,7 @@ const FIREFLY = {
 };
 
 // ---- the Christmas critters and the winter bears ----
+const drawCritter = () => NOW.s.host.drawCritter(NOW.s.G, NOW.critter, dfB(NOW.view));
 // One critter the office's drawCritter draws (its feet on the scene's origin), its act set before each draw.
 export function critterEntry({ id, name, kind, moving, when, where, extra = [], set, source = [] }) {
   const c = { kind, id: 0, act: moving[0], x: 0, y: 0, face: 1, red: false };
@@ -361,10 +364,11 @@ export function critterEntry({ id, name, kind, moving, when, where, extra = [], 
     axes: [axis('act', () => tr('assets.axis.act'), critterActs(kind, moving)), ...extra],
     uses: ['light'],
     draw(ctx, view, t) {
-      const s = AssetsStage.stage(ctx, view, t);
+      const s = aim(ctx, view, t);
       c.act = view.pick.act;
       if (set) set(c, view.pick);
-      s.scene(0, 0, 0, () => s.host.drawCritter(s.G, c, dfB(view)), true);
+      NOW.critter = c;
+      s.scene(0, 0, 0, drawCritter, true);
     },
   };
 }
@@ -397,6 +401,8 @@ const BEARS_NOW = {
   bear: { kind: 'bear', act: 'walk', path: [[1, 1]], face: 1, x: 0, y: 0 },
   cub: { kind: 'cub', act: 'walk', path: [[1, 1]], face: 1, x: 0, y: 0 },
 };
+const drawBear = () => NOW.s.host.drawBear(NOW.s.G, NOW.bear, dfB(NOW.view));
+const drawIgloo = () => NOW.s.host.drawIgloo(NOW.s.G, dfB(NOW.view));
 const POLAR_BEAR = {
   id: 'animals.polar-bear',
   cat: 'animals',
@@ -414,21 +420,17 @@ const POLAR_BEAR = {
       { id: 'bear', label: () => tr('assets.bear.mother') },
       { id: 'cub', label: () => tr('assets.bear.cub') },
     ]),
-    axis('frame', () => tr('assets.axis.frame'), frames(['moving', ...BEAR_FRAMES], ACT)),
+    axis('act', () => tr('assets.axis.act'), frames(['moving', ...BEAR_FRAMES], ACT)),
   ],
   uses: ['light'],
   draw(ctx, view, t) {
-    const s = AssetsStage.stage(ctx, view, t),
+    const s = aim(ctx, view, t),
       kind = view.pick.kind === 'cub' ? 'cub' : 'bear';
-    if (view.pick.frame === 'moving')
-      return s.scene(
-        0,
-        0,
-        0,
-        () => ClaudeOffice.prototype.drawBear.call(s.host, s.G, BEARS_NOW[kind], dfB(view)),
-        true,
-      );
-    const img = s.host.critterSprite(kind, view.pick.frame, dfB(view), false, false);
+    if (view.pick.act === 'moving') {
+      NOW.bear = BEARS_NOW[kind];
+      return s.scene(0, 0, 0, drawBear, true);
+    }
+    const img = s.host.critterSprite(kind, view.pick.act, dfB(view), false, false);
     ctx.drawImage(img, view.ox - img.ax, view.oy - img.fh);
   },
 };
@@ -441,9 +443,9 @@ const IGLOO = {
   source: [{ file: 'web/office-draw-bears.js', fn: 'drawIgloo' }],
   uses: ['light'],
   draw(ctx, view) {
-    const s = AssetsStage.stage(ctx, view),
+    const s = aim(ctx, view),
       ig = BEARS.igloo;
-    s.scene(ig.x + 1, ig.y + 1, 0, () => ClaudeOffice.prototype.drawIgloo.call(s.host, s.G, dfB(view)), true);
+    s.scene(ig.x + 1, ig.y + 1, 0, drawIgloo, true);
   },
 };
 
