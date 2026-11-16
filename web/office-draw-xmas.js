@@ -101,7 +101,7 @@ export function litStar(ctx, x, sy, tw, glow) {
 }
 
 // A wreath, its middle at (x, y): a ring of fir with a red bow under it; `small` for a kennel's gable.
-function wreath(ctx, x, y, small) {
+export function wreath(ctx, x, y, small) {
   const r = small ? 2 : 3;
   ctx.fillStyle = '#1f6b3a';
   ctx.fillRect(x - r, y - r + 1, 2 * r + 1, 2 * r - 1);
@@ -115,7 +115,7 @@ function wreath(ctx, x, y, small) {
 }
 // On a desk with an owner (from the event's second level), by the desk's number: a mini tree, a stocking over the
 // edge, or a strand of tinsel. Four rectangles at most. (x, y) is the back corner of the desk top.
-function deskDecor(ctx, i, x, y) {
+export function deskDecor(ctx, i, x, y) {
   const k = i % 3;
   if (k === 0) {
     ctx.fillStyle = '#2a8048';
