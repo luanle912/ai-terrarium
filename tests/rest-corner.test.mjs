@@ -10,7 +10,7 @@ import { loadDogLogic } from './load-dog-logic.mjs'
 loadI18n('vi')
 globalThis.React ??= { createElement: () => null }
 const scene = loadWeb('office-scene')
-const { ISLAND, IDLE_SPOTS, ACT_TXT, DOG_PLACES, W, H, WALL, FLOOR_Z, TH } = scene
+const { ISLAND, IDLE_SPOTS, ACT_TXT, DOG_PLACES, W, H, WALL, FLOOR_Z, TH, BACK_X1 } = scene
 const { bfs, startCell } = loadWeb('office-util')
 const Dog = loadDogLogic()
 const K = (x, y) => x + ',' + y
@@ -90,7 +90,7 @@ test('no dog stands in the strip right behind the office walls, where they would
     const [x, y] = k.split(',').map(Number)
     assert.ok(!scene.behindWalls(x, y), `${k} is right behind a wall`)
     if (x < 0 && x >= -reach) assert.ok(y - x < -1 || y - x > H + 1, `${k} is right behind the left wall`)
-    if (y < 0 && y >= -reach) assert.ok(x - y < -1 || x - y > W + 1, `${k} is right behind the back wall`)
+    if (y < 0 && y >= -reach) assert.ok(x - y < -1 || x - y > BACK_X1 + 1, `${k} is right behind the back wall`)
   }
 })
 

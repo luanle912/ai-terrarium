@@ -26,21 +26,21 @@ const nightMix = df => (1 - df) * 0.3;
 
 // Whether a dog on (x, y) would be drawn over something that should hide it. The office walls go down before the
 // sorted sprites, so a dog in the strip right behind them, within `reach` tiles (its feet climb 16 px up the screen
-// per tile, the walls rise reach × 16 px) and in a screen column the walls cover, would show through them. `tall`
-// lists things baked into the island picture as [x, y, reach]: a dog up to `reach` tiles behind one, in its screen
-// column (x − y within a tile), would be drawn over it.
-function hidden(x, y, W, H, reach, tall) {
+// per tile, the walls rise reach × 16 px) and in a screen column the walls cover (the back wall runs on to `backX1`,
+// the restroom block's end), would show through them. `tall` lists things baked into the island picture as [x, y,
+// reach]: a dog up to `reach` tiles behind one, in its screen column (x − y within a tile), would be drawn over it.
+function hidden(x, y, backX1, H, reach, tall) {
   if (x < 0 && x >= -reach && y - x >= -1 && y - x <= H + 1) return true;
-  if (y < 0 && y >= -reach && x - y >= -1 && x - y <= W + 1) return true;
+  if (y < 0 && y >= -reach && x - y >= -1 && x - y <= backX1 + 1) return true;
   return tall.some(([tx, ty, r]) => Math.abs(tx - ty - (x - y)) <= 1 && tx + ty > x + y && tx + ty - (x + y) <= r);
 }
 // Lawn cells a dog may stand on: the walkable lawn minus the office, water, reserved areas and the cells where it
 // would be drawn over the walls or something tall (hidden).
-function roamCells(walk, { W, H, pond, avoid = [], wallReach = 4, tall = [] }) {
+function roamCells(walk, { W, H, pond, avoid = [], wallReach = 4, tall = [], backX1 = W }) {
   const out = new Set();
   for (const k of walk) {
     const [x, y] = k.split(',').map(Number);
-    if ((x >= 0 && y >= 0 && x < W && y < H) || pond.has(k) || hidden(x, y, W, H, wallReach, tall)) continue;
+    if ((x >= 0 && y >= 0 && x < W && y < H) || pond.has(k) || hidden(x, y, backX1, H, wallReach, tall)) continue;
     if (avoid.some(r => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)) continue;
     out.add(k);
   }
