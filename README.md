@@ -21,7 +21,7 @@
 <br>
 
 <p align="center">
-  <img src="assets/demo.gif" alt="ai-terrarium — a busy pixel-art office on a sky island: agents at their desks, zooming in, then rain and snow" width="720">
+  <img src="assets/demo.gif" alt="ai-terrarium — a busy pixel-art office on a sky island: agents at their desks with live speech bubbles" width="720">
   <br>
   <sub>Simulation mode (⚙ → Data source) — the departments and sessions are made up</sub>
 </p>
