@@ -7,6 +7,7 @@ import { OfficeDecor } from './office-decor.js';
 import { drawUsageBoard } from './decor-boards.js';
 import { DECOR_SPOT, WREATH_SPOT, deskDecor, wreath } from './office-draw-xmas.js';
 import { DOOR_KIT } from './office-draw.js';
+import { layWindow } from './office-draw-festive.js';
 import { DEPT_PAL, DESKS, SEGS, THEMES } from './office-scene.js';
 
 const F = OfficeDecor.F;
@@ -81,8 +82,13 @@ const KIT = [
   kitPiece('window', WALL, {
     name: () => tr('assets.item.office.window'),
     tags: ['animated'],
-    uses: ['light'],
-    draw: (ctx, view, t) => F.window(kitOf(ctx, view), t, view.env.df < 0.5 ? NIGHT_ON : NIGHT_OFF),
+    uses: ['light', 'event'],
+    draw(ctx, view, t) {
+      const K = kitOf(ctx, view);
+      F.window(K, t, view.env.df < 0.5 ? NIGHT_ON : NIGHT_OFF);
+      // what the look lays on a window (frost, a star), off the pane's mount as the office lays it
+      layWindow({ ctx, t, df: view.env.df }, view.env.look, ...K.P(0.3, 0, 54));
+    },
   }),
   kitPiece('walldecor', WALL, {
     name: () => tr('assets.item.office.walldecor'),

@@ -146,3 +146,61 @@ test('the drawing reads the look, not the event\'s level', () => {
     assert.doesNotMatch(readWeb(name), /\.level\s*>=|level >= \d|eventNow\(/, name)
   assert.match(readWeb('office-draw-cathedral'), /look\.has\('cathedral'\)/)
 })
+
+// --- the office's new Christmas variants and overlays (web/office-draw-festive.js) ---
+const { CLOCK, POTS, SHELF, WINDOWS } = loadWeb('office-instances')
+loadWeb('office-draw-festive')
+const { lerpHex } = loadWeb('office-scene')
+
+// One frame of the festive overlays: what each spied (label, overlay) painter was laid on, and the items pushed.
+function festive(look, spy) {
+  const keep = spy.map(([label, overlay]) => Paint.overlaysOf(label, XMAS).find(f => f.overlay === overlay))
+  const seen = spy.map(() => [])
+  spy.forEach(([label, overlay], i) => Paint.overlay(label, overlay, (G, inst) => seen[i].push(inst)))
+  const items = [], G = { ctx: context(), t: 1.2, df: 1, look }
+  try {
+    ClaudeOffice.prototype.dressWalls.call(office(), G)
+    ClaudeOffice.prototype.dressItems.call(office(), G, items)
+    for (const it of items) it.f()
+  } finally {
+    spy.forEach(([label, overlay], i) => Paint.overlay(label, overlay, keep[i]))
+  }
+  return { items, seen }
+}
+const SPY = [['window', 'frost'], ['window', 'star'], ['shelf', 'garland-small'], ['plant.pot', 'bauble'],
+  ['clock', 'holly-sprig']]
+
+test('every window its frost and star, the shelf its garland, every pot plant its baubles, the clock its holly', () => {
+  const { seen } = festive(XMAS, SPY)
+  assert.deepEqual(seen[0], WINDOWS)
+  assert.deepEqual(seen[1], WINDOWS)
+  assert.deepEqual(seen[2], SHELF)
+  assert.deepEqual(seen[3], POTS)
+  assert.deepEqual(seen[4], CLOCK)
+})
+
+test('without the event the festive overlays lay nothing and push no item', () => {
+  const { items, seen } = festive(SUMMER, SPY)
+  assert.deepEqual(seen.map(s => s.length), [0, 0, 0, 0, 0])
+  assert.equal(items.length, 0)
+})
+
+test('the pantry\'s plain checker is the tiles it always was; the red one is red and white', () => {
+  const plain = Paint.painter('floor.pantry', 'checker'), red = Paint.painter('floor.pantry', 'checker-red')
+  for (const df of [0, 0.4, 1])
+    for (const [x, y] of [[20, 0], [21, 0], [23, 5]])
+      assert.equal(plain(x, y, df),
+        (x + y) % 2 ? lerpHex('#2e2d3a', '#ebe7dd', df) : lerpHex('#282734', '#dfdace', df))
+  assert.notEqual(red(21, 0, 1), plain(21, 0, 1))
+  assert.notEqual(red(20, 0, 1), red(21, 0, 1))
+})
+
+test('the runner keeps off the big tree\'s cells', () => {
+  const { RUNNER } = loadWeb('office-draw-festive')
+  for (const k of EventLogic.TREE_CELLS) {
+    const [cx, cy] = k.split(',').map(Number)
+    for (const [x0, y0, x1, y1] of RUNNER)
+      assert.ok(x1 <= cx || x0 >= cx + 1 || y1 <= cy || y0 >= cy + 1, `${[x0, y0, x1, y1]} under ${k}`)
+  }
+  assert.ok(RUNNER.length >= 2)
+})

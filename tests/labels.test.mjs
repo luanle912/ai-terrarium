@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { loadWeb } from './web.mjs'
+import { loadWeb, readWeb } from './web.mjs'
 import { loadI18n } from './load-i18n.mjs'
 
 const { Labels } = loadWeb('labels')
@@ -61,13 +61,13 @@ test('a test pack resolves without code changes', () => {
 
 // Overlays some later task of the plan paints (docs/plans/2026-11-18-asset-labels-plan.md): each one leaves this list
 // in the task that registers its painter, and the test below fails if it is listed and painted at once.
-const LATER = new Set(['window+frost', 'window+star', 'shelf+garland-small', 'plant.pot+bauble',
-  'clock+holly-sprig'])
+const LATER = new Set()
 test('every (label, overlay) in every pack has a painter', () => {
   globalThis.React ??= { createElement: () => null, Component: class {} }
   loadI18n('vi')
   loadWeb('office-draw-xmas') // the office's Christmas overlays register their painters on import
   loadWeb('sky-mist') // and the far islands' fir its lights
+  loadWeb('office-draw-festive') // and the office's floors, windows, shelf, pot plants and clock theirs
   const { Paint } = loadWeb('paint')
   const missing = []
   for (const p of Theme.PACKS)
@@ -78,4 +78,17 @@ test('every (label, overlay) in every pack has a painter', () => {
         else if (!Paint.has(id, o)) missing.push(`${p.key}: ${k}`)
       }
   assert.deepEqual(missing, [])
+})
+
+test('every variant of the office\'s floors has a painter: the drawing asks for the look\'s, whatever it is', () => {
+  globalThis.React ??= { createElement: () => null, Component: class {} }
+  loadI18n('vi')
+  loadWeb('office-draw-festive')
+  const { Paint } = loadWeb('paint')
+  for (const id of ['floor.corridor', 'floor.pantry'])
+    for (const v of Labels.byId(id).variants) assert.equal(typeof Paint.painter(id, v), 'function', `${id} ${v}`)
+})
+
+test('web/office-draw.js stays at 700 lines or fewer', () => {
+  assert.ok(readWeb('office-draw').split('\n').length <= 701, 'move drawing out to a module of its own')
 })

@@ -36,6 +36,7 @@ import {
 import { isCold, officeG, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 import { OUTDOOR_LABELS } from './labels.js';
+import { Paint } from './paint.js';
 
 // What the island's bake shows of the look: the outdoor labels and the extras it stands on the lawn.
 const ISLAND_PARTS = Object.freeze([...OUTDOOR_LABELS, 'cane', 'cathedral', 'ourlady']);
@@ -442,6 +443,7 @@ mixin(
         ctx.lineTo(cx + Math.cos(sA) * 5, cy + Math.sin(sA) * 5.5);
         ctx.stroke();
       }
+      this.dressWalls(G);
       {
         const OD = OfficeDecor;
         if (OD) OD.F.door(OD.kit(ctx, ...P(DOOR_KIT[0], DOOR_KIT[1])), t);
@@ -466,7 +468,8 @@ mixin(
           }
         }
       {
-        const own = this.colOwners();
+        const own = this.colOwners(),
+          tile = Paint.painter('floor.pantry', G.look.of('floor.pantry'));
         for (let y = 0; y < H; y++)
           for (let x = 0; x < W; x++) {
             const zi = zoneAt(x, y);
@@ -482,7 +485,7 @@ mixin(
                 poly([P(jx, y), P(jx + 0.03, y), P(jx + 0.03, y + 0.5), P(jx, y + 0.5)], sm, null);
                 continue;
               }
-              col = (x + y) % 2 ? lerpHex('#2e2d3a', '#ebe7dd', df) : lerpHex('#282734', '#dfdace', df);
+              col = tile(x, y, df);
             } else if (zi < 0) col = mix((x + y) % 2 ? th.fa : th.fb, '#000000', th.stroke ? 0.03 : 0.14);
             else {
               const dk = own[zi];
@@ -516,6 +519,7 @@ mixin(
             ctx.stroke();
           }
         });
+        Paint.painter('floor.corridor', G.look.of('floor.corridor'))(G);
         // Soft contact shadow where the walls meet the floor.
         [
           [0.45, 0.06],
@@ -602,6 +606,7 @@ mixin(
       this.fateItems(G, items);
       this.xmasItems(G, items, ev);
       this.restroomItems(G, items, snow);
+      this.dressItems(G, items);
       POTS.forEach(({ x, y }) =>
         items.push({
           z: x + y,

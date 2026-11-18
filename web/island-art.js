@@ -471,7 +471,8 @@ export function drawBush(pt, P, C, d, variant = 'plain') {
     berries = fruit || holly || hash(d.x, d.y, 43) > 0.6,
     ripe = fruit ? 0.82 : holly ? 0.86 : 0.93,
     [l, m, k, out] = BUSH_TONES[holly ? 'holly' : 'plain'],
-    tones = lit3(C(l, 0.75), C(m, 0.55), C(k, 0.45)),
+    // holly's glossy leaves take (almost) none of the snow's tint: dark green with red berries under full cover
+    tones = holly ? lit3(C(l, 0.15), C(m), C(k)) : lit3(C(l, 0.75), C(m, 0.55), C(k, 0.45)),
     clumps = big
       ? [
           [-3, 0, 4.2, 4],
@@ -491,7 +492,7 @@ export function drawBush(pt, P, C, d, variant = 'plain') {
     (u, v, i, j) => {
       // holly berries come in bunches: a berry beside a ripe pixel's right-hand neighbour, so two or three together
       const h = berries ? hash(holly ? i >> 1 : i, j, d.x * 7 + d.y) : 0;
-      if (h <= ripe) return holly && u + v < -0.7 && hash(i, j, 44) > 0.7 ? C('#5fa978', 0.75) : tones(u, v);
+      if (h <= ripe) return holly && u + v < -0.7 && hash(i, j, 44) > 0.7 ? C('#5fa978', 0.15) : tones(u, v);
       if (holly) return (i + j) & 1 ? C('#c8323a') : C('#e8505a');
       return fruit && h > 0.91 ? C('#8e4ec6') : C('#d94a5a');
     },
