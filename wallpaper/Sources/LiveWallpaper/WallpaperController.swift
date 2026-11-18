@@ -17,8 +17,12 @@ final class WallpaperController: NSObject, WKNavigationDelegate {
     private var currentImages: [CGDirectDisplayID: URL] = [:]
     private let storage: URL
 
-    /// Màn hình khoá hiện ảnh wallpaper, nên chụp mỗi phút để ảnh đó không cũ quá một phút.
-    private let snapshotInterval: TimeInterval = 60
+    /// Lúc live, cửa sổ WebView che wallpaper hệ thống; ảnh chụp chỉ để dành cho màn hình khoá và lúc chuyển sang tĩnh
+    /// (khoá máy, rút sạc, thoát đều chụp ngay một khung). Mỗi ảnh mới làm macOS lưu thêm một bitmap cỡ màn hình
+    /// (~80 MB ở 6K), nên chụp định kỳ thưa thôi: 15 phút.
+    private let snapshotInterval: TimeInterval = 15 * 60
+    /// Đợi WallpaperAgent dựng xong bitmap của ảnh vừa đặt rồi mới dọn các bitmap cũ.
+    private let pruneDelay: TimeInterval = 20
     /// Hạn cho một lượt chụp: quá hạn thì vẫn đi tiếp (đóng WebView), không treo.
     private let snapshotTimeout: TimeInterval = 3
     private let retryInterval: TimeInterval = 5
@@ -31,6 +35,7 @@ final class WallpaperController: NSObject, WKNavigationDelegate {
         try? FileManager.default.createDirectory(at: storage, withIntermediateDirectories: true)
         super.init()
         loadExistingImages()
+        Self.pruneSystemCache()
     }
 
     var isLiveMode: Bool { state != .still }
@@ -205,21 +210,65 @@ final class WallpaperController: NSObject, WKNavigationDelegate {
             try data.write(to: file)
             try NSWorkspace.shared.setDesktopImageURL(file, for: screen, options: [:])
         } catch {
+            // Ghi hỏng (vd. đầy đĩa) thì bỏ file dở, không để lại file 0 byte.
+            try? FileManager.default.removeItem(at: file)
             NSLog("LiveWallpaper: không đặt được wallpaper: \(error)")
             return
         }
         if let old = currentImages[id], old != file { try? FileManager.default.removeItem(at: old) }
         currentImages[id] = file
+        DispatchQueue.main.asyncAfter(deadline: .now() + pruneDelay) { Self.pruneSystemCache() }
     }
 
-    /// Giữ lại ảnh mới nhất của mỗi màn hình từ lần chạy trước, xoá phần còn lại.
+    /// WallpaperAgent của macOS giữ một bitmap cỡ màn hình (.bmp, ~80 MB ở 6K) cho mỗi ảnh wallpaper nó từng nhận,
+    /// theo đường dẫn và ngày của file, và không bao giờ tự xoá: chụp mỗi phút từng làm thư mục này phình tới 116 GB.
+    /// Giữ vài bitmap mới nhất (đủ cho ảnh hiện tại và ảnh trước của mỗi màn hình), xoá phần còn lại; bitmap nào
+    /// cần lại thì agent tự dựng lại từ ảnh gốc.
+    static func pruneSystemCache() {
+        let fm = FileManager.default
+        let dir = fm.homeDirectoryForCurrentUser.appendingPathComponent(
+            "Library/Containers/com.apple.wallpaper.agent/Data/Library/Caches/com.apple.wallpaper.caches/"
+                + "extension-com.apple.wallpaper.extension.image",
+            isDirectory: true
+        )
+        let keys: [URLResourceKey] = [.contentModificationDateKey]
+        let files: [URL]
+        do {
+            files = try fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: keys)
+        } catch {
+            NSLog("LiveWallpaper: không đọc được cache wallpaper của macOS: \(error)")
+            return
+        }
+        let bitmaps = files
+            .filter { $0.pathExtension == "bmp" }
+            .map { ($0, (try? $0.resourceValues(forKeys: Set(keys)).contentModificationDate) ?? .distantPast) }
+            .sorted { $0.1 > $1.1 }
+        let keep = max(4, NSScreen.screens.count * 2)
+        var removed = 0
+        for (file, _) in bitmaps.dropFirst(keep) {
+            do {
+                try fm.removeItem(at: file)
+                removed += 1
+            } catch {
+                NSLog("LiveWallpaper: không xoá được \(file.lastPathComponent): \(error)")
+            }
+        }
+        NSLog("LiveWallpaper: cache wallpaper của macOS: \(bitmaps.count) bitmap, giữ \(keep), xoá \(removed)")
+    }
+
+    /// Giữ lại ảnh mới nhất của mỗi màn hình từ lần chạy trước, xoá phần còn lại (và file 0 byte của lần ghi hỏng).
     private func loadExistingImages() {
-        let files = (try? FileManager.default.contentsOfDirectory(at: storage, includingPropertiesForKeys: nil)) ?? []
+        let keys: [URLResourceKey] = [.fileSizeKey]
+        let files = (try? FileManager.default.contentsOfDirectory(at: storage, includingPropertiesForKeys: keys)) ?? []
         var newest: [CGDirectDisplayID: (stamp: Int, url: URL)] = [:]
         for file in files where file.pathExtension == "png" {
             let parts = file.deletingPathExtension().lastPathComponent.split(separator: "-")
             guard parts.count == 3, parts[0] == "display",
                   let id = UInt32(parts[1]), let stamp = Int(parts[2]) else { continue }
+            if (try? file.resourceValues(forKeys: Set(keys)).fileSize) == 0 {
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
             if let current = newest[id] {
                 let loser = current.stamp >= stamp ? file : current.url
                 try? FileManager.default.removeItem(at: loser)
