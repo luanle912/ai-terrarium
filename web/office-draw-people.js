@@ -144,7 +144,7 @@ mixin(
 
     drawPerson(G, a) {
       const { ctx, poly, box, rect, th, t } = G,
-        o = outfitOf(a, G.ev);
+        o = outfitOf(a, G.look);
       if (a.sleeping) return this.drawSleeper(G, a);
       let [sx, sy] = a.seated ? P(a.x, a.y, 11.5) : PA(a.x, a.y, a.actNow === 'skate' ? WATER_Z : 0);
       sx = Math.round(sx);
@@ -169,6 +169,10 @@ mixin(
         }
         R(sx - 4, y0 - 5, 8, 4, shirtOf(a));
         R(sx + 2, y0 - 5, 2, 4, shade(shirtOf(a), -30));
+        if (o) {
+          XMAS.pattern(R, o, sx - 4, y0 - 5, 8, 4, true);
+          XMAS.scarf(R, o, sx, y0 - 5);
+        }
         R(sx - 3, y0 - 11, 6, 6, a.skin);
         R(sx + 2, y0 - 11, 1, 6, shade(a.skin, -25));
         PERSON.hairBath(R, LOOK(a), sx, y0, a.skin);
@@ -313,6 +317,7 @@ mixin(
         R(sx + 2, sy - 11, 3, 11, shD);
         R(sx - 5, sy - 11, 10, 1, shL);
         R(sx - 1, sy - 10, 1, 9, shD);
+        if (o) XMAS.pattern(R, o, sx - 5, sy - 11, 10, 8, false);
         R(sx - 1, sy - 13, 3, 2, skD);
         const hy = sy - 21 + (skey === 'reading' ? 1 : 0);
         if (skey === 'visitor' || skey === 'permission') PERSON.hairProfile(R, L, sx, hy, sh, sk);
@@ -516,10 +521,10 @@ mixin(
       }
     }
     // A dog's frame baked once per light level and snow level (like the island), then stamped with one drawImage.
-    // With `ev` (the event from its second week) the dog is dressed and the sprite is DogXmas.PAD rows taller (cv.pad).
-    dogSprite(breed, name, dfB, snB, ev) {
-      const x = ev && ev.level >= 2,
-        k = breed + '/' + name + '/' + dfB + '/' + snB + (x ? '/x' : ''),
+    // costume is the look's dog.costume variant: dressed ('xmas', DogXmas), the sprite is DogXmas.PAD rows taller.
+    dogSprite(breed, name, dfB, snB, costume) {
+      const x = DogXmas.dressed(costume),
+        k = DogXmas.key(breed, name, dfB, snB, costume),
         hit = this.dogSprites.get(k);
       if (hit) return hit;
       if (this.dogSprites.size > 300) this.dogSprites.clear();
@@ -556,7 +561,7 @@ mixin(
       const { ctx, th, rect } = G,
         p = DogLogic.pose(d, t),
         f = DogSprites.frame(d.breed, p.frame),
-        img = this.dogSprite(d.breed, p.frame, dfB, snB, G.ev);
+        img = this.dogSprite(d.breed, p.frame, dfB, snB, G.look.of('dog.costume'));
       let [sx, sy] = PG(d.x, d.y);
       sx = Math.round(sx);
       sy = Math.round(sy);
@@ -616,7 +621,7 @@ mixin(
     }
     drawSleeper(G, a) {
       const { ctx, poly, box, rect, th, t } = G,
-        o = outfitOf(a, G.ev),
+        o = outfitOf(a, G.look),
         d = DESKS[a.desk],
         x = d.gx,
         y = d.gy;
@@ -653,6 +658,7 @@ mixin(
       if (o) XMAS.hatSleep(box, o, x, y);
       else if (a.parent) box(x + 0.18, y + 0.48, 0.08, 0.28, 6.5, 7, '#ffd166');
       box(x + 0.4, y + 0.44, 0.34, 0.36, 0.5, 4.5 + br, shirtOf(a));
+      if (o) XMAS.sleep(box, o, x, y, br);
       const top = shirtOf(a),
         bl = shade(top, -50) === top ? '#5b8def' : ['#3e8ed0', '#e5484d', '#46a758', '#8e4ec6'][a.id % 4];
       box(x + 0.6, y + 0.4, 0.62, 0.44, 0.5, 4 + br * 0.6, bl);

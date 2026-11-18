@@ -320,7 +320,6 @@ export default {
 "assets.pose.seated":"At the desk",
 "assets.pose.stool":"On a stool",
 "assets.pose.asleep":"Asleep at the desk",
-"assets.outfit.hat":"Santa hat only",
 "assets.outfit.santa":"Santa",
 "assets.outfit.sweater":"Sweater",
 "assets.outfit.sweater-alt":"Sweater (red)",

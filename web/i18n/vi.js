@@ -320,7 +320,6 @@ export default {
 "assets.pose.seated":"Ngồi bàn",
 "assets.pose.stool":"Ngồi ghế đẩu",
 "assets.pose.asleep":"Ngủ gục ở bàn",
-"assets.outfit.hat":"Chỉ mũ Noel",
 "assets.outfit.santa":"Ông già Noel",
 "assets.outfit.sweater":"Áo len",
 "assets.outfit.sweater-alt":"Áo len (đỏ)",

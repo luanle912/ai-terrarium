@@ -114,7 +114,7 @@ test('stage projects round (ox, oy) and hands out the game kits, colours and a h
   assert.notEqual(night.C('#ffffff'), '#ffffff', 'night darkens')
   const snowy = AssetsStage.stage(ctx, { ...view, env: AssetsStage.envOf({ ...L.DEFAULTS, snow: true }) })
   assert.equal(snowy.C('#000000', 1), '#eef3f7', 'snow whitens what it covers')
-  assert.deepEqual(Object.keys(s.G).sort(), ['box', 'cold', 'ctx', 'df', 'ev', 'poly', 'rect', 't', 'th'].sort())
+  assert.deepEqual(Object.keys(s.G).sort(), ['box', 'cold', 'ctx', 'df', 'ev', 'look', 'poly', 'rect', 't', 'th'].sort())
   assert.equal(AssetsStage.stage(ctx, view).G.th, env.theme, 'the stage follows the view it was last given')
   assert.equal(AssetsStage.stage(ctx, view, 2.5).G.t, 2.5)
 })

@@ -320,7 +320,6 @@ export default {
 "assets.pose.seated":"En el escritorio",
 "assets.pose.stool":"En un taburete",
 "assets.pose.asleep":"Dormido en el escritorio",
-"assets.outfit.hat":"Solo gorro de Papá Noel",
 "assets.outfit.santa":"Papá Noel",
 "assets.outfit.sweater":"Jersey",
 "assets.outfit.sweater-alt":"Jersey (rojo)",

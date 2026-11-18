@@ -19,8 +19,6 @@ import { WATER_Z } from './sky-island.js';
 
 const { axis, dfB, valueIndex } = AssetsStage;
 const snB = view => Math.round(view.env.snow * 10);
-// What a dog is dressed by (DogXmas from the event's second level), whatever the page's event control says.
-const DRESSED = AssetsStage.xmasEvent(2);
 // The draw under way: its stage and view, and what it shows (read by the fixed functions handed to scene()).
 const NOW = { s: null, view: null, t: 0, dog: null, i: 0, dogs: null, critter: null, bear: null };
 const aim = (ctx, view, t) => {
@@ -111,12 +109,13 @@ const DOG = {
     const s = AssetsStage.stage(ctx, view),
       { breed, frame } = view.pick,
       f = DogSprites.frame(breed, frame),
-      img = s.host.dogSprite(breed, frame, dfB(view), snB(view), view.pick.outfit === 'xmas' ? DRESSED : null);
+      img = s.host.dogSprite(breed, frame, dfB(view), snB(view), view.pick.outfit === 'xmas' ? 'xmas' : 'none');
     ctx.drawImage(img, view.ox - f.ax, view.oy - f.h - (img.pad || 0));
   },
 };
 // A dog doing something, through the office's drawDog: DogLogic.pose picks and steps the frame (a hop when it runs,
-// ripples when it drinks, Z's when it sleeps) and it is dressed from the event's second level, as on the lawn.
+// ripples when it drinks, Z's when it sleeps) and it is dressed by the look's dog.costume (Christmas: from the event's
+// first day), as on the lawn.
 const DOG_ACTS = ['walk', 'run', 'stand', 'sit', 'rest', 'sleep', 'drink', 'bow', 'play'];
 const dogDoing = (breed, act) => ({
   id: 0,

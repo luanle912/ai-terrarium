@@ -8,6 +8,7 @@ import { tr } from './i18n.js';
 import { AssetsStage } from './assets-stage.js';
 import { PeopleLogic } from './people-logic.js';
 import { OutfitLogic } from './outfit-logic.js';
+import { Theme } from './theme.js';
 import { FateLogic } from './fate-logic.js';
 import { OfficeDecor } from './office-decor.js';
 import { DEPT_PAL, DESKS, IDLE_SPOTS, P, PA } from './office-scene.js';
@@ -42,8 +43,15 @@ const aim = (ctx, view, t) => {
   return (NOW.s = AssetsStage.stage(ctx, view, t));
 };
 const drawWho = () => NOW.s.host.drawPerson(NOW.s.G, NOW.who);
-// The event objects (as EventLogic.active gives them) an outfit needs: level 1 is the Santa hat only, 2 the outfit.
-const EV = [null, xmasEvent(1), xmasEvent(2)];
+// The Christmas look the outfits are made under (the whole outfit from the event's first day, D1), and the event
+// object (as EventLogic.active gives it) the Christmas acts are drawn under.
+const XMAS_LOOK = Theme.resolve({
+  season: 'winter',
+  holiday: null,
+  event: { key: 'christmas', since: 0 },
+  key: 'assets|christmas',
+});
+const XMAS_EV = xmasEvent(2);
 
 // ---- the axes of a person ----
 const STYLE = PeopleLogic.STYLE;
@@ -165,7 +173,6 @@ const ACT = axis('act', () => tr('assets.axis.act'), [
 const XMAS_ACTS = new Set(['snowball', 'snowman', 'skate', 'gift', 'cocoa']);
 const OUTFIT = axis('outfit', () => tr('assets.axis.outfit'), [
   val('none', NONE),
-  val('hat', () => tr('assets.outfit.hat')),
   val('santa', () => tr('assets.outfit.santa')),
   val('sweater', () => tr('assets.outfit.sweater')),
   val('sweater-alt', () => tr('assets.outfit.sweater-alt')),
@@ -189,18 +196,16 @@ const HAT = axis('hat', () => tr('assets.axis.hat'), [
 const OUTFIT_SID = {};
 for (let i = 0; i < 400 && Object.keys(OUTFIT_SID).length < 6; i++) {
   const sid = 'assets-' + i,
-    o = OutfitLogic.outfit(sid, EV[2], false, DEPT_PAL[0]),
+    o = OutfitLogic.outfit(sid, XMAS_LOOK, false, DEPT_PAL[0]),
     k = o.kind === 'sweater' && o.top === OutfitLogic.RED ? 'sweater-alt' : o.kind;
   if (!OUTFIT_SID[k]) OUTFIT_SID[k] = sid;
 }
 const OUTFITS = OUTFIT.values.map(v => v.id),
   HATS = HAT.values.map(v => v.id);
 const outfitBase = (kind, dept) =>
-  kind === 'hat'
-    ? OutfitLogic.outfit('assets', EV[1], false, dept)
-    : kind === 'elf'
-      ? OutfitLogic.outfit('assets', EV[2], true, dept)
-      : OutfitLogic.outfit(OUTFIT_SID[kind], EV[2], false, dept);
+  kind === 'elf'
+    ? OutfitLogic.outfit('assets', XMAS_LOOK, true, dept)
+    : OutfitLogic.outfit(OUTFIT_SID[kind], XMAS_LOOK, false, dept);
 // Each hat with the colours of the outfit that wears it.
 const HAT_COLOURS = {};
 for (const k of OUTFITS.slice(1)) {
@@ -294,16 +299,16 @@ function place(pick) {
   [A.x, A.y] = A.seated ? SEAT : act === 'fish' ? FISH : SPOT;
   return pose;
 }
-// The outfit and the event it needs: the Christmas acts happen only during the event, so they bring at least the hat.
+// The outfit and the event it needs: the Christmas acts happen only during the event, so they bring an outfit (the
+// first, Santa's; there is no hat-only tier, D1). The outfit is pinned on the person (outfitPin, as a fate's snapshot
+// is), so the page's look does not change what the axes picked.
 function wear(pick, G) {
   let oi = index(OUTFIT, pick.outfit);
   const hi = index(HAT, pick.hat);
   if (!oi && (hi || XMAS_ACTS.has(pick.act))) oi = 1;
-  A.outfitL = !oi ? 0 : oi === 1 ? 1 : 2;
-  A.outfitSub = false;
-  A.outfitDept = A[DEPT];
+  A.outfitPin = true;
   A.outfit = oi ? outfitOf(oi, index(SHIRT, pick.colour), hi) : null;
-  G.ev = EV[A.outfitL];
+  G.ev = oi ? XMAS_EV : null;
 }
 // At the desk, as the office draws it: the desk, the chair, the person and the backrest over them.
 function atDesk() {
@@ -422,17 +427,18 @@ const WHO = { ...A, id: 3, sid: 'assets-who', look: PeopleLogic.look('assets-who
 WHO.skin = WHO.look.skin;
 WHO.acc = WHO.look.acc;
 const FATE = { kind: 'exit', seed: 3, who: WHO };
-// The EXIT door's faller, as the office's startFall records them, once per event level (their hat, at Christmas):
-// recorded on a host of its own that answers the stage host's event, so the stage host keeps no fallers.
-const FALLERS = [];
+// The EXIT door's faller, as the office's startFall records them, once per outfit variant of the look (their
+// Christmas outfit, the same as every other pose): recorded on a host of its own that answers the stage host's look,
+// so the stage host keeps no fallers.
+const FALLERS = new Map();
 function fallerOf(host) {
-  const ev = host.eventNow(),
-    l = ev ? ev.level : 0;
-  if (FALLERS[l]) return FALLERS[l];
+  const v = host.look.of('outfit.agent');
+  if (FALLERS.has(v)) return FALLERS.get(v);
   const rec = Object.create(host);
   rec.fallers = null;
-  rec.startFall({ ...WHO, outfit: null, outfitL: undefined }, 0);
-  return (FALLERS[l] = rec.fallers[0]);
+  rec.startFall({ ...WHO, outfit: null, outfitV: undefined }, 0);
+  FALLERS.set(v, rec.fallers[0]);
+  return rec.fallers[0];
 }
 // One of the twenty scenes, clipped round the person (x, y px: their feet).
 function fateScene(x, y) {

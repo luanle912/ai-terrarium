@@ -4,10 +4,21 @@ import { PeopleLogic } from './people-logic.js';
 const RED = '#c8323a',
   GREEN = '#2f7d4f',
   WHITE = '#f4f1e8',
-  ELF = '#2f8f4e',
   GOLD = '#ffd166',
   COAL = '#1d2029',
   FALLBACK = '#5b8def';
+// The elf's costume, one palette for a sub-agent at Christmas and the critter elf (web/critter-sprites.js), so the
+// two are visibly the same elf: green coat (and its shade), red trim and scarf, a dark belt with a gold buckle, a
+// gold bell.
+const ELF = Object.freeze({
+  coat: '#2f8f4e',
+  coatD: '#1f6b3a',
+  trim: RED,
+  trimD: '#96242b',
+  belt: COAL,
+  buckle: GOLD,
+  bell: GOLD,
+});
 const KINDS = ['santa', 'sweater', 'reindeer', 'coat', 'snowman'];
 const HATS = ['santa', 'muffs', 'antlers', 'beanie', 'tophat', 'elf'];
 const isHex = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
@@ -41,25 +52,25 @@ const MAKE = {
   coat: dept => ({ top: dept, trim: WHITE, hat: 'beanie', hatColor: tone(dept, -25), hatTrim: WHITE }),
   snowman: () => ({ top: '#eef2f6', trim: COAL, hat: 'tophat', hatColor: '#2a2e3a', hatTrim: RED }),
 };
-// ev is EventLogic.active()'s answer (null outside the event). Level 1 is a Santa hat only; from level 2 the whole
-// outfit, with a scarf in the department's colour so the team still shows. A sub-agent is always an elf: the pointed
-// hat replaces its gold band.
-function outfit(sid, ev, isSub, deptColor) {
-  if (!ev) return null;
-  if (isSub)
+// look is the Look (web/theme.js), or null. Under its 'xmas' outfit.agent a main agent wears the whole outfit from the
+// event's first day (no hat-only tier, D1), with a scarf in the department's colour so the team still shows. Under
+// the 'elf' outfit.subagent a sub-agent is an elf: the pointed hat replaces its gold band. 'team' is everyday clothes.
+function outfit(sid, look, isSub, deptColor) {
+  const v = look ? look.of(isSub ? 'outfit.subagent' : 'outfit.agent') : 'team';
+  if (v === 'elf')
     return {
       kind: 'elf',
-      top: ELF,
-      trim: RED,
+      top: ELF.coat,
+      trim: ELF.trim,
       hat: 'elf',
-      hatColor: ELF,
-      hatTrim: GOLD,
-      scarf: RED,
-      scarfD: tone(RED, -30),
+      hatColor: ELF.coat,
+      hatTrim: ELF.bell,
+      scarf: ELF.trim,
+      scarfD: ELF.trimD,
     };
-  if (ev.level <= 1) return { kind: 'hat', hat: 'santa', hatColor: RED, hatTrim: WHITE };
+  if (v !== 'xmas') return null;
   const dept = isHex(deptColor) ? deptColor.toLowerCase() : FALLBACK,
     kind = KINDS[roll(sid, 'outfit', KINDS.length)];
   return { kind, ...MAKE[kind](dept, roll(sid, 'outfit-alt', 2) === 1), scarf: dept, scarfD: tone(dept, -30) };
 }
-export const OutfitLogic = { KINDS, HATS, RED, WHITE, GOLD, COAL, outfit, tone };
+export const OutfitLogic = { KINDS, HATS, RED, WHITE, GOLD, COAL, ELF, outfit, tone };

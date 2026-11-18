@@ -3,7 +3,7 @@
 // person is still inside its depth and the sky below shows the rest.
 import { PG, DOOR, LW, ISLAND, TW, TH } from './office-scene.js';
 import { LOOK, hairTones } from './office-people.js';
-import { outfitOf, shirtOf } from './office-people-xmas.js';
+import { XMAS, outfitOf, shirtOf } from './office-people-xmas.js';
 import { shade } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 
@@ -48,11 +48,11 @@ mixin(
         d: 0,
         v: 0,
         out: 0,
-        top: (outfitOf(a, this.eventNow()), shirtOf(a)),
+        outfit: outfitOf(a, this.look),
+        top: shirtOf(a),
         skin: a.skin,
         look: LOOK(a),
         sub: !!a.parent && !a.outfit,
-        hat: a.outfit ? a.outfit.hatColor : null,
         spin: a.id % 2 ? 1 : -1,
       });
     }
@@ -96,12 +96,17 @@ mixin(
         ctx.fillRect(sx, -26 - len - ((u * 40 + sx * 3) % 6), 1, len);
       ctx.rotate(f.spin * u * 2.6);
       ctx.translate(0, 6);
-      // legs, body, arms flung up (flapping), head with hair, a gold band for a sub-agent
+      // legs, body, arms flung up (flapping), head with hair, a gold band for a sub-agent; at Christmas the outfit
+      // they left in (the pattern, the scarf, the hat), as every pose draws it
       const flap = Math.floor(u * 10) % 2;
       R(-3, 0, 2, 5, '#3b4252');
       R(1, 0, 2, 5, '#3b4252');
       R(-4, -7, 8, 7, f.top);
       R(2, -7, 2, 7, shade(f.top, -30));
+      if (f.outfit) {
+        XMAS.pattern(R, f.outfit, -4, -7, 8, 7, true);
+        XMAS.scarf(R, f.outfit, 0, -7);
+      }
       R(-6, -12 - flap, 2, 6, f.top);
       R(4, -12 + flap, 2, 6, shade(f.top, -30));
       R(-6, -14 - flap, 2, 2, f.skin);
@@ -114,7 +119,7 @@ mixin(
       R(1, -11, 1, 1, '#1a1a1a');
       R(-1, -9, 2, 1, '#5a1f1f');
       if (f.sub) R(-3, -15, 6, 1, '#ffd166');
-      if (f.hat) R(-3, -17, 6, 3, f.hat);
+      if (f.outfit) XMAS.hatEvent(R, f.outfit, 0, -13);
       ctx.restore();
     }
   },

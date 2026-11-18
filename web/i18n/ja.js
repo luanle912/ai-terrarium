@@ -320,7 +320,6 @@ export default {
 "assets.pose.seated":"デスクで",
 "assets.pose.stool":"スツールで",
 "assets.pose.asleep":"デスクで居眠り",
-"assets.outfit.hat":"サンタ帽のみ",
 "assets.outfit.santa":"サンタ",
 "assets.outfit.sweater":"セーター",
 "assets.outfit.sweater-alt":"セーター（赤）",

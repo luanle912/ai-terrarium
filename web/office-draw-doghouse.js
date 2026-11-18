@@ -166,7 +166,7 @@ mixin(
             this.doghouseBowl(ctx, L(xb + 0.26, yb - 0.02, 0), roof, N);
             if (i === 0) this.doghouseBone(ctx, L(xb + 0.35, ya - 0.05, 0), N(TRIM));
             if (dog) {
-              this.doghouseSleeper(ctx, dog, door, L(xb, yc, ZB), dfB, snB, G.ev);
+              this.doghouseSleeper(ctx, dog, door, L(xb, yc, ZB), dfB, snB, G.look.of('dog.costume'));
               if (dog.nap) this.doghouseZs(ctx, L(xb, yc, ZR + 2), t + i * 0.7, N('#e8ecf5'));
             }
           },
@@ -197,11 +197,11 @@ mixin(
     }
     // The dog lying inside its house, head up in the doorway looking out (sprites face right, out of the door):
     // only what the opening shows is drawn. Its 'lie' frame always, which has the head up; the z's
-    // over the roof tell when it sleeps. Dressed as the dogs out on the lawn are (G.ev, drawDog), not by a clock of
-    // its own.
-    doghouseSleeper(ctx, d, door, [bx, by], dfB, snB, ev) {
+    // over the roof tell when it sleeps. Dressed as the dogs out on the lawn are (the look's dog.costume, drawDog), not
+    // by a clock of its own.
+    doghouseSleeper(ctx, d, door, [bx, by], dfB, snB, costume) {
       const f = DogSprites.frame(d.breed, 'lie'),
-        img = this.dogSprite(d.breed, 'lie', dfB, snB, ev),
+        img = this.dogSprite(d.breed, 'lie', dfB, snB, costume),
         { hc, ht } = headOf(f),
         left = Math.round(bx) - hc,
         top = Math.round(by) - DH + 2 - ht;

@@ -320,7 +320,6 @@ export default {
 "assets.pose.seated":"책상에서",
 "assets.pose.stool":"스툴에서",
 "assets.pose.asleep":"책상에서 잠듦",
-"assets.outfit.hat":"산타 모자만",
 "assets.outfit.santa":"산타",
 "assets.outfit.sweater":"스웨터",
 "assets.outfit.sweater-alt":"스웨터 (빨강)",

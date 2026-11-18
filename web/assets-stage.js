@@ -165,6 +165,10 @@ class StageHost {
   seasonNow() {
     return this.env.season;
   }
+  // the office's look (ClaudeOffice#computeMoment), here the view's: what the people and the dogs wear
+  get look() {
+    return this.env.look;
+  }
   eventNow() {
     return eventOf(this.env);
   }
@@ -178,7 +182,7 @@ Object.setPrototypeOf(StageHost.prototype, ClaudeOffice.prototype);
 // One stage per canvas: the projection, the island painter, the kits and the colours are rebuilt only when the anchor
 // or the env changes, so drawing a card frame after frame makes nothing new. The G is the office's own (officeG, in
 // the scene's projection), set from the env for every draw as the office sets it every frame: the theme, daylight,
-// the event and the cold (breath shows); t when given.
+// the event, the look and the cold (breath shows); t when given.
 const NO_FRAME = { OX: 0, OY: 0 };
 class Stage {
   constructor(ctx) {
@@ -211,6 +215,7 @@ class Stage {
     G.th = env.theme;
     G.df = env.df;
     G.ev = eventOf(env);
+    G.look = env.look;
     G.cold = isCold(env.snow, env.df, env);
     this.view = view;
     this.host.view = view;

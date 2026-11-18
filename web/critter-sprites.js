@@ -3,9 +3,11 @@
 // web/dog-sprites.js: each letter is a palette colour ('.' is empty), the bottom row is where the feet touch the
 // ground and `ax` is the column under the critter's middle. Pure data (tests/critter-sprites.test.mjs).
 import { OutfitLogic } from './outfit-logic.js';
+import { XMAS } from './office-people-xmas.js';
 
 const { RED, WHITE, GOLD } = OutfitLogic,
   GREEN = '#2f8f4e',
+  E = XMAS.elf,
   DARK = '#2a1c14';
 
 // The reindeer's head and neck over its back, then its trunk; the legs are what changes between frames.
@@ -70,7 +72,8 @@ const KINDS = {
   },
   elf: {
     ax: 3,
-    pal: { g: GREEN, G: '#1f6b3a', r: RED, R: '#96242b', s: '#f0c8a0', k: DARK, y: GOLD, w: WHITE },
+    // the sub-agent's costume (XMAS.elf): coat and its shade, red trim and scarf, a dark belt, the gold buckle and bell
+    pal: { g: E.coat, G: E.coatD, r: E.trim, R: E.trimD, b: E.belt, s: '#f0c8a0', k: DARK, y: E.bell, w: WHITE },
     frames: {
       walk1: [
         '..y....',
@@ -79,9 +82,9 @@ const KINDS = {
         '.rrrrr.',
         'sssks..',
         '.ssss..',
-        '.gggg..',
+        '.rrrr..',
         '.ggggs.',
-        '.Gyyg..',
+        '.byyb..',
         '.gggg..',
         '.g..g..',
         'kk..kk.',
@@ -93,9 +96,9 @@ const KINDS = {
         '.rrrrr.',
         'sssks..',
         '.ssss..',
-        '.gggg..',
+        '.rrrr..',
         'sgggg..',
-        '.Gyyg..',
+        '.byyb..',
         '.gggg..',
         '..gg...',
         '..kkk..',
@@ -107,9 +110,9 @@ const KINDS = {
         '.rrrrr....',
         'sssks.....',
         '.ssss.yy..',
-        '.gggg.ry..',
+        '.rrrr.ry..',
         '.ggggsryrr',
-        '.GyygsyyyR',
+        '.byybsyyyR',
         '.gggg.ryrR',
         '.g..g.....',
         'kk..kk....',
@@ -121,9 +124,9 @@ const KINDS = {
         '.rrrrr....',
         'sssks.yy..',
         '.ssss.ry..',
-        '.ggggsryrr',
+        '.rrrrsryrr',
         '.ggggsyyyR',
-        '.Gyyg.ryrR',
+        '.byyb.ryrR',
         '.gggg.....',
         '..gg......',
         '..kkk.....',
@@ -136,9 +139,9 @@ const KINDS = {
         '..rrrrr...',
         '.sssks....',
         '..ssss.yy.',
-        '.ggggs.ry.',
+        '.rrrrs.ry.',
         '.gggggsryr',
-        '.Gyyg.yyyR',
+        '.byyb.yyyR',
         '.g..g.ryrR',
         'kk..kk....',
       ],
@@ -150,9 +153,9 @@ const KINDS = {
         '.rrrrr....',
         'sssks.....',
         '.ssss.....',
-        '.gggg.....',
+        '.rrrr.....',
         'sgggg..y..',
-        '.Gyyg.kry.',
+        '.byyb.kry.',
         '.gggggkyyy',
         '.GggggkryR',
       ],

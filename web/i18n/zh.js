@@ -320,7 +320,6 @@ export default {
 "assets.pose.seated":"在工位",
 "assets.pose.stool":"坐高脚凳",
 "assets.pose.asleep":"趴在桌上睡",
-"assets.outfit.hat":"只戴圣诞帽",
 "assets.outfit.santa":"圣诞老人",
 "assets.outfit.sweater":"毛衣",
 "assets.outfit.sweater-alt":"毛衣（红）",

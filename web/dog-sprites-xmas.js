@@ -109,4 +109,8 @@ function dress(breed, name, f) {
   }
   return dressed.get(k);
 }
-export const DogXmas = { PAL, PAD, overlay, palFor, dress };
+// The dog costume is the look's dog.costume variant (web/labels.js): 'xmas' is this dress, 'none' the bare dog.
+const isDressed = costume => costume === 'xmas';
+// The office's cache key of a baked dog frame: breed, frame, light and snow level, and the costume by name.
+const key = (breed, name, dfB, snB, costume) => breed + '/' + name + '/' + dfB + '/' + snB + '/' + (costume || 'none');
+export const DogXmas = { PAL, PAD, overlay, palFor, dress, dressed: isDressed, key };

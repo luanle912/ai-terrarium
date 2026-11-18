@@ -320,7 +320,6 @@ export default {
 "assets.pose.seated":"ที่โต๊ะ",
 "assets.pose.stool":"บนเก้าอี้สตูล",
 "assets.pose.asleep":"หลับที่โต๊ะ",
-"assets.outfit.hat":"หมวกซานต้าอย่างเดียว",
 "assets.outfit.santa":"ซานต้า",
 "assets.outfit.sweater":"เสื้อสเวตเตอร์",
 "assets.outfit.sweater-alt":"เสื้อสเวตเตอร์ (แดง)",
