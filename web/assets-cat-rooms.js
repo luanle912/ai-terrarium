@@ -8,6 +8,8 @@ import { AssetsStage } from './assets-stage.js';
 import { PeopleLogic } from './people-logic.js';
 import { PropUse } from './prop-use.js';
 import { DEPT_PAL, IDLE_SPOTS, SMOKE, WC } from './office-scene.js';
+import { STRINGS } from './office-draw-xmas.js';
+import { Paint } from './paint.js';
 
 const STATE = {
   id: 'state',
@@ -45,7 +47,7 @@ function someone(id, spot, more) {
 const NOBODY = [];
 const byDepth = (p, q) => p.z - q.z;
 // The draw under way (read by the fixed functions handed to the stage's scene(), so a card makes no closures).
-const NOW = { s: null, view: null, people: NOBODY };
+const NOW = { s: null, view: null, people: NOBODY, overlays: null };
 // Each person's piece among the room's, made once: drawn by the office's drawPerson on the stage under way.
 const pieceOf = a => ({ z: a.x + a.y, f: () => NOW.s.host.drawPerson(NOW.s.G, a) });
 // The office's way: the method has pushed its pieces, the people go in among them, then everything by depth.
@@ -78,6 +80,7 @@ function restroom() {
 }
 const RESTROOM = {
   id: 'rooms.restroom',
+  labels: ['floor.wc', 'wall.inner', 'door'],
   cat: 'rooms',
   name: () => tr('assets.item.rooms.restroom'),
   tags: ['animated', 'state'],
@@ -105,14 +108,25 @@ const RESTROOM = {
 const SMOKERS = [SMOKE.spots[1], SMOKE.spots[3], SMOKE.spots[4]].map((sp, i) => someone(20 + i, sp));
 for (const a of SMOKERS) a.piece = pieceOf(a);
 const SMOKE_MID = [SMOKE.x + 2, SMOKE.y + 1.5];
+// What the look strings under the pergola's beam, among the corner's pieces as the office's xmasItems puts it (one
+// piece per string, made once; it reads the look of the draw under way).
+const PERGOLA = STRINGS.filter(st => st.label === 'pergola').map(st => ({
+  z: st.z,
+  f: () => {
+    for (const f of NOW.overlays) f(NOW.s.host, NOW.s.G, st.inst, st);
+  },
+}));
 function smoking() {
   const { s, view } = NOW;
   ITEMS.length = 0;
   s.host.smokingItems(s.G, ITEMS, view.env.snow);
+  NOW.overlays = Paint.overlaysOf('pergola', s.G.look);
+  if (NOW.overlays.length) for (const it of PERGOLA) ITEMS.push(it);
   paint();
 }
 const SMOKING = {
   id: 'rooms.smoking',
+  label: 'pergola',
   cat: 'rooms',
   name: () => tr('assets.item.rooms.smoking'),
   tags: ['animated', 'state'],
@@ -121,6 +135,7 @@ const SMOKING = {
   source: [
     { file: 'web/office-draw-smoking.js', fn: 'smokingItems' },
     { file: 'web/smoke-logic.js', fn: 'SmokeLogic.layout' },
+    { file: 'web/office-draw-xmas.js', fn: 'xmasItems' },
   ],
   axes: [STATE],
   uses: ['light', 'snow', 'event'],

@@ -334,6 +334,9 @@ function drawA(ctx, view, t) {
 }
 const PERSON = {
   id: 'people.person',
+  label: 'outfit.agent',
+  // in the conversion table: the team's clothes, or the first Christmas outfit (Santa's) under the Christmas look
+  pickFor: look => ({ outfit: look.of('outfit.agent') === 'xmas' ? 'santa' : 'none' }),
   cat: 'people',
   name: () => tr('assets.item.people.person'),
   tags: ['animated', 'state'],
@@ -370,6 +373,7 @@ SUB.acc = SUB.look.acc;
 const SUB_POSE = axis('pose', () => tr('assets.axis.pose'), POSE.values.slice(0, 3));
 const SUB_AGENT = {
   id: 'people.sub-agent',
+  label: 'outfit.subagent',
   cat: 'people',
   name: () => tr('assets.item.people.sub-agent'),
   tags: ['animated'],
@@ -458,6 +462,7 @@ function fateScene(x, y) {
 const CROP = { left: 64, up: 112, w: 128, h: 126 };
 const FATES = {
   id: 'people.fate',
+  label: 'outfit.agent',
   cat: 'people',
   name: () => tr('assets.item.people.fate'),
   tags: ['animated'],

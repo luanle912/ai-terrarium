@@ -82,6 +82,7 @@ function entry(name) {
   return {
     id: 'pantry.' + name,
     cat: 'pantry',
+    label: 'pantry.item',
     name: NAMES[name],
     tags: [MOVING.has(name) && 'animated', USED.has(name) && 'state'].filter(Boolean),
     when: { always: true },

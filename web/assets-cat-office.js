@@ -48,6 +48,7 @@ const kitPiece = (key, file, more) => ({
 const KIT = [
   kitPiece('desk', FURN, {
     name: () => tr('assets.item.office.desk'),
+    labels: ['desk', 'monitor'],
     tags: ['animated', 'state'],
     axes: [SCREENS],
     // as the office's workstation sets it: the mug makes way for the terminal, an idle screen is off
@@ -59,9 +60,9 @@ const KIT = [
       F.desk(kitOf(ctx, view), t, DESK_O);
     },
   }),
-  kitPiece('chair', FURN, { name: () => tr('assets.item.office.chair') }),
-  kitPiece('chairBase', FURN, { name: () => tr('assets.item.office.chair-base') }),
-  kitPiece('backrest', FURN, { name: () => tr('assets.item.office.backrest') }),
+  kitPiece('chair', FURN, { name: () => tr('assets.item.office.chair'), label: 'chair' }),
+  kitPiece('chairBase', FURN, { name: () => tr('assets.item.office.chair-base'), label: 'chair' }),
+  kitPiece('backrest', FURN, { name: () => tr('assets.item.office.backrest'), label: 'chair' }),
   kitPiece('bookshelf', FURN, { name: () => tr('assets.item.office.bookshelf'), catalogueOnly: true }),
   kitPiece('coffee', FURN, { name: () => tr('assets.item.office.coffee'), catalogueOnly: true, tags: ['animated'] }),
   kitPiece('fridge', FURN, { name: () => tr('assets.item.office.fridge'), catalogueOnly: true }),
@@ -81,6 +82,7 @@ const KIT = [
   kitPiece('plants', FURN, { name: () => tr('assets.item.office.plants'), catalogueOnly: true, tags: ['animated'] }),
   kitPiece('window', WALL, {
     name: () => tr('assets.item.office.window'),
+    label: 'window',
     tags: ['animated'],
     uses: ['light', 'event'],
     draw(ctx, view, t) {
@@ -95,7 +97,7 @@ const KIT = [
     catalogueOnly: true,
     tags: ['animated'],
   }),
-  kitPiece('door', WALL, { name: () => tr('assets.item.office.door'), tags: ['animated'] }),
+  kitPiece('door', WALL, { name: () => tr('assets.item.office.door'), tags: ['animated'], label: 'door' }),
   kitPiece('rug', WALL, { name: () => tr('assets.item.office.rug'), catalogueOnly: true }),
 ];
 const NIGHT_ON = { night: true },
@@ -106,6 +108,7 @@ const LEVELS = { low: [0.22, 0.35], mid: [0.66, 0.58], high: [0.93, 0.88] };
 const BOARD_O = { variant: 'led', night: false, h5: 0, d7: 0, r5: 135, r7: 4210 };
 const BOARD = {
   id: 'office.usage-board',
+  label: 'board.usage',
   cat: 'office',
   name: () => tr('assets.item.office.usage-board'),
   tags: ['animated', 'state'],
@@ -161,6 +164,7 @@ const SEG = SEGS.find(sg => !sg.v && sg.zi < 4),
 const drawSeg = () => NOW.s.host.drawSeg(NOW.s.G, SEG, NOW.own);
 const GLASS = {
   id: 'office.glass-wall',
+  label: 'wall.inner',
   cat: 'office',
   name: () => tr('assets.item.office.glass-wall'),
   tags: ['state'],
@@ -203,6 +207,7 @@ const STATUS = {
 };
 const OLD_DESK = {
   id: 'office.old-desk',
+  labels: ['desk', 'monitor'],
   cat: 'office',
   name: () => tr('assets.item.office.old-desk'),
   tags: ['animated', 'state'],
@@ -240,10 +245,11 @@ const own = draw => () => {
 };
 const DESK_DECOR = {
   id: 'office.desk-decor',
+  label: 'desk',
   cat: 'office',
   name: () => tr('assets.item.office.desk-decor'),
   tags: ['animated'],
-  when: { event: { key: 'christmas', level: 1 } },
+  when: { event: 'christmas' },
   where: 'office',
   source: [{ file: 'web/office-draw-xmas.js', fn: 'deskDecor' }],
   axes: [
@@ -264,10 +270,11 @@ const DESK_DECOR = {
 };
 const WREATH = {
   id: 'office.wreath',
+  label: 'door',
   cat: 'office',
   name: () => tr('assets.item.office.wreath'),
   tags: ['animated'],
-  when: { event: { key: 'christmas', level: 1 } },
+  when: { event: 'christmas' },
   where: 'office',
   source: [{ file: 'web/office-draw-xmas.js', fn: 'wreath' }],
   axes: [

@@ -55,14 +55,15 @@ test('variantCount multiplies the item axes by the scene controls it uses', () =
   assert.equal(L.variantCount(ENTRIES[1]), 2, 'day and night')
   assert.equal(L.variantCount(ENTRIES[3]), 1)
   assert.equal(L.variantCount(ENTRIES[4]), 4 * 2 * 2)
-  assert.equal(L.variantCount(entry('event.x', { uses: ['event'], axes: [AXIS('a', 'x', 'y')] })), 8)
+  assert.equal(L.variantCount(entry('event.x', { uses: ['event'], axes: [AXIS('a', 'x', 'y')] })), 2 * 3,
+    'none, winter and Christmas (the small holidays have entries of their own)')
 })
 
 test('sceneOf keeps only the controls an item uses; the rest stay at their defaults', () => {
-  const c = { ...L.DEFAULTS, light: 'night', season: 'winter', snow: true, event: 2 }
-  assert.deepEqual(L.sceneOf(ENTRIES[3], c), { light: 'day', season: 'summer', snow: false, event: 0 })
-  assert.deepEqual(L.sceneOf(ENTRIES[1], c), { light: 'night', season: 'summer', snow: false, event: 0 })
-  assert.deepEqual(L.sceneOf(ENTRIES[4], c), { light: 'night', season: 'winter', snow: true, event: 0 })
+  const c = { ...L.DEFAULTS, light: 'night', season: 'winter', snow: true, event: 'christmas' }
+  assert.deepEqual(L.sceneOf(ENTRIES[3], c), { light: 'day', season: 'summer', snow: false, event: 'none' })
+  assert.deepEqual(L.sceneOf(ENTRIES[1], c), { light: 'night', season: 'summer', snow: false, event: 'none' })
+  assert.deepEqual(L.sceneOf(ENTRIES[4], c), { light: 'night', season: 'winter', snow: true, event: 'none' })
 })
 
 test('combos lists every variant worth a cell, at most 48, the item axes first', () => {
@@ -80,23 +81,29 @@ test('combos lists every variant worth a cell, at most 48, the item axes first',
   })
   const cells = L.combos(big, L.DEFAULTS)
   assert.equal(cells.length, 27, 'the scene controls are dropped before the item axes')
-  assert.ok(cells.every(x => x.controls.event === 0 && x.controls.light === 'day'))
+  assert.ok(cells.every(x => x.controls.event === 'none' && x.controls.light === 'day'))
   const huge = entry('people.person', { axes: [AXIS('a', ...'abcdefgh'), AXIS('b', ...'abcdefgh')] })
   assert.equal(L.combos(huge, L.DEFAULTS).length, 48)
   assert.deepEqual(L.combos(ENTRIES[3], L.DEFAULTS), [{ pick: {}, controls: L.DEFAULTS }], 'a plain item is one cell')
 })
 
-test('the event brings winter: an item that reacts to season and event has no cells of other seasons under it', () => {
+test('the winter and Christmas packs bring winter: an item reacting to season and pack has no other season under them',
+  () => {
   const lake = entry('island.lake', { uses: ['season', 'event'] })
-  assert.equal(L.variantCount(lake), 4 + 3, 'four seasons with the event off, winter under each level')
+  assert.equal(L.variantCount(lake), 4 + 1, 'four seasons with no pack (winter\'s is the winter pack), then Christmas')
   const all = L.combos(lake, L.DEFAULTS)
-  assert.equal(all.length, 7)
-  assert.ok(all.every(c => c.controls.event === 0 || c.controls.season === 'winter'))
-  // too many to cross: the event is held at the level chosen, so every season there is the same winter
+  assert.equal(all.length, 5)
+  assert.ok(all.every(c => c.controls.event === 'none' || c.controls.season === 'winter'))
+  assert.equal(new Set(all.map(c => JSON.stringify(c.controls))).size, 5, 'no cell twice')
+  // too many to cross: the pack is held as chosen, so every season there is the same winter
   const big = entry('island.big', { axes: [AXIS('a', ...'abcd')], uses: ['light', 'season', 'snow', 'event'] })
-  const held = L.combos(big, { ...L.DEFAULTS, event: 2 })
+  const held = L.combos(big, { ...L.DEFAULTS, event: 'christmas' })
   assert.equal(held.length, 4 * 2 * 2, 'the axis x day/night x snow, winter only')
-  assert.ok(held.every(c => c.controls.season === 'winter' && c.controls.event === 2))
+  assert.ok(held.every(c => c.controls.season === 'winter' && c.controls.event === 'christmas'))
+  assert.equal(L.forcedSeason('winter'), 'winter')
+  assert.equal(L.forcedSeason('christmas'), 'winter')
+  assert.equal(L.forcedSeason('none'), null)
+  assert.equal(L.forcedSeason('tet'), null, 'a small holiday keeps the season chosen')
   assert.equal(L.variantCount(entry('island.sky', { uses: ['season'] })), 4, 'season alone keeps all four')
 })
 
@@ -126,15 +133,19 @@ test('defaultPick takes the first value of every axis, and fixPick drops values 
 test('the deep link round-trips, leaves defaults out and ignores what it does not know', () => {
   assert.equal(L.toHash({ ...L.DEFAULTS }), '#/')
   const s = { ...L.DEFAULTS, cat: 'pantry', id: 'pantry.microwave', light: 'night', season: 'winter', snow: true,
-    event: 3, zoom: 4, motion: false, pick: { use: 'use' }, q: 'lò vi', tags: ['state', 'animated'] }
+    event: 'christmas', zoom: 4, motion: false, view: 'table', pick: { use: 'use' }, q: 'lò vi',
+    tags: ['state', 'animated'] }
   const hash = L.toHash(s)
   assert.match(hash, /^#\/pantry\/microwave\?/)
   assert.match(hash, /light=night/)
   assert.match(hash, /season=winter/)
+  assert.match(hash, /event=christmas/)
+  assert.match(hash, /view=table/)
   assert.deepEqual(L.fromHash(hash), s)
   assert.deepEqual(L.fromHash('#/office'), { ...L.DEFAULTS, cat: 'office' })
   assert.deepEqual(L.fromHash(''), { ...L.DEFAULTS })
-  assert.deepEqual(L.fromHash('#/zzz/!!?light=noon&zoom=9&event=7&snow=maybe'), { ...L.DEFAULTS })
+  assert.deepEqual(L.fromHash('#/zzz/!!?light=noon&zoom=9&event=7&snow=maybe&view=list'), { ...L.DEFAULTS })
+  assert.deepEqual(L.fromHash('#/?event=tet'), { ...L.DEFAULTS, event: 'tet' }, 'a small holiday is a pack too')
   assert.deepEqual(L.fromHash('#/all?q=a%26b%3Dc'), { ...L.DEFAULTS, q: 'a&b=c' })
   for (const st of [{ ...L.DEFAULTS, cat: 'office' }, { ...L.DEFAULTS, cat: 'all', id: 'plants.tree', light: 'dusk' }])
     assert.deepEqual(L.fromHash(L.toHash(st)), st)
@@ -171,9 +182,53 @@ test('the deep link leaves out the open item\'s first variant and motion that on
 })
 
 test('the event windows come from the event calendar; a holiday window reads day/month', () => {
-  assert.deepEqual(L.eventWindow('christmas', 1), { from: '12-01', to: '12-26' })
-  assert.deepEqual(L.eventWindow('christmas', 2), { from: '12-01', to: '12-26' }, 'one event window, no weekly levels (D1)')
-  assert.deepEqual(L.eventWindow('christmas', 3), { from: '12-01', to: '12-26' })
+  assert.deepEqual(L.eventWindow('christmas'), { from: '12-01', to: '12-26' }, 'one window, no weekly levels (D1)')
+  assert.equal(L.eventWindow('easter'), null)
   assert.equal(L.dayMonth('12-27'), '27/12')
   assert.equal(L.span({ from: '12-27', to: '01-02' }), '27/12 → 02/01')
+})
+
+test('the Event control lists the theme packs: none, winter, Christmas, then every small holiday', () => {
+  const { Theme } = loadWeb('theme')
+  assert.deepEqual(L.CHOICES.event.slice(0, 3), ['none', 'winter', 'christmas'])
+  const holidays = Theme.PACKS.filter(p => p.kind === 'holiday').map(p => p.key)
+  assert.ok(holidays.length > 3)
+  assert.deepEqual(L.CHOICES.event.slice(3), holidays)
+  assert.equal(L.DEFAULTS.event, 'none')
+  assert.deepEqual(L.PACKS.map(p => p.id), L.CHOICES.event)
+  assert.deepEqual(L.PACKS.slice(0, 3).map(p => p.kind), ['base', 'season', 'event'])
+  assert.ok(L.PACKS.slice(3).every(p => p.kind === 'holiday'))
+})
+
+test('the conversion table: one column per pack (the small holidays as one, the chosen one or the first)', () => {
+  const holidays = L.CHOICES.event.slice(3)
+  const cols = L.tableCols('none')
+  assert.deepEqual(cols.map(c => c.id), ['none', 'winter', 'christmas', 'holiday'])
+  assert.deepEqual(cols.map(c => c.pack), ['none', 'winter', 'christmas', holidays[0]])
+  assert.equal(L.tableCols(holidays[2])[3].pack, holidays[2], 'a holiday picked on the Event control')
+  assert.equal(L.tableCols('christmas')[3].pack, holidays[0])
+  assert.equal(L.tableCols('none'), L.tableCols('christmas'), 'one list per holiday shown')
+})
+
+test('the conversion table: one row per label, each with the entries that draw it, and the cell a look shows', () => {
+  const labels = [{ id: 'tree.x', group: 'outdoor' }, { id: 'tree.y', group: 'outdoor' },
+    { id: 'desk', group: 'office' }]
+  const look = v => ({ of: () => v })
+  const plain = entry('plants.plain', { label: 'tree.x' })
+  const follows = entry('plants.follows', { label: 'tree.x', uses: ['event'] })
+  const kinds = entry('plants.kinds', { label: 'tree.y', axes: [AXIS('kind', 'a', 'b')],
+    pickFor: lk => ({ kind: lk.of('tree.y') }) })
+  const tet = entry('plants.tet', { label: 'desk', variant: 'tet' })
+  const xmas = entry('plants.xmas', { labels: ['desk', 'tree.y'], variant: 'xmas' })
+  const rows = L.tableRows([plain, follows, kinds, tet, xmas, ENTRIES[0]], labels)
+  assert.deepEqual(rows.map(r => r.id), ['tree.x', 'tree.y', 'desk'])
+  assert.deepEqual(rows[0].entries, [plain, follows])
+  assert.deepEqual(rows[2].entries, [tet, xmas])
+  assert.deepEqual(L.labelsOf(xmas), ['desk', 'tree.y'])
+  assert.deepEqual(L.labelsOf(ENTRIES[0]), [])
+  assert.equal(L.tableCell(rows[0], look('plain')).entry, follows, 'an entry that follows the pack first')
+  assert.deepEqual(L.tableCell(rows[1], look('b')), { entry: kinds, pick: { kind: 'b' } }, 'its axis set from the look')
+  assert.equal(L.tableCell(rows[2], look('tet')).entry, tet, 'a fixed variant of the label')
+  assert.equal(L.tableCell(rows[2], look('xmas')).entry, xmas)
+  assert.equal(L.tableCell(rows[2], look('none')), null, 'a variant nothing draws (no holiday tree)')
 })

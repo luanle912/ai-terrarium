@@ -29,6 +29,7 @@ function inScene(ctx, view, x, y, z) {
 const ROCKS = ['small', 'big'].map(l => findTile((x, y) => hash(x, y, 49) > 0.5 === (l === 'big')));
 const ROCK = {
   id: 'outdoor.rock',
+  label: 'rock',
   cat: 'outdoor',
   name: () => tr('assets.item.outdoor.rock'),
   when: { always: true },
@@ -54,6 +55,7 @@ const LAMP0 = ISLAND.lamps[0],
 const paintLamp = s => drawLamp(s.pt, s.PG, s.C, ISLAND, LAMP0);
 const LAMP = {
   id: 'outdoor.lamp',
+  label: 'lamp',
   cat: 'outdoor',
   name: () => tr('assets.item.outdoor.lamp'),
   tags: ['animated'],
@@ -79,7 +81,7 @@ const CANE = {
   id: 'outdoor.candy-cane',
   cat: 'outdoor',
   name: () => tr('assets.item.outdoor.candy-cane'),
-  when: { event: { key: 'christmas', level: 2 } },
+  when: { event: 'christmas' },
   where: 'lawn',
   source: [{ file: 'web/island-art-xmas.js', fn: 'drawCandyCane' }],
   uses: ['light', 'snow'],
@@ -89,6 +91,7 @@ const CANE = {
 const paintBench = s => drawBench(s.pt, s.PG, s.C, BENCH_AT);
 const BENCH = {
   id: 'outdoor.bench',
+  label: 'bench',
   cat: 'outdoor',
   name: () => tr('assets.item.outdoor.bench'),
   when: { always: true },
@@ -104,6 +107,7 @@ const PILLAR = ISLAND.pavilion.pillar;
 const paintPavilion = s => drawPavilion(s.pt, s.PG, s.C, ISLAND);
 const PAVILION = {
   id: 'outdoor.pavilion',
+  label: 'pavilion',
   cat: 'outdoor',
   name: () => tr('assets.item.outdoor.pavilion'),
   tags: ['animated'],

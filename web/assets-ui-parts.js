@@ -4,6 +4,7 @@ import { tr } from './i18n.js';
 import { SeasonLogic } from './season-logic.js';
 import { AssetsLogic } from './assets-logic.js';
 import { AssetsPaint } from './assets-ui-paint.js';
+import { HOLIDAY_NAME } from './assets-cat-plants.js';
 
 export const h = React.createElement;
 const { useEffect, useRef, useState } = React;
@@ -25,8 +26,8 @@ export const SEASONS = () =>
     }[k],
     swatch: SeasonLogic.seasonChip({ season: k }).accent,
   }));
-// The season buttons while a Christmas level is on: the event brings winter (AssetsStage.envOf), so the other seasons
-// cannot be chosen until it is off; the hint says why.
+// The season buttons while a pack that brings winter is on (the winter pack, Christmas: AssetsStage.envOf), so the
+// other seasons cannot be chosen until it is off; the hint says why.
 export const heldSeasons = () =>
   SEASONS().map(o => (o.id === 'winter' ? { ...o, title: tr('assets.eventWinter') } : { ...o, disabled: true }));
 export const SeasonHint = () =>
@@ -40,10 +41,14 @@ export const SNOWS = () => [
   { id: false, label: tr('assets.snow.off') },
   { id: true, label: tr('assets.snow.on'), icon: 'snow' },
 ];
-export const EVENTS = () => [
-  { id: 0, label: tr('assets.event.off') },
-  ...[1, 2, 3].map(n => ({ id: n, label: tr('assets.event.level', { n }), title: tr('assets.event.title', { n }) })),
-];
+// The theme packs (AssetsLogic.PACKS): none, winter, Christmas, then every small holiday by its tree's name.
+const PACK_LABEL = {
+  none: () => tr('assets.event.off'),
+  winter: () => tr('season.winter'),
+  christmas: () => tr('assets.event.christmas'),
+};
+export const packLabel = id => (PACK_LABEL[id] || HOLIDAY_NAME[id] || (() => id))();
+export const EVENTS = () => AssetsLogic.PACKS.map(p => ({ id: p.id, label: packLabel(p.id) }));
 export const CONTROL_LABEL = {
   light: () => tr('assets.ctl.light'),
   season: () => tr('assets.ctl.season'),
@@ -118,6 +123,20 @@ export function Seg({ label, value, options, onChange, compact, className }) {
         (!compact || !o.icon) && h('span', { className: 'as-seg-txt' }, o.label),
       ),
     ),
+  );
+}
+
+// A drop-down of pixel style for a control with many choices (the packs). options as Seg's; the ids are strings.
+export function Choice({ label, value, options, onChange, className }) {
+  return h(
+    'select',
+    {
+      className: 'as-choice' + (className ? ' ' + className : ''),
+      'aria-label': label,
+      value,
+      onChange: e => onChange(e.target.value),
+    },
+    options.map(o => h('option', { key: o.id, value: o.id }, o.label)),
   );
 }
 

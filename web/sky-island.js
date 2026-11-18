@@ -55,7 +55,7 @@ export function bakeTools(frame, env) {
 // dark than the lawn does.
 export const eventTone = df => c => night(c, 1 - (1 - df) * 0.55);
 // The cathedral and the statue are dressed in full from the event's first day (D1): their top dressing level.
-const DRESSED = 3;
+export const DRESSED = 3;
 
 // The island as one image the size of the scene canvas. The land (underside, lawn, lake, mountain) is painted first on
 // its own canvas so it can be ringed with the 1 px outline; the pool at the mountain's foot, the stepping stones,

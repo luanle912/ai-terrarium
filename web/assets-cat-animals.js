@@ -16,6 +16,8 @@ import { IslandLife, V_GAP, drawBirds, drawFlies, lifePalette, vRank, vSide, win
 import { WATER } from './island-art-lake.js';
 import { night } from './island-art.js';
 import { WATER_Z } from './sky-island.js';
+import { STRINGS, WREATHS } from './office-draw-xmas.js';
+import { Paint } from './paint.js';
 
 const { axis, dfB, valueIndex } = AssetsStage;
 const snB = view => Math.round(view.env.snow * 10);
@@ -94,6 +96,8 @@ const OUTFIT_AXIS = axis('outfit', () => tr('assets.axis.outfit'), [
 // (ox, oy) and the sprite's anchor column over ox, as drawDog places it.
 const DOG = {
   id: 'animals.dog',
+  label: 'dog.costume',
+  pickFor: look => ({ outfit: look.of('dog.costume') === 'xmas' ? 'xmas' : 'plain' }),
   cat: 'animals',
   name: () => tr('assets.item.animals.dog'),
   when: { always: true },
@@ -134,6 +138,7 @@ const DOGS = new Map(BREEDS.map(b => [b, DOG_ACTS.map(a => dogDoing(b, a))]));
 const drawDog = () => NOW.s.host.drawDog(NOW.s.G, NOW.dog, NOW.t, dfB(NOW.view), snB(NOW.view));
 const DOG_LIFE = {
   id: 'animals.dog-life',
+  label: 'dog.costume',
   cat: 'animals',
   name: () => tr('assets.item.animals.dog-life'),
   tags: ['animated'],
@@ -167,6 +172,10 @@ const AT_HOME = new Map(
   ]),
 );
 const ITEMS = [];
+// What the look lays on each kennel, as the office's xmasItems lays it just after the house: the string of lights
+// along its gable and the wreath over its door.
+const KENNEL_STRING = DOG_HOUSES.map(h => STRINGS.find(st => st.label === 'kennel' && st.inst === h) || null),
+  KENNEL_WREATH = WREATHS.filter(w => w.door.kind === 'kennel');
 // The office's doghouseItems lays out the three kennels and the lantern (in that order); NOW.i is the one drawn.
 function kennels() {
   const { s, view } = NOW;
@@ -174,15 +183,24 @@ function kennels() {
   s.host.dogs = NOW.dogs;
   s.host.doghouseItems(s.G, ITEMS, view.env.snow, dfB(view), snB(view));
   ITEMS[NOW.i].f();
+  // (the lantern, NOW.i 3, has neither)
+  const st = KENNEL_STRING[NOW.i],
+    w = KENNEL_WREATH[NOW.i];
+  if (st) for (const f of Paint.overlaysOf('kennel', s.G.look)) f(s.host, s.G, st.inst, st);
+  if (w) for (const f of Paint.overlaysOf('door', s.G.look)) f(s.host, s.G, w.door, w);
 }
 const KENNEL = {
   id: 'animals.kennel',
+  label: 'kennel',
   cat: 'animals',
   name: () => tr('assets.item.animals.kennel'),
   tags: ['animated', 'state'],
   when: { always: true },
   where: 'kennel',
-  source: [{ file: 'web/office-draw-doghouse.js', fn: 'doghouseItems' }],
+  source: [
+    { file: 'web/office-draw-doghouse.js', fn: 'doghouseItems' },
+    { file: 'web/office-draw-xmas.js', fn: 'xmasItems' },
+  ],
   axes: [KENNEL_AXIS, HOME],
   uses: ['light', 'snow', 'event'],
   draw(ctx, view, t) {
@@ -376,7 +394,7 @@ const REINDEER = critterEntry({
   name: () => tr('assets.item.animals.reindeer'),
   kind: 'reindeer',
   moving: ['walk'],
-  when: { event: { key: 'christmas', level: 2 } },
+  when: { event: 'christmas' },
   where: 'lawn',
   extra: [
     axis('nose', () => tr('assets.axis.nose'), [
@@ -391,7 +409,7 @@ const PENGUIN = critterEntry({
   name: () => tr('assets.item.animals.penguin'),
   kind: 'penguin',
   moving: ['waddle'],
-  when: { event: { key: 'christmas', level: 3 } },
+  when: { event: 'christmas' },
   where: 'lake',
 });
 // A polar bear or its cub: walking (PolarBears.pose steps the frames, through the office's drawBear) or one frame.

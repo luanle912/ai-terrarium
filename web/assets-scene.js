@@ -133,6 +133,59 @@ function islandScene(ctx, view, t, r, over) {
   if (over) over(ctx, view, t);
   ctx.restore();
 }
+// The office as the game draws it (ClaudeOffice#draw on a stand-in host of its own: the island under it, the walls,
+// floors and furniture, and all the look lays on them; nobody in it, no usage board), at one canvas px per scene px,
+// once per scene at a still clock. Every office region (officeRegion(), made when the module loads, as region()) is
+// cut out of it right away and the whole picture let go; the cuts of the last CUT_ENVS scenes are kept. For what the
+// office paints inline in its draw (floors, the outer walls and their lights, the shelf, the clock, the pot plants,
+// the stairs and the plinth): the card shows it in place, as it is in the game.
+const OFFICE_T = 1.25;
+const OFFICE_REGIONS = [],
+  OFFICE_CUTS = new Map();
+let officeHost = null;
+function officeRegion(x, y, w, h) {
+  const r = { x, y, w, h };
+  OFFICE_REGIONS.push(r);
+  return r;
+}
+function officeBake(env) {
+  const host = officeHost || (officeHost = new AssetsStage.StageHost());
+  host.view = { env };
+  host.clean();
+  host.canvas = document.createElement('canvas');
+  host.k = 0;
+  host.renderK = () => 1;
+  host.draw(OFFICE_T);
+  const out = new Map();
+  for (const r of OFFICE_REGIONS) {
+    const c = document.createElement('canvas');
+    c.width = r.w;
+    c.height = r.h;
+    c.getContext('2d').drawImage(host.canvas, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+    out.set(r, c);
+  }
+  host.canvas.width = host.canvas.height = 0;
+  host.canvas = null;
+  return out;
+}
+// Region r of the office in the scene of env, its top left at (ox, oy).
+function officeScene(ctx, view, r) {
+  const key = view.env.key;
+  let cuts = OFFICE_CUTS.get(key);
+  if (cuts && cuts.has(r)) OFFICE_CUTS.delete(key);
+  else {
+    if (cuts) for (const c of cuts.values()) c.width = c.height = 0;
+    OFFICE_CUTS.delete(key);
+    cuts = officeBake(view.env);
+    if (OFFICE_CUTS.size >= CUT_ENVS) {
+      const old = OFFICE_CUTS.keys().next().value;
+      for (const c of OFFICE_CUTS.get(old).values()) c.width = c.height = 0;
+      OFFICE_CUTS.delete(old);
+    }
+  }
+  OFFICE_CUTS.set(key, cuts);
+  ctx.drawImage(cuts.get(r), view.ox, view.oy);
+}
 // The frame of a scene card showing region r (an entry's `frame`): what it draws is clipped to the region, so there is
 // nothing to measure (measuring would bake the island once per scene for every card).
 const frameOf = r => ({ w: r.w, h: r.h });
@@ -148,4 +201,15 @@ function weatherEnv(env, w) {
   return m[w];
 }
 
-export const AssetsScene = { sprite, prop, region, frameOf, bakeCut, enter, islandScene, weatherEnv };
+export const AssetsScene = {
+  sprite,
+  prop,
+  region,
+  frameOf,
+  bakeCut,
+  enter,
+  islandScene,
+  weatherEnv,
+  officeRegion,
+  officeScene,
+};

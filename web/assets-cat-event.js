@@ -2,8 +2,8 @@
 // the pile of presents they make (critter sprites, web/critter-sprites.js, through the office's own methods), the
 // strings of lights (web/office-draw-xmas.js; the candy canes by the lamps are in outdoor), and the landmark:
 // Notre-Dame of Saigon and the statue with the crib before it, baked by web/island-art-cathedral.js and
-// web/island-art-cathedral-yard.js and lit by web/office-draw-cathedral.js. The pieces that change with the event's
-// level follow the page's Event control; with the event off they show its last level, so they are never empty.
+// web/island-art-cathedral-yard.js and lit by web/office-draw-cathedral.js. Everything is whole from the event's first
+// day (D1), so each piece shows as the game shows it whatever the page's Event control.
 import { tr } from './i18n.js';
 import { AssetsStage } from './assets-stage.js';
 import { ACT, critterEntry, frames } from './assets-cat-animals.js';
@@ -14,15 +14,12 @@ import { PILE } from './office-draw-critters.js';
 import { STRINGS, drawString, glowAt } from './office-draw-xmas.js';
 import { drawCathedral } from './island-art-cathedral.js';
 import { drawOurLady } from './island-art-cathedral-yard.js';
-import { eventTone } from './sky-island.js';
+import { DRESSED, eventTone } from './sky-island.js';
 import { Theme } from './theme.js';
 
 const { axis, dfB, xmasEvent } = AssetsStage;
-// The event an entry shows up with (its `when`), at a level.
-const XMAS = level => xmasEvent(level);
-// The event's level an env shows: the page's Event control, or the full event (level 3) while it is off.
-const DEFAULT_LEVEL = 3;
-const levelOf = env => env.event || DEFAULT_LEVEL;
+// When the Christmas pieces show up (their `when`): with the Christmas pack.
+const XMAS = 'christmas';
 // The outdoor Christmas pieces' colours (web/sky-island.js eventTone), one function per daylight.
 const TONES = new Map();
 const tonesOf = df => {
@@ -44,7 +41,7 @@ const SANTA = {
   cat: 'event',
   name: () => tr('assets.item.event.santa'),
   tags: ['animated'],
-  when: { event: XMAS(1) },
+  when: { event: XMAS },
   where: 'office',
   source: [
     { file: 'web/critter-sprites.js', fn: 'KINDS.santa' },
@@ -61,7 +58,7 @@ const SLEIGH = {
   id: 'event.sleigh',
   cat: 'event',
   name: () => tr('assets.item.event.sleigh'),
-  when: { event: XMAS(1) },
+  when: { event: XMAS },
   where: 'sky',
   source: [
     { file: 'web/critter-sprites.js', fn: 'KINDS.sleigh' },
@@ -80,7 +77,7 @@ const PARCEL = {
   id: 'event.parcel',
   cat: 'event',
   name: () => tr('assets.item.event.parcel'),
-  when: { event: XMAS(1) },
+  when: { event: XMAS },
   where: 'sky',
   source: [
     { file: 'web/critter-sprites.js', fn: 'KINDS.parcel' },
@@ -95,13 +92,13 @@ const ELF = critterEntry({
   name: () => tr('assets.item.event.elf'),
   kind: 'elf',
   moving: ['carry', 'back'],
-  when: { event: XMAS(3) },
+  when: { event: XMAS },
   where: 'lawn',
 });
 // The pile by the front stairs, as many presents as the elves and the sleigh have brought.
 const DROP = CRITTER_PLACES.drop || [0, 0];
 // The draw under way, read by the fixed functions handed to the stage's scene() (no closure per frame).
-const NOW = { s: null, view: null, n: 0, ev: null, level: 1 };
+const NOW = { s: null, view: null, n: 0, ev: null };
 const aim = (ctx, view, t) => {
   NOW.view = view;
   return (NOW.s = AssetsStage.stage(ctx, view, t));
@@ -111,7 +108,7 @@ const GIFT_PILE = {
   id: 'event.gift-pile',
   cat: 'event',
   name: () => tr('assets.item.event.gift-pile'),
-  when: { event: XMAS(3) },
+  when: { event: XMAS },
   where: 'lawn',
   source: [
     { file: 'web/office-draw-critters.js', fn: 'drawPile' },
@@ -158,7 +155,7 @@ const STRING_LIGHTS = {
   cat: 'event',
   name: () => tr('assets.item.event.string-lights'),
   tags: ['animated'],
-  when: { event: XMAS(1) },
+  when: { event: XMAS },
   where: 'lawn',
   source: [
     { file: 'web/office-draw-xmas.js', fn: 'drawString' },
@@ -201,22 +198,22 @@ function lights(s, ev, part) {
 }
 const LANDMARK_SOURCE = { file: 'web/office-draw-cathedral.js', fn: 'cathedralItems' };
 function drawChurch() {
-  const { s, view, ev, level } = NOW;
+  const { s, view, ev } = NOW;
   lights(s, ev, 'back');
-  drawCathedral(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, level, SITE.at);
+  drawCathedral(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, DRESSED, SITE.at);
   lights(s, ev, 'front');
 }
 function drawLady() {
-  const { s, view, level } = NOW;
-  drawOurLady(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, level, SITE.lady);
-  lights(s, xmasEvent(level, false), 'yard');
+  const { s, view } = NOW;
+  drawOurLady(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, DRESSED, SITE.lady);
+  lights(s, xmasEvent(false), 'yard');
 }
 const CATHEDRAL = {
   id: 'event.cathedral',
   cat: 'event',
   name: () => tr('assets.item.event.cathedral'),
   tags: ['animated'],
-  when: { event: XMAS(1) },
+  when: { event: XMAS },
   where: 'lawn',
   source: [{ file: 'web/island-art-cathedral.js', fn: 'drawCathedral' }, LANDMARK_SOURCE],
   axes: [
@@ -225,11 +222,10 @@ const CATHEDRAL = {
       { id: 'eve', label: () => tr('assets.eve.eve') },
     ]),
   ],
-  uses: ['light', 'snow', 'event'],
+  uses: ['light', 'snow'],
   draw(ctx, view, t) {
     const s = aim(ctx, view, t);
-    NOW.level = levelOf(view.env);
-    NOW.ev = xmasEvent(NOW.level, view.pick.eve === 'eve');
+    NOW.ev = xmasEvent(view.pick.eve === 'eve');
     s.scene(SITE.at[0] + 0.5, SITE.at[1] + 0.5, 0, drawChurch, true);
   },
 };
@@ -237,13 +233,12 @@ const OUR_LADY = {
   id: 'event.our-lady',
   cat: 'event',
   name: () => tr('assets.item.event.our-lady'),
-  when: { event: XMAS(1) },
+  when: { event: XMAS },
   where: 'lawn',
   source: [{ file: 'web/island-art-cathedral-yard.js', fn: 'drawOurLady' }, LANDMARK_SOURCE],
-  uses: ['light', 'snow', 'event'],
+  uses: ['light', 'snow'],
   draw(ctx, view, t) {
     const s = aim(ctx, view, t);
-    NOW.level = levelOf(view.env);
     s.scene(SITE.lady[0] + 0.5, SITE.lady[1] + 0.5, 0, drawLady, true);
   },
 };

@@ -1,19 +1,43 @@
 // The /assets page as logic (no DOM, no canvas; tests/assets-logic.test.mjs): the global controls and their defaults,
 // filtering and search, how many variants an item has, the cells of the "all variants" grid, which controls reach an
-// item, the deep link in the URL hash and the dates an item shows up on.
+// item, the deep link in the URL hash, the dates an item shows up on and the rows and columns of the conversion table.
 import { EventLogic } from './event-logic.js';
+import { Theme } from './theme.js';
 
 // The scene controls (they change what the game draws) and the view controls (how the page shows it).
 const SCENE = ['light', 'season', 'snow', 'event'];
 // The categories of the catalogue, in the order of the page's rail (web/assets-registry.js gives them names).
 const CAT_IDS = ['plants', 'outdoor', 'island', 'animals', 'people', 'office', 'pantry', 'rooms', 'event', 'world'];
+// The theme packs (web/theme.js) the Event control picks from: none (the base pack alone, in the season chosen), the
+// season packs (winter: the season it is for), the events (Christmas, which brings winter too), then the small
+// holidays (each its own holiday tree, in the season chosen). season: the season a pack brings, whatever is chosen.
+const KIND_ORDER = ['base', 'season', 'event', 'holiday'];
+const PACKS = Object.freeze(
+  [...Theme.PACKS]
+    .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind))
+    .map(p =>
+      Object.freeze({
+        id: p.kind === 'base' ? 'none' : p.key,
+        kind: p.kind,
+        season: p.kind === 'season' || p.kind === 'event' ? p.season || null : null,
+      }),
+    ),
+);
+const PACK = new Map(PACKS.map(p => [p.id, p]));
+const forcedSeason = id => (PACK.has(id) && PACK.get(id).season) || null;
+// The packs that change more than the holiday tree: what the variants grid and the scene tests go through (each small
+// holiday's tree has an entry of its own).
+const BIG_PACKS = Object.freeze(PACKS.filter(p => p.kind !== 'holiday').map(p => p.id));
+const HOLIDAYS = PACKS.filter(p => p.kind === 'holiday').map(p => p.id);
 const CHOICES = {
   light: ['day', 'dusk', 'night'],
   season: ['spring', 'summer', 'autumn', 'winter'],
   snow: [false, true],
-  event: [0, 1, 2, 3],
+  event: PACKS.map(p => p.id),
   zoom: [2, 3, 4],
   motion: [true, false],
+  // the grid of cards, or the conversion table (a row per label, a column per pack)
+  view: ['grid', 'table'],
 };
 // Summer is the game's standard look (web/season-logic.js).
 const DEFAULTS = Object.freeze({
@@ -24,14 +48,15 @@ const DEFAULTS = Object.freeze({
   light: 'day',
   season: 'summer',
   snow: false,
-  event: 0,
+  event: 'none',
   zoom: 3,
   motion: true,
+  view: 'grid',
   pick: {},
 });
 // The values a cell of the variants grid takes per scene control (dusk is a blend of the two, so it is left out),
 // and the order the controls are dropped in when the grid would have more than MAX_CELLS cells.
-const CELL_VALUES = { light: ['day', 'night'], season: CHOICES.season, snow: CHOICES.snow, event: CHOICES.event };
+const CELL_VALUES = { light: ['day', 'night'], season: CHOICES.season, snow: CHOICES.snow, event: BIG_PACKS };
 const DROP = ['event', 'snow', 'light', 'season'];
 const MAX_CELLS = 48;
 
@@ -70,25 +95,53 @@ function counts(entries) {
   return out;
 }
 
-// The item's own axes times the scene controls it reacts to (day and night count as two, dusk being a blend). An
-// entry with `sweep` (too many axes to cross, like a person) counts each value of each of its axes once. The event
-// brings winter (EventLogic.season), so an item that reacts to both counts every season with the event off and
-// winter alone under each of its levels.
-const heldByEvent = e => e.uses.includes('season') && e.uses.includes('event');
-function variantCount(e) {
-  let n = 1;
-  if (e.sweep) for (const a of e.axes) n += a.values.length - 1;
-  else for (const a of e.axes) n *= a.values.length;
-  for (const u of e.uses) if (!(heldByEvent(e) && (u === 'event' || u === 'season'))) n *= CELL_VALUES[u].length;
-  if (heldByEvent(e)) n *= CELL_VALUES.season.length + CELL_VALUES.event.length - 1;
-  return n;
-}
 // The scene an item is drawn in: the controls it uses as chosen, the rest at their defaults, so a card that ignores
 // a control never changes with it.
 function sceneOf(e, controls) {
   const out = {};
   for (const u of SCENE) out[u] = e.uses.includes(u) ? controls[u] : DEFAULTS[u];
   return out;
+}
+// The scene a cell really shows, for an item that reacts to the season: a pack that brings a season (winter,
+// Christmas) shows it whatever the season chosen, and the winter pack is winter's own column (the base pack in winter
+// has it), so it is winter with no pack.
+function shown(e, controls) {
+  const sc = sceneOf(e, controls);
+  if (!e.uses.includes('season')) return sc;
+  const forced = forcedSeason(sc.event);
+  if (forced) sc.season = forced;
+  if (PACK.has(sc.event) && PACK.get(sc.event).kind === 'season') sc.event = 'none';
+  return sc;
+}
+// The controls of `cells` crossed with every grid value of each control in `list`, a cell that shows the same scene
+// as one before it left out (shown as that scene's controls).
+function cross(e, cells, list) {
+  for (const u of list) {
+    const next = [];
+    for (const c of cells) for (const v of CELL_VALUES[u]) next.push({ ...c, [u]: v });
+    cells = next;
+  }
+  const seen = new Set(),
+    out = [];
+  for (const c of cells) {
+    const sc = shown(e, c),
+      key = SCENE.map(u => sc[u]).join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e.uses.includes('season') ? { ...c, season: sc.season, event: sc.event } : c);
+  }
+  return out;
+}
+
+// The item's own axes times the scenes of the controls it reacts to (day and night count as two, dusk being a blend;
+// of the packs none, winter and Christmas, a scene shown twice counted once). An entry with `sweep` (too many axes to
+// cross, like a person) counts each value of each of its axes once.
+function variantCount(e) {
+  let n = 1;
+  if (e.sweep) for (const a of e.axes) n += a.values.length - 1;
+  else for (const a of e.axes) n *= a.values.length;
+  const used = SCENE.filter(u => e.uses.includes(u));
+  return n * cross(e, [DEFAULTS], used).length;
 }
 const defaultPick = e => {
   const p = {};
@@ -106,7 +159,7 @@ function fixPick(e, pick) {
 }
 
 // The cells of the "all variants" grid: every value of every axis of the item, times the scene controls it uses,
-// at most MAX_CELLS. Scene controls are fixed at their current value one by one (the event first) until it fits;
+// at most MAX_CELLS. Scene controls are fixed at their current value one by one (the pack first) until it fits;
 // past that the item's own combinations are cut at MAX_CELLS. An entry with `sweep: [axisId…]` does not cross its
 // axes: its cells are the first value of every axis, then each other value of each swept axis on its own.
 function sweepPicks(e) {
@@ -118,48 +171,31 @@ function sweepPicks(e) {
 }
 function combos(e, controls) {
   const used = SCENE.filter(u => e.uses.includes(u));
-  // how many distinct cells the controls in `list` make (under the event every season is the one winter)
-  const size = list => {
-    let n = list.reduce((k, u) => k * CELL_VALUES[u].length, 1);
-    if (heldByEvent(e) && list.includes('season'))
-      if (list.includes('event'))
-        n =
-          (n / (CELL_VALUES.season.length * CELL_VALUES.event.length)) *
-          (CELL_VALUES.season.length + CELL_VALUES.event.length - 1);
-      else if (controls.event > 0) n /= CELL_VALUES.season.length;
-    return n;
-  };
   const picks = e.sweep ? sweepPicks(e) : null;
   let axesN = 1;
   if (picks) axesN = picks.length;
   else for (const a of e.axes) axesN *= a.values.length;
-  for (const u of DROP) if (axesN * size(used) > MAX_CELLS && used.includes(u)) used.splice(used.indexOf(u), 1);
-  const dims = [
-    ...(picks ? [] : e.axes.map(a => a.values.map(v => ['pick', a.id, v.id]))),
-    ...used.map(u => CELL_VALUES[u].map(v => ['controls', u, v])),
-  ];
-  let cells = picks ? picks.map(pick => ({ pick, controls })) : [{ pick: {}, controls }];
-  for (const d of dims) {
-    const next = [];
-    for (const c of cells)
-      for (const [part, k, v] of d) {
-        if (next.length >= MAX_CELLS * 4) break;
-        next.push(
-          part === 'pick' ? { ...c, pick: { ...c.pick, [k]: v } } : { ...c, controls: { ...c.controls, [k]: v } },
-        );
-      }
-    cells = next;
-  }
-  // under the event every season is winter: those cells are one cell, shown as winter
-  if (heldByEvent(e)) {
-    const seen = new Set();
-    cells = cells.filter(c => {
-      if (c.controls.event > 0 && c.controls.season !== 'winter') c.controls = { ...c.controls, season: 'winter' };
-      const key = JSON.stringify(c.pick) + JSON.stringify(sceneOf(e, c.controls));
-      return !seen.has(key) && seen.add(key);
-    });
-  }
-  return cells.slice(0, MAX_CELLS);
+  for (const u of DROP)
+    if (axesN * cross(e, [controls], used).length > MAX_CELLS && used.includes(u)) used.splice(used.indexOf(u), 1);
+  const scenes = cross(e, [controls], used);
+  let cells = picks ? picks.map(pick => ({ pick })) : [{ pick: {} }];
+  if (!picks)
+    for (const a of e.axes) {
+      const next = [];
+      for (const c of cells)
+        for (const v of a.values) {
+          if (next.length >= MAX_CELLS * 4) break;
+          next.push({ pick: { ...c.pick, [a.id]: v.id } });
+        }
+      cells = next;
+    }
+  const out = [];
+  for (const c of cells)
+    for (const sc of scenes) {
+      if (out.length >= MAX_CELLS) return out;
+      out.push({ pick: c.pick, controls: sc });
+    }
+  return out;
 }
 
 // ---- the deep link: #/<cat>/<name>?light=night&season=winter&v.use=use… (only what differs from the defaults) ----
@@ -177,7 +213,7 @@ function toHash(s, base = {}) {
   if (id) path = own === s.cat ? '#/' + own + '/' + id.slice(own.length + 1) : '#/' + (cat || 'all') + '/' + id;
   const q = [],
     motion = base.motion === undefined ? DEFAULTS.motion : base.motion;
-  for (const k of ['light', 'season', 'snow', 'event', 'zoom', 'motion'])
+  for (const k of ['light', 'season', 'snow', 'event', 'zoom', 'motion', 'view'])
     if (s[k] !== (k === 'motion' ? motion : DEFAULTS[k]))
       q.push(k + '=' + (typeof s[k] === 'boolean' ? (s[k] ? 1 : 0) : s[k]));
   if (s.q) q.push('q=' + enc(s.q));
@@ -189,7 +225,7 @@ function toHash(s, base = {}) {
 }
 const asValue = (k, raw) => {
   const v = k === 'snow' || k === 'motion' ? (raw === '1' ? true : raw === '0' ? false : null) : raw;
-  const n = k === 'event' || k === 'zoom' ? Number(v) : v;
+  const n = k === 'zoom' ? Number(v) : v;
   return CHOICES[k].includes(n) ? n : undefined;
 };
 function fromHash(hash) {
@@ -226,14 +262,14 @@ function fromHash(hash) {
 
 // ---- when an item shows up ----
 const pad = n => String(n).padStart(2, '0');
-// From the first day of December the event reaches `level` to its last day, read off the event calendar itself.
-function eventWindow(key, level) {
+// The days of December the event `key` is on, read off the event calendar itself (it is whole from its first day, D1).
+function eventWindow(key) {
   let from = null,
     to = null;
   for (let d = 1; d <= 31; d++) {
     const ev = EventLogic.active(new Date(2026, 11, d, 12), 'auto', null, 0);
     if (!ev || ev.key !== key) continue;
-    if (ev.level >= level && !from) from = '12-' + pad(d);
+    if (!from) from = '12-' + pad(d);
     to = '12-' + pad(d);
   }
   return from ? { from, to } : null;
@@ -245,9 +281,46 @@ const dayMonth = md => {
 };
 const span = w => dayMonth(w.from) + ' → ' + dayMonth(w.to);
 
+// ---- the conversion table: a row per label (web/labels.js), a column per pack ----
+// The labels an entry draws: `label`, or `labels` for an entry that shows several.
+const labelsOf = e => (e.labels ? e.labels : e.label ? [e.label] : []);
+// The columns: no pack (the season chosen), winter, Christmas, and the small holidays as one column, the one picked on
+// the Event control or else the first (they differ only in the holiday tree). One list per holiday shown.
+const COLS = new Map();
+function tableCols(choice) {
+  const holiday = HOLIDAYS.includes(choice) ? choice : HOLIDAYS[0];
+  let cols = COLS.get(holiday);
+  if (!cols)
+    COLS.set(
+      holiday,
+      (cols = Object.freeze([...BIG_PACKS.map(id => ({ id, pack: id })), { id: 'holiday', pack: holiday }])),
+    );
+  return cols;
+}
+// The rows, in the order of `labels` ([{id, group}], Labels.LIST): each with the entries that carry its label.
+const tableRows = (entries, labels) =>
+  labels.map(l => ({ id: l.id, group: l.group, entries: entries.filter(e => labelsOf(e).includes(l.id)) }));
+// What a cell of `row` shows under `look` (web/theme.js): the entry that draws the label's variant there and its pick.
+// An entry with a `variant` draws that one variant only (a holiday's tree); the others draw what the look gives, and
+// of those one that follows the pack (it reacts to the Event control, or sets its axes from the look by `pickFor`)
+// comes first. null when the look's variant is one no entry draws (no holiday tree).
+function tableCell(row, look) {
+  const v = look.of(row.id);
+  let entry = row.entries.find(e => e.variant === v) || null;
+  if (!entry) {
+    const open = row.entries.filter(e => e.variant === undefined);
+    entry = open.find(e => e.pickFor || e.uses.includes('event')) || open[0] || null;
+  }
+  if (!entry) return null;
+  return { entry, pick: fixPick(entry, entry.pickFor ? entry.pickFor(look) : null) };
+}
+
 export const AssetsLogic = {
   SCENE,
   CAT_IDS,
+  PACKS,
+  BIG_PACKS,
+  forcedSeason,
   CHOICES,
   DEFAULTS,
   MAX_CELLS,
@@ -264,4 +337,8 @@ export const AssetsLogic = {
   eventWindow,
   dayMonth,
   span,
+  labelsOf,
+  tableCols,
+  tableRows,
+  tableCell,
 };

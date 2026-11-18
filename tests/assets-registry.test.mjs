@@ -75,31 +75,43 @@ const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase())
 // ---- the stage ----
 
 test('envOf has the shape of the game env, plus snow and the theme', () => {
-  const env = AssetsStage.envOf({ light: 'night', season: 'spring', snow: true, event: 0 })
+  const env = AssetsStage.envOf({ light: 'night', season: 'spring', snow: true, event: 'none' })
   assert.deepEqual(Object.keys(env).sort(),
     ['col', 'df', 'event', 'flash', 'frozen', 'fx', 'hour', 'key', 'light', 'look', 'reduced', 'season', 'snow', 'theme']
       .sort())
   assert.equal(env.look.of('tree.island'), 'fresh', 'the look of the scene: spring, no event')
   assert.equal(env.light, 'night')
-  assert.notEqual(env.key, AssetsStage.envOf({ light: 'day', season: 'spring', snow: true, event: 0 }).key)
+  assert.notEqual(env.key, AssetsStage.envOf({ light: 'day', season: 'spring', snow: true, event: 'none' }).key)
   assert.equal(env.df, 0)
   assert.equal(env.snow, 1)
   assert.equal(env.season, 'spring')
   assert.equal(env.theme._day, 0)
-  assert.equal(AssetsStage.envOf({ light: 'day', season: 'spring', snow: false, event: 0 }).df, 1)
-  const dusk = AssetsStage.envOf({ light: 'dusk', season: 'summer', snow: false, event: 0 })
+  assert.equal(AssetsStage.envOf({ light: 'day', season: 'spring', snow: false, event: 'none' }).df, 1)
+  const dusk = AssetsStage.envOf({ light: 'dusk', season: 'summer', snow: false, event: 'none' })
   assert.ok(dusk.df > 0 && dusk.df < 1 && dusk.theme._day === dusk.df)
-  const xmas = AssetsStage.envOf({ light: 'day', season: 'summer', snow: false, event: 2 })
-  assert.equal(xmas.event, 2)
+  const xmas = AssetsStage.envOf({ light: 'day', season: 'summer', snow: false, event: 'christmas' })
+  assert.equal(xmas.event, 'christmas')
   assert.equal(xmas.season, 'winter', 'the event brings winter, as in the game')
   assert.equal(xmas.frozen, true)
   assert.equal(xmas.look.of('tree.island'), 'fir', 'the Christmas look')
-  assert.equal(xmas.look.build('gifts'), 5, 'level 2 stands for the second gift step')
-  assert.equal(AssetsStage.envOf({ light: 'day', season: 'summer', snow: false, event: 2 }), xmas, 'one env per scene')
+  assert.equal(xmas.look.build('gifts'), 9, 'the whole event, as Settings "on" shows it (the big tree: a gifts axis)')
+  assert.equal(AssetsStage.envOf({ light: 'day', season: 'summer', snow: false, event: 'christmas' }), xmas,
+    'one env per scene')
+  // the winter pack is winter's own column: the same scene as winter with no pack
+  const winter = AssetsStage.envOf({ light: 'day', season: 'summer', snow: false, event: 'winter' })
+  assert.equal(winter, AssetsStage.envOf({ light: 'day', season: 'winter', snow: false, event: 'none' }))
+  assert.equal(winter.look.of('tree.island'), 'bare')
+  assert.ok(winter.look.extras.has('igloo'))
+  // a small holiday keeps the season chosen and swaps in its tree
+  const tet = AssetsStage.envOf({ light: 'day', season: 'spring', snow: false, event: 'tet' })
+  assert.equal(tet.season, 'spring')
+  assert.equal(tet.look.of('tree.holiday'), 'tet')
+  assert.equal(tet.look.of('tree.island'), 'fresh')
 })
 
 test('stage projects round (ox, oy) and hands out the game kits, colours and a host', () => {
-  const ctx = AssetsStage.recordingCtx(), env = AssetsStage.envOf({ light: 'day', season: 'summer', snow: false, event: 0 })
+  const ctx = AssetsStage.recordingCtx(),
+    env = AssetsStage.envOf({ light: 'day', season: 'summer', snow: false, event: 'none' })
   const view = { ox: 40, oy: 30, env, pick: {} }
   const s = AssetsStage.stage(ctx, view)
   assert.deepEqual(s.PG(0, 0, 0), [40, 30])
@@ -121,14 +133,15 @@ test('stage projects round (ox, oy) and hands out the game kits, colours and a h
 
 test('the host borrows the office methods and answers from the view env', () => {
   const ctx = AssetsStage.recordingCtx()
-  const env = AssetsStage.envOf({ light: 'night', season: 'autumn', snow: false, event: 3 })
+  const env = AssetsStage.envOf({ light: 'night', season: 'autumn', snow: false, event: 'christmas' })
   const { host, G } = AssetsStage.stage(ctx, { ox: 0, oy: 0, env, pick: {} })
   for (const m of ['drawSeg', 'drawDesk', 'drawDog', 'drawPerson', 'cathedralItems', 'smokingItems', 'critterSprite'])
     assert.equal(typeof host[m], 'function', m)
   assert.equal(host.env, env)
   assert.equal(host.theme, env.theme)
   assert.equal(host.seasonNow(), 'winter')
-  assert.deepEqual(host.eventNow(), { key: 'christmas', level: 3, eve: true, day: true })
+  assert.deepEqual(host.eventNow(), { key: 'christmas', since: 14, level: 3, eve: true, day: true },
+    'the whole event, as EventLogic.active gives it with Settings on')
   assert.deepEqual(G.ev, host.eventNow())
   assert.equal(host.season, 'default', 'no event tree unless an entry picks one (host.holiday)')
   assert.deepEqual(host.agents, [])
@@ -315,11 +328,13 @@ test('every item the game knows has an entry in the catalogue', () => {
   assert.deepEqual(missing, [])
 })
 
-// Every choice of every axis (the others at their first value) under every combination of the controls it uses.
+// Every choice of every axis (the others at their first value) under every combination of the controls it uses; of
+// the packs, none, winter and Christmas (the small holidays change only tree.holiday: see the label tests below).
+const VALUES = u => (u === 'event' ? L.BIG_PACKS : L.CHOICES[u])
 function* variants(e) {
   const picks = [L.defaultPick(e)]
   for (const a of e.axes) for (const v of a.values.slice(1)) picks.push({ ...L.defaultPick(e), [a.id]: v.id })
-  const dims = L.SCENE.filter(u => e.uses.includes(u)).map(u => L.CHOICES[u].map(v => [u, v]))
+  const dims = L.SCENE.filter(u => e.uses.includes(u)).map(u => VALUES(u).map(v => [u, v]))
   const scenes = dims.reduce((acc, d) => acc.flatMap(s => d.map(([u, v]) => ({ ...s, [u]: v }))), [{ ...L.DEFAULTS }])
   for (const pick of picks) for (const sc of scenes) yield { pick, scene: L.sceneOf(e, sc) }
 }
@@ -501,7 +516,90 @@ test('the registry refuses an entry whose `when` names what the game does not ha
   assert.equal(R.check(ok), null)
   assert.equal(R.check({ ...ok, when: { seasons: ['winter'] } }), null)
   assert.match(R.check({ ...ok, when: { seasons: ['monsoon'] } }), /season/)
-  assert.match(R.check({ ...ok, when: { event: { key: 'christmas', level: 9 } } }), /event/)
+  assert.equal(R.check({ ...ok, when: { event: 'christmas' } }), null)
+  assert.match(R.check({ ...ok, when: { event: { key: 'christmas', level: 2 } } }), /event/, 'no levels (D1)')
+  assert.match(R.check({ ...ok, when: { event: 'easter' } }), /event/)
+  assert.match(R.check({ ...ok, when: { event: 'none' } }), /event/)
+  assert.match(R.check({ ...ok, label: 'tree.nope' }), /label/)
+  assert.match(R.check({ ...ok, labels: ['bush', 'nope'] }), /label/)
+  assert.equal(R.check({ ...ok, labels: ['bush', 'flower'] }), null)
+  assert.match(R.check({ ...ok, label: 'bush', variant: 'nope' }), /variant/)
   assert.match(R.check({ ...ok, when: { holiday: 'nope' } }), /holiday/)
   assert.match(R.check({ ...ok, when: 'always' }), /when/)
+})
+
+// ---- labels and packs (docs/specs/2026-11-18-asset-labels-design.md §5.10) ----
+const { Labels } = loadWeb('labels')
+const packLook = pack => AssetsStage.envOf({ ...L.DEFAULTS, event: pack }).look
+// What a cell of the conversion table draws for a label under a pack (the page's other controls at their defaults).
+function cellLog(row, pack) {
+  const cell = L.tableCell(row, packLook(pack))
+  return cell && drawLog(cell.entry, cell.pick, L.sceneOf(cell.entry, { ...L.DEFAULTS, event: pack }))
+}
+const ROWS = L.tableRows(ENTRIES, Labels.LIST)
+
+test('every label in Labels.LIST has at least one registry entry', () => {
+  const missing = Labels.LIST.filter(l => !ENTRIES.some(e => L.labelsOf(e).includes(l.id))).map(l => l.id)
+  assert.deepEqual(missing, [])
+  for (const e of ENTRIES) for (const id of L.labelsOf(e)) assert.ok(Labels.byId(id), `${e.id}: label ${id}`)
+})
+
+test('every entry with a label draws under every pack', () => {
+  const threw = [], blank = []
+  for (const e of ENTRIES.filter(x => L.labelsOf(x).length))
+    for (const pack of L.CHOICES.event) {
+      const at = `${e.id} under ${pack}`
+      try {
+        const pick = e.pickFor ? L.fixPick(e, e.pickFor(packLook(pack))) : L.defaultPick(e)
+        if (drawLog(e, pick, L.sceneOf(e, { ...L.DEFAULTS, event: pack })).drawn < 1) blank.push(at)
+      } catch (err) {
+        threw.push(at + ': ' + err.message)
+      }
+    }
+  assert.deepEqual(threw, [])
+  assert.deepEqual(blank, [])
+})
+
+test('the table view lists one row per label and one column per pack', () => {
+  assert.deepEqual(ROWS.map(r => r.id), Labels.LIST.map(l => l.id))
+  const cols = L.tableCols(L.DEFAULTS.event)
+  assert.deepEqual(cols.map(c => c.id), ['none', 'winter', 'christmas', 'holiday'])
+  assert.ok(cols.every(c => L.CHOICES.event.includes(c.pack)))
+  // every cell draws something, but the holiday tree where the pack has none
+  const empty = []
+  for (const row of ROWS)
+    for (const c of cols) {
+      const log = cellLog(row, c.pack)
+      if (!log || log.drawn < 1) empty.push(`${row.id} ${c.id}`)
+    }
+  assert.deepEqual(empty, ['tree.holiday none', 'tree.holiday winter'])
+  // the holiday column shows the small holiday's tree, the Christmas one the decorated Christmas tree
+  const tree = ROWS.find(r => r.id === 'tree.holiday')
+  assert.equal(L.tableCell(tree, packLook(cols[3].pack)).entry.id, 'plants.holiday-' + cols[3].pack)
+  assert.equal(L.tableCell(tree, packLook('christmas')).entry.id, 'plants.holiday-christmas')
+})
+
+test('a row of the table changes wherever the packs change its label (winter to Christmas)', () => {
+  const same = []
+  const winter = packLook('winter'), xmas = packLook('christmas')
+  for (const row of ROWS) {
+    if (winter.of(row.id) === xmas.of(row.id) && winter.decor(row.id) === xmas.decor(row.id)) continue
+    if (row.id === 'tree.holiday') continue // nothing stands there in winter (above)
+    const a = cellLog(row, 'winter'), b = cellLog(row, 'christmas')
+    if (a.sig === b.sig) same.push(row.id)
+  }
+  assert.deepEqual(same, [])
+})
+
+test('a cell of the table draws an entry of its own row, set from the look where its axis is the variant', () => {
+  for (const row of ROWS)
+    for (const pack of L.CHOICES.event) {
+      const look = packLook(pack), cell = L.tableCell(row, look)
+      if (!cell) continue
+      assert.ok(L.labelsOf(cell.entry).includes(row.id), `${row.id} ${pack}`)
+      if (cell.entry.pickFor) assert.deepEqual(cell.pick, L.fixPick(cell.entry, cell.entry.pickFor(look)))
+    }
+  const tree = ROWS.find(r => r.id === 'tree.island')
+  assert.equal(L.tableCell(tree, packLook('christmas')).pick.kind, 'fir')
+  assert.equal(L.tableCell(tree, packLook('none')).pick.kind, 'green', 'summer, the page\'s season')
 })

@@ -7,6 +7,7 @@ import { AssetsLogic } from './assets-logic.js';
 import { AssetsRegistry } from './assets-registry.js';
 import { AssetsPaint } from './assets-ui-paint.js';
 import {
+  Choice,
   EVENTS,
   Icon,
   LIGHTS,
@@ -20,6 +21,7 @@ import {
   heldSeasons,
 } from './assets-ui-parts.js';
 import { Detail } from './assets-ui-detail.js';
+import { Table } from './assets-ui-table.js';
 
 const { useEffect, useMemo, useRef, useState } = React;
 const L = AssetsLogic,
@@ -68,7 +70,7 @@ const hrefOf = (s, patch) => linkOf({ ...s, ...patch });
 function Header({ s, set, searchRef, narrow }) {
   const group = (key, node, hint) =>
     h('div', { className: 'as-ctl', key }, h('span', { className: 'as-ctl-label' }, key, hint), node);
-  const winter = s.event > 0;
+  const winter = !!L.forcedSeason(s.event);
   return h(
     'header',
     { className: 'as-header' },
@@ -141,7 +143,25 @@ function Header({ s, set, searchRef, narrow }) {
       ),
       group(
         tr('assets.ctl.event'),
-        h(Seg, { label: tr('assets.ctl.event'), value: s.event, options: EVENTS(), onChange: v => set({ event: v }) }),
+        h(Choice, {
+          label: tr('assets.ctl.event'),
+          value: s.event,
+          options: EVENTS(),
+          onChange: v => set({ event: v }),
+        }),
+      ),
+      group(
+        tr('assets.ctl.view'),
+        h(Seg, {
+          label: tr('assets.ctl.view'),
+          value: s.view,
+          options: [
+            { id: 'grid', label: tr('assets.view.grid'), icon: 'grid' },
+            { id: 'table', label: tr('assets.view.table'), icon: 'tree' },
+          ],
+          onChange: v => set({ view: v }),
+          compact: narrow,
+        }),
       ),
       group(
         tr('assets.ctl.zoom'),
@@ -385,7 +405,7 @@ export function AssetsApp() {
       'div',
       { className: 'as-body' },
       h(Rail, { s, set, counts }),
-      h(Grid, { s, set, list, controls }),
+      s.view === 'table' ? h(Table, { s, set, controls }) : h(Grid, { s, set, list, controls }),
       sel &&
         h(Detail, {
           key: 'detail',

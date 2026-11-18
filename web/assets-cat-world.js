@@ -26,6 +26,7 @@ const stampAt = (ctx, view, img) => ctx.drawImage(img, view.ox - ISL.cx, view.oy
 
 const WORLD_ISLAND = {
   id: 'world.island',
+  label: 'tree.world',
   cat: 'world',
   name: () => tr('assets.item.world.island'),
   tags: ['state'],

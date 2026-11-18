@@ -8,6 +8,7 @@ import { AssetsRegistry } from './assets-registry.js';
 import { AssetsStage } from './assets-stage.js';
 import { AssetsPaint } from './assets-ui-paint.js';
 import {
+  Choice,
   CONTROL_LABEL,
   CONTROL_OPTIONS,
   Icon,
@@ -40,10 +41,10 @@ function whenLines(e) {
     out.push(
       tr('assets.when.seasons', { list: w.seasons.map(k => (SEASON_NAME[k] ? SEASON_NAME[k]() : k)).join(', ') }),
     );
-  if (w.event && w.event.key) {
-    const win = L.eventWindow(w.event.key, w.event.level),
-      name = (EVENT_NAME[w.event.key] || (() => w.event.key))();
-    out.push(tr('assets.when.event', { name, level: w.event.level, span: win ? L.span(win) : '' }));
+  if (w.event) {
+    const win = L.eventWindow(w.event),
+      name = (EVENT_NAME[w.event] || (() => w.event))();
+    out.push(tr('assets.when.event', { name, span: win ? L.span(win) : '' }));
   }
   if (w.holiday) {
     const hd = SeasonTree.SEASONS[w.holiday];
@@ -100,12 +101,11 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
     }
     return keys;
   }, [cells]);
-  const scene = L.sceneOf(e, controls);
+  // a cell is the variant on show when it has the same pick and the same scene (envOf gives one env per scene, the
+  // season a pack brings and the winter pack as winter's own column included)
   const isCurrent = c => {
     for (const a of e.axes) if (c.pick[a.id] !== pick[a.id]) return false;
-    const cs = L.sceneOf(e, c.controls);
-    for (const u of L.SCENE) if (cs[u] !== scene[u] && !(u === 'season' && env.event)) return false;
-    return true;
+    return AssetsStage.envOf(L.sceneOf(e, c.controls)) === env;
   };
   useEffect(() => {
     setZoomMode('fit');
@@ -135,7 +135,9 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
       done();
     }
   };
-  const name = e.name();
+  const name = e.name(),
+    // the season a pack brings (winter, Christmas) holds the season row, when the item reacts to the pack
+    held = e.uses.includes('event') ? L.forcedSeason(s.event) : null;
   return h(
     'aside',
     {
@@ -237,13 +239,13 @@ export function Detail({ e, s, set, controls, narrow, onClose, onStep, position 
       ? e.uses.map(u =>
           h(
             Row,
-            { key: u, label: CONTROL_LABEL[u](), hint: u === 'season' && s.event ? h(SeasonHint) : null },
-            h(Seg, {
+            { key: u, label: CONTROL_LABEL[u](), hint: u === 'season' && held ? h(SeasonHint) : null },
+            h(u === 'event' ? Choice : Seg, {
               label: CONTROL_LABEL[u](),
-              value: u === 'season' && s.event ? 'winter' : s[u],
-              options: u === 'season' && s.event ? heldSeasons() : CONTROL_OPTIONS[u](),
+              value: u === 'season' && held ? held : s[u],
+              options: u === 'season' && held ? heldSeasons() : CONTROL_OPTIONS[u](),
               onChange: v => set({ [u]: v }),
-              className: u === 'season' && s.event ? 'as-seg-held' : '',
+              className: u === 'season' && held ? 'as-seg-held' : '',
             }),
           ),
         )

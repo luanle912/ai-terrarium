@@ -205,6 +205,7 @@ const WEATHER = {
 const FAR_SC = 0.8;
 const FAR = {
   id: 'island.far-islands',
+  label: 'tree.far',
   cat: 'island',
   name: () => tr('assets.item.island.far-islands'),
   when: { always: true },

@@ -13,6 +13,7 @@ import { hash } from './island-land.js';
 import { SeasonTree } from './season-tree.js';
 import { EventLogic } from './event-logic.js';
 import { CHRISTMAS } from './themes/christmas.js';
+import { Labels } from './labels.js';
 import { tree as miniTree } from './world-ui.js';
 import { treeDusk } from './office-draw.js';
 import { treeNight } from './office-draw-xmas.js';
@@ -55,6 +56,9 @@ const treeTile = pick => TREE_TILES[Math.max(0, ['a', 'b', 'c'].indexOf(pick.sha
 const paintTree = s => drawSeasonTree(s.pt, s.PG, s.C, treeTile(s.view.pick), s.view.pick.kind || 'fresh');
 const ISLAND_TREE = {
   id: 'plants.island-tree',
+  label: 'tree.island',
+  // in the conversion table: the kind the look gives
+  pickFor: look => ({ kind: look.of('tree.island') }),
   cat: 'plants',
   name: () => tr('assets.item.plants.island-tree'),
   // its kind is the season's (the axis below), so the Seasonal filter finds it
@@ -94,7 +98,7 @@ const ISLAND_TREE = {
 // Drawn as the game draws one on the lawn: the office's drawEventTree on the stage's host, standing on a tile whose
 // middle is at (ox, oy), at the lawn's night tint (treeDusk; after dark it goes through the host's scratch canvas). The
 // method sets the canvas's transform itself, so it gets the canvas framed in the scene (Stage.framed).
-const HOLIDAY_NAME = {
+export const HOLIDAY_NAME = {
   newyear: () => tr('seasonTree.newyear.label'),
   tet: () => tr('seasonTree.tet.label'),
   valentine: () => tr('seasonTree.valentine.label'),
@@ -118,16 +122,20 @@ const tintedTree = c => TREE_NOW.s.host.drawEventTree(c, ANY_TILE, TREE_NOW.key,
 const eventTree = () => TREE_NOW.s.framed(tintedTree);
 // Holidays whose tree art never moves with the clock.
 const STILL_TREES = new Set(['teachers', 'default']);
+const variantOf = key => (key === 'christmas' ? 'xmas' : key);
+const TREE_VARIANTS = new Set(Labels.byId('tree.holiday').variants);
 const holidayTree = key => {
   const S = SeasonTree.SEASONS[key],
-    // the game draws only event and lunar trees, and at Christmas the big tree instead (web/office-draw.js)
-    live = (S.type === 'event' || S.type === 'lunar') && key !== 'christmas';
+    // the game draws the trees a pack swaps in (tree.holiday): a small holiday's own, or the decorated Christmas tree
+    // ('xmas', web/themes/christmas.js) beside the big one indoors (web/office-draw.js); the others are catalogue only
+    live = TREE_VARIANTS.has(variantOf(key));
   return {
     id: 'plants.holiday-' + key,
     cat: 'plants',
+    ...(live && { label: 'tree.holiday', variant: variantOf(key) }),
     name: () => tr('assets.item.plants.holiday', { name: HOLIDAY_NAME[key]() }),
     tags: STILL_TREES.has(key) ? [] : ['animated'],
-    when: S.type === 'none' ? { always: true } : { holiday: key },
+    when: S.type === 'none' ? { always: true } : key === 'christmas' ? { event: 'christmas' } : { holiday: key },
     where: 'lawn',
     catalogueOnly: !live,
     source: [
@@ -165,7 +173,7 @@ const BIG_TREE = {
   cat: 'plants',
   name: () => tr('assets.item.plants.big-tree'),
   tags: ['animated'],
-  when: { event: { key: 'christmas', level: 1 } },
+  when: { event: 'christmas' },
   where: 'office',
   source: [
     { file: 'web/island-art-xmas.js', fn: 'drawBigTree' },
@@ -201,6 +209,8 @@ const BIG_TREE = {
 // ---- the world view's little tree (web/world-ui.js) ----
 const WORLD_TREE = {
   id: 'plants.world-tree',
+  label: 'tree.world',
+  pickFor: look => ({ kind: look.of('tree.world') }),
   cat: 'plants',
   name: () => tr('assets.item.plants.world-tree'),
   tags: ['season'],
@@ -231,6 +241,7 @@ const bushTile = pick => BUSH_TILES[Math.max(0, BUSH_LOOKS.indexOf(pick.look))];
 const paintBush = s => drawBush(s.pt, s.PG, s.C, bushTile(s.view.pick), s.env.look.of('bush'), s);
 const BUSH = {
   id: 'plants.bush',
+  label: 'bush',
   cat: 'plants',
   name: () => tr('assets.item.plants.bush'),
   when: { always: true },
@@ -262,6 +273,7 @@ const MUSHROOM_TILES = MUSHROOM_LOOKS.map(l =>
 );
 const MUSHROOM = {
   id: 'plants.mushroom',
+  label: 'mushroom',
   cat: 'plants',
   name: () => tr('assets.item.plants.mushroom'),
   when: { always: true },
@@ -289,6 +301,7 @@ const MUSHROOM = {
 const FLOWER_BED = AssetsScene.region(848, 212, 96, 60);
 const FLOWERS = {
   id: 'plants.flowers',
+  label: 'flower',
   cat: 'plants',
   name: () => tr('assets.item.plants.flowers'),
   tags: ['animated'],

@@ -35,6 +35,7 @@ import { SeasonLogic } from './season-logic.js';
 import { SkyLogic } from './sky-logic.js';
 import { EventLogic } from './event-logic.js';
 import { Theme } from './theme.js';
+import { AssetsLogic } from './assets-logic.js';
 import { isCold, officeG } from './office-util.js';
 
 // ---- shared by the catalogue modules ----
@@ -47,30 +48,35 @@ const valueIndex = (ax, id) => {
 };
 // The light level (0..10) the office's sprite caches are keyed on, as its draw() rounds it.
 const dfB = view => Math.round(view.env.df * 10);
-// The Christmas event as EventLogic.active gives it ({key, level, eve, day}), one object per level and eve.
-const XMAS = [false, true].map(eve => [1, 2, 3].map(level => ({ key: 'christmas', level, eve, day: true })));
-const xmasEvent = (level, eve = true) => XMAS[eve ? 1 : 0][level - 1] || null;
+// The Christmas event as EventLogic.active gives it with Settings "on" ({key, since, level, eve, day}: the whole
+// event), on Christmas Eve (every bulb burning) or on an ordinary night of it.
+const XMAS = [false, true].map(eve => ({ ...EventLogic.active(new Date(2026, 11, 15), 'on', null, 0), eve }));
+const xmasEvent = (eve = true) => XMAS[eve ? 1 : 0];
+// The event of each event pack (one so far).
+const EVENTS = { christmas: xmasEvent() };
 
 // ---- the scene ----
 // Daylight (df) and the clock hour each light stands for: noon, the middle of the evening fade, late night.
 const LIGHT = { day: [1, 12], dusk: [0.5, 17.25], night: [0, 22.5] };
-const EVENTS = [null, 1, 2, 3].map(l => l && xmasEvent(l));
 const ENVS = new Map();
 // The env the game would hand its draw code under these controls ({light, season, snow, event}), the same object
-// for the same controls so caches keyed on it hold. As in the game the Christmas event brings winter. On top of
-// envNow's shape: snow (0 or 1, the cover lying on the lawn), theme (the office colours lerped day to night), light
-// (the control it was made from) and key (one string per scene, for caches). look is the Look (web/theme.js) of a
-// moment in the scene's season with the event on from the day its level stands for (levels 1, 2, 3: days 0, 7, 14,
-// the gift steps), no small holiday.
-function envOf({ light = 'day', season = 'summer', snow = false, event = 0 } = {}) {
-  const key = light + '|' + season + '|' + (snow ? 1 : 0) + '|' + event;
+// for the same scene so caches keyed on it hold. event is a theme pack (AssetsLogic.PACKS): none, the winter pack,
+// Christmas or a small holiday. As in the game a pack that brings a season (winter, Christmas) is in it, and the
+// winter pack is winter's own column, so it is the same scene as winter with no pack. On top of envNow's shape: snow
+// (0 or 1, the cover lying on the lawn), theme (the office colours lerped day to night), light (the control it was
+// made from), event (the pack shown), look (web/theme.js: the Look of a moment in that season under that pack,
+// Christmas whole as Settings "on" shows it) and key (one string per scene, for caches).
+function envOf({ light = 'day', season = 'summer', snow = false, event = 'none' } = {}) {
+  if (!LIGHT[light]) light = 'day';
+  const pack = AssetsLogic.PACKS.find(p => p.id === event) || AssetsLogic.PACKS[0],
+    s = pack.season || season;
+  const id = pack.kind === 'season' ? 'none' : pack.id,
+    key = light + '|' + s + '|' + (snow ? 1 : 0) + '|' + id;
   let env = ENVS.get(key);
   if (env) return env;
-  if (!LIGHT[light]) light = 'day';
   const [df, hour] = LIGHT[light],
     fx = { ...SkyLogic.FX.clear },
-    ev = EVENTS[event] || null,
-    s = EventLogic.season(ev, season);
+    ev = pack.kind === 'event' ? EVENTS[id] || null : null;
   env = {
     df,
     hour,
@@ -80,8 +86,8 @@ function envOf({ light = 'day', season = 'summer', snow = false, event = 0 } = {
     flash: 0,
     col: SkyLogic.skyColors(df, hour, fx),
     season: s,
-    event: ev ? ev.level : 0,
-    look: lookOf(s, ev),
+    event: id,
+    look: lookOf(s, ev, pack.kind === 'holiday' ? id : null),
     snow: snow ? 1 : 0,
     theme: df >= 1 ? { _day: 1, ...THEMES.day } : df <= 0 ? { _day: 0, ...THEMES.night } : lerpTheme(df),
     light,
@@ -90,17 +96,17 @@ function envOf({ light = 'day', season = 'summer', snow = false, event = 0 } = {
   ENVS.set(key, env);
   return env;
 }
-function lookOf(season, ev) {
-  const event = ev ? { key: ev.key, since: (ev.level - 1) * 7 } : null;
+function lookOf(season, ev, holiday) {
+  const event = ev ? { key: ev.key, since: ev.since } : null;
   return Theme.resolve({
     season,
-    holiday: null,
+    holiday,
     event,
-    key: 'assets|' + season + '|' + (event ? event.key + '@' + event.since : '-'),
+    key: 'assets|' + season + '|' + (holiday || '-') + '|' + (event ? event.key + '@' + event.since : '-'),
   });
 }
-// The event object of an env ({key, level, eve, day}, as EventLogic.active gives it), or null.
-const eventOf = env => EVENTS[(env && env.event) || 0] || null;
+// The event object of an env ({key, since, level, eve, day}, as EventLogic.active gives it), or null.
+const eventOf = env => (env && EVENTS[env.event]) || null;
 
 // ---- a stand-in office ----
 // What the office's draw methods read off `this`, answered from the view's env; the methods themselves are

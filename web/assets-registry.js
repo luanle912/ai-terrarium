@@ -12,15 +12,22 @@
 //     name: () => tr(KEY),              // KEY a literal string key, e.g. assets.item.plants.island-tree
 //     tags: ['animated', 'state'],       // 'animated' = moves with t (a test checks), 'state' = has on/off/use states;
 //                                        // season / event / night / snow / catalogue-only are added from the fields
-//     when: { always: true },            // or { seasons: ['winter'] }, { event: { key: 'christmas', level: 2 } },
-//                                        // { holiday: 'tet' } (a key of SeasonTree.SEASONS)
+//     when: { always: true },            // or { seasons: ['winter'] }, { event: 'christmas' } (an event pack's
+//                                        // key), { holiday: 'tet' } (a key of SeasonTree.SEASONS)
+//     label: 'bush',                     // the label (web/labels.js) of what it draws, or labels: ['door', 'clock']
+//                                        // for an entry that shows several; every label needs an entry (a test)
+//     variant: 'tet',                    // optional: it draws only this variant of its label (a holiday's tree);
+//                                        // otherwise it draws what the scene's look gives
+//     pickFor: look => ({ kind: look.of('tree.island') }),  // optional: the pick that shows what `look` gives, for
+//                                        // an entry whose axis is the label's variant (the conversion table uses it)
 //     where: 'lawn',                     // a key of WHERE
 //     catalogueOnly: true,               // the code exists but the live game never draws it
 //     source: [{ file: 'web/island-art.js', fn: 'drawBush' }],
 //     axes: [{ id: 'kind', label: () => tr(KEY), values: [{ id: 'big', label: () => tr(KEY) }, …] }],
 //     sweep: ['status', 'act'],          // optional, for an item with too many axes to cross (a person): the grid
 //                                        // steps through these axes one at a time, each value counts once
-//     uses: ['light', 'season', 'snow', 'event'],   // the global controls it reacts to (only those reach it)
+//     uses: ['light', 'season', 'snow', 'event'],   // the global controls it reacts to (only those reach it); event
+//                                        // is the theme pack, so an entry that draws what the look gives uses it
 //     palette: () => ['#…'],             // optional: colours to show when the draw only stamps sprites
 //     frame: { w: 160, h: 100 },         // optional, for a scene card clipped to a box from (ox, oy): its frame
 //     draw(ctx, view, t) {…},            // view = {ox, oy, env, pick}: draw the item standing at (ox, oy)
@@ -47,6 +54,7 @@
 import { tr } from './i18n.js';
 import { AssetsLogic } from './assets-logic.js';
 import { SeasonTree } from './season-tree.js';
+import { Labels } from './labels.js';
 import { OFFICE } from './assets-cat-office.js';
 import { PANTRY } from './assets-cat-pantry.js';
 import { ANIMALS } from './assets-cat-animals.js';
@@ -57,6 +65,7 @@ import { PLANTS } from './assets-cat-plants.js';
 import { OUTDOOR } from './assets-cat-outdoor.js';
 import { ISLAND_SKY } from './assets-cat-island.js';
 import { WORLD } from './assets-cat-world.js';
+import { OFFICE_SCENE } from './assets-cat-office-scene.js';
 
 // The categories in rail order, each with the accent its cards and chips wear.
 const CAT_NAMES = {
@@ -128,10 +137,15 @@ function check(e) {
     if (!w || typeof w !== 'object') return e.id + ': bad when';
     if (w.seasons && (!Array.isArray(w.seasons) || w.seasons.some(k => !AssetsLogic.CHOICES.season.includes(k))))
       return e.id + ': unknown season in when';
-    if (w.event && (typeof w.event.key !== 'string' || !AssetsLogic.CHOICES.event.includes(w.event.level)))
+    if (w.event && (w.event === 'none' || !AssetsLogic.CHOICES.event.includes(w.event)))
       return e.id + ': bad event in when';
     if (w.holiday && !SeasonTree.SEASONS[w.holiday]) return e.id + ': unknown holiday in when';
   }
+  const labels = AssetsLogic.labelsOf(e);
+  for (const id of labels) if (!Labels.byId(id)) return e.id + ': unknown label ' + id;
+  if (e.variant !== undefined && !labels.every(id => Labels.byId(id).variants.includes(e.variant)))
+    return e.id + ': variant ' + e.variant + ' is not one of its labels';
+  if (e.pickFor !== undefined && typeof e.pickFor !== 'function') return e.id + ': pickFor must be a function';
   for (const a of e.axes || [])
     if (!a.id || typeof a.label !== 'function' || !Array.isArray(a.values) || !a.values.length)
       return e.id + ': bad axis ' + a.id;
@@ -188,5 +202,7 @@ register(PLANTS);
 register(OUTDOOR);
 register(ISLAND_SKY);
 register(WORLD);
+// Task 13: what the office paints inline, as cards cut from it (every label has an entry)
+register(OFFICE_SCENE);
 
 export const AssetsRegistry = { CATS, TAGS, TAG_LABEL, WHERE, entries, byId, cat, check, register, problems };
