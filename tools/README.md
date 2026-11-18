@@ -122,3 +122,26 @@ Bakes as `perf-frame.mjs` reports them (island + props; the island's is the same
 12–14 + 14–23 ms with the landmark and 13–14 + 12–18 ms without; the first bake of a page 36–51 + 11–24 ms and
 35–39 + 12–16 ms. The building is worked out once per event level and snow depth (about 1 ms) and only recoloured
 after that, so the difference stays inside the spread, under the 45 ms a later bake may take. GC 0.3–0.5 % either way.
+
+## After labelled assets and event packs (2026-11-18)
+
+Before is `claude/assets-wiki` @ 69937da (the event in weekly levels), after is `claude/asset-labels` (labels, theme
+packs, Christmas whole from its first day). No agents, the Event choice on Auto, three runs of each alternated
+before / after on a busy machine (the first run of each scene was the slowest on both sides); medians, ranges in
+brackets.
+
+| Scene | ms p50 before / after | ms p95 before / after | canvas calls before → after | bakes (island + props), later runs |
+|---|---|---|---|---|
+| 20 Dec 12:00 | 3.7 (3.4–7.7) / 3.7 (3.6–6.2) | 7.2 / 6.2 | 16,095 → 17,036 (+940) | 39–53 + 14–22 / 36–75 + 14–34 ms |
+| 20 Dec 21:00 | 3.5 (3.3–5.8) / 3.8 (3.5–5.9) | 4.7 / 7.3 | 16,104 → 16,848 (+745) | 38 + 15–18 / 39–44 + 15–16 ms |
+| 20 Jul 12:00 | 3.4 (3.2–5.2) / 3.6 (3.2–5.2) | 4.6 / 5.8 | 15,712 → 15,714 | 33–35 + 6–8 / 34–39 + 7–13 ms |
+
+July is the same frame on both sides. In December the extra calls are what D1 brings on every day of the event,
+counted per call site in a frame: the three holiday trees by the office as decorated Christmas trees (about 280),
+the light strings on the restroom block's walls as well as the office's (about 300), frost and a star on the windows
+(about 140), a decoration on every desk with or without an owner (about 55), the corridor runner (about 45) and the
+shelf, pot plants and clock (about 80). Against the 2026-11-10 baseline above (18,915 by day, 18,721 by night) both are lower, so inside the event's
+budget (+900 day, +1,400 night, +0.4 ms p50); against the branch before, the day is 40 calls over +900 and the p50
+changes by at most +0.3 ms, inside the run-to-run spread. The bakes spread as widely on both sides (the slowest later
+bake 75 ms after and 53 ms before, both in a loaded run). GC 0.1–0.6 % on both
+sides. No page errors in any run.
