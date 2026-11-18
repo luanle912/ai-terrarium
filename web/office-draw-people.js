@@ -2,6 +2,7 @@ import { SkyRender } from './sky-render.js';
 import { DogLogic } from './dog-logic.js';
 import { DogSprites } from './dog-sprites.js';
 import { DogXmas } from './dog-sprites-xmas.js';
+import { Paint } from './paint.js';
 import { SmokeLogic } from './smoke-logic.js';
 import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW, outdoors } from './office-scene.js';
 import { WATER_Z } from './island-land.js';
@@ -527,14 +528,11 @@ mixin(
     // A dog's frame baked once per light level and snow level (like the island), then stamped with one drawImage.
     // costume is the look's dog.costume variant: dressed ('xmas', DogXmas), the sprite is DogXmas.PAD rows taller.
     dogSprite(breed, name, dfB, snB, costume) {
-      const x = DogXmas.dressed(costume),
-        k = DogXmas.key(breed, name, dfB, snB, costume),
+      const k = DogXmas.key(breed, name, dfB, snB, costume),
         hit = this.dogSprites.get(k);
       if (hit) return hit;
       if (this.dogSprites.size > 300) this.dogSprites.clear();
-      const f0 = DogSprites.frame(breed, name),
-        f = x ? DogXmas.dress(breed, name, f0) : f0,
-        pal = x ? DogXmas.palFor(breed) : DogSprites.BREEDS[breed].pal,
+      const { f, pal } = Paint.painter('dog.costume', costume || 'none')(breed, name, DogSprites.frame(breed, name)),
         cv = document.createElement('canvas');
       cv.width = f.w;
       cv.height = f.h;

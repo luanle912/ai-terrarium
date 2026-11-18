@@ -8,6 +8,8 @@ import { WorldLogic } from './world-logic.js';
 import { SkyRender } from './sky-render.js';
 import { SeasonLogic } from './season-logic.js';
 import { h } from './office-scene.js';
+import { Paint } from './paint.js';
+import { Labels } from './labels.js';
 export const VIEW_KEY = 'ai-terrarium.view',
   DEVICE_KEY = 'ai-terrarium.thisDevice';
 export const OFF_MS = 250,
@@ -235,6 +237,9 @@ export const tree = (g, x, y, df, kind = 'green') => {
   px1(g, N(t, df), x - 1, y - 8, 3, 1);
   if (kind === 'fresh') px1(g, N('#fde6ef', df), x - 1, y - 6, 1, 1);
 };
+// The small islands' trees are the tree.world label's variants: the look picks the one on every small island.
+for (const v of Labels.byId('tree.world').variants)
+  Paint.variant('tree.world', v, (g, x, y, df) => tree(g, x, y, df, v));
 // What a small island's art depends on, as one string (the sprite cache's key): the roof colour, the light, the lit
 // windows, the pennant, the season and the look of its trees (look.keyOf of WORLD_LABELS).
 export const WORLD_LABELS = Object.freeze(['tree.world']);
@@ -247,7 +252,7 @@ export function paintIsland(g, color, df, lit, mine, season, trees) {
     { cx, cy, hw } = ISL,
     b = BLD,
     look = SeasonLogic.look(season),
-    kind = trees || look.trees,
+    plant = Paint.painter('tree.world', trees || look.trees),
     // the lawn leans to the season's grass tint and, in winter, lies under its snow (as on the full island)
     gr = look.grass,
     lawn = c => M(gr.color ? M(c, gr.color, gr.mix) : c, '#eef3f7', look.minSnow),
@@ -275,7 +280,7 @@ export function paintIsland(g, color, df, lit, mine, season, trees) {
     px1(g, N(look.trees === 'gold' && fc === '#ff8fab' ? '#e0703a' : fc, df), cx + fx, cy + fy);
   // the path runs from the door, square to the office's right face
   for (let k = 0; k < 6; k++) px1(g, N(k % 2 ? '#bdb6aa' : '#c9c3b8', df), b.cx + 8 + 2 * k, b.cy + 4 + k, 2, 1);
-  tree(g, cx - 24, cy + 1, df, kind);
+  plant(g, cx - 24, cy + 1, df);
   const wall = N('#efe9dc', df),
     roof = N(color, df),
     glass = N('#33415e', df);
@@ -304,7 +309,7 @@ export function paintIsland(g, color, df, lit, mine, season, trees) {
     px1(g, GOLD, b.cx + 1, y + 1, 3, 1);
     px1(g, GOLD, b.cx + 1, y + 2, 2, 1);
   }
-  tree(g, cx + 21, cy + 8, df, kind);
+  plant(g, cx + 21, cy + 8, df);
   // lighter at night, so islands keep their edge on a dark sky
   outline(g, SkyRender.mix(OUTLINE, '#3a4766', 1 - df), false);
 }

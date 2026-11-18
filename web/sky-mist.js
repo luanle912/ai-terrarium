@@ -3,6 +3,7 @@
 import { CameraLogic } from './camera-logic.js';
 import { hash, hex, mix, toHex } from './sky-island.js';
 import { Paint } from './paint.js';
+import { Labels } from './labels.js';
 export const rgba = (hexc, a) => {
   const [r, g, b] = hex(hexc);
   return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
@@ -281,8 +282,7 @@ export function paintFarIsland(g, sc, haze, kind, trees, snowy, overlays = NONE)
   }
   const fir = trees === 'fir';
   if (kind === 'tree') {
-    if (fir) farFir(R, hz, sc, OUT);
-    else farTree(R, hz, sc, trees, OUT);
+    Paint.painter('tree.far', trees)(R, hz, sc, OUT);
     for (const f of overlays) f(R, hz, sc, trees);
   } else if (kind === 'rock') {
     // a boulder (lit on the left, flat where it sits) and a bush beside it, outlined like the tree
@@ -436,5 +436,12 @@ function farTree(R, hz, sc, trees, OUT) {
   if (trees === 'fresh')
     for (let k = 0; k < 4; k++) R(tx - r + 2 + k * Math.round(r / 2), cy - 1 + (k % 2) * 3, 1, 1, hz('#f4b8cf'));
 }
+// The far trees are the tree.far label's variants: the look picks the one on every far tree island.
+for (const v of Labels.byId('tree.far').variants)
+  Paint.variant(
+    'tree.far',
+    v,
+    v === 'fir' ? (R, hz, sc, OUT) => farFir(R, hz, sc, OUT) : (R, hz, sc, OUT) => farTree(R, hz, sc, v, OUT),
+  );
 // env: {df, hour, fx:{cloud,rain,snow,storm,fog}, col: SkyLogic.skyColors(...), reduced, view?: island camera view}
 // The gradient, sun, moon and stars stay put; clouds, far islands and birds follow the camera by depth.

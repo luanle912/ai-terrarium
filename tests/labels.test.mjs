@@ -89,6 +89,21 @@ test('every variant of the office\'s floors has a painter: the drawing asks for 
     for (const v of Labels.byId(id).variants) assert.equal(typeof Paint.painter(id, v), 'function', `${id} ${v}`)
 })
 
+// Every label that can take more than one look: each of its variants has a painter, registered by the module that
+// draws it, so a new pack's variant nobody paints fails here rather than falling to some default in the drawing.
+test('every variant of every label with more than one has a painter', () => {
+  globalThis.React ??= { createElement: () => null, Component: class {} }
+  globalThis.document ??= { documentElement: {}, createElement: () => ({ getContext: () => ({}) }) } // world-ui reads it
+  loadI18n('vi')
+  for (const m of ['island-art', 'island-art-season', 'office-draw-festive', 'sky-mist', 'world-ui', 'office-draw',
+    'outfit-logic', 'dog-sprites-xmas']) loadWeb(m)
+  const { Paint } = loadWeb('paint')
+  const missing = []
+  for (const l of Labels.LIST)
+    if (l.variants.length > 1) for (const v of l.variants) if (!Paint.has(l.id, v)) missing.push(l.id + ' ' + v)
+  assert.deepEqual(missing, [])
+})
+
 test('web/office-draw.js stays at 700 lines or fewer', () => {
   assert.ok(readWeb('office-draw').split('\n').length <= 701, 'move drawing out to a module of its own')
 })

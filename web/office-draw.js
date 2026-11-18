@@ -35,7 +35,7 @@ import {
 } from './office-scene.js';
 import { isCold, officeG, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
-import { OUTDOOR_LABELS } from './labels.js';
+import { Labels, OUTDOOR_LABELS } from './labels.js';
 import { Paint } from './paint.js';
 import { Light } from './light.js';
 import { eventTreeSprite } from './event-tree-sprite.js';
@@ -48,6 +48,16 @@ const HOLIDAY_TREES = SeasonIsland.holidayTrees(ISLAND, W, H);
 // How strongly a holiday tree takes the lawn's night tint at light level dfB (0..10): SkyRender.night's
 // (1 - light) x 0.6.
 export const treeDusk = dfB => (1 - dfB / 10) * 0.6;
+// The holiday trees are the tree.holiday label's variants: 'none' (the season's tree stays), 'xmas' the decorated
+// Christmas tree, any other a small holiday's own; each drawn by the office's drawEventTree.
+for (const v of Labels.byId('tree.holiday').variants) {
+  const season = v === 'xmas' ? 'christmas' : v;
+  Paint.variant(
+    'tree.holiday',
+    v,
+    v === 'none' ? () => {} : (o, ctx, d, t, k, dusk) => o.drawEventTree(ctx, d, season, t, k, dusk),
+  );
+}
 // The floor cell the EXIT door's kit stands on (OfficeDecor.kit at P of it).
 export const DOOR_KIT = EXIT.kit;
 mixin(
@@ -232,7 +242,8 @@ mixin(
       // canvas and takes the same night tint as the lawn (SkyRender.night: toward #0d1322 by (1 - light) x 0.6), so
       // it does not glow.
       const hv = this.look.of('tree.holiday'),
-        holiday = hv === 'none' ? null : hv === 'xmas' ? 'christmas' : hv,
+        holiday = hv !== 'none',
+        plant = Paint.painter('tree.holiday', hv),
         dusk = treeDusk(dfB),
         held = d => holiday && HOLIDAY_TREES.has(d.x + ',' + d.y);
       for (const p of this.islandCache.props)
@@ -241,7 +252,7 @@ mixin(
         if (d.kind !== 'tree' || !held(d)) continue;
         (backOf(d) ? behind : items).push({
           z: d.x + d.y + 0.5,
-          f: () => this.drawEventTree(ctx, d, holiday, t, k, dusk),
+          f: () => plant(this, ctx, d, t, k, dusk),
         });
       }
       const G = officeG(ctx, P, th),

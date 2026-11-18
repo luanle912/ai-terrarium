@@ -1,4 +1,5 @@
 import { PeopleLogic } from './people-logic.js';
+import { Paint } from './paint.js';
 // Who wears what at Christmas. Fixed per session id like the look (PeopleLogic), so a person keeps one outfit for the
 // whole event and every machine shows the same one. No DOM, no canvas; tests/outfit-logic.test.mjs runs this block.
 const RED = '#c8323a',
@@ -55,22 +56,31 @@ const MAKE = {
 // look is the Look (web/theme.js), or null. Under its 'xmas' outfit.agent a main agent wears the whole outfit from the
 // event's first day (no hat-only tier, D1), with a scarf in the department's colour so the team still shows. Under
 // the 'elf' outfit.subagent a sub-agent is an elf: the pointed hat replaces its gold band. 'team' is everyday clothes.
-function outfit(sid, look, isSub, deptColor) {
-  const v = look ? look.of(isSub ? 'outfit.subagent' : 'outfit.agent') : 'team';
-  if (v === 'elf')
-    return {
-      kind: 'elf',
-      top: ELF.coat,
-      trim: ELF.trim,
-      hat: 'elf',
-      hatColor: ELF.coat,
-      hatTrim: ELF.bell,
-      scarf: ELF.trim,
-      scarfD: ELF.trimD,
-    };
-  if (v !== 'xmas') return null;
+// Each variant of outfit.agent and outfit.subagent is a painter that dresses one person: (sid, deptColor) -> the
+// outfit, or null for everyday clothes. Run once per person and look change (web/office-people-xmas.js outfitOf),
+// not every frame.
+const team = () => null;
+const elf = () => ({
+  kind: 'elf',
+  top: ELF.coat,
+  trim: ELF.trim,
+  hat: 'elf',
+  hatColor: ELF.coat,
+  hatTrim: ELF.bell,
+  scarf: ELF.trim,
+  scarfD: ELF.trimD,
+});
+function xmas(sid, deptColor) {
   const dept = isHex(deptColor) ? deptColor.toLowerCase() : FALLBACK,
     kind = KINDS[roll(sid, 'outfit', KINDS.length)];
   return { kind, ...MAKE[kind](dept, roll(sid, 'outfit-alt', 2) === 1), scarf: dept, scarfD: tone(dept, -30) };
+}
+Paint.variant('outfit.agent', 'team', team);
+Paint.variant('outfit.agent', 'xmas', xmas);
+Paint.variant('outfit.subagent', 'team', team);
+Paint.variant('outfit.subagent', 'elf', elf);
+function outfit(sid, look, isSub, deptColor) {
+  const label = isSub ? 'outfit.subagent' : 'outfit.agent';
+  return Paint.painter(label, look ? look.of(label) : 'team')(sid, deptColor);
 }
 export const OutfitLogic = { KINDS, HATS, RED, WHITE, GOLD, COAL, ELF, outfit, tone };
