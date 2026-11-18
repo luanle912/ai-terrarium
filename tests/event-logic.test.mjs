@@ -127,7 +127,7 @@ test('a string of lights: bulbs a gap apart along the line, never more than the 
   assert.ok(E.lightString(line, 2, 20).length / 2 <= 20)
   assert.equal(E.lightString([[0, 0]], 10, 5).length, 0)
   assert.equal(E.MAX_BULBS, 120)
-  assert.deepEqual(E.GIFTS, [0, 2, 5, 9])
+  assert.equal(E.GIFTS, undefined, 'the gifts under the tree are the Christmas pack\'s build (Look.build)')
 })
 
 test('the Christmas trees by the office start with December now', () => {

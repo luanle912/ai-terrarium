@@ -117,7 +117,7 @@ mixin(
               snowman: '⛄ ',
               skate: '⛸️ ',
               gift: '🎁 ',
-            }[a.actNow] || '☕ ') + (actLabel(a.actNow, this.eventNow()) || tr('bubble.pantryBreak'))
+            }[a.actNow] || '☕ ') + (actLabel(a.actNow, this.look) || tr('bubble.pantryBreak'))
           );
         case 'leaving':
           return fateLine(a.fate) || tr('bubble.leaving');

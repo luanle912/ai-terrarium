@@ -17,6 +17,8 @@ const A = loadWeb('island-art-cathedral')
 const Y = loadWeb('island-art-cathedral-yard')
 const { SeasonIsland } = loadWeb('season-island')
 const { SnowLogic } = loadWeb('snow-logic')
+const { Theme } = loadWeb('theme')
+const { Moment } = loadWeb('moment')
 const { bfs } = loadWeb('office-util')
 const { ISLAND: I, W, H } = S
 
@@ -61,7 +63,10 @@ const facts = () => {
     roam: S.DOG_ROAM, roamList: S.DOG_PLACES.roamList, clear: S.DOG_CLEAR, houses: S.DOG_HOUSES, stairs: S.STAIRS,
     water: I.pond.cells, skip: [],
   })
-  const w = { ...pl, level: 3, eve: false, day: true, frozen: true, calm: false, now: 0, rand: seeded(), dogs: [] }
+  const date = new Date(2026, 11, 20, 12),
+    moment = Moment.at({ date, now: date.getTime(), seasonChoice: 'auto', eventChoice: 'auto', df: 1, snow: 0.8 }),
+    look = Theme.resolve(moment)
+  const w = { ...pl, look, frozen: true, calm: false, now: 0, rand: seeded(), dogs: [] }
   const list = E.create(w), deer = list.filter(c => c.kind === 'reindeer')
   return {
     drop: pl.drop, edge: pl.edge, route: E.elfRoute(w),

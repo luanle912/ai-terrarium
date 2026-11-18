@@ -260,12 +260,12 @@ export const treeNight = (c, dfB) => night(c, 1 - (1 - dfB / 10) * 0.45);
 const TREE = EventLogic.TREE_AT,
   [TX, TY] = P(TREE[0], TREE[1], 0).map(Math.round),
   [TL, TU, TR, TD] = BIG_TREE_EXT;
-// Its still part (trunk, tiers, tinsel, presents), painted once per event level and light level and stamped with
-// one drawImage; what blinks is drawn over it every frame (xmasTreeLights).
+// Its still part (trunk, tiers, tinsel, presents), painted once per gift count (Look.build('gifts')) and light level
+// and stamped with one drawImage; what blinks is drawn over it every frame (xmasTreeLights).
 let treeImg = null,
   treeKey = -1;
-function treeSprite(level, dfB) {
-  const k = level * 100 + dfB;
+function treeSprite(gifts, dfB) {
+  const k = gifts * 100 + dfB;
   if (k === treeKey) return treeImg;
   if (!treeImg) {
     treeImg = document.createElement('canvas');
@@ -280,7 +280,7 @@ function treeSprite(level, dfB) {
     () => foot,
     c => treeNight(c, dfB),
     [0, 0],
-    level,
+    gifts,
   );
   treeKey = k;
   return treeImg;
@@ -291,10 +291,11 @@ mixin(
   class {
     // What the look lays on the labels among the scene's sprites (the overlays of every instance: the strings off
     // the office's own walls, every door's wreath, every desk's decoration), then the event's big tree and its
-    // landmark. G.look says what; ev (eventNow, or null) is still what the big tree is painted from.
+    // landmark. G.look says what, the big tree's presents too (build('gifts')); ev is still the landmark's.
     xmasItems(G, items, ev) {
       const look = G.look;
-      if (ev && look.has('tree.big')) items.push({ z: TREE[0] + TREE[1] + 0.02, f: () => this.xmasTree(G, ev) });
+      if (look.has('tree.big'))
+        items.push({ z: TREE[0] + TREE[1] + 0.02, f: () => this.xmasTree(G, look.build('gifts')) });
       for (const s of STRINGS) {
         const fs = s.z === null ? EMPTY : Paint.overlaysOf(s.label, look);
         if (fs.length) items.push({ z: s.z, f: () => fs.forEach(f => f(this, G, s.inst, s)) });
@@ -321,9 +322,9 @@ mixin(
       drawString(ctx, at, t, glow, !!(this.env && this.env.reduced), glow > 0.01);
       ctx.imageSmoothingEnabled = smooth;
     }
-    // The big tree among the office's sprites: its still part as one sprite, then its lights.
-    xmasTree(G, ev) {
-      G.ctx.drawImage(treeSprite(ev.level, Math.round(G.df * 10)), TX - TL, TY - TU);
+    // The big tree among the office's sprites with `gifts` presents: its still part as one sprite, then its lights.
+    xmasTree(G, gifts) {
+      G.ctx.drawImage(treeSprite(gifts, Math.round(G.df * 10)), TX - TL, TY - TU);
       this.xmasTreeLights(G);
     }
     xmasTreeLights(G) {

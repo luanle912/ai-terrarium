@@ -3,11 +3,11 @@
 // place where it happens and how long its scene plays. Pure (no DOM, no canvas): the page and
 // tests/fate-logic.test.mjs both run this block; randomness comes in as `rand`.
 //
-// c (the conditions) = { wet, storm, windy, cold, frozen, night, hot, calm, xmas, eve }:
+// c (the conditions) = { wet, storm, windy, cold, frozen, night, hot, calm, look }:
 //   wet     it is raining            storm  a thunderstorm          windy  a storm, or autumn's steady wind
 //   cold    winter or snow falling   frozen the lake is iced over   night  after dark
 //   hot     a clear summer day       calm   reduced motion: only the door
-//   xmas    the Christmas event is on         eve    Santa is about (all event long)
+//   look    the Look (web/theme.js): the event's ways out are its rules, a weight each (fate.sleigh, ...)
 // at: 'door' the EXIT door · 'lawn' open lawn in front of the office · 'lake' the bathing spots in the lake
 //     'way' a few steps along the way to the door, wherever the person was
 const FATES = {
@@ -29,10 +29,10 @@ const FATES = {
   dust: { at: 'way', dur: 3, w: () => 2 },
   ghost: { at: 'way', dur: 4.6, w: () => 2 },
   // the Christmas event's own
-  sleigh: { at: 'lawn', dur: 5, w: c => (c.eve ? 4 : 0) },
-  wrapped: { at: 'way', dur: 3.6, w: c => (c.xmas ? 4 : 0) },
-  skateoff: { at: 'lake', dur: 4.4, w: c => (c.xmas && c.frozen ? 5 : 0) },
-  chimney: { at: 'lawn', dur: 4.6, w: c => (c.xmas ? 3 : 0) },
+  sleigh: { at: 'lawn', dur: 5, w: c => +c.look.has('fate.sleigh') },
+  wrapped: { at: 'way', dur: 3.6, w: c => +c.look.has('fate.wrapped') },
+  skateoff: { at: 'lake', dur: 4.4, w: c => (c.frozen ? +c.look.has('fate.skateoff') : 0) },
+  chimney: { at: 'lawn', dur: 4.6, w: c => +c.look.has('fate.chimney') },
 };
 const KINDS = Object.keys(FATES);
 
@@ -74,8 +74,9 @@ function goal(kind, places, way, rand) {
   return null;
 }
 // The conditions from what the page knows: fx is the weather mix (0..1 each), look the season's row
-// (SeasonLogic.look), day the daylight factor (0 night .. 1 day).
-function conditions({ fx, look, day, summer, calm, ev }) {
+// (SeasonLogic.look), day the daylight factor (0 night .. 1 day), theme the Look (web/theme.js; none: no event).
+const NO_LOOK = { has: () => false };
+function conditions({ fx, look, day, summer, calm, theme }) {
   const f = fx || {},
     wet = Math.max(f.rain || 0, f.storm || 0) > 0.4,
     storm = (f.storm || 0) > 0.4;
@@ -88,8 +89,7 @@ function conditions({ fx, look, day, summer, calm, ev }) {
     night: day < 0.3,
     hot: !!summer && day > 0.7 && !wet && (f.cloud || 0) < 0.5 && !((f.snow || 0) > 0.1),
     calm: !!calm,
-    xmas: !!ev,
-    eve: !!ev && !!(ev.eve || ev.day),
+    look: theme || NO_LOOK,
   };
 }
 

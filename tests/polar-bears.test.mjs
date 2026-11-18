@@ -13,7 +13,7 @@ const L = S.BEARS
 const seeded = seed => () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32
 const key = (x, y) => x + ',' + y
 const cell = b => key(Math.floor(b.x), Math.floor(b.y))
-const world = over => ({ winter: true, night: false, calm: false, now: 0, rand: seeded(7), ...over })
+const world = over => ({ bears: true, night: false, calm: false, now: 0, rand: seeded(7), ...over })
 
 test('the layout: an igloo of 2 × 2 cells by the mountain, a patch of lawn round it, a wider ring kept clear', () => {
   assert.deepEqual([L.igloo.x, L.igloo.y], [7, -10])
@@ -51,12 +51,23 @@ test('two bears in winter, a mother and her cub, and none outside it', () => {
   const list = B.create(L)
   assert.deepEqual(list.map(b => b.kind), ['bear', 'cub'])
   assert.ok(list.every(b => L.zoneSet.has(cell(b))))
-  const w = world({ winter: false })
+  const w = world({ bears: false })
   B.step(list, L, w, 0.1)
   assert.ok(list.every(b => b.away), 'gone with the winter')
-  w.winter = true
+  w.bears = true
   B.step(list, L, w, 0.1)
   assert.ok(list.every(b => !b.away), 'back with it')
+})
+
+test('the look brings the bears and the igloo: winter extras, with the event or without it, none in summer', () => {
+  const { Theme } = loadWeb('theme'), { Moment } = loadWeb('moment')
+  const lookAt = (date, eventChoice = 'auto') =>
+    Theme.resolve(Moment.at({ date, now: date.getTime(), seasonChoice: 'auto', eventChoice, df: 1, snow: 0.8 }))
+  for (const l of [lookAt(new Date(2026, 11, 20, 12)), lookAt(new Date(2026, 11, 20, 12), 'off')])
+    assert.deepEqual([l.extras.has('bear'), l.extras.has('igloo')], [true, true])
+  const summer = lookAt(new Date(2026, 6, 20, 12))
+  assert.deepEqual([summer.extras.has('bear'), summer.extras.has('igloo')], [false, false])
+  assert.deepEqual(lookAt(new Date(2026, 6, 20, 12), 'on').extras.has('bear'), true, 'the event brings winter')
 })
 
 test('they wander about their lawn, the cub keeping near its mother, never leaving it or walking into the igloo', () => {

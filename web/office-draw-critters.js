@@ -126,9 +126,7 @@ mixin(
       if (!w) {
         w = this.critterWorld = {
           ...CRITTER_PLACES,
-          level: 0,
-          eve: false,
-          day: false,
+          look: null,
           frozen: false,
           calm: false,
           now: 0,
@@ -138,10 +136,7 @@ mixin(
         };
         this.critters = [];
       }
-      const ev = this.eventNow();
-      w.level = ev ? ev.level : 0;
-      w.eve = !!ev && ev.eve;
-      w.day = !!ev && ev.day;
+      w.look = this.look;
       w.frozen = !!this.dogWorld.frozen;
       w.calm = !!this.dogWorld.calm;
       EventCritters.step(this.critters, w, dt);
@@ -150,7 +145,7 @@ mixin(
     // and with the front ones the pile of presents.
     critterItems(G, list, back, dfB) {
       const w = this.critterWorld;
-      if (!w || !w.level) return;
+      if (!w) return;
       for (const c of this.critters)
         if (c.act !== 'away' && behindWalls(Math.floor(c.x), Math.floor(c.y), DRAW_REACH) === back)
           list.push({ z: c.x + c.y, f: () => this.drawCritter(G, c, dfB) });
@@ -183,7 +178,7 @@ mixin(
     // the front one the presents it let go, coming down under their parachutes to the pile by the stairs.
     drawSleigh(ctx, back, w, h) {
       const cw = this.critterWorld;
-      if (!cw || !cw.level || !cw.parcels) return;
+      if (!cw || !cw.parcels) return;
       const k = Math.max(2, Math.round(w / 500)),
         H0 = 0.1 * h;
       if (back) {

@@ -12,11 +12,12 @@ import { drawBigTree } from './island-art-xmas.js';
 import { hash } from './island-land.js';
 import { SeasonTree } from './season-tree.js';
 import { EventLogic } from './event-logic.js';
+import { CHRISTMAS } from './themes/christmas.js';
 import { tree as miniTree } from './world-ui.js';
 import { treeDusk } from './office-draw.js';
 import { treeNight } from './office-draw-xmas.js';
 
-const { axis, dfB, xmasEvent } = AssetsStage;
+const { axis, dfB } = AssetsStage;
 // The first tile (x, y in 0..59) whose hashes give a look: ok(x, y) says whether it does.
 export function findTile(ok) {
   for (let y = 0; y < 60; y++) for (let x = 0; x < 60; x++) if (ok(x, y)) return { x, y };
@@ -147,16 +148,18 @@ const holidayTree = key => {
 const HOLIDAY = SeasonTree.ORDER.map(holidayTree);
 
 // ---- the big Christmas tree in the office (web/island-art-xmas.js, web/office-draw-xmas.js) ----
-// Its presents come with the event's level; lit, the office draws its blinking bulbs, star and glow over it.
+// Its presents come with the event's day (the Christmas pack's gift steps, Look.build('gifts')); lit, the office draws
+// its blinking bulbs, star and glow over it.
 const TREE_AT = EventLogic.TREE_AT,
   FOOT = [0, 0],
   footAt = () => FOOT,
   PT = { ctx: null };
 let treeDfB = 10,
   treeStage = null,
-  treeEv = null;
+  treeGifts = 0;
 const treeT = c => treeNight(c, treeDfB);
-const litTree = () => treeStage.host.xmasTree(treeStage.G, treeEv);
+const litTree = () => treeStage.host.xmasTree(treeStage.G, treeGifts);
+const GIFT_STEPS = CHRISTMAS.build.gifts.map(s => s[1]);
 const BIG_TREE = {
   id: 'plants.big-tree',
   cat: 'plants',
@@ -169,11 +172,11 @@ const BIG_TREE = {
     { file: 'web/office-draw-xmas.js', fn: 'xmasTreeLights' },
   ],
   axes: [
-    axis('level', () => tr('assets.axis.gifts'), [
-      { id: '1', label: () => tr('assets.gifts.n', { n: EventLogic.GIFTS[1] }) },
-      { id: '2', label: () => tr('assets.gifts.n', { n: EventLogic.GIFTS[2] }) },
-      { id: '3', label: () => tr('assets.gifts.n', { n: EventLogic.GIFTS[3] }) },
-    ]),
+    axis(
+      'gifts',
+      () => tr('assets.axis.gifts'),
+      GIFT_STEPS.map(n => ({ id: String(n), label: () => tr('assets.gifts.n', { n }) })),
+    ),
     axis('lights', () => tr('assets.axis.lights'), [
       { id: 'on', label: () => tr('assets.lights.on') },
       { id: 'off', label: () => tr('assets.lights.off') },
@@ -181,16 +184,16 @@ const BIG_TREE = {
   ],
   uses: ['light'],
   draw(ctx, view, t) {
-    const level = Math.min(3, Math.max(1, +view.pick.level || 1));
+    const gifts = GIFT_STEPS.includes(+view.pick.gifts) ? +view.pick.gifts : GIFT_STEPS[0];
     if (view.pick.lights === 'off') {
       treeDfB = dfB(view);
       PT.ctx = ctx;
       FOOT[0] = view.ox;
       FOOT[1] = view.oy;
-      return drawBigTree(PT, footAt, treeT, FOOT, level);
+      return drawBigTree(PT, footAt, treeT, FOOT, gifts);
     }
     treeStage = AssetsStage.stage(ctx, view, t);
-    treeEv = xmasEvent(level);
+    treeGifts = gifts;
     treeStage.scene(TREE_AT[0], TREE_AT[1], 0, litTree);
   },
 };

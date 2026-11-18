@@ -385,7 +385,9 @@ mixin(
         const act = !a.moving && st === 'idle' ? a.actNow : null;
         const tp = t + a.id * 1.37; // per-person phase, so a group of smokers never moves in step
         if (act && (!sit || act === 'smoke')) {
-          if (!(G.ev && this.xmasArms(R, act, sx, by, tp, slv, slvD, sk, a)))
+          // the event's own arms: its acts (only open under its look), and cocoa where the look makes the coffee so
+          const own = act !== 'coffee' || G.look.text('office.act.coffee') === 'office.act.cocoa';
+          if (!(own && this.xmasArms(R, act, sx, by, tp, slv, slvD, sk, a)))
             this.actArms(R, act, sx, by, act === 'smoke' ? tp : t, slv, slvD, sk);
         } else if (up) {
           R(sx - 6, by - 17, 2, 7, slv);

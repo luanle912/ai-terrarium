@@ -361,8 +361,12 @@ export const ACT_TXT = {
   gift: tr('office.act.gift'),
   cocoa: tr('office.act.cocoa'),
 };
-// What someone is doing, in words: during the Christmas event (ev) the coffee is hot cocoa.
-export const actLabel = (act, ev) => (ev && act === 'coffee' ? ACT_TXT.cocoa : ACT_TXT[act]);
+// What someone is doing, in words: the look (web/theme.js) may name an act's words by another key (Christmas: the
+// coffee is hot cocoa, look.text('office.act.coffee') === 'office.act.cocoa'). Both maps are made once.
+const ACT_KEY = {},
+  ACT_BY_KEY = {};
+for (const k in ACT_TXT) ACT_BY_KEY[(ACT_KEY[k] = 'office.act.' + k)] = ACT_TXT[k];
+export const actLabel = (act, look) => (look && ACT_BY_KEY[look.text(ACT_KEY[act])]) || ACT_TXT[act];
 export const SEGS = [],
   EDGE = new Set();
 export const addV = (zi, X, y) => {

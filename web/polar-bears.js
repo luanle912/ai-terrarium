@@ -5,8 +5,8 @@
 // their lawn (layout().keep) is taken off everyone else's ground in web/office-scene.js: people, dogs and the
 // Christmas critters never go near.
 //
-// w = { winter, night, calm, now, rand }: the season is winter; it is night; the viewer asked for reduced motion
-// (they stand still); seconds (step moves it on) and the dice.
+// w = { bears, night, calm, now, rand }: the look has them (its extra 'bear', winter's); it is night; the viewer
+// asked for reduced motion (they stand still); seconds (step moves it on) and the dice.
 import { DogLogic } from './dog-logic.js';
 
 const key = (x, y) => x + ',' + y,
@@ -135,7 +135,7 @@ function cub(c, m, L, w, dt) {
 function step(list, L, w, dt) {
   dt = dt > 0 ? Math.min(DT_MAX, dt) : 0;
   w.now += dt;
-  const away = !w.winter || !L.zone.length;
+  const away = !w.bears || !L.zone.length;
   for (const b of list) b.away = away;
   if (away || w.calm || list.length < 2) return;
   mother(list[0], L, w, dt);

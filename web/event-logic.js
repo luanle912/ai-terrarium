@@ -105,8 +105,6 @@ function lightString(points, gap, max) {
 }
 
 const MAX_BULBS = 120;
-// Presents under the big tree by level (index 0: no event).
-const GIFTS = [0, 2, 5, 9];
 
 export const EventLogic = {
   CHOICES,
@@ -126,5 +124,4 @@ export const EventLogic = {
   SNOWFALL,
   lightString,
   MAX_BULBS,
-  GIFTS,
 };

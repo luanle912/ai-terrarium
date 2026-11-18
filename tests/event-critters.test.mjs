@@ -10,6 +10,15 @@ globalThis.React ??= { createElement: () => null }
 const { EventCritters: E } = loadWeb('event-critters')
 const { CRITTER_PLACES: PL, DOG_PLACES: D, DOG_ROAM_WINTER, STAIRS } = loadWeb('office-scene')
 const { CritterSprites: S } = loadWeb('critter-sprites')
+const { Theme } = loadWeb('theme')
+const { Moment } = loadWeb('moment')
+// The Look (web/theme.js) of a moment: the event on 20 Dec, on its first day, winter with the event off, summer.
+const lookAt = (date, eventChoice = 'auto') =>
+  Theme.resolve(Moment.at({ date, now: date.getTime(), seasonChoice: 'auto', eventChoice, df: 1, snow: 0.8 }))
+const XMAS = lookAt(new Date(2026, 11, 20, 12))
+const DAY0 = lookAt(new Date(2026, 11, 1, 12))
+const WINTER = lookAt(new Date(2026, 11, 20, 12), 'off')
+const SUMMER = lookAt(new Date(2026, 6, 20, 12))
 
 const seeded = (a = 7) => () => {
   a = (a + 0x6d2b79f5) | 0
@@ -17,7 +26,7 @@ const seeded = (a = 7) => () => {
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296
 }
-const world = over => ({ ...PL, level: 3, eve: false, day: false, frozen: true, calm: false, now: 0, rand: seeded(), dogs: [], ...over })
+const world = over => ({ ...PL, look: XMAS, frozen: true, calm: false, now: 0, rand: seeded(), dogs: [], ...over })
 const cell = c => Math.floor(c.x) + ',' + Math.floor(c.y)
 const of = (list, kind) => list.filter(c => c.kind === kind)
 const run = (list, w, secs, each, dt = 0.1) => {
@@ -39,21 +48,36 @@ test('the places: a spot for the presents beside the front stairs, a way in from
   assert.ok(PL.roam === DOG_ROAM_WINTER, 'the dogs\' winter lawn: none of them goes near the polar bears')
 })
 
-test('who is about: nobody at level 1, reindeer from level 2, elves and penguins at level 3, Santa on the day', () => {
+test('who is about: the look says (its critter rules); the other islands only have reindeer', () => {
   const z = { reindeer: 0, elf: 0, penguin: 0, santa: 0 }
-  assert.deepEqual(E.wanted(world({ level: 0 })), z)
-  assert.deepEqual(E.wanted(world({ level: 1 })), z)
-  assert.deepEqual(E.wanted(world({ level: 2 })), { ...z, reindeer: 3 })
-  assert.deepEqual(E.wanted(world({ level: 3 })), { reindeer: 3, elf: 2, penguin: 4, santa: 0 })
-  assert.deepEqual(E.wanted(world({ level: 3, day: true })), { reindeer: 3, elf: 2, penguin: 4, santa: 1 })
-  assert.equal(E.wanted(world({ level: 3, frozen: false })).penguin, 0)
-  assert.equal(E.wanted(world({ level: 3 })), E.wanted(world({ level: 1 })), 'one object, used again')
-  assert.deepEqual(E.wanted(world({ level: 3, day: true, only: 'reindeer' })), { ...z, reindeer: 3 })
-  assert.deepEqual(E.wanted(world({ level: 3, day: true, calm: true })), { reindeer: 3, elf: 0, penguin: 4, santa: 1 })
+  assert.deepEqual(E.wanted(world({ look: SUMMER })), z)
+  assert.deepEqual(E.wanted(world({ look: null })), z)
+  assert.deepEqual(E.wanted(world({})), { reindeer: 3, elf: 2, penguin: 4, santa: 1 })
+  assert.equal(E.wanted(world({ frozen: false })).penguin, 0)
+  assert.equal(E.wanted(world({})), E.wanted(world({ look: SUMMER })), 'one object, used again')
+  assert.deepEqual(E.wanted(world({ only: 'reindeer' })), { ...z, reindeer: 3 })
+  assert.deepEqual(E.wanted(world({ calm: true })), { reindeer: 3, elf: 0, penguin: 4, santa: 1 })
+})
+
+test('christmas day 0: reindeer, elves, penguins, Santa all present (D1b)', () => {
+  assert.deepEqual(E.wanted(world({ look: DAY0 })), { reindeer: 3, elf: 2, penguin: 4, santa: 1 })
+  const w = world({ look: DAY0 }), list = E.create(w)
+  assert.deepEqual(['reindeer', 'elf', 'penguin', 'santa'].map(k => of(list, k).length), [3, 2, 4, 1])
+  E.flyNow(w)
+  E.step(list, w, 0.1)
+  assert.ok(E.sleigh(w), 'and the sleigh')
+})
+
+test('winter without the event: no reindeer, no elves, no penguins, no Santa, no sleigh', () => {
+  assert.deepEqual(E.wanted(world({ look: WINTER })), { reindeer: 0, elf: 0, penguin: 0, santa: 0 })
+  const w = world({ look: WINTER }), list = E.create(w)
+  assert.deepEqual(list, [])
+  E.flyNow(w)
+  run(list, w, 30, () => assert.equal(E.sleigh(w), null))
 })
 
 test('three reindeer, one with a red nose, each with a home of its own off the paths and away from the presents', () => {
-  const w = world({ level: 2 }), list = E.create(w)
+  const w = world({ only: 'reindeer' }), list = E.create(w)
   assert.equal(list.length, 3)
   assert.ok(list.every(c => c.kind === 'reindeer'))
   assert.equal(list.filter(c => c.red).length, 1)
@@ -68,7 +92,7 @@ test('three reindeer, one with a red nose, each with a home of its own off the p
 })
 
 test('reindeer graze, look up and stroll, never leaving the lawn or straying far from home', () => {
-  const w = world({ level: 2 }), list = E.create(w), seen = list.map(() => new Set())
+  const w = world({ only: 'reindeer' }), list = E.create(w), seen = list.map(() => new Set())
   run(list, w, 600, () =>
     list.forEach((c, i) => {
       seen[i].add(c.act)
@@ -82,7 +106,7 @@ test('reindeer graze, look up and stroll, never leaving the lawn or straying far
 })
 
 test('a dog close by makes a reindeer look at it until it goes', () => {
-  const w = world({ level: 2 }), list = E.create(w), c = list[0]
+  const w = world({ only: 'reindeer' }), list = E.create(w), c = list[0]
   w.dogs = [{ x: c.x + 1, y: c.y - 1 }]
   run(list, w, 1)
   assert.equal(c.act, 'look')
@@ -99,7 +123,7 @@ test('a dog close by makes a reindeer look at it until it goes', () => {
 })
 
 test('with reduced motion the reindeer and penguins stand still, and there are no elves and no sleigh', () => {
-  const w = world({ calm: true, eve: true }), list = E.create(w), at = list.map(c => [c.x, c.y])
+  const w = world({ calm: true }), list = E.create(w), at = list.map(c => [c.x, c.y])
   assert.equal(of(list, 'elf').length, 0)
   run(list, w, 60, () => assert.equal(E.sleigh(w), null))
   assert.deepEqual(list.map(c => [c.x, c.y]), at)
@@ -108,7 +132,7 @@ test('with reduced motion the reindeer and penguins stand still, and there are n
 })
 
 test('a long gap between two frames moves nobody further than a quarter of a second would', () => {
-  const w = world({ eve: true }), list = E.create(w)
+  const w = world({}), list = E.create(w)
   run(list, w, 120)
   const at = list.map(c => [c.x, c.y]), now = w.now
   E.step(list, w, 300)
@@ -121,11 +145,11 @@ test('a long gap between two frames moves nobody further than a quarter of a sec
 
 test('when the event ends, or the island has no room, nobody is left and nothing throws', () => {
   const w = world({}), list = E.create(w)
-  assert.equal(list.length, 9)
-  w.level = 0
+  assert.equal(list.length, 10)
+  w.look = WINTER
   E.step(list, w, 0.1)
   assert.equal(list.length, 0)
-  const bare = world({ roam: new Set(), roamList: [], drop: null, edge: null, ice: [], iceSet: new Set(), day: true, eve: true })
+  const bare = world({ roam: new Set(), roamList: [], drop: null, edge: null, ice: [], iceSet: new Set() })
   const none = E.create(bare)
   assert.deepEqual(none, [])
   run(none, bare, 5)
@@ -134,7 +158,7 @@ test('when the event ends, or the island has no room, nobody is left and nothing
 })
 
 test('a pose is one object used again, and names a frame the sprites have', () => {
-  const w = world({ day: true }), list = E.create(w)
+  const w = world({}), list = E.create(w)
   assert.equal(E.pose(list[0], 1), E.pose(list[1], 2))
   run(list, w, 200, i => {
     if (i % 7) return
@@ -151,7 +175,7 @@ test("the elves' way: from the edge of the island to the cell beside the present
   for (const [x, y] of r) assert.ok(w.roam.has(x + ',' + y))
   assert.equal(E.elfRoute(world({ edge: null })), null)
   assert.equal(E.wanted(world({ edge: null })).elf, 0)
-  assert.equal(of(E.create(world({ level: 2 })), 'elf').length, 0)
+  assert.equal(of(E.create(world({ only: 'reindeer' })), 'elf').length, 0)
 })
 
 test('each elf goes round: away, carrying, setting the present down, walking back; never two setting down at once', () => {
@@ -166,7 +190,7 @@ test('each elf goes round: away, carrying, setting the present down, walking bac
     assert.ok(w.placed <= E.PLACED_MAX)
   })
   assert.equal(w.placed, E.PLACED_MAX, 'the pile by the stairs grows with each present, up to a point')
-  w.level = 0
+  w.look = WINTER
   E.step(list, w, 0.1)
   assert.equal(w.placed, 0, 'and is gone with the event')
   const order = ['away', 'carry', 'place', 'back']
@@ -210,10 +234,10 @@ test('four penguins huddle on the ice; one at a time slides off on its belly and
   assert.equal(E.huddle(PL.ice).length, 4)
 })
 
-test("the sleigh crosses the sky only while Santa is about, every few minutes, and drops a present or two", () => {
-  const off = world({}), none = E.create(off)
+test("the sleigh crosses the sky only while the look has it, every few minutes, and drops a present or two", () => {
+  const off = world({ look: WINTER }), none = E.create(off)
   run(none, off, 120, () => assert.equal(E.sleigh(off), null))
-  const w = world({ eve: true }), list = E.create(w)
+  const w = world({}), list = E.create(w)
   let flights = 0, was = null, last = -1
   run(list, w, 1800, () => {
     const s = E.sleigh(w)
@@ -233,13 +257,13 @@ test("the sleigh crosses the sky only while Santa is about, every few minutes, a
   while (E.sleigh(w)) E.step(list, w, 0.1)
   E.step(list, w, 3600)
   assert.equal(E.sleigh(w), null, 'an hour in one frame is a quarter of a second: no flight begins')
-  w.eve = false
+  w.look = SUMMER
   E.step(list, w, 0.1)
   assert.equal(E.sleigh(w), null)
 })
 
 test('asked for, the sleigh sets off at once (for a screenshot)', () => {
-  const w = world({ eve: true }), list = E.create(w)
+  const w = world({}), list = E.create(w)
   E.step(list, w, 0.1)
   assert.equal(E.sleigh(w), null)
   E.flyNow(w)
@@ -247,8 +271,8 @@ test('asked for, the sleigh sets off at once (for a screenshot)', () => {
   assert.ok(E.sleigh(w))
 })
 
-test('on Christmas Day Santa sits by the presents, out of the way of the elves, and waves now and then', () => {
-  const w = world({ day: true }), list = E.create(w), s = of(list, 'santa')
+test('all event long Santa sits by the presents, out of the way of the elves, and waves now and then', () => {
+  const w = world({}), list = E.create(w), s = of(list, 'santa')
   assert.equal(s.length, 1)
   const end = E.elfRoute(w).at(-1)
   assert.notEqual(cell(s[0]), w.drop.join(','))
@@ -257,7 +281,7 @@ test('on Christmas Day Santa sits by the presents, out of the way of the elves, 
   const frames = new Set()
   for (let t = 0; t < 30; t += 0.1) frames.add(E.pose(s[0], t).frame)
   assert.deepEqual([...frames].sort(), ['sit', 'wave'])
-  w.day = false
+  w.look = WINTER
   E.step(list, w, 0.1)
   assert.equal(of(list, 'santa').length, 0)
 })
@@ -282,15 +306,15 @@ test('reduced motion switched on while a penguin is away brings it straight back
 })
 
 test('the event going and coming back, or the lake thawing mid-slide, leaves everyone in order', () => {
-  const w = world({ eve: true }), list = E.create(w)
+  const w = world({}), list = E.create(w)
   E.flyNow(w)
   run(list, w, 40)
-  w.level = 0
+  w.look = WINTER
   E.step(list, w, 0.1)
   assert.deepEqual([list.length, w.placed, w.landed, E.sleigh(w)], [0, 0, 0, null])
-  w.level = 3
+  w.look = XMAS
   E.step(list, w, 0.1)
-  assert.equal(list.length, 9)
+  assert.equal(list.length, 10)
   let away = null
   for (let i = 0; i < 400 && !away; i++) {
     E.step(list, w, 0.1)

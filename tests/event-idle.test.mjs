@@ -12,9 +12,15 @@ const { EventCritters: E } = loadWeb('event-critters')
 const { EventLogic } = loadWeb('event-logic')
 const S = loadWeb('office-scene')
 const PL = S.CRITTER_PLACES
+const { Theme } = loadWeb('theme')
+const { Moment } = loadWeb('moment')
+const lookAt = (date, eventChoice = 'auto') =>
+  Theme.resolve(Moment.at({ date, now: date.getTime(), seasonChoice: 'auto', eventChoice, df: 1, snow: 0.8 }))
+const XMAS = lookAt(new Date(2026, 11, 1, 12)) // the event's first day: every act is open (D1b)
+const WINTER = lookAt(new Date(2026, 11, 20, 12), 'off')
 const src = over => ({ ...PL, H: S.H, avoid: E.elfRoute({ ...PL }) || [], huddle: E.huddle(PL.ice), ...over })
 const L = I.layout(src())
-const C = { level: 3, snow: 2, frozen: true, calm: false }
+const C = { look: XMAS, snow: 2, frozen: true, calm: false }
 
 test('the layout: two snowball spots facing each other, a snowman spot, a rink on the ice, a place by the tree', () => {
   assert.deepEqual(L.spots.map(s => s.act), ['snowball', 'snowball', 'snowman', 'skate', 'gift'])
@@ -61,20 +67,25 @@ test('an island with no ice has no rink, one with no lawn only the place by the 
   assert.equal(bare.pitch, null)
 })
 
-test('what is open: snow for snowballs and the snowman, ice for skating, the second week for presents', () => {
+test("what is open: the look's idle rules, then snow for snowballs and the snowman, ice for skating", () => {
   const spots = [{ act: 'coffee' }, ...L.spots], all = spots.map((_, i) => i)
   const acts = c => I.open(spots, all, c).map(i => spots[i].act)
   assert.deepEqual(acts(C), ['coffee', 'snowball', 'snowball', 'snowman', 'skate', 'gift'])
-  assert.deepEqual(acts({ ...C, level: 0 }), ['coffee'])
-  assert.deepEqual(acts({ ...C, level: 1 }), ['coffee', 'snowball', 'snowball', 'snowman', 'skate'])
+  assert.deepEqual(acts({ ...C, look: null }), ['coffee'])
   assert.deepEqual(acts({ ...C, snow: 1 }), ['coffee', 'skate', 'gift'])
   assert.deepEqual(acts({ ...C, frozen: false }), ['coffee', 'snowball', 'snowball', 'snowman', 'gift'])
   assert.deepEqual(acts({ ...C, calm: true }), ['coffee', 'snowman', 'gift'])
   assert.deepEqual(I.open(spots, [0, 5], C), [0, 5], 'only what was free')
-  for (const c of [C, { ...C, level: 0 }, { ...C, snow: 0 }, { ...C, frozen: false }, { ...C, calm: true }])
+  for (const c of [C, { ...C, look: WINTER }, { ...C, snow: 0 }, { ...C, frozen: false }, { ...C, calm: true }])
     for (const i of all) assert.equal(I.stays(spots, i, c), I.open(spots, [i], c).length === 1, spots[i].act)
   assert.equal(I.stays(spots, null, C), true)
   assert.deepEqual(I.ACTS, ['snowball', 'snowman', 'skate', 'gift'])
+})
+
+test('winter without the event: no snowball, snowman or skate spots (nor the present by the tree)', () => {
+  const spots = [{ act: 'coffee' }, ...L.spots], all = spots.map((_, i) => i)
+  assert.deepEqual(I.open(spots, all, { ...C, look: WINTER }).map(i => spots[i].act), ['coffee'])
+  for (const i of all.slice(1)) assert.equal(I.stays(spots, i, { ...C, look: WINTER }), false)
 })
 
 test('a snowball flies only when two are there: one way, then back, in an arc', () => {
@@ -121,10 +132,10 @@ test('the page: the event spots come last in IDLE_SPOTS, the others keep their p
   assert.ok(S.IDLE_SPOTS.slice(0, n - 5).every(s => !s.event))
   assert.equal(S.IDLE_SPOTS[n - 6].act, 'fish')
   for (const a of [...I.ACTS, 'cocoa']) assert.ok(S.ACT_TXT[a] && !S.ACT_TXT[a].startsWith('office.act.'), a)
-  const ev = { key: 'christmas', level: 1 }
-  assert.equal(S.actLabel('coffee', ev), S.ACT_TXT.cocoa)
+  assert.equal(S.actLabel('coffee', XMAS), S.ACT_TXT.cocoa, 'the look swaps the coffee for cocoa')
+  assert.equal(S.actLabel('coffee', WINTER), S.ACT_TXT.coffee)
   assert.equal(S.actLabel('coffee', null), S.ACT_TXT.coffee)
-  assert.equal(S.actLabel('skate', ev), S.ACT_TXT.skate)
+  assert.equal(S.actLabel('skate', XMAS), S.ACT_TXT.skate)
 })
 
 test('everyone can walk to every event spot from the door, round the big tree too', () => {

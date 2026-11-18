@@ -83,22 +83,25 @@ function paintIgloo(dfB) {
 mixin(
   ClaudeOffice,
   class {
-    // One frame of the bears' lives, on every island; and the dogs keep their distance while the bears are about.
+    // One frame of the bears' lives, on every island, while the look has them (its extras 'bear' and 'igloo',
+    // winter's); and the dogs keep their distance while the bears are about.
     stepBears(dt) {
       let w = this.bearWorld;
       if (!w) {
-        w = this.bearWorld = { winter: false, night: false, calm: false, now: 0, rand: Math.random };
+        w = this.bearWorld = { bears: false, igloo: false, night: false, calm: false, now: 0, rand: Math.random };
         this.bears = PolarBears.create(BEARS);
       }
-      w.winter = this.seasonNow() === 'winter';
+      const look = this.look;
+      w.bears = !!look && look.extras.has('bear');
+      w.igloo = !!look && look.extras.has('igloo');
       w.night = DogLogic.isNight(this.dogWorld.hour);
       w.calm = !!(this.env && this.env.reduced);
       PolarBears.step(this.bears, BEARS, w, dt);
-      const places = w.winter ? DOG_PLACES_WINTER : DOG_PLACES;
+      const places = w.bears ? DOG_PLACES_WINTER : DOG_PLACES;
       this.dogWorld.roam = places.roam;
       this.dogWorld.roamList = places.roamList;
       this.dogWorld.drink = places.drink;
-      if (w.winter) for (const d of this.dogs) this.dogOut(d);
+      if (w.bears) for (const d of this.dogs) this.dogOut(d);
     }
     // A dog that stands in the ring round the bears (it was there when winter came, or the page opened with it there)
     // walks out to the nearest lawn outside it, over the whole lawn since its own ground no longer reaches it.
@@ -126,10 +129,12 @@ mixin(
     }
     // The igloo and the bears on one side of the walls (back: those drawn before them), into the sorted list.
     bearItems(G, list, back, dfB) {
-      if (!this.bears || this.bears[0].away) return;
+      const w = this.bearWorld;
+      if (!w) return;
       const ig = BEARS.igloo;
-      if (behindWalls(ig.x + 1, ig.y + 1, DRAW_REACH) === back)
+      if (w.igloo && behindWalls(ig.x + 1, ig.y + 1, DRAW_REACH) === back)
         list.push({ z: ig.x + ig.y + 2, f: () => this.drawIgloo(G, dfB) });
+      if (this.bears[0].away) return;
       for (const b of this.bears)
         if (behindWalls(Math.floor(b.x), Math.floor(b.y), DRAW_REACH) === back)
           list.push({ z: b.x + b.y, f: () => this.drawBear(G, b, dfB) });

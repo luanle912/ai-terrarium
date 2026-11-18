@@ -15,7 +15,7 @@ import { DEPT_PAL, DESKS, IDLE_SPOTS, P, PA } from './office-scene.js';
 import { SCENES } from './office-draw-fate.js';
 import { SIZE as FALL_SIZE } from './office-draw-fall.js';
 
-const { axis, valueIndex, xmasEvent } = AssetsStage;
+const { axis, valueIndex } = AssetsStage;
 const val = (id, label, more) => ({ id, label, ...more });
 // Where a person stands for the catalogue: a cell of the office floor (indoors, so no breath in the cold).
 // Fishing happens on the lake's bank, where the line reaches the water (web/office-draw-people.js drawRod).
@@ -43,15 +43,16 @@ const aim = (ctx, view, t) => {
   return (NOW.s = AssetsStage.stage(ctx, view, t));
 };
 const drawWho = () => NOW.s.host.drawPerson(NOW.s.G, NOW.who);
-// The Christmas look the outfits are made under (the whole outfit from the event's first day, D1), and the event
-// object (as EventLogic.active gives it) the Christmas acts are drawn under.
+// The Christmas look the outfits are made under (the whole outfit from the event's first day, D1) and the Christmas
+// acts are drawn under (cocoa is the coffee under it); a person without an outfit is drawn under PLAIN, so the card
+// does not change with the page's event control (it has an outfit axis for that).
 const XMAS_LOOK = Theme.resolve({
   season: 'winter',
   holiday: null,
   event: { key: 'christmas', since: 0 },
   key: 'assets|christmas',
 });
-const XMAS_EV = xmasEvent(2);
+const PLAIN_LOOK = Theme.resolve({ season: 'summer', holiday: null, event: null, key: 'assets|plain' });
 
 // ---- the axes of a person ----
 const STYLE = PeopleLogic.STYLE;
@@ -169,7 +170,7 @@ const ACT = axis('act', () => tr('assets.axis.act'), [
   val('none', NONE),
   ...Object.keys(ACT_LABEL).map(k => val(k, ACT_LABEL[k])),
 ]);
-// The Christmas event's own acts: drawn by xmasArms only while the event is on (cocoa is the coffee then).
+// The Christmas event's own acts: drawn by xmasArms under the Christmas look (cocoa is the coffee then).
 const XMAS_ACTS = new Set(['snowball', 'snowman', 'skate', 'gift', 'cocoa']);
 const OUTFIT = axis('outfit', () => tr('assets.axis.outfit'), [
   val('none', NONE),
@@ -299,16 +300,16 @@ function place(pick) {
   [A.x, A.y] = A.seated ? SEAT : act === 'fish' ? FISH : SPOT;
   return pose;
 }
-// The outfit and the event it needs: the Christmas acts happen only during the event, so they bring an outfit (the
-// first, Santa's; there is no hat-only tier, D1). The outfit is pinned on the person (outfitPin, as a fate's snapshot
-// is), so the page's look does not change what the axes picked.
+// The outfit and the look it needs: the Christmas acts happen only under the Christmas look, so they bring an outfit
+// (the first, Santa's; there is no hat-only tier, D1). The outfit is pinned on the person (outfitPin, as a fate's
+// snapshot is), so the page's look does not change what the axes picked; an outfit draws under the Christmas look.
 function wear(pick, G) {
   let oi = index(OUTFIT, pick.outfit);
   const hi = index(HAT, pick.hat);
   if (!oi && (hi || XMAS_ACTS.has(pick.act))) oi = 1;
   A.outfitPin = true;
   A.outfit = oi ? outfitOf(oi, index(SHIRT, pick.colour), hi) : null;
-  G.ev = oi ? XMAS_EV : null;
+  G.look = oi ? XMAS_LOOK : PLAIN_LOOK;
 }
 // At the desk, as the office draws it: the desk, the chair, the person and the backrest over them.
 function atDesk() {
@@ -317,7 +318,7 @@ function atDesk() {
 function drawA(ctx, view, t) {
   const s = aim(ctx, view, t),
     G = s.G,
-    ev = G.ev,
+    look = G.look,
     pick = view.pick;
   dress(pick);
   const pose = place(pick);
@@ -328,7 +329,7 @@ function drawA(ctx, view, t) {
     else if (pose === 'asleep') s.scene(SEAT[0], SEAT[1], 0, drawWho);
     else atFeet(ctx, view, A.x, A.y, drawWho);
   } finally {
-    G.ev = ev;
+    G.look = look;
   }
 }
 const PERSON = {
