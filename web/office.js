@@ -548,10 +548,11 @@ export class ClaudeOffice extends React.Component {
       this.wx = r.wx;
       this.preview = r.preview;
     } else this.stepWeather(now);
-    // During the Christmas event it snows (unless the weather is switched off in Settings).
+    // An event's look may force its weather (Christmas: it snows), unless the weather is switched off in Settings.
+    // eventNow keeps the event's blocked cells in step with the moment.
+    this.eventNow();
     const reduced = !!(this.reducedMq && this.reducedMq.matches),
-      ev = this.eventNow(),
-      fx = EventLogic.weather(SkyLogic.weatherFx(this.wx, now), this.state.weatherMode === 'off' ? null : ev),
+      fx = EventLogic.weather(SkyLogic.weatherFx(this.wx, now), this.state.weatherMode === 'off' ? null : this.look),
       df = dayFactor();
     // Winter keeps at least its own snow on the lawn, the roofs and the mountain whatever the weather. The snow an
     // event brought melts within seconds once it ends, unless it is snowing (meltUntil, web/office-look.js).

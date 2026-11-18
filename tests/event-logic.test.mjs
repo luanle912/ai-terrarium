@@ -2,7 +2,7 @@
 // the big tree stands and how a string of lights is laid out.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadWeb } from './web.mjs'
+import { loadWeb, readWeb } from './web.mjs'
 import { loadSkyLogic } from './load-sky-logic.mjs'
 
 const SkyLogic = loadSkyLogic()
@@ -90,19 +90,35 @@ test('while the event is on the season is winter, whatever the date or the choic
   }
 })
 
-test('while the event is on it snows: rain and storm turn to snow, and it never stops', () => {
-  const ev = { key: 'christmas', since: 0 }
+test('while the event is on it snows: rain and storm turn to snow, and it never stops (the weather is the pack\'s)', () => {
+  const { Theme } = loadWeb('theme')
+  const { CHRISTMAS } = loadWeb('themes/christmas')
+  const key = (s, e) => [s, e ? e.key + '@' + e.since : '-', '-'].join('|')
+  const ev = { key: 'christmas', since: 0 },
+    look = Theme.resolve({ season: 'winter', holiday: null, event: ev, key: key('winter', ev) }),
+    winter = Theme.resolve({ season: 'winter', holiday: null, event: null, key: key('winter', null) })
+  assert.equal(look.snow, CHRISTMAS.weather.snowFloor, 'the snow floor comes from the pack')
+  assert.equal(look.rainToSnow, true)
+  assert.equal(winter.rainToSnow, false)
+  assert.equal(E.SNOWFALL, undefined, 'no copy of the pack\'s number in the logic')
   const clear = { cloud: 0.2, rain: 0, snow: 0, storm: 0, fog: 0 }
-  assert.equal(E.weather(clear, ev), clear, 'the same object, changed in place')
-  assert.equal(clear.snow, E.SNOWFALL)
-  assert.ok(E.SNOWFALL >= 0.3 && E.SNOWFALL <= 0.6, 'a light fall')
-  const storm = E.weather({ cloud: 1, rain: 1, snow: 0, storm: 1, fog: 0 }, ev)
+  assert.equal(E.weather(clear, look), clear, 'the same object, changed in place')
+  assert.equal(clear.snow, look.snow)
+  assert.ok(look.snow >= 0.3 && look.snow <= 0.6, 'a light fall')
+  const storm = E.weather({ cloud: 1, rain: 1, snow: 0, storm: 1, fog: 0 }, look)
   assert.deepEqual([storm.rain, storm.storm, storm.snow], [0, 0, 1])
-  const heavy = E.weather({ cloud: 0.7, rain: 0, snow: 1, storm: 0, fog: 0 }, ev)
+  const heavy = E.weather({ cloud: 0.7, rain: 0, snow: 1, storm: 0, fog: 0 }, look)
   assert.equal(heavy.snow, 1)
-  assert.equal(E.weather({ cloud: 0.5, rain: 0, snow: 0, storm: 0, fog: 1 }, ev).fog, 1, 'fog stays')
+  assert.equal(E.weather({ cloud: 0.5, rain: 0, snow: 0, storm: 0, fog: 1 }, look).fog, 1, 'fog stays')
   const off = { cloud: 1, rain: 1, snow: 0, storm: 1, fog: 0 }
-  assert.deepEqual(E.weather({ ...off }, null), off, 'no event: untouched')
+  assert.deepEqual(E.weather({ ...off }, null), off, 'no look (the weather off): untouched')
+  assert.deepEqual(E.weather({ ...off }, winter), off, 'a look whose packs force no weather: untouched')
+  // a pack that only keeps a floor, without turning rain to snow
+  assert.deepEqual(E.weather({ ...off }, { snow: 0.2, rainToSnow: false }), { ...off, snow: 0.2 })
+})
+
+test('the office forces the weather from its look, not from the event', () => {
+  assert.match(readWeb('office'), /EventLogic\.weather\(.*: this\.look\)/)
 })
 
 test('a string of lights: bulbs a gap apart along the line, never more than the most allowed', () => {

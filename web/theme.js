@@ -7,13 +7,15 @@
 // resolves in that season. In an event pack, swap[label] === SAME keeps what the layers below give. decor and extras
 // add up across packs; rules and text of a later pack override earlier ones.
 //
-// Look = { of(label), decor(label), has(rule), text(key), build(name), extras, snow, key, keyOf(labels) }, frozen.
+// Look = { of(label), decor(label), has(rule), text(key), build(name), extras, snow, rainToSnow, key, keyOf(labels) },
+// frozen.
 //   of(label)      the variant; throws on a label that does not exist, so a typo shows at once
 //   decor(label)   the overlays, the same frozen array on every call
 //   has(rule)      the rule's value (true or a weight), or false
 //   text(key)      the i18n key to use in place of key (coffee -> cocoa), or key itself
 //   build(name)    a count that grows with the event's day (gifts), 0 when no pack builds it
-//   snow           the snow cover a pack keeps on the ground (its weather.snowFloor), 0 when none does
+//   snow           the snow a pack keeps falling and on the ground (its weather.snowFloor), 0 when none does
+//   rainToSnow     a pack turns rain and storm into snow (its weather.rainToSnow; EventLogic.weather)
 //   key            one string of every variant, overlay, extra, rule, text swap and count: equal keys, equal looks
 //   keyOf(labels)  the same for a few labels only (a label in extras counts as present or not)
 // One Look per moment.key: calling again with the same key returns the very same object.
@@ -60,7 +62,8 @@ function build(moment, packs) {
     rules = Object.create(null),
     text = Object.create(null),
     counts = Object.create(null);
-  let snow = 0;
+  let snow = 0,
+    rainToSnow = false;
   for (const { id } of Labels.LIST) {
     for (const p of layers) {
       const v = p.swap && p.swap[id];
@@ -77,6 +80,7 @@ function build(moment, packs) {
     Object.assign(text, p.text);
     for (const name in p.build || {}) counts[name] = count(p.build[name], day);
     if (p.weather && p.weather.snowFloor) snow = p.weather.snowFloor;
+    if (p.weather && p.weather.rainToSnow) rainToSnow = true;
   }
   const part = id =>
     id in variants ? `${id}=${variants[id]}+${decor[id].join(',')}` : `${id}:${extras.has(id) ? 1 : 0}`;
@@ -109,6 +113,7 @@ function build(moment, packs) {
     build: name => counts[name] || 0,
     extras,
     snow,
+    rainToSnow,
     key,
     keyOf(labels) {
       let k = partial.get(labels);

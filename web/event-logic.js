@@ -70,14 +70,18 @@ function block(set, on) {
 // While the event is on the season is winter, whatever the date or the season chosen in Settings: snow on the lawn,
 // frozen lakes, snowmen.
 const season = (ev, key) => (ev ? 'winter' : key);
-// And it snows. fx is the weather's mix of effects (SkyLogic.weatherFx: cloud, rain, snow, storm, fog; a fresh
-// object each frame), changed in place: rain and storm fall as snow, and there is always at least a light fall.
-const SNOWFALL = 0.45;
-function weather(fx, ev) {
-  if (!ev) return fx;
-  fx.snow = Math.max(fx.snow, fx.rain, SNOWFALL);
-  fx.rain = 0;
-  fx.storm = 0;
+// And it snows, as the look's packs say (themes/christmas.js weather; web/theme.js): fx is the weather's mix of
+// effects (SkyLogic.weatherFx: cloud, rain, snow, storm, fog; a fresh object each frame), changed in place. Under
+// look.rainToSnow rain and storm fall as snow; look.snow is the least that falls. No look (the weather switched off in
+// Settings): untouched.
+function weather(fx, look) {
+  if (!look) return fx;
+  if (look.rainToSnow) {
+    fx.snow = Math.max(fx.snow, fx.rain);
+    fx.rain = 0;
+    fx.storm = 0;
+  }
+  if (look.snow > fx.snow) fx.snow = look.snow;
   return fx;
 }
 
@@ -128,7 +132,6 @@ export const EventLogic = {
   block,
   season,
   weather,
-  SNOWFALL,
   lightString,
   MAX_BULBS,
 };
