@@ -12,10 +12,14 @@ const W = 27, H = 14
 const island = SkyLogic.buildIsland({ W, H })
 const at = (y, m, d, h = 12, mi = 0, s = 0) => new Date(y, m - 1, d, h, mi, s)
 const lvl = d => { const e = E.active(d, 'auto'); return e ? e.level : null }
+const since = d => { const e = E.active(d, 'auto'); return e ? e.since : null }
 
-test('the calendar: three levels through December, nothing before or after', () => {
+test('the calendar: the whole event is level 3 (a shim for old code) from 1 to 26 Dec, with days since 1 Dec', () => {
   assert.equal(lvl(at(2026, 11, 30)), null)
-  for (const [d, l] of [[1, 1], [7, 1], [8, 2], [14, 2], [15, 3], [26, 3]]) assert.equal(lvl(at(2026, 12, d)), l, `${d} Dec`)
+  for (const d of [1, 7, 8, 14, 15, 26]) {
+    const e = E.active(at(2026, 12, d), 'auto')
+    assert.deepEqual([e.level, e.eve, e.day, e.since], [3, true, true, d - 1], `${d} Dec`)
+  }
   assert.equal(lvl(at(2026, 12, 27)), null)
   assert.equal(lvl(at(2027, 1, 1)), null)
   assert.equal(E.active(at(2026, 12, 10), 'auto').key, 'christmas')
@@ -24,7 +28,8 @@ test('the calendar: three levels through December, nothing before or after', () 
 test('the edges are exact to the second, in a leap year too', () => {
   for (const y of [2026, 2028]) {
     assert.equal(lvl(at(y, 11, 30, 23, 59, 59)), null)
-    assert.equal(lvl(at(y, 12, 1, 0, 0, 0)), 1)
+    assert.equal(lvl(at(y, 12, 1, 0, 0, 0)), 3)
+    assert.equal(since(at(y, 12, 1, 0, 0, 0)), 0)
     assert.equal(lvl(at(y, 12, 26, 23, 59, 59)), 3)
     assert.equal(lvl(at(y, 12, 27, 0, 0, 0)), null)
     // Santa and his sleigh are about the whole event long, not just on the 24th and 25th
@@ -38,7 +43,7 @@ test('the edges are exact to the second, in a leap year too', () => {
 
 test('the choice: off hides it in December, on shows all of it in July (Santa and the sleigh too), a preview lasts a minute', () => {
   assert.equal(E.active(at(2026, 12, 20), 'off'), null)
-  assert.deepEqual(E.active(at(2026, 7, 20), 'on'), { key: 'christmas', level: 3, eve: true, day: true })
+  assert.deepEqual(E.active(at(2026, 7, 20), 'on'), { key: 'christmas', since: 14, level: 3, eve: true, day: true })
   assert.equal(E.active(at(2026, 12, 3), 'on').level, 3)
   assert.equal(E.active(at(2026, 7, 20), 'auto'), null)
   assert.equal(E.active(at(2026, 7, 20), 'nonsense'), null)

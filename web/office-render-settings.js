@@ -13,7 +13,7 @@ mixin(
     seasonSection() {
       const now = this.seasonNow(),
         choice = this.seasonChoice || 'auto',
-        name = key => SeasonLogic.seasonLabel(key);
+        name = key => SeasonLogic.seasonLabel({ season: key });
       return h(
         'div',
         { id: 'season-section', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
@@ -32,7 +32,13 @@ mixin(
             SeasonLogic.KEYS.map(k => h('option', { key: k, value: k }, name(k))),
           ),
         ),
-        h('span', null, tr('settings.season.current', { label: SeasonLogic.seasonLabel(now, this.season) })),
+        h(
+          'span',
+          null,
+          tr('settings.season.current', {
+            label: SeasonLogic.seasonLabel({ season: now, holiday: this.season, event: this.eventNow() }),
+          }),
+        ),
         h(
           'div',
           { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },

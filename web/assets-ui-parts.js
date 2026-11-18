@@ -23,7 +23,7 @@ export const SEASONS = () =>
       autumn: tr('season.autumn'),
       winter: tr('season.winter'),
     }[k],
-    swatch: SeasonLogic.seasonChip(k).accent,
+    swatch: SeasonLogic.seasonChip({ season: k }).accent,
   }));
 // The season buttons while a Christmas level is on: the event brings winter (AssetsStage.envOf), so the other seasons
 // cannot be chosen until it is off; the hint says why.

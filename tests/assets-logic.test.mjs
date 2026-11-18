@@ -172,8 +172,8 @@ test('the deep link leaves out the open item\'s first variant and motion that on
 
 test('the event windows come from the event calendar; a holiday window reads day/month', () => {
   assert.deepEqual(L.eventWindow('christmas', 1), { from: '12-01', to: '12-26' })
-  assert.deepEqual(L.eventWindow('christmas', 2), { from: '12-08', to: '12-26' })
-  assert.deepEqual(L.eventWindow('christmas', 3), { from: '12-15', to: '12-26' })
+  assert.deepEqual(L.eventWindow('christmas', 2), { from: '12-01', to: '12-26' }, 'one event window, no weekly levels (D1)')
+  assert.deepEqual(L.eventWindow('christmas', 3), { from: '12-01', to: '12-26' })
   assert.equal(L.dayMonth('12-27'), '27/12')
   assert.equal(L.span({ from: '12-27', to: '01-02' }), '27/12 → 02/01')
 })

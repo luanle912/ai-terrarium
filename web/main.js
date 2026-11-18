@@ -4,6 +4,7 @@ import './i18n.js';
 import './season-tree.js';
 import './season-logic.js';
 import './theme.js';
+import './moment.js';
 import './office-decor.js';
 import './pantry-items.js';
 import './island-grid.js';

@@ -8,21 +8,19 @@ const EVENT_KEY = 'ai-terrarium.event';
 const PREVIEW_MS = 60_000;
 const startPreview = now => ({ until: now + PREVIEW_MS });
 
-// The event at a moment of the viewer's own clock, or null: { key: 'christmas', level, eve, day }.
-//   level 1  1-7 Dec    lights on the office, wreaths, hats
-//   level 2  8-14 Dec   candy canes, desk decorations, the kennels and the pergola lit, whole outfits
-//   level 3  15-26 Dec  everything
-//   eve, day  the whole event long: Santa's sleigh crosses the sky (eve) and he sits by the tree (day) all December,
-//             not just on the 24th and 25th
-// choice 'on' shows level 3 whatever the date, 'off' nothing; a preview shows level 3 until it runs out, whatever the
-// choice.
+// The event at a moment of the viewer's own clock, or null: { key: 'christmas', since, level, eve, day }.
+//   since  whole days from 1 Dec (0-based); choice 'on' and a preview say 14, the full event
+//   level 3, eve, day  a stopgap for the drawing code that still asks for levels: the whole event is level 3, with
+//          Santa about all of it (removed when that code reads the theme instead)
+// The event runs 1-26 Dec. choice 'off' shows nothing; a preview shows the event until it runs out, any choice.
+const SINCE_FULL = 14;
+const make = since => ({ key: 'christmas', since, level: 3, eve: true, day: true });
 function active(date, choice, preview, now) {
-  if (preview && now < preview.until) return { key: 'christmas', level: 3, eve: true, day: true };
-  if (choice === 'on') return { key: 'christmas', level: 3, eve: true, day: true };
+  if (preview && now < preview.until) return make(SINCE_FULL);
+  if (choice === 'on') return make(SINCE_FULL);
   if (choice !== 'auto' || date.getMonth() !== 11) return null;
   const d = date.getDate();
-  if (d > 26) return null;
-  return { key: 'christmas', level: d <= 7 ? 1 : d <= 14 ? 2 : 3, eve: true, day: true };
+  return d > 26 ? null : make(d - 1);
 }
 // What the island's bake is keyed by: '' without the event, 'x1'..'x3' by level.
 const cacheKey = ev => (ev ? 'x' + ev.level : '');
