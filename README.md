@@ -182,7 +182,7 @@ Open the ⚙ panel in the bottom-right corner of the office:
 - *Real weather* asks for a city. The page looks it up with [Open-Meteo](https://open-meteo.com/) (free for non-commercial use, no key) and refreshes every 15 minutes. If the lookup fails, the panel says why and the page falls back to random weather.
 - The preview buttons (*Clear, Cloudy, Rain, Storm, Snow, Fog*) show a weather right away.
 - The mode and city are remembered in this browser. With "reduce motion" turned on in your OS, lightning does not flash and rain and snow are lighter.
-- **Event** (under *Season*) is the Christmas event: *Auto* shows it from 1 to 26 December, all of it from the first day; *On* shows all of it now (winter and snowfall included, whatever the date), *Off* never. The button previews it for a minute. The choice, like the season's, is shared with the wallpaper and your other tabs, and the newest choice wins; switching changes everything at once, even while paused.
+- **Event** (under *Season*) is the Christmas event: *Auto* shows it from 1 to 26 December, all of it from the first day; *On* shows all of it now (winter and snowfall included, whatever the date), *Off* never. The button previews it for a minute. The choice, like the season's, is shared with the wallpaper and your other tabs, and the newest choice wins; switching changes everything at once, even while paused. The world view on the hub cannot reach the local server, so it follows the choice made in its own browser (its own tabs follow each other) and may differ from the wallpaper until you change it there.
 
 ---
 
