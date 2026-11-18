@@ -268,8 +268,22 @@ mixin(
     dressItems(G, items) {
       const shelf = Paint.overlaysOf('shelf', G.look),
         pots = Paint.overlaysOf('plant.pot', G.look);
-      if (shelf.length) for (const s of SHELF) items.push({ z: 9.01, f: () => shelf.forEach(f => f(G, s)) });
-      if (pots.length) for (const p of POTS) items.push({ z: p.x + p.y + 0.01, f: () => pots.forEach(f => f(G, p)) });
+      if (shelf.length)
+        for (const s of SHELF)
+          items.push({
+            z: 9.01,
+            f: () => {
+              for (const f of shelf) f(G, s);
+            },
+          });
+      if (pots.length)
+        for (const p of POTS)
+          items.push({
+            z: p.x + p.y + 0.01,
+            f: () => {
+              for (const f of pots) f(G, p);
+            },
+          });
     }
   },
 );

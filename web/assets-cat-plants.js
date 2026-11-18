@@ -7,7 +7,7 @@ import { tr } from './i18n.js';
 import { AssetsStage } from './assets-stage.js';
 import { AssetsScene } from './assets-scene.js';
 import { drawSeasonTree, TREE_EXT } from './island-art-season.js';
-import { drawBush, drawMushroom } from './island-art.js';
+import { bushSnowOnTop, drawBush, drawMushroom } from './island-art.js';
 import { drawBigTree } from './island-art-xmas.js';
 import { hash } from './island-land.js';
 import { SeasonTree } from './season-tree.js';
@@ -224,7 +224,8 @@ const BUSH_TILES = BUSH_LOOKS.map(l =>
 );
 const bushTile = pick => BUSH_TILES[Math.max(0, BUSH_LOOKS.indexOf(pick.look))];
 // the look's bush (web/theme.js): in fruit in spring every bush carries berries; holly during the Christmas event
-const paintBush = s => drawBush(s.pt, s.PG, s.C, bushTile(s.view.pick), s.env.look.of('bush'));
+// (holly lays its own snow cap: s carries the bake's S and depth)
+const paintBush = s => drawBush(s.pt, s.PG, s.C, bushTile(s.view.pick), s.env.look.of('bush'), s);
 const BUSH = {
   id: 'plants.bush',
   cat: 'plants',
@@ -247,7 +248,8 @@ const BUSH = {
   palette: paletteOf(paintBush),
   draw(ctx, view) {
     const d = bushTile(view.pick);
-    AssetsScene.prop(ctx, view, 'bush|' + d.x + ',' + d.y, d.x, d.y, [11, 15, 11, 4], paintBush);
+    const snowy = bushSnowOnTop(view.env.look.of('bush'));
+    AssetsScene.prop(ctx, view, 'bush|' + d.x + ',' + d.y, d.x, d.y, [11, 15, 11, 4], paintBush, snowy);
   },
 };
 // Mushrooms lie in the lawn's bake (no sprite, no snow on top).

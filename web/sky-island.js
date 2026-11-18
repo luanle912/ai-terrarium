@@ -5,6 +5,7 @@
 import {
   drawBench,
   drawLamp,
+  bushSnowOnTop,
   drawMushroom,
   drawRock,
   drawUnderside,
@@ -209,14 +210,15 @@ export function renderProps(island, frame, k, env) {
   );
   // Every bush and tree wears the look's variant of its label (env.look, web/theme.js), drawn by its painter
   // (web/paint.js): under the Christmas event holly and firs, the firs lightly snowed (they bring their own snow).
-  // Holly takes no snow on top: settled on its glossy leaves it reads pale mint, not dark green with red berries.
+  // Holly lays its own small snow cap (bushSnowOnTop, web/island-art.js).
   const lk = env.look,
-    holly = lk.of('bush') === 'holly',
+    bushSnow = bushSnowOnTop(lk.of('bush')),
+    snow = { S, depth },
     bush = Paint.painter('bush', lk.of('bush')),
     tree = lk.of('tree.island'),
     paintTree = Paint.painter('tree.island', tree);
   for (const d of island.decor)
-    if (d.kind === 'bush') add(d.x, d.y, d.x + d.y + 0.5, [11, 15, 11, 4], pt => bush(pt, P, C, d), -1, !holly);
+    if (d.kind === 'bush') add(d.x, d.y, d.x + d.y + 0.5, [11, 15, 11, 4], pt => bush(pt, P, C, d, snow), -1, bushSnow);
   for (const d of island.decor)
     if (d.kind === 'tree') {
       add(d.x, d.y, d.x + d.y + 0.5, TREE_EXT, pt => paintTree(pt, P, C, d), -1, tree !== 'fir');

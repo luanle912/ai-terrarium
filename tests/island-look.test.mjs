@@ -102,6 +102,26 @@ test('a holly bush paints dark green leaves and red berries on the bush\'s frame
   assert.deepEqual(box(holly), box(plain), 'the same footprint as the plain bush')
 })
 
+test('holly lays its own small snow cap, by the depth, none without snow; the bake snows every other bush', () => {
+  const { bushSnowOnTop } = loadWeb('island-art')
+  const P = (x, y, z = 0) => [(x - y) * 16, (x + y) * 8 - z]
+  const S = c => 'snow' + c
+  const snowPx = depth => {
+    const log = []
+    drawBush(painter(context(log), P), P, c => c, { x: 3, y: 5 }, 'holly', { S, depth })
+    return log.filter(e => String(e.fill).startsWith('snow')).length
+  }
+  assert.equal(snowPx(0), 0, 'a snowless frame: no cap')
+  assert.ok(snowPx(1) > 3, 'a thin cap')
+  assert.ok(snowPx(2) > snowPx(1), 'deeper snow, a thicker cap')
+  assert.ok(snowPx(3) < 40, 'a small cap, the leaves still show')
+  assert.equal(bushSnowOnTop('holly'), false)
+  assert.equal(bushSnowOnTop('plain'), true)
+  assert.match(readWeb('assets-cat-plants'), /bushSnowOnTop\(/,
+    '/assets snows a bush as the game does')
+  assert.match(readWeb('sky-island'), /bushSnowOnTop\(/)
+})
+
 test('the far islands: the sprite is keyed by the tree variant; a fir with lights under Christmas', () => {
   assert.ok(Paint.has('tree.far', 'lights'), 'the far fir\'s lights have a painter')
   const col = { haze: '#a8c4e0' }
