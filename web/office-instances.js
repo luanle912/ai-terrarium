@@ -28,6 +28,8 @@ export const DOORS = [
   ...WC.doors.map(d => ({ id: 'door.wc.' + d.room, kind: 'wc', at: [(d.x0 + d.x1) / 2, d.y, 0] })),
   ...DOG_HOUSES.map((h, i) => ({ id: 'door.kennel.' + i, kind: 'kennel', at: [h.x, h.y, 0] })),
 ];
+DOORS.forEach(d => Object.freeze(Object.freeze(d.at) && d));
+Object.freeze(DOORS);
 
 export const WINDOWS = [1.6, 4.8, 11.6, 14.8].map((x, i) => ({ id: 'window.' + i, x }));
 export const POTS = [
@@ -35,10 +37,11 @@ export const POTS = [
   [19.5, 13.5],
   [19.5, 0.5],
 ].map(([x, y], i) => ({ id: 'pot.' + i, x, y }));
-// The wall decor's clock and the bookshelf are kit pieces (web/decor-wall.js, decor-furniture.js): `at` and `size`
-// are off the kit's cell on the back wall, where the player lays them out.
-export const CLOCK = [{ id: 'clock.back', at: [2.0, 0, 46], size: [15, 15], face: 'back' }];
-export const SHELF = [{ id: 'shelf.back', at: [0, 0, 0], size: [1.2, 0.42, 46], face: 'back' }];
+// The two things the live office draws inline on its walls (web/office-draw.js): the bookshelf-like shelf in the
+// corridor between the zones (a free-standing box on the back wall) and the round clock on the left wall. The kit's
+// own bookshelf and wall-decor clock are catalogue pieces, not instances.
+export const CLOCK = [{ id: 'clock.left', at: [0, 12.8, 42], size: [16, 18], face: 'left' }];
+export const SHELF = [{ id: 'shelf.back', at: [9.05, 0.05, 0], size: [0.9, 0.4, 42], face: 'back' }];
 export const KENNELS = DOG_HOUSES;
 
 let ISLAND_TREES = null;

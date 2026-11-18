@@ -43,3 +43,17 @@ test('exit wreath spot equals DOORS exit at, and the literal is gone from the xm
   assert.deepEqual(loadWeb('office-draw-xmas').WREATH_SPOT, exit.at)
   assert.doesNotMatch(readWeb('office-draw-xmas'), /7\.05/)
 })
+
+test('the shelf and the clock are where office-draw draws them, read from the lists', () => {
+  const src = readWeb('office-draw')
+  assert.deepEqual([SHELF[0].at, SHELF[0].size], [[9.05, 0.05, 0], [0.9, 0.4, 42]])
+  assert.deepEqual(CLOCK[0].at, [0, 12.8, 42])
+  assert.doesNotMatch(src, /9\.05|12\.8, 42/)
+  assert.match(src, /SHELF\[0\]/)
+  assert.match(src, /CLOCK\[0\]/)
+})
+
+test('DOORS and their spots are frozen, so the wreath spot cannot be changed through an alias', () => {
+  assert.ok(Object.isFrozen(DOORS))
+  for (const d of DOORS) assert.ok(Object.isFrozen(d) && Object.isFrozen(d.at), d.id)
+})

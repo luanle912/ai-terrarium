@@ -9,7 +9,7 @@ import { IslandLife } from './island-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
 import { PropUse } from './prop-use.js';
-import { EXIT, POTS, WINDOWS } from './office-instances.js';
+import { CLOCK, EXIT, POTS, SHELF, WINDOWS } from './office-instances.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import {
   DESKS,
@@ -398,7 +398,7 @@ mixin(
         box(0.03, 9.68 + k * 0.27, 0.2, 0.2, 22, 22 + hh, col);
       });
       {
-        const [cx, cy] = P(0, 12.8, 42);
+        const [cx, cy] = P(...CLOCK[0].at);
         ctx.fillStyle = '#1a1c24';
         ctx.beginPath();
         ctx.ellipse(cx, cy, 8, 9, 0, 0, Math.PI * 2);
@@ -615,14 +615,16 @@ mixin(
       items.push({
         z: 9,
         f: () => {
-          box(9.05, 0.05, 0.9, 0.4, 0, 42, shade(th.trim, -5)); // in the middle of the corridor between the zones
-          [10, 20, 30, 40].forEach(z => box(9.08, 0.06, 0.84, 0.38, z, z + 1, shade(th.trim, -30)));
+          const [sx, sy, sz] = SHELF[0].at,
+            [sw, sd, sh] = SHELF[0].size;
+          box(sx, sy, sw, sd, sz, sh, shade(th.trim, -5)); // in the middle of the corridor between the zones
+          [10, 20, 30, 40].forEach(z => box(sx + 0.03, sy + 0.01, sw - 0.06, sd - 0.02, z, z + 1, shade(th.trim, -30)));
           [
             [12, '#e5484d', '#3e8ed0', '#f5a524'],
             [22, '#46a758', '#e8e2d6', '#8e4ec6'],
             [32, '#12a594', '#5b5bd6', '#e93d82'],
           ].forEach(([z, ...cs]) =>
-            cs.forEach((col, k) => box(9.15 + k * 0.24, 0.12, 0.16, 0.28, z, z + 7 - (k % 2) * 2, col)),
+            cs.forEach((col, k) => box(sx + 0.1 + k * 0.24, sy + 0.07, 0.16, 0.28, z, z + 7 - (k % 2) * 2, col)),
           );
         },
       });
