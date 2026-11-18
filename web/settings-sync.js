@@ -74,6 +74,13 @@ async function share(host, { touch: changed = false, fetch: f, now = Date.now() 
   return saved;
 }
 
+// The server's value lacks a choice this page made by hand ('auto' is no choice), and this page can send.
+const seeds = (host, ps) =>
+  !host.wallpaper &&
+  !host.world &&
+  !host.sync.inFlight &&
+  ((!ps.season && (host.seasonChoice || 'auto') !== 'auto') || (!ps.event && (host.eventChoice || 'auto') !== 'auto'));
+
 // The server's value (a snapshot's pageSettings, or a push's answer) against this page's: take it when it is newer,
 // else send ours when it is newer and not sent yet (or its send failed) and nothing is on the way.
 function receive(host, ps, opts) {
@@ -89,6 +96,9 @@ function receive(host, ps, opts) {
     if (e.take) host.setEventChoice(e.take, true);
     if (SeasonLogic.CHOICES.includes(ps.season) && ps.season !== host.seasonChoice)
       host.setSeasonChoice(ps.season, true);
+    // A file written before the season (or the event) was shared has neither, nor a stamp, so it counts as newer
+    // than a page that never synced: a choice picked by hand here is sent once, stamped, or it would never get there.
+    if (seeds(host, ps)) share(host, { ...opts, touch: true });
   } else if (e.push && !s.inFlight && (s.pending || s.sentAt !== s.at)) share(host, opts);
 }
 

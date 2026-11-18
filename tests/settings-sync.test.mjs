@@ -149,3 +149,46 @@ test('the world view follows another tab of its page through storage, and never 
     ['weather', { weatherMode: 'off', city: '', cityDraft: '' }, true],
   ])
 })
+
+// Upgrading: the server's file was written before the season (or the event) was shared, so it has the weather only,
+// and no stamp; this page has never synced (at 0), so the server's value counts as newer. A hand-picked choice here
+// must still reach the server, once, or it never would until something else is changed.
+const settle = () => new Promise(r => setTimeout(r, 0))
+for (const [field, pick] of [['season', h => (h.seasonChoice = 'winter')], ['event', h => (h.eventChoice = 'on')]])
+  test(`an old file without ${field} gets this page's hand-picked ${field}, pushed once`, async () => {
+    const log = [], host = fakeHost()
+    pick(host)
+    const old = { weather: { mode: 'random', city: '' } }
+    S.receive(host, old, { fetch: okFetch(log), now: 7000 })
+    await settle()
+    assert.equal(log.length, 1, 'one push')
+    assert.equal(log[0].body[field], field === 'season' ? 'winter' : 'on')
+    assert.ok(log[0].body.updatedAt > 0, 'stamped, so other pages take it')
+    S.receive(host, old, { fetch: okFetch(log), now: 8000 })
+    await settle()
+    assert.equal(log.length, 1, 'not again on the next snapshot')
+  })
+
+test('an old file and a page on auto: nothing to push', async () => {
+  const log = [], host = fakeHost()
+  S.receive(host, { weather: { mode: 'random', city: '' } }, { fetch: okFetch(log) })
+  await settle()
+  assert.equal(log.length, 0)
+})
+
+test('the wallpaper never seeds an old file', async () => {
+  const log = [], host = fakeHost({ wallpaper: true, seasonChoice: 'winter' })
+  S.receive(host, { weather: { mode: 'random', city: '' } }, { fetch: okFetch(log) })
+  await settle()
+  assert.equal(log.length, 0)
+})
+
+test('a file with a season but no event still gets this page\'s hand-picked event', async () => {
+  const log = [], host = fakeHost()
+  host.eventChoice = 'off'
+  S.receive(host, { weather: { mode: 'random', city: '' }, season: 'summer' }, { fetch: okFetch(log) })
+  await settle()
+  assert.equal(host.seasonChoice, 'summer', 'the server\'s season is taken')
+  assert.equal(log.length, 1)
+  assert.equal(log[0].body.event, 'off')
+})
