@@ -7,6 +7,7 @@ import { SeasonLogic } from './season-logic.js';
 import { PropUse } from './prop-use.js';
 import { FateLogic } from './fate-logic.js';
 import { EventIdle } from './event-idle.js';
+import { TeleportLogic } from './teleport-logic.js';
 import { SnowLogic } from './snow-logic.js';
 import {
   CRITTER_PLACES,
@@ -19,12 +20,18 @@ import {
   IDLE_SPOTS,
   LAWN_WALK,
   SIM_DEPTS,
+  STAIRS,
   W,
   colOf,
 } from './office-scene.js';
 import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 const ON_LAWN = (x, y) => LAWN_WALK.has(Math.floor(x) + ',' + Math.floor(y));
+const CHAIRS = DESKS.map(d => [d.gx + 1, d.gy + 1.45]);
+// Stair cells: a teleport landing there would lie across the steps.
+const STEPS = STAIRS.flatMap(s =>
+  Array.from({ length: s.len }, (_, k) => (s.side === 'east' ? [W + 0.5, s.y + k + 0.5] : [s.x + k + 0.5, H + 0.5])),
+);
 // Agents: the simulated office and the live feed, desks and departments, where each agent goes next.
 mixin(
   ClaudeOffice,
@@ -560,7 +567,10 @@ mixin(
       if (a.sleeping) return;
       const g = this.goalFor(a);
       if (g.key !== a.goalKey) {
-        EventIdle.offRink(a, EVENT_IDLE, CRITTER_PLACES.water); // a skater steps off the ice first
+        // A skater steps off the ice first; a bather going back to work (or mid-teleport) leaves from the pond.
+        if (a.actNow === 'skate' || !(a.tp || g.key === 'seat' || g.key.startsWith('visit')))
+          EventIdle.offRink(a, EVENT_IDLE, CRITTER_PLACES.water);
+        const prev = { was: a.goalKey, hid: a.wcIn, stool: a.stool, act: a.actNow };
         a.goalKey = g.key;
         a.seated = false;
         a.sleeping = false;
@@ -574,7 +584,11 @@ mixin(
           .map(p => [p[0] + 0.5, p[1] + 0.5])
           .concat([g.pt]);
         if (g.key === 'seat' && a.path.length > 1) a.path.splice(a.path.length - 2, 1);
+        const c = { prev, key: g.key, agents: this.agents, chairs: CHAIRS, stairs: STEPS, speed: this.speed };
+        a.tp = TeleportLogic.plan(a, c);
       }
+      // Held still while a teleport plays (web/teleport-logic.js).
+      if (a.tp && TeleportLogic.step(a, dt)) return;
       if (a.path.length) {
         a.moving = true;
         let step = 2.6 * this.speed * dt;

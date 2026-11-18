@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Magic teleport back to work** — Someone on a break who gets back to work (or is called to another desk) with a long way to walk (12 tiles or more: the pantry, the game corner, the restroom, the smoking corner, the lake) no longer crosses the whole island: a faint circle appears under them, then draws itself in light, its runes turning round a violet hexagram; they turn white, thin into a pillar of light and a comet carries them to the aisle by their desk, where a second pillar strikes down in a burst of sparks and they walk the last few steps to sit down. Coming back to the page after a while is a shower of circles a sixth of a second apart: sixteen people are at their desks in about four and a half seconds instead of twenty-four. A teleport is used only when it is quicker than walking at the chosen speed. Arrivals through the door, sub-agents and people leaving still walk. Paused, the circles stop with everyone else. With reduced motion people fade out and in over a still circle. The circle and its rings are pixel sprites baked once, on the first teleport; a frame only stamps them, and nothing is drawn when nobody teleports. Every island in the world view has it
+
 ## [2.5.0] - 2026-11-12
 
 Notre-Dame of Saigon comes to the island for Christmas. Deploy the hub too, so islands in the world view show it as well.

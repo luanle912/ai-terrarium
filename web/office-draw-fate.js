@@ -457,6 +457,7 @@ mixin(
       if (!this.fates) this.fates = [];
       if (this.fates.length > 12) this.fates.shift();
       const who = { ...a, moving: false, path: [], seated: false, sleeping: false, stool: false, actNow: null };
+      who.tp = null;
       this.fates.push({ kind: a.fate, x: a.x, y: a.y, t0: null, seed: a.id || 1, who });
     }
     // The scenes still playing, as sprites of the scene (the clock starts at a scene's first frame).

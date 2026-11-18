@@ -145,6 +145,7 @@ mixin(
     drawPerson(G, a) {
       const { ctx, poly, box, rect, th, t } = G,
         o = outfitOf(a, G.ev);
+      if (a.tp && this.tpPerson(G, a)) return;
       if (a.sleeping) return this.drawSleeper(G, a);
       let [sx, sy] = a.seated ? P(a.x, a.y, 11.5) : PA(a.x, a.y, a.actNow === 'skate' ? WATER_Z : 0);
       sx = Math.round(sx);
@@ -485,7 +486,8 @@ mixin(
           R(hx - 7, hy - 7, 15, 4, '#ffffff');
           R(hx - 2, hy - 1, 2, 2, '#ffffff');
           for (let k = 0; k < 3; k++) R(hx - 4 + k * 4, hy - 6, 2, 2, k < n ? '#5b8def' : '#c8d2e6');
-        } else if (st === 'idle' && !a.actNow) {
+        } else if (st === 'idle' && !a.actNow && !a.tp) {
+          // none during a teleport: the Z would float unsqueezed beside the column
           for (let k = 0; k < 2; k++) {
             const p = (t * 0.6 + k * 0.5) % 1;
             ctx.globalAlpha = 1 - p;

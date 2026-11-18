@@ -9,6 +9,7 @@ import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import { EventLogic } from './event-logic.js';
 import { EventLandmark } from './event-landmark.js';
+import { TeleportLogic } from './teleport-logic.js';
 import {
   BLOCK,
   DOG_PLACES,
@@ -540,6 +541,7 @@ export class ClaudeOffice extends React.Component {
       const [sx, sy] = this.headPos(a);
       el.style.left = Math.min(92, Math.max(8, (sx / LW) * 100)) + '%';
       el.style.top = ((sy - 12) / LH) * 100 + '%';
+      el.style.visibility = TeleportLogic.unseen(a.tp) ? 'hidden' : '';
     }
   }
   // Preview buttons show a weather within 3 s for a minute, then the mode's own weather returns
