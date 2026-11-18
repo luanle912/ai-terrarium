@@ -8,9 +8,10 @@ import { DogLogic } from './dog-logic.js';
 import { CritterSprites } from './critter-sprites.js';
 import { EventCritters } from './event-critters.js';
 import { WATER_Z } from './island-land.js';
-import { glowAt, glowSprite } from './office-draw-xmas.js';
+import { glowSprite } from './office-draw-xmas.js';
 import { CRITTER_PLACES, DRAW_REACH, LW, OX, OY, TH, TW, behindWalls } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 
 const NOSE_GLOW = '#ff4d4d',
   NIGHT = '#0d1322',
@@ -160,8 +161,8 @@ mixin(
         y = Math.round(OY + (c.x + c.y) * TH - (c.kind === 'penguin' ? WATER_Z : 0)) - img.fh - p.dy;
       G.ctx.drawImage(img, x, y);
       // Rudolph's nose glows after dark
-      if (c.red && G.df < 0.6 && img.nx >= 0) {
-        G.ctx.globalAlpha = glowAt(G.df);
+      if (c.red && Light.glow(G.df) > 0 && img.nx >= 0) {
+        G.ctx.globalAlpha = Light.glow(G.df);
         G.ctx.drawImage(this.noseGlow || (this.noseGlow = glowSprite(NOSE_GLOW, 8)), x + img.nx - 4, y + img.ny - 4);
         G.ctx.globalAlpha = 1;
       }

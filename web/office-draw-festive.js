@@ -9,10 +9,11 @@
 // Rectangles and polygons only, every place worked out once; a frame without the event pushes nothing.
 import { EventLogic } from './event-logic.js';
 import { CLOCK, POTS, SHELF, WINDOWS } from './office-instances.js';
-import { glowAt, litStar, treeNight } from './office-draw-xmas.js';
+import { litStar, treeNight } from './office-draw-xmas.js';
 import { H, P, lerpHex, mix } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 import { Paint } from './paint.js';
+import { Light } from './light.js';
 
 const R = Math.round;
 // A palette in the light of dfB (0..10), worked out once per level: dim(c, dfB) gives one colour.
@@ -118,7 +119,7 @@ const FROST_DAY = ['#f4f9ff', '#cde3f6'],
   FROST_NIGHT = ['#aebde0', '#7f95c3'];
 function frost(G, win, x, y) {
   const { ctx } = G,
-    [body, rim] = G.df < 0.5 ? FROST_NIGHT : FROST_DAY;
+    [body, rim] = Light.night(G.df) ? FROST_NIGHT : FROST_DAY;
   for (const [c, h, top] of FROST) {
     const r = top ? 2 : 32 - h,
       sy = y + r + (c >> 1);
@@ -139,7 +140,7 @@ function star(G, win, x, y) {
     dy = y + (c >> 1);
   ctx.fillStyle = '#c8323a';
   ctx.fillRect(x + c, dy + 2, 1, 4);
-  litStar(ctx, x + c, dy + 6, R(G.t * 1.3) & 1, glowAt(G.df) * 0.7);
+  litStar(ctx, x + c, dy + 6, R(G.t * 1.3) & 1, Light.glow(G.df) * 0.7);
 }
 Paint.overlay('window', 'frost', frost);
 Paint.overlay('window', 'star', star);

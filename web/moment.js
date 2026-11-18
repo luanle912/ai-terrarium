@@ -7,6 +7,7 @@ import { SeasonTree } from './season-tree.js';
 import { EventLogic } from './event-logic.js';
 import { SnowLogic } from './snow-logic.js';
 import { Theme } from './theme.js';
+import { Light } from './light.js';
 
 const eventPack = key => Theme.PACKS.find(p => p.kind === 'event' && p.key === key);
 const SMALL = key => {
@@ -24,7 +25,7 @@ function at({ date, now, seasonChoice, seasonPreview, eventChoice, eventPreview,
   // D2: a small holiday only on the date's own season, with no event and nothing picked by hand
   const holiday = !event && choice === 'auto' && !picked.previewing ? SMALL(SeasonTree.seasonFor(date)) : null;
   const season = (pack && pack.season) || picked.key;
-  const night = df < 0.5;
+  const night = Light.night(df);
   const band = SnowLogic.depth(snow || 0);
   return {
     season,

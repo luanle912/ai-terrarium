@@ -6,6 +6,7 @@ import { shade } from './office-util.js';
 import { SnowLogic } from './snow-logic.js';
 import { snowTones } from './office-draw-winter.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 
 // One roof colour per dog, in DogLogic.BREEDS order: the corgi's red, the husky's blue, the dalmatian's green.
 const ROOF = ['#c8553d', '#3e6fb0', '#3f8f5a'];
@@ -247,7 +248,7 @@ mixin(
     doghouseLantern(ctx, [x, y], df, t, N) {
       x = Math.round(x);
       y = Math.round(y);
-      const glow = df < 0.6 ? 1 - df / 0.6 : 0;
+      const glow = Light.glow(df);
       if (glow > 0.01) {
         const smooth = ctx.imageSmoothingEnabled,
           g = ctx.createRadialGradient(x + 3, y + 4, 0, x + 3, y + 4, 22);

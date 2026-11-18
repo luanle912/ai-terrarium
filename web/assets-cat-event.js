@@ -11,11 +11,12 @@ import { CRITTER_PLACES, PG } from './office-scene.js';
 import { EventCritters } from './event-critters.js';
 import { EventLandmark } from './event-landmark.js';
 import { PILE } from './office-draw-critters.js';
-import { STRINGS, drawString, glowAt } from './office-draw-xmas.js';
+import { STRINGS, drawString } from './office-draw-xmas.js';
 import { drawCathedral } from './island-art-cathedral.js';
 import { drawOurLady } from './island-art-cathedral-yard.js';
 import { DRESSED, eventTone } from './sky-island.js';
 import { Theme } from './theme.js';
+import { Light } from './light.js';
 
 const { axis, dfB } = AssetsStage;
 // When the Christmas pieces show up (their `when`): with the Christmas pack.
@@ -165,7 +166,7 @@ const STRING_LIGHTS = {
   uses: ['light'],
   draw(ctx, view, t) {
     const at = PLACES[view.pick.placement] || PLACES[PLACE_IDS[0]],
-      glow = glowAt(view.env.df);
+      glow = Light.glow(view.env.df);
     ctx.save();
     ctx.translate(view.ox - at[0], view.oy - at[1]);
     drawString(ctx, at, t, glow, false, glow > 0.01);

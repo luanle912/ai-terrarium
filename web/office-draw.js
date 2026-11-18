@@ -37,6 +37,7 @@ import { isCold, officeG, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 import { OUTDOOR_LABELS } from './labels.js';
 import { Paint } from './paint.js';
+import { Light } from './light.js';
 
 // What the island's bake shows of the look: the outdoor labels and the extras it stands on the lawn.
 const ISLAND_PARTS = Object.freeze([...OUTDOOR_LABELS, 'cane', 'cathedral', 'ourlady']);
@@ -357,7 +358,7 @@ mixin(
       this.xmasWallLights(G);
       {
         const OD = OfficeDecor;
-        if (OD) WINDOWS.forEach(({ x }) => OD.F.window(OD.kit(ctx, ...P(x, 0)), t, { night: df < 0.5 }));
+        if (OD) WINDOWS.forEach(({ x }) => OD.F.window(OD.kit(ctx, ...P(x, 0)), t, { night: Light.night(df) }));
       }
       {
         const OD = OfficeDecor,
@@ -382,7 +383,7 @@ mixin(
               r5: rMin(u5h.resets),
               r7: rMin(u7d.resets),
               variant: 'led',
-              night: df < 0.5,
+              night: Light.night(df),
             },
             t,
             'left',
@@ -446,6 +447,7 @@ mixin(
         const OD = OfficeDecor;
         if (OD) OD.F.door(OD.kit(ctx, ...P(DOOR_KIT[0], DOOR_KIT[1])), t);
       }
+      const fl = Light.floor(df); // the floor's day grain and night specks
       for (let y = 0; y < H; y++)
         for (let x = 0; x < W; x++) {
           poly(
@@ -453,12 +455,12 @@ mixin(
             (x + y) % 2 ? th.fa : th.fb,
             th.stroke ? '#dfe5ef' : null,
           );
-          if (df > 0.2) {
+          if (fl.grain) {
             ctx.globalAlpha = df;
             poly([P(x, y + 0.5), P(x + 1, y + 0.5), P(x + 1, y + 0.52), P(x, y + 0.52)], shade(th.fa, -18), null);
             ctx.globalAlpha = 1;
           }
-          if (df < 0.8 && (x * 7 + y * 3) % 5 === 0) {
+          if (fl.specks && (x * 7 + y * 3) % 5 === 0) {
             ctx.globalAlpha = 1 - df;
             const [px, py] = P(x + 0.5, y + 0.5);
             rect(px, py, 1, 1, shade(th.fa, 14));
@@ -495,12 +497,12 @@ mixin(
               col = mix(
                 (x + y) % 2 ? th.fa : th.fb,
                 this.depts.get(dk).color,
-                th.stroke ? 0.14 : df < 0.5 ? 0.3 : 0.34,
+                th.stroke ? 0.14 : Light.night(df) ? 0.3 : 0.34,
               );
             }
             poly([P(x, y), P(x + 1, y), P(x + 1, y + 1), P(x, y + 1)], col, th.stroke ? '#dfe5ef' : null);
           }
-        ctx.strokeStyle = th.stroke ? '#c9d3e3' : df > 0.5 ? '#c9a77a' : '#3a4462';
+        ctx.strokeStyle = th.stroke ? '#c9d3e3' : Light.day(df) ? '#c9a77a' : '#3a4462';
         ctx.lineWidth = 1;
         [
           [9.5, 0, 9.5, H],
@@ -557,7 +559,7 @@ mixin(
               z.zx + 3.12,
               z.zy + 3 + len / 2,
               name,
-              th.stroke ? '#9aa3b5' : df > 0.5 ? shade(th.fa, -45) : shade(th.fa, 30),
+              th.stroke ? '#9aa3b5' : Light.day(df) ? shade(th.fa, -45) : shade(th.fa, 30),
               FS,
               ALONG_Y,
             );
@@ -568,9 +570,9 @@ mixin(
           while (name.length > MAXC && /[-_.]/.test(name)) name = name.replace(/^[^-_.]*[-_.]/, '');
           name = name.slice(0, MAXC);
           const len = ((name.length * 4 - 1) * FS) / 16;
-          paint(z.zx + 3.12, z.zy + 3 + len / 2, name, df > 0.5 ? shade(col, -80) : shade(col, 10), FS, ALONG_Y);
+          paint(z.zx + 3.12, z.zy + 3 + len / 2, name, Light.day(df) ? shade(col, -80) : shade(col, 10), FS, ALONG_Y);
         });
-        paint(21.3, 13.2, 'PANTRY', df > 0.5 ? '#8a5a2a' : '#a8763e', 2.5, ALONG_X);
+        paint(21.3, 13.2, 'PANTRY', Light.day(df) ? '#8a5a2a' : '#a8763e', 2.5, ALONG_X);
       }
       poly([P(0.05, 6.4), P(0.9, 6.4), P(0.9, 7.6), P(0.05, 7.6)], lerpHex('#3a2f55', '#b5523b', df), null);
       WINDOWS.forEach(({ x }) => {

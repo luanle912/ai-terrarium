@@ -14,14 +14,15 @@ import { IslandLakeLife } from './island-lake-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
 import { SeasonLogic } from './season-logic.js';
+import { Light } from './light.js';
 
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const TW = 16,
   TH = 8;
 
 // ---- pure logic ----
-// Lamps light up as the day fades: off at df >= 0.8, full at df <= 0.2.
-const lampGlow = df => clamp01((0.8 - df) / 0.6);
+// Lamps light up as the day fades: off at df >= 0.8, full at df <= 0.2 (Light.lamp).
+const lampGlow = Light.lamp;
 // Wind for the vines: a breeze, more in rain, most in a storm.
 const windOf = fx => Math.min(1.4, 0.15 + 0.6 * fx.rain + 0.8 * fx.storm);
 // The falls run up to twice as hard in the rain.

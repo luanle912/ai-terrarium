@@ -9,6 +9,7 @@ import { LOOK, PERSON } from './office-people.js';
 import { XMAS, breathAt, lookUnder, outfitOf, shirtOf } from './office-people-xmas.js';
 import { ICON, ST, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 // Drawing people (at desks, walking, asleep, in the pond) and the office dogs.
 mixin(
   ClaudeOffice,
@@ -439,8 +440,9 @@ mixin(
           const { drag, exhale } = SmokeLogic.cycle(tp),
             [ex, ey] = drag ? [sx - 1, by - 13] : [sx + 7, by - 8],
             reduced = this.env && this.env.reduced;
-          if (G.df < 0.6) {
-            ctx.globalAlpha = 0.35 * (1 - G.df / 0.6);
+          const ember = Light.glow(G.df);
+          if (ember > 0) {
+            ctx.globalAlpha = 0.35 * ember;
             R(ex - 1, ey, 3, 1, '#ff9a3d');
             R(ex, ey - 1, 1, 3, '#ff9a3d');
             ctx.globalAlpha = 1;

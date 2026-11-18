@@ -6,9 +6,10 @@ import { EventLandmark } from './event-landmark.js';
 import { stamp } from './island-art.js';
 import { CATHEDRAL_EXT, cathedralLights } from './island-art-cathedral.js';
 import { LADY_EXT, yardLights } from './island-art-cathedral-yard.js';
-import { drawString, glowAt, glowSprite, litStar } from './office-draw-xmas.js';
+import { drawString, glowSprite, litStar } from './office-draw-xmas.js';
 import { H, ISLAND, PG, W } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 
 // Where the bake put the two sprites (web/sky-island.js): the same site, or none on an island without room for it.
 const HERE = EventLandmark.site(ISLAND, { W, H }),
@@ -54,7 +55,7 @@ function windowSprite() {
 }
 // Christmas Eve: one wide warm halo round the building, drawn before its sprite so it shows behind the towers.
 function eveHalo(ctx, df) {
-  const glow = glowAt(df);
+  const glow = Light.glow(df);
   if (glow <= 0.01) return;
   const smooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = true;
@@ -67,7 +68,7 @@ function eveHalo(ctx, df) {
 // facade, the eave and the rose and the lit star, all from the event's first day (D1). `still` (reduced motion) stops
 // the blinking and the twinkle; on Christmas Eve (`eve`) every bulb burns.
 function cathedralGlow(ctx, t, df, eve, still) {
-  const glow = glowAt(df),
+  const glow = Light.glow(df),
     dark = glow > 0.01,
     steady = still || eve,
     smooth = ctx.imageSmoothingEnabled,
@@ -89,7 +90,7 @@ function cathedralGlow(ctx, t, df, eve, still) {
 }
 // After dark, a soft halo on the statue and the manger's light in the crib.
 function yardGlow(ctx, df) {
-  const glow = glowAt(df);
+  const glow = Light.glow(df);
   if (glow <= 0.01) return;
   const smooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = true;

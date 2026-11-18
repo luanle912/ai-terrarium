@@ -9,6 +9,7 @@ import { DOORS, WALLS } from './office-instances.js';
 import { DESKS, DOG_HOUSES, ISLAND, P, PG, SMOKE, WC } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 import { Paint } from './paint.js';
+import { Light } from './light.js';
 
 const EMPTY = Object.freeze([]);
 export const BULB = ['#ff5a66', '#ffd166', '#5fd27a', '#5ec8ff'];
@@ -32,8 +33,6 @@ export function glowSprite(colour, size = 12) {
   }
   return c;
 }
-// How strongly lights glow for a daylight factor: nothing by day, full at night.
-export const glowAt = df => (df >= 0.6 ? 0 : 1 - df / 0.6);
 // Which of the four colour groups are lit at time t: two at a time, changing once a second; all with reduced motion.
 export const groupLit = (g, t, still) => still || (Math.floor(t) + g) % 4 < 2;
 
@@ -316,7 +315,7 @@ mixin(
     }
     xmasString(G, at) {
       const { ctx, t, df } = G,
-        glow = glowAt(df),
+        glow = Light.glow(df),
         smooth = ctx.imageSmoothingEnabled;
       ctx.imageSmoothingEnabled = true;
       drawString(ctx, at, t, glow, !!(this.env && this.env.reduced), glow > 0.01);
@@ -329,7 +328,7 @@ mixin(
     }
     xmasTreeLights(G) {
       const { ctx, t, df } = G,
-        glow = glowAt(df),
+        glow = Light.glow(df),
         still = !!(this.env && this.env.reduced),
         smooth = ctx.imageSmoothingEnabled;
       if (glow > 0.01) {
