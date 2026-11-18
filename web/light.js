@@ -8,7 +8,7 @@
 //   glow(df)    how strongly a light glows: nothing by day, rising from df 0.6 to full at 0 (the Christmas lights, the
 //               lanterns, the WC lamps, the smoking corner's lights, embers, Rudolph's nose); glow(df) > 0 is "lit"
 //   screen(df)  a working monitor and the desk lamp cast light on the desk (df < 0.7)
-//   floor(df)   the floor's day grain (df > 0.2) and night specks (df < 0.8)
+//   grain(df)   the floor's day grain shows (df > 0.2); specks(df) its night specks (df < 0.8)
 //   lamp(df)    the island's lamp posts across the same band: off at df 0.8, full at 0.2
 const NIGHT = 0.5,
   GLOW = 0.6,
@@ -20,7 +20,8 @@ const night = df => df < NIGHT;
 const day = df => df > NIGHT;
 const glow = df => (df >= GLOW ? 0 : 1 - df / GLOW);
 const screen = df => df < SCREEN;
-const floor = df => ({ grain: df > BAND[0], specks: df < BAND[1] });
+const grain = df => df > BAND[0];
+const specks = df => df < BAND[1];
 const lamp = df => clamp01((BAND[1] - df) / 0.6); // 0.6: the band's width, written out (0.8 - 0.2 is not 0.6 in floats)
 
-export const Light = { NIGHT, GLOW, SCREEN, BAND, night, day, glow, screen, floor, lamp };
+export const Light = { NIGHT, GLOW, SCREEN, BAND, night, day, glow, screen, grain, specks, lamp };

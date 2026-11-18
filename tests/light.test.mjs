@@ -20,9 +20,9 @@ test('glow: nothing from df 0.6 up, rising to full at 0 (what glowAt was)', () =
 
 test('screens light the desk below df 0.7; the floor shows its grain above 0.2 and its specks below 0.8', () => {
   assert.deepEqual([0.69, 0.7].map(Light.screen), [true, false])
-  assert.deepEqual(Light.floor(0.2), { grain: false, specks: true })
-  assert.deepEqual(Light.floor(0.5), { grain: true, specks: true })
-  assert.deepEqual(Light.floor(0.8), { grain: true, specks: false })
+  assert.deepEqual([0.2, 0.5, 0.8].map(Light.grain), [false, true, true])
+  assert.deepEqual([0.2, 0.5, 0.8].map(Light.specks), [true, true, false])
+  assert.equal(Light.floor, undefined, 'two booleans, no object a frame')
 })
 
 test('the lamp posts ramp across the same band: off at 0.8, full at 0.2 (IslandLife.lampGlow)', () => {

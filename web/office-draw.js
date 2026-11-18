@@ -38,12 +38,11 @@ import { ClaudeOffice, mixin } from './office.js';
 import { OUTDOOR_LABELS } from './labels.js';
 import { Paint } from './paint.js';
 import { Light } from './light.js';
+import { eventTreeSprite } from './event-tree-sprite.js';
 
 // What the island's bake shows of the look: the outdoor labels and the extras it stands on the lawn.
 const ISLAND_PARTS = Object.freeze([...OUTDOOR_LABELS, 'cane', 'cathedral', 'ourlady']);
 // Drawing the office: sky, camera, the floor, walls, planters, pantry and desks.
-// The night tint over event trees, in 1/50 steps of its strength (built once, no string per frame).
-const NIGHT_TINT = Array.from({ length: 31 }, (_, i) => 'rgba(13,19,34,' + i / 50 + ')');
 // On a holiday these few trees by the office turn into the holiday's tree; the rest keep the season's.
 const HOLIDAY_TREES = SeasonIsland.holidayTrees(ISLAND, W, H);
 // How strongly a holiday tree takes the lawn's night tint at light level dfB (0..10): SkyRender.night's
@@ -138,43 +137,22 @@ mixin(
       }
     }
 
-    // One event tree at its tile, tinted for the night by `dusk` (0 = full day). Every event tree of a season looks
-    // the same at a given moment, so after dark the tinted tree is painted once a frame into a scratch canvas (at the
-    // scene's resolution) and stamped at each tile.
+    // One event tree at its tile, tinted for the night by `dusk` (0 = full day): stamped from its sprite
+    // (web/event-tree-sprite.js) when it has one, else drawn straight onto the scene.
     drawEventTree(ctx, d, season, t, k, dusk) {
       const [px, py] = PG(d.x + 0.5, d.y + 0.5, 0),
         X = Math.round(px),
-        Y = Math.round(py);
-      if (dusk < 0.02) {
+        Y = Math.round(py),
+        s = eventTreeSprite(season, X, Y, t, k, dusk);
+      if (!s) {
         ctx.save();
         ctx.translate(X, Y);
         SeasonTree.drawSeasonTree(ctx, 0, 0, season, t);
         ctx.restore();
         return;
       }
-      const sc = this.treeScratch || (this.treeScratch = document.createElement('canvas')),
-        m = this.treeMemo || (this.treeMemo = { t: null, k: 0, dusk: 0, season: '' });
-      if (m.t !== t || m.k !== k || m.dusk !== dusk || m.season !== season) {
-        Object.assign(m, { t, k, dusk, season });
-        const w = Math.ceil(48 * k),
-          h = Math.ceil(58 * k);
-        if (sc.width !== w || sc.height !== h) {
-          sc.width = w;
-          sc.height = h;
-        }
-        const g = sc.getContext('2d');
-        g.setTransform(1, 0, 0, 1, 0, 0);
-        g.globalCompositeOperation = 'source-over';
-        g.clearRect(0, 0, w, h);
-        g.setTransform(k, 0, 0, k, 24 * k, 48 * k);
-        SeasonTree.drawSeasonTree(g, 0, 0, season, t);
-        g.setTransform(1, 0, 0, 1, 0, 0);
-        g.globalCompositeOperation = 'source-atop';
-        g.fillStyle = NIGHT_TINT[Math.min(NIGHT_TINT.length - 1, Math.round(dusk * 50))];
-        g.fillRect(0, 0, w, h);
-      }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(sc, Math.round((X - 24) * k), Math.round((Y - 48) * k));
+      ctx.drawImage(s.img, s.x, s.y);
       ctx.setTransform(k, 0, 0, k, 0, 0);
     }
     renderK() {
@@ -450,7 +428,8 @@ mixin(
         const OD = OfficeDecor;
         if (OD) OD.F.door(OD.kit(ctx, ...P(DOOR_KIT[0], DOOR_KIT[1])), t);
       }
-      const fl = Light.floor(df); // the floor's day grain and night specks
+      const grain = Light.grain(df),
+        specks = Light.specks(df);
       for (let y = 0; y < H; y++)
         for (let x = 0; x < W; x++) {
           poly(
@@ -458,12 +437,12 @@ mixin(
             (x + y) % 2 ? th.fa : th.fb,
             th.stroke ? '#dfe5ef' : null,
           );
-          if (fl.grain) {
+          if (grain) {
             ctx.globalAlpha = df;
             poly([P(x, y + 0.5), P(x + 1, y + 0.5), P(x + 1, y + 0.52), P(x, y + 0.52)], shade(th.fa, -18), null);
             ctx.globalAlpha = 1;
           }
-          if (fl.specks && (x * 7 + y * 3) % 5 === 0) {
+          if (specks && (x * 7 + y * 3) % 5 === 0) {
             ctx.globalAlpha = 1 - df;
             const [px, py] = P(x + 0.5, y + 0.5);
             rect(px, py, 1, 1, shade(th.fa, 14));

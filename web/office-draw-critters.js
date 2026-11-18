@@ -161,8 +161,9 @@ mixin(
         y = Math.round(OY + (c.x + c.y) * TH - (c.kind === 'penguin' ? WATER_Z : 0)) - img.fh - p.dy;
       G.ctx.drawImage(img, x, y);
       // Rudolph's nose glows after dark
-      if (c.red && Light.glow(G.df) > 0 && img.nx >= 0) {
-        G.ctx.globalAlpha = Light.glow(G.df);
+      const nose = c.red ? Light.glow(G.df) : 0;
+      if (nose > 0 && img.nx >= 0) {
+        G.ctx.globalAlpha = nose;
         G.ctx.drawImage(this.noseGlow || (this.noseGlow = glowSprite(NOSE_GLOW, 8)), x + img.nx - 4, y + img.ny - 4);
         G.ctx.globalAlpha = 1;
       }
