@@ -11,44 +11,36 @@ const { SeasonTree } = loadWeb('season-tree')
 const W = 27, H = 14
 const island = SkyLogic.buildIsland({ W, H })
 const at = (y, m, d, h = 12, mi = 0, s = 0) => new Date(y, m - 1, d, h, mi, s)
-const lvl = d => { const e = E.active(d, 'auto'); return e ? e.level : null }
+const on = d => E.active(d, 'auto') !== null
 const since = d => { const e = E.active(d, 'auto'); return e ? e.since : null }
 
-test('the calendar: the whole event is level 3 (a shim for old code) from 1 to 26 Dec, with days since 1 Dec', () => {
-  assert.equal(lvl(at(2026, 11, 30)), null)
-  for (const d of [1, 7, 8, 14, 15, 26]) {
-    const e = E.active(at(2026, 12, d), 'auto')
-    assert.deepEqual([e.level, e.eve, e.day, e.since], [3, true, true, d - 1], `${d} Dec`)
-  }
-  assert.equal(lvl(at(2026, 12, 27)), null)
-  assert.equal(lvl(at(2027, 1, 1)), null)
+test('the calendar: the whole event from 1 to 26 Dec (D1: no levels), with days since 1 Dec', () => {
+  assert.equal(on(at(2026, 11, 30)), false)
+  for (const d of [1, 7, 8, 14, 15, 26])
+    assert.deepEqual(E.active(at(2026, 12, d), 'auto'), { key: 'christmas', since: d - 1 }, `${d} Dec`)
+  assert.equal(on(at(2026, 12, 27)), false)
+  assert.equal(on(at(2027, 1, 1)), false)
   assert.equal(E.active(at(2026, 12, 10), 'auto').key, 'christmas')
 })
 
 test('the edges are exact to the second, in a leap year too', () => {
   for (const y of [2026, 2028]) {
-    assert.equal(lvl(at(y, 11, 30, 23, 59, 59)), null)
-    assert.equal(lvl(at(y, 12, 1, 0, 0, 0)), 3)
+    assert.equal(on(at(y, 11, 30, 23, 59, 59)), false)
+    assert.equal(on(at(y, 12, 1, 0, 0, 0)), true)
     assert.equal(since(at(y, 12, 1, 0, 0, 0)), 0)
-    assert.equal(lvl(at(y, 12, 26, 23, 59, 59)), 3)
-    assert.equal(lvl(at(y, 12, 27, 0, 0, 0)), null)
-    // Santa and his sleigh are about the whole event long, not just on the 24th and 25th
-    for (const [d, h] of [[1, 0], [1, 12], [10, 3], [24, 17], [26, 23]]) {
-      const e = E.active(at(y, 12, d, h, 0, 0), 'auto')
-      assert.equal(e.eve, true, `eve on ${d} Dec ${h}:00`)
-      assert.equal(e.day, true, `day on ${d} Dec ${h}:00`)
-    }
+    assert.equal(on(at(y, 12, 26, 23, 59, 59)), true)
+    assert.equal(on(at(y, 12, 27, 0, 0, 0)), false)
   }
 })
 
 test('the choice: off hides it in December, on shows all of it in July (Santa and the sleigh too), a preview lasts a minute', () => {
   assert.equal(E.active(at(2026, 12, 20), 'off'), null)
-  assert.deepEqual(E.active(at(2026, 7, 20), 'on'), { key: 'christmas', since: 14, level: 3, eve: true, day: true })
-  assert.equal(E.active(at(2026, 12, 3), 'on').level, 3)
+  assert.deepEqual(E.active(at(2026, 7, 20), 'on'), { key: 'christmas', since: 14 })
+  assert.deepEqual(E.active(at(2026, 12, 3), 'on'), { key: 'christmas', since: 14 })
   assert.equal(E.active(at(2026, 7, 20), 'auto'), null)
   assert.equal(E.active(at(2026, 7, 20), 'nonsense'), null)
   const p = E.startPreview(1000)
-  assert.equal(E.active(at(2026, 7, 20), 'off', p, 1000 + 59_000).level, 3)
+  assert.deepEqual(E.active(at(2026, 7, 20), 'off', p, 1000 + 59_000), { key: 'christmas', since: 14 })
   assert.equal(E.active(at(2026, 7, 20), 'off', p, 1000 + 60_000), null)
 })
 
@@ -63,9 +55,9 @@ test('the choice is kept in storage; anything else reads as auto', () => {
   assert.deepEqual(E.CHOICES, ['auto', 'on', 'off'])
 })
 
-test("the bake's key: nothing without the event, one per level", () => {
-  assert.equal(E.cacheKey(null), '')
-  assert.deepEqual([1, 2, 3].map(level => E.cacheKey({ key: 'christmas', level })), ['x1', 'x2', 'x3'])
+test('the event is only its key and its days since 1 Dec: no levels, no bake key of its own (the look keys it)', () => {
+  assert.deepEqual(Object.keys(E.active(at(2026, 12, 20), 'auto')), ['key', 'since'])
+  assert.equal(E.cacheKey, undefined)
 })
 
 test('the big tree stands indoors, in the middle of the crossing of the two corridors, and people walk round it', () => {
@@ -91,7 +83,7 @@ test('the big tree stands indoors, in the middle of the crossing of the two corr
 })
 
 test('while the event is on the season is winter, whatever the date or the choice in Settings', () => {
-  const ev = { key: 'christmas', level: 3, eve: false, day: false }
+  const ev = { key: 'christmas', since: 14 }
   for (const k of ['spring', 'summer', 'autumn', 'winter']) {
     assert.equal(E.season(ev, k), 'winter')
     assert.equal(E.season(null, k), k)
@@ -99,7 +91,7 @@ test('while the event is on the season is winter, whatever the date or the choic
 })
 
 test('while the event is on it snows: rain and storm turn to snow, and it never stops', () => {
-  const ev = { key: 'christmas', level: 1, eve: false, day: false }
+  const ev = { key: 'christmas', since: 0 }
   const clear = { cloud: 0.2, rain: 0, snow: 0, storm: 0, fog: 0 }
   assert.equal(E.weather(clear, ev), clear, 'the same object, changed in place')
   assert.equal(clear.snow, E.SNOWFALL)

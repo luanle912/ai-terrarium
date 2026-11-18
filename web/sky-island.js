@@ -175,9 +175,9 @@ export function renderIsland(island, frame, k, env) {
 // Everything that stands up off the lawn, each baked into its own small sprite at the island image's resolution and
 // light: [{ x, y, z, img, dx, dy, lamp, lantern }]. (x, y) is its tile, z its depth among the scene's sorted sprites
 // (x + y of the point that decides what it hides), dx, dy where the sprite goes in canvas px, lamp the lamp's index or
-// -1, lantern true for the pavilion. The island's trees, in the season's colours, are marked tree: true, so the scene
-// can leave out the few that turn into a holiday's tree; in winter the snowmen stand among them
-// (SeasonIsland.snowmanTiles).
+// -1, lantern true for the pavilion. The island's trees, in the look's variant (tree.island), are marked tree: true,
+// so the office can draw the look's holiday tree (tree.holiday) in place of the few by it (web/office-draw.js); in
+// winter the snowmen stand among them (SeasonIsland.snowmanTiles).
 // Someone behind a lamp post, a bush, the bench, a tree, a snowman or the pavilion is hidden by it.
 export function renderProps(island, frame, k, env) {
   const { P, C, look, depth, S } = bakeTools(frame, env),

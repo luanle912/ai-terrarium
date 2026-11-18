@@ -78,11 +78,11 @@ test('IslandScene reads the host\'s moment and look, and keeps no clock of its o
   assert.equal(scene.look.of('tree.holiday'), 'teachers')
 })
 
-test('eventNow: the stopgap shape over the moment\'s event, the same object while the event does not change', () => {
+test('eventNow: the moment\'s event, the same object while the event does not change', () => {
   const h = host({ eventChoice: 'on', dogs: [] })
   compute(h, NOV18)
   const a = ClaudeOffice.prototype.eventNow.call(h)
-  assert.deepEqual(a, { key: 'christmas', since: 14, level: 3, eve: true, day: true })
+  assert.deepEqual(a, { key: 'christmas', since: 14 })
   compute(h, NOV18)
   assert.equal(ClaudeOffice.prototype.eventNow.call(h), a)
   assert.equal(ClaudeOffice.prototype.seasonNow.call(h), 'winter')

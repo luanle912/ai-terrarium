@@ -275,9 +275,9 @@ test('the landmark is baked only inside the event block, and lit only from the e
   assert.match(sky, /lk\.extras\.has\('cathedral'\)[\s\S]*drawCathedral\(/)
   assert.match(sky, /lk\.extras\.has\('ourlady'\)[\s\S]*drawOurLady\(/)
   const xmas = readWeb('office-draw-xmas')
-  const items = /\n {4}xmasItems\(G, items, ev\) \{\n([\s\S]*?)\n {4}\}\n/.exec(xmas)
+  const items = /\n {4}xmasItems\(G, items\) \{\n([\s\S]*?)\n {4}\}\n/.exec(xmas)
   assert.ok(items, 'xmasItems')
-  assert.match(items[1], /this\.cathedralItems\(G, items, ev\);/)
+  assert.match(items[1], /this\.cathedralItems\(G, items, true\);/, 'the Eve look all the event long (D1b)')
   // the mixin reads nothing of the scene but the reduced-motion flag, and adds its items after the baked props'
   const mix = readWeb('office-draw-cathedral')
   assert.deepEqual([...new Set([...mix.matchAll(/\bthis\.(\w+)/g)].map(m => m[1]))], ['env'])

@@ -122,11 +122,10 @@ function drawBack(ctx, w, h, t, env) {
   inView(ctx, layerView(view, 0.2), () => {
     const far = env.overview ? FAR_OVERVIEW : FAR_ISLANDS,
       // the look's far trees (the season's, firs under Christmas) with its decor on them, and the season's lasting
-      // snow, as on the main island
+      // snow, as on the main island (every env has its look: the office's envNow, the /assets scenes)
       look = env.season ? SeasonLogic.look(env.season) : null,
-      lk = env.look,
-      trees = lk ? lk.of('tree.far') : (look && look.trees) || 'green',
-      lights = lk ? Paint.overlaysOf('tree.far', lk) : undefined,
+      trees = env.look.of('tree.far'),
+      lights = Paint.overlaysOf('tree.far', env.look),
       snowy = !!(look && look.minSnow > 0);
     for (let i = 0; i < far.length; i++) {
       const [fx_, fy, sc, kind] = far[i];

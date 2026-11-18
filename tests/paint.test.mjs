@@ -36,7 +36,6 @@ loadWeb('office-draw-cathedral')
 
 const XMAS = Theme.resolve({ season: 'winter', holiday: null, event: { key: 'christmas', since: 0 }, key: 'paint-x' })
 const SUMMER = Theme.resolve({ season: 'summer', holiday: null, event: null, key: 'paint-s' })
-const EV = { key: 'christmas', since: 0, level: 3, eve: false, day: true }
 
 test('a painter is registered for a label\'s own variant or overlay only', () => {
   assert.throws(() => Paint.overlay('no.such', 'x', () => {}), /label/)
@@ -99,7 +98,7 @@ function frame(look, host = office(), spy = []) {
   const items = [], G = { ctx: context(), t: 1.2, df: 0, look }
   try {
     ClaudeOffice.prototype.xmasWallLights.call(host, G)
-    ClaudeOffice.prototype.xmasItems.call(host, G, items, look === XMAS ? EV : null)
+    ClaudeOffice.prototype.xmasItems.call(host, G, items)
     for (const it of items.sort((a, b) => a.z - b.z)) it.f()
   } finally {
     spy.forEach(([label, overlay], i) => Paint.overlay(label, overlay, keep[i]))

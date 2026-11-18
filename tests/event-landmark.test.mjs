@@ -461,7 +461,7 @@ test('the page reserves the lawn when the moment\'s event comes or goes, and sen
   const page = { eventChoice: 'on', eventPreview: null, dogs: [dog] }
   try {
     ClaudeOffice.prototype.computeMoment.call(page) // the moment the page works out every frame
-    assert.equal(ClaudeOffice.prototype.eventNow.call(page).level, 3)
+    assert.deepEqual(ClaudeOffice.prototype.eventNow.call(page), { key: 'christmas', since: 14 })
     for (const k of L.WALK_OFF) assert.ok(!S.LAWN_WALK.has(k), `${k} still walkable`)
     for (const k of L.ROAM_OFF) assert.ok(!S.DOG_ROAM.has(k), `${k} still roamed`)
     assert.ok(S.DOG_ROAM.has(key(Math.floor(dog.x), Math.floor(dog.y))), 'its dog is put down on the lawn')

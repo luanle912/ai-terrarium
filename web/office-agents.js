@@ -530,7 +530,7 @@ mixin(
         }
         // Men use WC NAM and women WC NỮ (RestroomLogic.roomOf); about one idle choice in four is a free stall there.
         // On the frozen lakes nobody fishes or bathes: whoever is there leaves (SeasonLogic.idleStays).
-        // The Christmas event's own spots are open by its level, the snow and the ice (EventIdle.open).
+        // The Christmas event's own spots are open by the look, the snow and the ice (EventIdle.open).
         const frozen = SeasonLogic.look(this.seasonNow()).frozen,
           c = this.idleCtx(frozen);
         // (Someone the Look just sent away lingers a moment first, a.linger seconds: web/office-look.js.)

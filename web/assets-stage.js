@@ -3,7 +3,7 @@
 // island bake uses, the furniture and pantry kits, the G of the office's draw methods, and a stand-in host that
 // inherits ClaudeOffice's methods. recordingCtx() is a canvas that only counts and measures what it is told: the tests
 // draw every entry on it, and the page uses it to size cards and read palettes. The small helpers the catalogue
-// modules share (axis, valueIndex, dfB, xmasEvent) are here too. Sprites, props and scene cards cut from the baked
+// modules share (axis, valueIndex, dfB) are here too. Sprites, props and scene cards cut from the baked
 // island are in web/assets-scene.js.
 import { SCENE_DOG_SPRITES } from './island-scene.js';
 import { ClaudeOffice } from './office.js';
@@ -48,12 +48,9 @@ const valueIndex = (ax, id) => {
 };
 // The light level (0..10) the office's sprite caches are keyed on, as its draw() rounds it.
 const dfB = view => Math.round(view.env.df * 10);
-// The Christmas event as EventLogic.active gives it with Settings "on" ({key, since, level, eve, day}: the whole
-// event), on Christmas Eve (every bulb burning) or on an ordinary night of it.
-const XMAS = [false, true].map(eve => ({ ...EventLogic.active(new Date(2026, 11, 15), 'on', null, 0), eve }));
-const xmasEvent = (eve = true) => XMAS[eve ? 1 : 0];
-// The event of each event pack (one so far).
-const EVENTS = { christmas: xmasEvent() };
+// The event of each event pack (one so far), as EventLogic.active gives it with Settings "on" ({key, since}: the
+// whole event).
+const EVENTS = { christmas: EventLogic.active(new Date(2026, 11, 15), 'on', null, 0) };
 
 // ---- the scene ----
 // Daylight (df) and the clock hour each light stands for: noon, the middle of the evening fade, late night.
@@ -64,8 +61,8 @@ const ENVS = new Map();
 // Christmas or a small holiday. As in the game a pack that brings a season (winter, Christmas) is in it, and the
 // winter pack is winter's own column, so it is the same scene as winter with no pack. On top of envNow's shape: snow
 // (0 or 1, the cover lying on the lawn), theme (the office colours lerped day to night), light (the control it was
-// made from), event (the pack shown), look (web/theme.js: the Look of a moment in that season under that pack,
-// Christmas whole as Settings "on" shows it) and key (one string per scene, for caches).
+// made from), pack (the pack shown, the Event control's id), look (web/theme.js: the Look of a moment in that season
+// under that pack, Christmas whole as Settings "on" shows it) and key (one string per scene, for caches).
 function envOf({ light = 'day', season = 'summer', snow = false, event = 'none' } = {}) {
   if (!LIGHT[light]) light = 'day';
   const pack = AssetsLogic.PACKS.find(p => p.id === event) || AssetsLogic.PACKS[0],
@@ -86,7 +83,7 @@ function envOf({ light = 'day', season = 'summer', snow = false, event = 'none' 
     flash: 0,
     col: SkyLogic.skyColors(df, hour, fx),
     season: s,
-    event: id,
+    pack: id,
     look: lookOf(s, ev, pack.kind === 'holiday' ? id : null),
     snow: snow ? 1 : 0,
     theme: df >= 1 ? { _day: 1, ...THEMES.day } : df <= 0 ? { _day: 0, ...THEMES.night } : lerpTheme(df),
@@ -105,8 +102,8 @@ function lookOf(season, ev, holiday) {
     key: 'assets|' + season + '|' + (holiday || '-') + '|' + (event ? event.key + '@' + event.since : '-'),
   });
 }
-// The event object of an env ({key, since, level, eve, day}, as EventLogic.active gives it), or null.
-const eventOf = env => (env && EVENTS[env.event]) || null;
+// The event object of an env ({key, since}, as EventLogic.active gives it), or null.
+const eventOf = env => (env && EVENTS[env.pack]) || null;
 
 // ---- a stand-in office ----
 // What the office's draw methods read off `this`, answered from the view's env; the methods themselves are
@@ -220,7 +217,6 @@ class Stage {
       G = this.G;
     G.th = env.theme;
     G.df = env.df;
-    G.ev = eventOf(env);
     G.look = env.look;
     G.cold = isCold(env.snow, env.df, env);
     this.view = view;
@@ -604,5 +600,4 @@ export const AssetsStage = {
   axis,
   valueIndex,
   dfB,
-  xmasEvent,
 };

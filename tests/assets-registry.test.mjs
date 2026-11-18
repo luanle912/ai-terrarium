@@ -77,7 +77,7 @@ const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase())
 test('envOf has the shape of the game env, plus snow and the theme', () => {
   const env = AssetsStage.envOf({ light: 'night', season: 'spring', snow: true, event: 'none' })
   assert.deepEqual(Object.keys(env).sort(),
-    ['col', 'df', 'event', 'flash', 'frozen', 'fx', 'hour', 'key', 'light', 'look', 'reduced', 'season', 'snow', 'theme']
+    ['col', 'df', 'flash', 'frozen', 'fx', 'hour', 'key', 'light', 'look', 'pack', 'reduced', 'season', 'snow', 'theme']
       .sort())
   assert.equal(env.look.of('tree.island'), 'fresh', 'the look of the scene: spring, no event')
   assert.equal(env.light, 'night')
@@ -90,7 +90,7 @@ test('envOf has the shape of the game env, plus snow and the theme', () => {
   const dusk = AssetsStage.envOf({ light: 'dusk', season: 'summer', snow: false, event: 'none' })
   assert.ok(dusk.df > 0 && dusk.df < 1 && dusk.theme._day === dusk.df)
   const xmas = AssetsStage.envOf({ light: 'day', season: 'summer', snow: false, event: 'christmas' })
-  assert.equal(xmas.event, 'christmas')
+  assert.equal(xmas.pack, 'christmas')
   assert.equal(xmas.season, 'winter', 'the event brings winter, as in the game')
   assert.equal(xmas.frozen, true)
   assert.equal(xmas.look.of('tree.island'), 'fir', 'the Christmas look')
@@ -126,7 +126,7 @@ test('stage projects round (ox, oy) and hands out the game kits, colours and a h
   assert.notEqual(night.C('#ffffff'), '#ffffff', 'night darkens')
   const snowy = AssetsStage.stage(ctx, { ...view, env: AssetsStage.envOf({ ...L.DEFAULTS, snow: true }) })
   assert.equal(snowy.C('#000000', 1), '#eef3f7', 'snow whitens what it covers')
-  assert.deepEqual(Object.keys(s.G).sort(), ['box', 'cold', 'ctx', 'df', 'ev', 'look', 'poly', 'rect', 't', 'th'].sort())
+  assert.deepEqual(Object.keys(s.G).sort(), ['box', 'cold', 'ctx', 'df', 'look', 'poly', 'rect', 't', 'th'].sort())
   assert.equal(AssetsStage.stage(ctx, view).G.th, env.theme, 'the stage follows the view it was last given')
   assert.equal(AssetsStage.stage(ctx, view, 2.5).G.t, 2.5)
 })
@@ -140,9 +140,9 @@ test('the host borrows the office methods and answers from the view env', () => 
   assert.equal(host.env, env)
   assert.equal(host.theme, env.theme)
   assert.equal(host.seasonNow(), 'winter')
-  assert.deepEqual(host.eventNow(), { key: 'christmas', since: 14, level: 3, eve: true, day: true },
+  assert.deepEqual(host.eventNow(), { key: 'christmas', since: 14 },
     'the whole event, as EventLogic.active gives it with Settings on')
-  assert.deepEqual(G.ev, host.eventNow())
+  assert.equal('ev' in G, false, 'the G carries the look, not the event')
   assert.equal(host.season, 'default', 'no event tree unless an entry picks one (host.holiday)')
   assert.deepEqual(host.agents, [])
 })

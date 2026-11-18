@@ -91,7 +91,7 @@ export function drawBigTree(pt, P, T, tile, gifts) {
   });
 }
 
-// A candy cane stuck in the snow beside a lamp post (from the event's second level): [left, up, right, down].
+// A candy cane stuck in the snow beside a lamp post (the look's extra 'cane'): [left, up, right, down].
 export const CANE_EXT = [4, 14, 5, 2];
 export function drawCandyCane(pt, P, T, l) {
   const [px, py] = P(l.x + 0.86, l.y + 0.62, 0),

@@ -207,7 +207,6 @@ mixin(
         dfB = Math.round(df * 10),
         snB = Math.round(snow * 10),
         season = this.seasonNow(),
-        ev = this.eventNow(),
         look = this.look,
         lookK = look.keyOf(ISLAND_PARTS);
       if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season || ic.look !== lookK) {
@@ -322,7 +321,6 @@ mixin(
       }
       G.t = t;
       G.df = df;
-      G.ev = ev;
       G.look = this.look;
       G.cold = isCold(snow, df, env);
       this.drawPrints(G, this.printNow || 0);
@@ -604,7 +602,7 @@ mixin(
       this.smokingItems(G, items, snow);
       this.doghouseItems(G, items, snow, dfB, snB);
       this.fateItems(G, items);
-      this.xmasItems(G, items, ev);
+      this.xmasItems(G, items);
       this.restroomItems(G, items, snow);
       this.dressItems(G, items);
       POTS.forEach(({ x, y }) =>

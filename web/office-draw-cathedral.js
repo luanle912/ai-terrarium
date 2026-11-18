@@ -108,11 +108,11 @@ mixin(
   ClaudeOffice,
   class {
     // The landmark's lights among the scene's sprites, each right after its baked sprite, while the look has the
-    // landmark (G.look); ev (eventNow, or null) says whether it is Christmas Eve.
-    cathedralItems(G, items, ev) {
+    // landmark (G.look); eve: Christmas Eve's (every bulb burning, a halo behind the building), which the page shows
+    // all the event long (D1b) and /assets beside an ordinary night.
+    cathedralItems(G, items, eve) {
       if (!HERE || !G.look.has('cathedral')) return;
-      const still = !!(this.env && this.env.reduced),
-        eve = !!(ev && ev.eve);
+      const still = !!(this.env && this.env.reduced);
       if (eve) items.push({ z: SITE.z - 0.01, f: () => eveHalo(G.ctx, G.df) });
       items.push({ z: SITE.z + 0.01, f: () => cathedralGlow(G.ctx, G.t, G.df, eve, still) });
       items.push({ z: SITE.ladyZ + 0.01, f: () => yardGlow(G.ctx, G.df) });

@@ -291,8 +291,8 @@ mixin(
   class {
     // What the look lays on the labels among the scene's sprites (the overlays of every instance: the strings off
     // the office's own walls, every door's wreath, every desk's decoration), then the event's big tree and its
-    // landmark. G.look says what, the big tree's presents too (build('gifts')); ev is still the landmark's.
-    xmasItems(G, items, ev) {
+    // landmark. G.look says what, the big tree's presents too (build('gifts')).
+    xmasItems(G, items) {
       const look = G.look;
       if (look.has('tree.big'))
         items.push({ z: TREE[0] + TREE[1] + 0.02, f: () => this.xmasTree(G, look.build('gifts')) });
@@ -307,7 +307,7 @@ mixin(
       if (desks.length)
         for (let i = 0; i < DESKS.length; i++)
           items.push({ z: DESK_AT[i * 3 + 2], f: () => desks.forEach(f => f(this, G, DESKS[i], i)) });
-      this.cathedralItems(G, items, ev);
+      this.cathedralItems(G, items, true); // the Eve look all the event long (D1b)
     }
     // What the look lays on the office's own walls, drawn right after them so everything in the room is in front.
     xmasWallLights(G) {

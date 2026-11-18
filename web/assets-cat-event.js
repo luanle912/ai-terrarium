@@ -17,7 +17,7 @@ import { drawOurLady } from './island-art-cathedral-yard.js';
 import { DRESSED, eventTone } from './sky-island.js';
 import { Theme } from './theme.js';
 
-const { axis, dfB, xmasEvent } = AssetsStage;
+const { axis, dfB } = AssetsStage;
 // When the Christmas pieces show up (their `when`): with the Christmas pack.
 const XMAS = 'christmas';
 // The outdoor Christmas pieces' colours (web/sky-island.js eventTone), one function per daylight.
@@ -98,7 +98,7 @@ const ELF = critterEntry({
 // The pile by the front stairs, as many presents as the elves and the sleigh have brought.
 const DROP = CRITTER_PLACES.drop || [0, 0];
 // The draw under way, read by the fixed functions handed to the stage's scene() (no closure per frame).
-const NOW = { s: null, view: null, n: 0, ev: null };
+const NOW = { s: null, view: null, n: 0, eve: true };
 const aim = (ctx, view, t) => {
   NOW.view = view;
   return (NOW.s = AssetsStage.stage(ctx, view, t));
@@ -175,8 +175,8 @@ const STRING_LIGHTS = {
 
 // ---- the landmark ----
 const SITE = EventLandmark.SITE;
-// The event as cathedralItems takes it, on an ordinary night or on Christmas Eve (every bulb burning, a halo round the
-// building), under the Christmas look (the whole landmark lit, whatever the page's Event control: D1).
+// The landmark's lights as cathedralItems lays them, on an ordinary night or on Christmas Eve (every bulb burning, a
+// halo round the building), under the Christmas look (the whole landmark lit, whatever the page's Event control: D1).
 const LIT = [];
 const XMAS_LOOK = Theme.resolve({
   season: 'winter',
@@ -184,13 +184,14 @@ const XMAS_LOOK = Theme.resolve({
   event: { key: 'christmas', since: 0 },
   key: 'assets|christmas',
 });
-// The office's lights of the landmark for ev, those for the building (back: the halo behind it) or for the yard.
-function lights(s, ev, part) {
+// The office's lights of the landmark, Christmas Eve's or not, those for the building (back: the halo behind it) or
+// for the yard.
+function lights(s, eve, part) {
   LIT.length = 0;
   const G = s.G,
     keep = G.look;
   G.look = XMAS_LOOK;
-  s.host.cathedralItems(G, LIT, ev);
+  s.host.cathedralItems(G, LIT, eve);
   G.look = keep;
   for (const it of LIT)
     if (part === 'back' ? it.z < SITE.z : part === 'front' ? it.z > SITE.z && it.z < SITE.ladyZ : it.z > SITE.ladyZ)
@@ -198,15 +199,15 @@ function lights(s, ev, part) {
 }
 const LANDMARK_SOURCE = { file: 'web/office-draw-cathedral.js', fn: 'cathedralItems' };
 function drawChurch() {
-  const { s, view, ev } = NOW;
-  lights(s, ev, 'back');
+  const { s, view, eve } = NOW;
+  lights(s, eve, 'back');
   drawCathedral(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, DRESSED, SITE.at);
-  lights(s, ev, 'front');
+  lights(s, eve, 'front');
 }
 function drawLady() {
   const { s, view } = NOW;
   drawOurLady(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, DRESSED, SITE.lady);
-  lights(s, xmasEvent(false), 'yard');
+  lights(s, false, 'yard');
 }
 const CATHEDRAL = {
   id: 'event.cathedral',
@@ -225,7 +226,7 @@ const CATHEDRAL = {
   uses: ['light', 'snow'],
   draw(ctx, view, t) {
     const s = aim(ctx, view, t);
-    NOW.ev = xmasEvent(view.pick.eve === 'eve');
+    NOW.eve = view.pick.eve === 'eve';
     s.scene(SITE.at[0] + 0.5, SITE.at[1] + 0.5, 0, drawChurch, true);
   },
 };

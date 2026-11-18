@@ -399,15 +399,15 @@ export class ClaudeOffice extends React.Component {
     this.look = Theme.resolve(this.moment);
     return this.moment;
   }
-  // The moment's event in the stopgap shape the drawing code still asks for ({ key, since, level 3, eve, day }; see
-  // EventLogic.active), one object while the event stays the same. When it comes or goes, the big tree's cells and
-  // the cathedral's ground are taken out of (or put back into) the walkable ones.
+  // The moment's event ({ key, since }, as EventLogic.active gives it), one object while the event stays the same.
+  // When it comes or goes, the big tree's cells and the cathedral's ground are taken out of (or put back into) the
+  // walkable ones.
   eventNow() {
     const e = this.moment && this.moment.event,
       k = e ? e.key + '@' + e.since : '';
     if (this.evK !== k) {
       this.evK = k;
-      this.evNow = e ? { ...e, level: 3, eve: true, day: true } : null;
+      this.evNow = e;
       EventLogic.block(BLOCK, !!e); // nobody walks through the big tree while it stands
       EventLandmark.reserve(EVENT_LAND, !!e, this.dogs); // nor through the cathedral
     }

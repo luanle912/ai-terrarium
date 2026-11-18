@@ -13,13 +13,12 @@ function previewClock(preview, now) {
   return s > 0 ? Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') : '';
 }
 
-// The event at a moment of the viewer's own clock, or null: { key: 'christmas', since, level, eve, day }.
-//   since  whole days from 1 Dec (0-based); choice 'on' and a preview say 14, the full event
-//   level 3, eve, day  a stopgap for the drawing code that still asks for levels: the whole event is level 3, with
-//          Santa about all of it (removed when that code reads the theme instead)
+// The event at a moment of the viewer's own clock, or null: { key: 'christmas', since }, since being whole days from
+// 1 Dec (0-based); choice 'on' and a preview say 14, the full event. The event is whole from its first day (D1): what
+// it shows is the look's (web/theme.js), which only counts the days for the presents under the tree.
 // The event runs 1-26 Dec. choice 'off' shows nothing; a preview shows the event until it runs out, any choice.
 const SINCE_FULL = 14;
-const make = since => ({ key: 'christmas', since, level: 3, eve: true, day: true });
+const make = since => ({ key: 'christmas', since });
 function active(date, choice, preview, now) {
   if (preview && now < preview.until) return make(SINCE_FULL);
   if (choice === 'on') return make(SINCE_FULL);
@@ -27,8 +26,6 @@ function active(date, choice, preview, now) {
   const d = date.getDate();
   return d > 26 ? null : make(d - 1);
 }
-// What the island's bake is keyed by: '' without the event, 'x1'..'x3' by level.
-const cacheKey = ev => (ev ? 'x' + ev.level : '');
 
 function loadChoice(storage) {
   try {
@@ -123,7 +120,6 @@ export const EventLogic = {
   startPreview,
   previewClock,
   active,
-  cacheKey,
   loadChoice,
   saveChoice,
   adopt,

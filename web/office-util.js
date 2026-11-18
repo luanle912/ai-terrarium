@@ -68,7 +68,7 @@ export const shade = (hh, p) => {
 // unless told otherwise), box (an iso box with shaded sides) and rect, plus the clock, daylight, the event and the
 // cold, which the caller sets each frame (web/office-draw.js, and the /assets page's web/assets-stage.js).
 export function officeG(ctx, P, th) {
-  const G = { ctx, poly: null, box: null, rect: null, th, t: 0, df: 1, ev: null, cold: false };
+  const G = { ctx, poly: null, box: null, rect: null, th, t: 0, df: 1, cold: false };
   const poly = (G.poly = (pts, fill, stroke) => {
     ctx.beginPath();
     pts.forEach((p, i) =>

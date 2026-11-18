@@ -1,9 +1,11 @@
 // The conversion table of the /assets page (docs/specs/2026-11-18-asset-labels-design.md §5.10): one row per label
-// (web/labels.js), one column per theme pack (none in the season chosen, winter, Christmas, and the small holidays as
-// one column), each cell the label's entry drawn under that pack's look with the game's own code, as the grid's cards
-// are (Preview: a cell is measured and drawn only once it comes near the screen, by the one paint loop). Under each
-// cell the variant the look gives and the overlays it lays on it, so "which tree turns into which" reads at a glance.
-// A click opens the entry in the drawer under that pack.
+// (web/labels.js), one column per theme pack (none in the season chosen, winter, Christmas) and one column for all the
+// small holidays together, by a deliberate controller ruling (R10): they differ only in tree.holiday and seventeen
+// columns would not read, so the Event control picks which holiday that column shows. Each cell is the label's entry
+// drawn under that pack's look with the game's own code, as the grid's cards are (Preview: a cell is measured and
+// drawn only once it comes near the screen, by the one paint loop). Under each cell the variant the look gives and the
+// overlays it lays on it, so "which tree turns into which" reads at a glance. A click opens the entry in the drawer
+// under that pack.
 import { tr } from './i18n.js';
 import { Labels } from './labels.js';
 import { AssetsLogic } from './assets-logic.js';
