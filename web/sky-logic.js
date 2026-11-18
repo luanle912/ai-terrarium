@@ -334,20 +334,27 @@ const SKY_WARM = {
 };
 const GREY_DAY = '#8e9aab',
   GREY_NIGHT = '#2a2f3d';
+// A NaN or missing number (a first frame under a shifted clock, a weather mix stored before a key existed) reads as 0,
+// so the sky never gets '#NaNNaNNaN'; every real (finite) value passes through unchanged.
+const num = v => (Number.isFinite(v) ? v : 0);
 // df is the day factor (0 night .. 1 day). Warmth peaks halfway through dawn and dusk; cloud cover and storms grey it
 // all.
 function skyColors(df, hour, fx) {
+  df = num(df);
+  const cloud = num(fx.cloud),
+    storm = num(fx.storm),
+    fog = num(fx.fog);
   const warm = 4 * df * (1 - df),
-    grey = (Math.max(0, fx.cloud - 0.2) / 0.8) * 0.55 + fx.storm * 0.3,
+    grey = (Math.max(0, cloud - 0.2) / 0.8) * 0.55 + storm * 0.3,
     greyTone = mixHex(GREY_NIGHT, GREY_DAY, df),
     out = {};
   for (const k in SKY_DAY) {
     let c = mixHex(SKY_NIGHT[k], SKY_DAY[k], df);
     c = mixHex(c, SKY_WARM[k], warm * (k === 'zenith' ? 0.35 : 0.7));
     c = mixHex(c, greyTone, Math.min(0.85, grey * (k === 'cloud' || k === 'cloudShade' ? 0.6 : 1)));
-    if (fx.storm > 0) c = mixHex(c, '#2a2f3a', fx.storm * 0.45);
-    if (fx.fog > 0 && (k === 'horizon' || k === 'haze' || k === 'below'))
-      c = mixHex(c, mixHex(greyTone, '#ffffff', 0.4), fx.fog * 0.5);
+    if (storm > 0) c = mixHex(c, '#2a2f3a', storm * 0.45);
+    if (fog > 0 && (k === 'horizon' || k === 'haze' || k === 'below'))
+      c = mixHex(c, mixHex(greyTone, '#ffffff', 0.4), fog * 0.5);
     out[k] = c;
   }
   return out;
