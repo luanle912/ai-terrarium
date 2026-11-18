@@ -14,6 +14,7 @@ import { SkyRender } from './sky-render.js';
 import { SkyLogic } from './sky-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { paintFarIsland } from './sky-mist.js';
+import { Paint } from './paint.js';
 import { ISLAND, PG } from './office-scene.js';
 
 const { axis } = AssetsStage;
@@ -141,7 +142,7 @@ function skyIn(ctx, view) {
   ctx.rect(0, 0, SKY_W, SKY_H);
   ctx.clip();
 }
-// the far islands in the back sky wear the season's trees and, from the event's second level, its lights
+// the far islands in the back sky wear the look's trees (firs with lights under the Christmas event)
 const SKY_USES = ['light', 'season', 'event'];
 const SKY = {
   id: 'island.sky',
@@ -199,8 +200,8 @@ const WEATHER = {
     ctx.restore();
   },
 };
-// The far islands in the sky (web/sky-mist.js): the season's trees and snow on them, and from the event's second
-// level a lit fir, a snowman and a cabin.
+// The far islands in the sky (web/sky-mist.js): the look's trees (tree.far: the season's, or under the Christmas
+// event a fir with its lights, a snowman and a cabin) and the season's snow on them.
 const FAR_SC = 0.8;
 const FAR = {
   id: 'island.far-islands',
@@ -222,7 +223,15 @@ const FAR = {
       look = SeasonLogic.look(env.season);
     ctx.save();
     ctx.translate(view.ox, view.oy);
-    paintFarIsland(ctx, FAR_SC, env.col.haze, view.pick.kind || 'tree', look.trees, look.minSnow > 0, env.event >= 2);
+    paintFarIsland(
+      ctx,
+      FAR_SC,
+      env.col.haze,
+      view.pick.kind || 'tree',
+      env.look.of('tree.far'),
+      look.minSnow > 0,
+      Paint.overlaysOf('tree.far', env.look),
+    );
     ctx.restore();
   },
 };

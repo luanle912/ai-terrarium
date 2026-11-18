@@ -210,6 +210,7 @@ const WORLD_TREE = {
       { id: 'fresh', label: () => tr('assets.tree.fresh') },
       { id: 'gold', label: () => tr('assets.tree.gold') },
       { id: 'bare', label: () => tr('assets.tree.bare') },
+      { id: 'fir', label: () => tr('assets.tree.fir') },
     ]),
   ],
   uses: ['light'],
@@ -222,8 +223,8 @@ const BUSH_TILES = BUSH_LOOKS.map(l =>
   findTile((x, y) => hash(x, y, 41) > 0.5 === l.startsWith('big') && hash(x, y, 43) > 0.6 === l.endsWith('berries')),
 );
 const bushTile = pick => BUSH_TILES[Math.max(0, BUSH_LOOKS.indexOf(pick.look))];
-// in fruit (spring) every bush carries berries
-const paintBush = s => drawBush(s.pt, s.PG, s.C, bushTile(s.view.pick), s.look.fruit);
+// the look's bush (web/theme.js): in fruit in spring every bush carries berries; holly during the Christmas event
+const paintBush = s => drawBush(s.pt, s.PG, s.C, bushTile(s.view.pick), s.env.look.of('bush'));
 const BUSH = {
   id: 'plants.bush',
   cat: 'plants',
@@ -242,7 +243,7 @@ const BUSH = {
       { id: 'small-berries', label: () => tr('assets.bush.small-berries') },
     ]),
   ],
-  uses: ['light', 'season', 'snow'],
+  uses: ['light', 'season', 'snow', 'event'],
   palette: paletteOf(paintBush),
   draw(ctx, view) {
     const d = bushTile(view.pick);

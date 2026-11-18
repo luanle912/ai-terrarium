@@ -61,12 +61,13 @@ test('a test pack resolves without code changes', () => {
 
 // Overlays some later task of the plan paints (docs/plans/2026-11-18-asset-labels-plan.md): each one leaves this list
 // in the task that registers its painter, and the test below fails if it is listed and painted at once.
-const LATER = new Set(['tree.far+lights', 'window+frost', 'window+star', 'shelf+garland-small', 'plant.pot+bauble',
+const LATER = new Set(['window+frost', 'window+star', 'shelf+garland-small', 'plant.pot+bauble',
   'clock+holly-sprig'])
 test('every (label, overlay) in every pack has a painter', () => {
   globalThis.React ??= { createElement: () => null, Component: class {} }
   loadI18n('vi')
   loadWeb('office-draw-xmas') // the office's Christmas overlays register their painters on import
+  loadWeb('sky-mist') // and the far islands' fir its lights
   const { Paint } = loadWeb('paint')
   const missing = []
   for (const p of Theme.PACKS)

@@ -23,6 +23,7 @@ import {
   dimmed,
   hhmm,
   okColor,
+  islandArtKey,
   paintIsland,
   paintTile,
   plate,
@@ -331,9 +332,10 @@ Object.assign(ClaudeOffice.prototype, {
     const df = Math.round((this.env ? this.env.df : 1) * 10) / 10,
       lit = Math.min(6, busy | 0),
       color = okColor(meta.color),
-      season = this.moment.season;
-    const img = art('i' + color + df + lit + (mine ? 'm' : '') + season, g =>
-      paintIsland(g, color, df, lit, !!mine, season),
+      season = this.moment.season,
+      wl = this.look;
+    const img = art(islandArtKey(color, df, lit, mine, season, wl), g =>
+      paintIsland(g, color, df, lit, !!mine, season, wl.of('tree.world')),
     );
     const p = this.artPlace(rect, labelH),
       dy = this.artShift(p, hover, t, meta.slot, reduced),

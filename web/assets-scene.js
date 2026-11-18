@@ -62,7 +62,7 @@ function region(x, y, w, h) {
 }
 function bake(env) {
   const frame = { LW, LH, OX, OY },
-    light = { df: env.df, snow: env.snow, season: env.season, block: { W: SCENE_W, H: SCENE_H }, event: env.event },
+    light = { df: env.df, snow: env.snow, season: env.season, block: { W: SCENE_W, H: SCENE_H }, look: env.look },
     land = SkyRender.renderIsland(ISLAND, frame, 1, light),
     props = SkyRender.renderProps(ISLAND, frame, 1, light).sort((a, b) => a.z - b.z),
     out = new Map();

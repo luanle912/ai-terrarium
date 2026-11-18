@@ -183,8 +183,8 @@ export const outline = (g, col, dashed) => {
       if (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1)) g.fillRect(x, y, 1, 1);
     }
 };
-// A small island tree in the season's colours (SeasonLogic look.trees): green, fresh with a blossom, gold, or bare
-// twigs with snow on them.
+// A small island tree, the look's tree.world variant: in the season's colours (SeasonLogic look.trees) green, fresh
+// with a blossom, gold, or bare twigs with snow on them; or a fir in three tiers with snow on their tops (Christmas).
 const MINI_TREE = {
   green: ['#3e9a45', '#57b85a'],
   fresh: ['#7cc95a', '#a8e27c'],
@@ -195,6 +195,27 @@ export const tree = (g, x, y, df, kind = 'green') => {
     wood = N('#6b4a2a', df);
   px1(g, 'rgba(0,0,0,0.2)', x - 3, y, 6, 1);
   px1(g, wood, x, y - 3, 1, 3);
+  if (kind === 'fir') {
+    const lf = N('#2f7a4a', df),
+      dk = SkyRender.mix(lf, '#000000', 0.22),
+      snow = N('#f4f8fc', df);
+    // [dy, half width] of every row, top down: three tiers, each wider than the last
+    for (const [dy, w] of [
+      [9, 0],
+      [8, 1],
+      [7, 1],
+      [6, 2],
+      [5, 2],
+      [4, 3],
+    ]) {
+      px1(g, lf, x - w, y - dy, w + 1, 1);
+      if (w) px1(g, dk, x + 1, y - dy, w, 1);
+    }
+    px1(g, snow, x, y - 9, 1, 1);
+    px1(g, snow, x - 1, y - 7, 1, 1);
+    px1(g, snow, x - 2, y - 5, 1, 1);
+    return;
+  }
   if (kind === 'bare') {
     px1(g, wood, x, y - 7, 1, 4);
     px1(g, wood, x - 2, y - 7, 1, 2);
@@ -214,12 +235,19 @@ export const tree = (g, x, y, df, kind = 'green') => {
   px1(g, N(t, df), x - 1, y - 8, 3, 1);
   if (kind === 'fresh') px1(g, N('#fde6ef', df), x - 1, y - 6, 1, 1);
 };
-export function paintIsland(g, color, df, lit, mine, season) {
+// What a small island's art depends on, as one string (the sprite cache's key): the roof colour, the light, the lit
+// windows, the pennant, the season and the look of its trees (look.keyOf of WORLD_LABELS).
+export const WORLD_LABELS = Object.freeze(['tree.world']);
+export const islandArtKey = (color, df, lit, mine, season, look) =>
+  'i' + color + df + lit + (mine ? 'm' : '') + season + '|' + look.keyOf(WORLD_LABELS);
+// trees: the look's tree.world variant (the season's own when not given).
+export function paintIsland(g, color, df, lit, mine, season, trees) {
   const N = SkyRender.night,
     M = SkyRender.mix,
     { cx, cy, hw } = ISL,
     b = BLD,
     look = SeasonLogic.look(season),
+    kind = trees || look.trees,
     // the lawn leans to the season's grass tint and, in winter, lies under its snow (as on the full island)
     gr = look.grass,
     lawn = c => M(gr.color ? M(c, gr.color, gr.mix) : c, '#eef3f7', look.minSnow),
@@ -247,7 +275,7 @@ export function paintIsland(g, color, df, lit, mine, season) {
     px1(g, N(look.trees === 'gold' && fc === '#ff8fab' ? '#e0703a' : fc, df), cx + fx, cy + fy);
   // the path runs from the door, square to the office's right face
   for (let k = 0; k < 6; k++) px1(g, N(k % 2 ? '#bdb6aa' : '#c9c3b8', df), b.cx + 8 + 2 * k, b.cy + 4 + k, 2, 1);
-  tree(g, cx - 24, cy + 1, df, look.trees);
+  tree(g, cx - 24, cy + 1, df, kind);
   const wall = N('#efe9dc', df),
     roof = N(color, df),
     glass = N('#33415e', df);
@@ -276,7 +304,7 @@ export function paintIsland(g, color, df, lit, mine, season) {
     px1(g, GOLD, b.cx + 1, y + 1, 3, 1);
     px1(g, GOLD, b.cx + 1, y + 2, 2, 1);
   }
-  tree(g, cx + 21, cy + 8, df, look.trees);
+  tree(g, cx + 21, cy + 8, df, kind);
   // lighter at night, so islands keep their edge on a dark sky
   outline(g, SkyRender.mix(OUTLINE, '#3a4766', 1 - df), false);
 }

@@ -6,6 +6,8 @@
 //   has(label, id)               a painter is registered for that variant or overlay
 //   overlaysOf(label, look)      the painters of look.decor(label) in its order, each tagged .overlay; the same array
 //                                for the same look and label, so a frame asks without making anything
+//   painter(label, variant)      the painter of that variant; throws when none is registered, so a look naming a
+//                                variant nobody draws shows at once
 //   draw(label, look, ...args)   the variant's painter (when one is registered), then every overlay's, with args
 // Paint does not force one signature: a group's painters take what its drawing has (spec §5.5).
 import { Labels } from './labels.js';
@@ -47,10 +49,16 @@ function overlaysOf(label, look) {
   return hit.list;
 }
 
+function painter(label, id) {
+  const fn = VARIANTS.get(label)?.get(id);
+  if (!fn) throw new Error(`Paint: no painter for ${label} ${id}`);
+  return fn;
+}
+
 function draw(label, look, ...args) {
   const fn = VARIANTS.get(label)?.get(look.of(label));
   if (fn) fn(...args);
   for (const f of overlaysOf(label, look)) f(...args);
 }
 
-export const Paint = { variant, overlay, has, overlaysOf, draw };
+export const Paint = { variant, overlay, has, overlaysOf, painter, draw };

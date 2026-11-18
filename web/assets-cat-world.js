@@ -5,7 +5,7 @@
 import { tr } from './i18n.js';
 import { AssetsStage } from './assets-stage.js';
 import { AssetsScene } from './assets-scene.js';
-import { ART_H, ART_W, ISL, paintIsland, paintTile } from './world-ui.js';
+import { ART_H, ART_W, ISL, islandArtKey, paintIsland, paintTile } from './world-ui.js';
 
 const { axis } = AssetsStage;
 // The roof colours the hub hands out to islands (hub/pages.js ISLAND_COLORS; a test keeps the two the same).
@@ -53,12 +53,12 @@ const WORLD_ISLAND = {
     const c = '#' + (ISLAND_COLORS.includes('#' + view.pick.colour) ? view.pick.colour : ISLAND_COLORS[0].slice(1)),
       lit = LIT.includes(+view.pick.lit) ? +view.pick.lit : 0,
       mine = view.pick.mine === 'mine',
-      { df, season } = view.env;
+      { df, season, look } = view.env;
     const img = AssetsScene.sprite(
-      'world|' + c + df + lit + mine + season,
+      'world|' + islandArtKey(c, df, lit, mine, season, look),
       ART_W,
       ART_H,
-      g => paintIsland(g, c, df, lit, mine, season),
+      g => paintIsland(g, c, df, lit, mine, season, look.of('tree.world')),
       true,
     );
     stampAt(ctx, view, img);

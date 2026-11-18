@@ -599,8 +599,8 @@ export class ClaudeOffice extends React.Component {
       flash: this.flash,
       col: SkyLogic.skyColors(df, hour, fx),
       season,
-      // the Christmas event's level (0: none), for the sky's far islands
-      event: ev ? ev.level : 0,
+      // the look (web/theme.js) the sky's far islands wear
+      look: this.look,
     };
   }
 }

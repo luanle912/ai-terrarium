@@ -77,8 +77,9 @@ const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase())
 test('envOf has the shape of the game env, plus snow and the theme', () => {
   const env = AssetsStage.envOf({ light: 'night', season: 'spring', snow: true, event: 0 })
   assert.deepEqual(Object.keys(env).sort(),
-    ['col', 'df', 'event', 'flash', 'frozen', 'fx', 'hour', 'key', 'light', 'reduced', 'season', 'snow', 'theme']
+    ['col', 'df', 'event', 'flash', 'frozen', 'fx', 'hour', 'key', 'light', 'look', 'reduced', 'season', 'snow', 'theme']
       .sort())
+  assert.equal(env.look.of('tree.island'), 'fresh', 'the look of the scene: spring, no event')
   assert.equal(env.light, 'night')
   assert.notEqual(env.key, AssetsStage.envOf({ light: 'day', season: 'spring', snow: true, event: 0 }).key)
   assert.equal(env.df, 0)
@@ -92,6 +93,8 @@ test('envOf has the shape of the game env, plus snow and the theme', () => {
   assert.equal(xmas.event, 2)
   assert.equal(xmas.season, 'winter', 'the event brings winter, as in the game')
   assert.equal(xmas.frozen, true)
+  assert.equal(xmas.look.of('tree.island'), 'fir', 'the Christmas look')
+  assert.equal(xmas.look.build('gifts'), 5, 'level 2 stands for the second gift step')
   assert.equal(AssetsStage.envOf({ light: 'day', season: 'summer', snow: false, event: 2 }), xmas, 'one env per scene')
 })
 

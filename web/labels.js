@@ -71,4 +71,8 @@ const setInstances = (id, list) => {
   LISTS.set(id, list);
 };
 
+// The ids of the outdoor labels: what the island's bake and its far and world copies show (the bake's cache key is
+// look.keyOf of these).
+export const OUTDOOR_LABELS = Object.freeze(LIST.filter(l => l.group === 'outdoor').map(l => l.id));
+
 export const Labels = { LIST, byId, SEASONAL, setInstances };

@@ -189,17 +189,21 @@ test('an island with no room for the landmark gets no lights either', async () =
 
 // what a stamped canvas was painted with: the image data put on it
 const painted = cv => cv.log.find(c => c.op === 'putImageData').a[0].data
-test('the bake hangs both sprites on the site: the level and depth of the day, the event\'s light, no lying snow on top', () => {
+test('the bake hangs both sprites on the site, fully dressed (D1) at the depth of the day, the event\'s light, no lying snow on top', () => {
   const view = { LW: S.LW, LH: S.LH, OX: S.OX, OY: S.OY }, k = 2
-  const bake = (event, snow = 0.8) => SkyRender.renderProps(ISLAND, view, k, { df: 0, snow, season: 'winter', block: { W, H }, event })
-  const none = bake(0), depth = SnowLogic.depth(0.8)
+  // the event's look on its day `since` (0, 7, 14: every gift step), or the plain winter look (null)
+  const lookOn = since => since === null ? PLAIN
+    : Theme.resolve({ season: 'winter', holiday: null, event: { key: 'christmas', since }, key: 'cath-bake-' + since })
+  const bake = (since, snow = 0.8) =>
+    SkyRender.renderProps(ISLAND, view, k, { df: 0, snow, season: 'winter', block: { W, H }, look: lookOn(since) })
+  const none = bake(null), depth = SnowLogic.depth(0.8)
   assert.ok(depth >= 1, 'snow lies, so a prop that takes lying snow gets a pass of it')
   assert.ok(none.some(p => p.img.log.some(c => c.op === 'drawImage' && c.a.length === 9)), 'as the other props do')
   assert.ok(!none.some(p => p.z === SITE.z && p.x === SITE.at[0]), 'nothing of it outside the event')
   const T = c => hex(SkyRender.night(c, 0.45)), snowLit = hex(SnowLogic.night(SnowLogic.PAL.lit, 0))
-  for (const event of [1, 2, 3]) {
-    const props = bake(event)
-    assert.equal(props.length, none.length + 2 + (event >= 2 ? ISLAND.lamps.length : 0), `level ${event}`)
+  for (const since of [0, 7, 14]) {
+    const props = bake(since), event = `day ${since}`
+    assert.equal(props.length, none.length + 2 + ISLAND.lamps.length, `${event}: the canes and both sprites`)
     for (const [prop, tile, z, layer, ext, colour] of [
       [props.at(-2), SITE.at, SITE.z, A.cathedralLayer, A.CATHEDRAL_EXT, A.CATHEDRAL_PAL.BRICK.left],
       [props.at(-1), SITE.lady, SITE.ladyZ, Y.yardLayer, Y.LADY_EXT, Y.LADY_PAL.lit],
@@ -209,18 +213,18 @@ test('the bake hangs both sprites on the site: the level and depth of the day, t
       assert.deepEqual([prop.dx, prop.dy, prop.img.width, prop.img.height], [x * k, y * k, (ext[0] + ext[2]) * k, (ext[1] + ext[3]) * k])
       // one stamp of the whole sprite at its corner, and no pass of lying snow after it
       const stamps = prop.img.log.filter(c => c.op === 'drawImage')
-      assert.equal(stamps.length, 1, `level ${event}: lying snow was settled on a sprite that brings its own`)
+      assert.equal(stamps.length, 1, `${event}: lying snow was settled on a sprite that brings its own`)
       const [cv, sx, sy] = stamps[0].a
       assert.deepEqual([sx, sy, cv.width, cv.height], [x, y, ext[0] + ext[2], ext[1] + ext[3]])
-      // the very layer of this level and depth, brick and stone in the event's light, snow in the snow's
-      const L = layer(event, depth), data = painted(cv), rgb = i => [...data.slice(i * 4, i * 4 + 3)]
-      for (let i = 0; i < L.idx.length; i++) assert.equal(data[i * 4 + 3] > 0, L.idx[i] > 0, `level ${event}: pixel ${i}`)
+      // the fully dressed layer (level 3) at this depth, brick and stone in the event's light, snow in the snow's
+      const L = layer(3, depth), data = painted(cv), rgb = i => [...data.slice(i * 4, i * 4 + 3)]
+      for (let i = 0; i < L.idx.length; i++) assert.equal(data[i * 4 + 3] > 0, L.idx[i] > 0, `${event}: pixel ${i}`)
       const first = c => L.idx.findIndex(n => n && L.keys[n - 1][0] === c)
-      assert.deepEqual(rgb(first(colour)), T(colour), `level ${event}: ${colour} in the event's light`)
-      assert.deepEqual(rgb(first(SnowLogic.PAL.lit)), snowLit, `level ${event}: snow keeps its own light`)
+      assert.deepEqual(rgb(first(colour)), T(colour), `${event}: ${colour} in the event's light`)
+      assert.deepEqual(rgb(first(SnowLogic.PAL.lit)), snowLit, `${event}: snow keeps its own light`)
     }
   }
   // a bare day bakes the bare layer
-  const bare = bake(3, 0).at(-2).img.log.find(c => c.op === 'drawImage').a[0], L0 = A.cathedralLayer(3, 0), data = painted(bare)
+  const bare = bake(14, 0).at(-2).img.log.find(c => c.op === 'drawImage').a[0], L0 = A.cathedralLayer(3, 0), data = painted(bare)
   for (let i = 0; i < L0.idx.length; i++) assert.equal(data[i * 4 + 3] > 0, L0.idx[i] > 0, `bare: pixel ${i}`)
 })

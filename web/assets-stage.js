@@ -34,6 +34,7 @@ import { bakeTools } from './sky-island.js';
 import { SeasonLogic } from './season-logic.js';
 import { SkyLogic } from './sky-logic.js';
 import { EventLogic } from './event-logic.js';
+import { Theme } from './theme.js';
 import { isCold, officeG } from './office-util.js';
 
 // ---- shared by the catalogue modules ----
@@ -58,7 +59,9 @@ const ENVS = new Map();
 // The env the game would hand its draw code under these controls ({light, season, snow, event}), the same object
 // for the same controls so caches keyed on it hold. As in the game the Christmas event brings winter. On top of
 // envNow's shape: snow (0 or 1, the cover lying on the lawn), theme (the office colours lerped day to night), light
-// (the control it was made from) and key (one string per scene, for caches).
+// (the control it was made from) and key (one string per scene, for caches). look is the Look (web/theme.js) of a
+// moment in the scene's season with the event on from the day its level stands for (levels 1, 2, 3: days 0, 7, 14,
+// the gift steps), no small holiday.
 function envOf({ light = 'day', season = 'summer', snow = false, event = 0 } = {}) {
   const key = light + '|' + season + '|' + (snow ? 1 : 0) + '|' + event;
   let env = ENVS.get(key);
@@ -78,6 +81,7 @@ function envOf({ light = 'day', season = 'summer', snow = false, event = 0 } = {
     col: SkyLogic.skyColors(df, hour, fx),
     season: s,
     event: ev ? ev.level : 0,
+    look: lookOf(s, ev),
     snow: snow ? 1 : 0,
     theme: df >= 1 ? { _day: 1, ...THEMES.day } : df <= 0 ? { _day: 0, ...THEMES.night } : lerpTheme(df),
     light,
@@ -85,6 +89,15 @@ function envOf({ light = 'day', season = 'summer', snow = false, event = 0 } = {
   };
   ENVS.set(key, env);
   return env;
+}
+function lookOf(season, ev) {
+  const event = ev ? { key: ev.key, since: (ev.level - 1) * 7 } : null;
+  return Theme.resolve({
+    season,
+    holiday: null,
+    event,
+    key: 'assets|' + season + '|' + (event ? event.key + '@' + event.since : '-'),
+  });
 }
 // The event object of an env ({key, level, eve, day}, as EventLogic.active gives it), or null.
 const eventOf = env => EVENTS[(env && env.event) || 0] || null;

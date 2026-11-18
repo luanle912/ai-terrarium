@@ -4,7 +4,6 @@ import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { SkyRender } from './sky-render.js';
 import { SnowLogic } from './snow-logic.js';
-import { EventLogic } from './event-logic.js';
 import { IslandLife } from './island-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
@@ -36,6 +35,10 @@ import {
 } from './office-scene.js';
 import { isCold, officeG, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { OUTDOOR_LABELS } from './labels.js';
+
+// What the island's bake shows of the look: the outdoor labels and the extras it stands on the lawn.
+const ISLAND_PARTS = Object.freeze([...OUTDOOR_LABELS, 'cane', 'cathedral', 'ourlady']);
 // Drawing the office: sky, camera, the floor, walls, planters, pantry and desks.
 // The night tint over event trees, in 1/50 steps of its strength (built once, no string per frame).
 const NIGHT_TINT = Array.from({ length: 31 }, (_, i) => 'rgba(13,19,34,' + i / 50 + ')');
@@ -196,19 +199,21 @@ mixin(
       ctx.imageSmoothingEnabled = false;
       ctx.globalAlpha = 1;
       ctx.clearRect(0, 0, LW, LH);
-      // The island is baked once per resolution / light level / snow level / season and stamped under the office.
+      // The island is baked once per resolution / light level / snow level / season / outdoor look (the variants,
+      // decor and extras of the outdoor labels) and stamped under the office.
       const snow = this.snowShown || 0,
         ic = this.islandCache,
         dfB = Math.round(df * 10),
         snB = Math.round(snow * 10),
         season = this.seasonNow(),
         ev = this.eventNow(),
-        evK = EventLogic.cacheKey(ev);
-      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season || ic.ev !== evK) {
+        look = this.look,
+        lookK = look.keyOf(ISLAND_PARTS);
+      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season || ic.look !== lookK) {
         // let the browser drop the old bake's canvases now rather than at the next collection
         if (ic) for (const c of [ic.img, ...ic.props.map(p => p.img)]) c.width = c.height = 0;
         const frame = { LW, LH, OX, OY },
-          light = { df: dfB / 10, snow: snB / 10, season, block: { W, H }, event: ev ? ev.level : 0 };
+          light = { df: dfB / 10, snow: snB / 10, season, block: { W, H }, look };
         this.islandCache = {
           img: SkyRender.renderIsland(ISLAND, frame, k, light),
           props: SkyRender.renderProps(ISLAND, frame, k, light),
@@ -216,7 +221,7 @@ mixin(
           df: dfB,
           sn: snB,
           season,
-          ev: evK,
+          look: lookK,
         };
       }
       ctx.save();

@@ -263,7 +263,7 @@ test('the bake stamps each whole sprite, outline included, at its anchor', () =>
 
 test('the landmark is baked only inside the event block, and lit only from the event\'s own items', () => {
   const sky = readWeb('sky-island')
-  const block = sky.indexOf('if (env.event && env.block) {')
+  const block = sky.indexOf('if (env.block && (lk.extras.has(')
   assert.ok(block > 0)
   for (const name of ['EventLandmark.site(', 'drawCathedral(', 'drawOurLady(']) {
     const uses = [...sky.matchAll(new RegExp(name.replace(/[.(]/g, '\\$&'), 'g'))].map(m => m.index)
@@ -271,7 +271,9 @@ test('the landmark is baked only inside the event block, and lit only from the e
     assert.ok(uses[0] > block, `${name} is outside the event block`)
   }
   // nothing after the block but the return, so the calls are inside it
-  assert.match(sky.slice(block), /^if \(env\.event && env\.block\) \{[\s\S]*drawOurLady\([\s\S]*?\n {2}\}\n {2}return out;\n\}\n$/)
+  assert.match(sky.slice(block), /^if \(env\.block && \(lk\.extras\.has\([\s\S]*drawOurLady\([\s\S]*?\n {2}\}\n {2}return out;\n\}\n$/)
+  assert.match(sky, /lk\.extras\.has\('cathedral'\)[\s\S]*drawCathedral\(/)
+  assert.match(sky, /lk\.extras\.has\('ourlady'\)[\s\S]*drawOurLady\(/)
   const xmas = readWeb('office-draw-xmas')
   const items = /\n {4}xmasItems\(G, items, ev\) \{\n([\s\S]*?)\n {4}\}\n/.exec(xmas)
   assert.ok(items, 'xmasItems')
