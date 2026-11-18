@@ -74,6 +74,7 @@ Open your browser → **http://localhost:4317** — that's it.
 | 🔌 | **Zero setup** | Installs as a Claude Code plugin — server auto-starts on `session.start` |
 | ⚡ | **Real-time** | Sessions appear and disappear as you open and close Claude Code |
 | 🔍 | **Session status** | See who's working, thinking, waiting for permission, talking, or idle — monitors show the current activity (code editor, terminal, reading, thinking) |
+| ✨ | **Magic teleport** | Agents on a break far from their desk come back through a magic circle and a pillar of light, landing a few steps from their seat — no more long walks back when you return to the page |
 | 🏢 | **Departments** | Sessions are grouped by working directory into up to four department zones with labelled floors |
 | 🤖 | **Sub-agents** | Child agents appear as smaller desks next to their parent |
 | 💤 | **Vacant desks** | Unclaimed desks look greyed out; empty departments show an EMPTY label |
