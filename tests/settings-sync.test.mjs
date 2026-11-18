@@ -27,6 +27,8 @@ function fakeHost(over = {}) {
       this.state.city = p.city
     },
     setEventChoice(c, fromServer) { this.calls.push(['event', c, fromServer]); this.eventChoice = c },
+    seasonChoice: 'auto',
+    setSeasonChoice(c, fromServer) { this.calls.push(['season', c, fromServer]); this.seasonChoice = c },
     adoptSettings(ps) { S.receive(this, ps) },
     ...over,
   }
@@ -46,7 +48,7 @@ test('sim mode pushes', async () => {
   assert.equal(log[0].url, '/api/settings')
   assert.equal(log[0].opts.method, 'POST')
   assert.equal(log[0].opts.headers['X-Terrarium'], 'settings')
-  assert.deepEqual(log[0].body, { weather: { mode: 'random', city: '' }, event: 'on', updatedAt: 5000 })
+  assert.deepEqual(log[0].body, { weather: { mode: 'random', city: '' }, event: 'on', season: 'auto', updatedAt: 5000 })
   assert.equal(host.sync.pending, false)
   assert.equal(S.loadAt(host.storage), 5000, 'the time of the choice is kept with it')
 })
@@ -86,13 +88,28 @@ test('a sent choice is not sent again on every snapshot of a server that keeps a
   assert.equal(log.length, 1)
 })
 
+test('the season choice is sent with the rest; a newer one is taken, the same or a strange one is not', async () => {
+  const log = [], host = fakeHost()
+  host.seasonChoice = 'summer'
+  await S.share(host, { touch: true, now: 5000, fetch: okFetch(log) })
+  assert.equal(log[0].body.season, 'summer')
+  S.receive(host, { weather: { mode: 'random', city: '' }, event: 'auto', season: 'summer', updatedAt: 6000 })
+  S.receive(host, { weather: { mode: 'random', city: '' }, event: 'auto', season: 'monsoon', updatedAt: 7000 })
+  assert.deepEqual(host.calls, [])
+  S.receive(host, { weather: { mode: 'random', city: '' }, event: 'auto', season: 'autumn', updatedAt: 8000 })
+  assert.deepEqual(host.calls, [['season', 'autumn', true]])
+})
+
 test('a newer server value is taken, weather and event, and its time becomes ours', () => {
   const host = fakeHost()
   host.sync.at = 100
-  S.receive(host, { weather: { mode: 'real', city: 'Hue' }, event: 'off', updatedAt: 900 }, { fetch: okFetch([]) })
+  S.receive(host, { weather: { mode: 'real', city: 'Hue' }, event: 'off', season: 'winter', updatedAt: 900 }, {
+    fetch: okFetch([]),
+  })
   assert.deepEqual(host.calls, [
     ['weather', { weatherMode: 'real', city: 'Hue', cityDraft: 'Hue' }, true],
     ['event', 'off', true],
+    ['season', 'winter', true],
   ])
   assert.equal(host.sync.at, 900)
   assert.equal(S.loadAt(host.storage), 900)
@@ -119,7 +136,6 @@ test('a local change is always stamped later than the last one, even with a cloc
 
 test('the world view follows another tab of its page through storage, and never sends anything', () => {
   const host = fakeHost({ world: {} })
-  host.setSeasonChoice = c => host.calls.push(['season', c])
   host.storage.setItem('ai-terrarium.event', 'off')
   S.follow(host, 'ai-terrarium.event')
   host.storage.setItem('ai-terrarium.season', 'winter')
@@ -129,7 +145,7 @@ test('the world view follows another tab of its page through storage, and never 
   S.follow(host, 'something.else')
   assert.deepEqual(host.calls, [
     ['event', 'off', true],
-    ['season', 'winter'],
+    ['season', 'winter', true],
     ['weather', { weatherMode: 'off', city: '', cityDraft: '' }, true],
   ])
 })

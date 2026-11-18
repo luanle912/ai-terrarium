@@ -1,8 +1,9 @@
-// Sharing the Settings choices (the weather and the event) through the local server (lib/page-settings.js; spec
-// 2026-11-18 §5.8, D2b; tests/settings-sync.test.mjs). The choice belongs to the viewer, not to the data source: a
-// page pushes it from Live, Simulation and "view as another person" alike whenever it can reach the server, and
-// every value carries when it was chosen (updatedAt, ms), so the newest wins everywhere (EventLogic.adopt). A push
-// that fails keeps the local choice, marked pending, and is sent again on the next change or snapshot.
+// Sharing the Settings choices (the weather, the event and the season; previews stay this page's own) through the
+// local server (lib/page-settings.js; spec 2026-11-18 §5.8, D2b; tests/settings-sync.test.mjs). The choice belongs to
+// the viewer, not to the data source: a page pushes it from Live, Simulation and "view as another person" alike
+// whenever it can reach the server, and every value carries when it was chosen (updatedAt, ms), so the newest wins
+// everywhere (EventLogic.adopt). A push that fails keeps the local choice, marked pending, and is sent again on the
+// next change or snapshot.
 //
 // The page keeps a small record, host.sync: { at (when this page's choice was made, or the server's it took), sentAt
 // (the `at` last sent successfully), pending (the last send failed), inFlight (sends on the way) }.
@@ -32,9 +33,9 @@ function touch(s, storage, now) {
 }
 
 // Sends this page's choice (host: { sync, storage, wallpaper, world, state: { weatherMode, city }, eventChoice,
-// settingsUrl, adoptSettings }); `touch` when it was just changed here. The server answers with the value it keeps,
-// which the page adopts: a newer one from another page wins in Simulation too. Resolves to that value, or null. The
-// wallpaper never chose anything, and the world (the hub's page) cannot reach the local server.
+// seasonChoice, settingsUrl, adoptSettings }); `touch` when it was just changed here. The server answers with the
+// value it keeps, which the page adopts: a newer one from another page wins in Simulation too. Resolves to that value,
+// or null. The wallpaper never chose anything, and the world (the hub's page) cannot reach the local server.
 async function share(host, { touch: changed = false, fetch: f, now = Date.now() } = {}) {
   if (!f && typeof fetch === 'function') f = (u, o) => fetch(u, o);
   if (host.wallpaper || host.world || typeof f !== 'function') return null;
@@ -42,7 +43,12 @@ async function share(host, { touch: changed = false, fetch: f, now = Date.now() 
     st = host.state;
   if (changed) touch(s, host.storage, now);
   const at = s.at,
-    value = { weather: { mode: st.weatherMode, city: st.city }, event: host.eventChoice || 'auto', updatedAt: at };
+    value = {
+      weather: { mode: st.weatherMode, city: st.city },
+      event: host.eventChoice || 'auto',
+      season: host.seasonChoice || 'auto',
+      updatedAt: at,
+    };
   s.inFlight++;
   let saved = null;
   try {
@@ -81,6 +87,8 @@ function receive(host, ps, opts) {
     if (w.mode !== host.state.weatherMode || w.city !== host.state.city)
       host.setWeather({ weatherMode: w.mode, city: w.city, cityDraft: w.city }, true);
     if (e.take) host.setEventChoice(e.take, true);
+    if (SeasonLogic.CHOICES.includes(ps.season) && ps.season !== host.seasonChoice)
+      host.setSeasonChoice(ps.season, true);
   } else if (e.push && !s.inFlight && (s.pending || s.sentAt !== s.at)) share(host, opts);
 }
 
@@ -89,7 +97,7 @@ function receive(host, ps, opts) {
 function follow(host, key) {
   const store = host.storage;
   if (key === EventLogic.EVENT_KEY) host.setEventChoice(EventLogic.loadChoice(store), true);
-  else if (key === SeasonLogic.SEASON_KEY) host.setSeasonChoice(SeasonLogic.loadSeasonChoice(store));
+  else if (key === SeasonLogic.SEASON_KEY) host.setSeasonChoice(SeasonLogic.loadSeasonChoice(store), true);
   else if (key === SkyLogic.WEATHER_KEY) {
     const w = SkyLogic.loadWeatherSettings(store);
     if (w.mode !== host.state.weatherMode || w.city !== host.state.city)

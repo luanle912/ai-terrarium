@@ -143,12 +143,14 @@ mixin(
         forced && h('span', { style: { fontSize: 11, color: 'var(--muted)' } }, tr('settings.forcedByEvent')),
       );
     }
-    setSeasonChoice(choice) {
+    // Shared with the other pages like the event choice (SettingsSync); `fromServer` when it came from one of them.
+    setSeasonChoice(choice, fromServer) {
       if (!SeasonLogic.CHOICES.includes(choice)) return;
       this.seasonChoice = choice;
       SeasonLogic.saveSeasonChoice(this.storage, choice);
       this.computeMoment();
       this.setState({ seasonChoice: choice });
+      if (!fromServer) this.pushSettings(true);
     }
     // A preview shows the season for SEASON_PREVIEW_MS, then the choice's own returns.
     previewSeason(key) {

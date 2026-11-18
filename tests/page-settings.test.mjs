@@ -8,6 +8,7 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const ps = require('../lib/page-settings.js')
 const { createHandler } = require('../server.js')
+import { loadWeb } from './web.mjs'
 
 const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'terr-ps-')), 'page-settings.json')
 
@@ -66,6 +67,31 @@ test('a page without updatedAt (older tab) is treated as oldest', () => {
   b.set({ weather: w, event: 'on' })
   assert.deepEqual(b.set({ weather: w, event: 'off' }), { weather: w, event: 'off' })
   assert.equal(b.set({ weather: w, event: 'on', updatedAt: 5 }).updatedAt, 5, 'any stamp is newer than none')
+})
+
+test('the season choice rides along: only one the page knows, kept when a page sends none', () => {
+  const { SeasonLogic } = loadWeb('season-logic')
+  assert.deepEqual(ps.SEASONS, SeasonLogic.CHOICES, 'the same list as the page')
+  const w = { mode: 'off', city: '' }
+  for (const season of SeasonLogic.CHOICES) assert.equal(ps.clean({ weather: w, season }).season, season)
+  assert.equal('season' in ps.clean({ weather: w, season: 'monsoon' }), false)
+  const a = ps.createPageSettings(tmpFile())
+  a.set({ weather: w, event: 'on', season: 'winter', updatedAt: 10 })
+  assert.deepEqual(a.set({ weather: w, event: 'off', updatedAt: 20 }),
+    { weather: w, event: 'off', season: 'winter', updatedAt: 20 },
+    'a page that sends no season (an older tab) leaves the one there is')
+  assert.equal(a.set({ weather: w, season: 'spring', updatedAt: 30 }).season, 'spring')
+})
+
+test('a posted updatedAt is clamped to at most a minute ahead of the server clock', () => {
+  const w = { mode: 'off', city: '' }, before = Date.now()
+  const c = ps.clean({ weather: w, updatedAt: before + 5 * 86400_000 })
+  assert.ok(c.updatedAt >= before + 60_000 && c.updatedAt <= Date.now() + 60_000, 'days ahead becomes now + 1 min')
+  assert.equal(ps.clean({ weather: w, updatedAt: before - 1000 }).updatedAt, before - 1000, 'a past stamp is kept')
+  const a = ps.createPageSettings(tmpFile())
+  a.set({ weather: w, event: 'on', updatedAt: before + 5 * 86400_000 })
+  assert.equal(a.set({ weather: w, event: 'off', updatedAt: Date.now() + 61_000 }).event, 'off',
+    'a skewed clock cannot lock the file for days')
 })
 
 test('the choice is kept on disk and read back by the next server', () => {
