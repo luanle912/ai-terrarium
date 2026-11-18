@@ -135,12 +135,8 @@ mixin(
         ls = live,
         others = isLive && this.state.asOthers;
       const cnt = k => this.agents.filter(a => !a.leaving && k.includes(a.status)).length;
-      // the season shown, a preview or the Settings choice included; the holiday's name while its trees are up
-      const seasonInfo = SeasonLogic.seasonChip({
-        season: this.seasonNow(),
-        holiday: this.treeOn ? this.season : null,
-        event: this.eventNow(),
-      });
+      // the moment's season, a preview or the Settings choice included; the small holiday's or the event's name
+      const seasonInfo = SeasonLogic.seasonChip(this.moment);
       const summary = [
         [tr('summary.working'), ['working'], '#3e8ed0'],
         [tr('summary.thinking'), ['thinking'], '#5b8def'],

@@ -238,16 +238,15 @@ mixin(
         },
         backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y), DRAW_REACH),
         walker = a => !a.sleeping && !a.seated && !a.wcIn;
-      // The island's trees: on a holiday the few by the office are the holiday's tree (HOLIDAY_TREES); the rest are
-      // the season's, baked among the props. Holiday trees are drawn in their
-      // own colours; after dark each goes through a scratch canvas and takes the same night tint as the lawn
-      // (SkyRender.night: toward #0d1322 by (1 - light) x 0.6), so it does not glow.
-      const tk = SeasonTree && this.treeOn ? this.season : null,
-        info = tk && SeasonTree.SEASONS[tk],
-        holiday = info && (info.type === 'event' || info.type === 'lunar') ? tk : null,
+      // The island's trees: the few by the office (HOLIDAY_TREES) are the look's holiday tree while one stands
+      // (tree.holiday: a small holiday's own, or 'xmas', the decorated Christmas tree); the rest are the season's,
+      // baked among the props. Holiday trees are drawn in their own colours; after dark each goes through a scratch
+      // canvas and takes the same night tint as the lawn (SkyRender.night: toward #0d1322 by (1 - light) x 0.6), so
+      // it does not glow.
+      const hv = this.look.of('tree.holiday'),
+        holiday = hv === 'none' ? null : hv === 'xmas' ? 'christmas' : hv,
         dusk = treeDusk(dfB),
-        // (not at Christmas: one big tree stands on the front lawn instead, web/island-art-xmas.js)
-        held = d => holiday && holiday !== 'christmas' && HOLIDAY_TREES.has(d.x + ',' + d.y);
+        held = d => holiday && HOLIDAY_TREES.has(d.x + ',' + d.y);
       for (const p of this.islandCache.props)
         if (!(p.tree && held(p))) (backOf(p) ? behind : items).push({ z: p.z, f: stamp(p) });
       for (const d of ISLAND.decor) {
@@ -574,7 +573,6 @@ mixin(
         );
         ctx.globalAlpha = 1;
       });
-      if (SeasonTree) this.seasonKey = SeasonTree.seasonFor(new Date());
       {
         const OD = OfficeDecor,
           lit = this.propLit || PropUse.DARK;

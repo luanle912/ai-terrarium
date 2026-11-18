@@ -99,6 +99,7 @@ Object.assign(ClaudeOffice.prototype, {
     const w = this.world,
       dt = Math.min(0.05, Math.max(0, (ts - this.last) / 1000));
     this.last = ts;
+    this.computeMoment(); // the moment every island of the world reads this frame (IslandScene)
     this.env = this.envNow();
     this.frameTheme = this.theme;
     const st = this.stageEl;
@@ -330,7 +331,7 @@ Object.assign(ClaudeOffice.prototype, {
     const df = Math.round((this.env ? this.env.df : 1) * 10) / 10,
       lit = Math.min(6, busy | 0),
       color = okColor(meta.color),
-      season = this.seasonNow();
+      season = this.moment.season;
     const img = art('i' + color + df + lit + (mine ? 'm' : '') + season, g =>
       paintIsland(g, color, df, lit, !!mine, season),
     );

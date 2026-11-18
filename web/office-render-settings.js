@@ -11,8 +11,7 @@ mixin(
     // The Season section, under Weather (the local page's panel and the world's): the choice, what shows now and four
     // buttons that show a season for a minute (SeasonLogic.startSeasonPreview).
     seasonSection() {
-      const now = this.seasonNow(),
-        choice = this.seasonChoice || 'auto',
+      const choice = this.seasonChoice || 'auto',
         name = key => SeasonLogic.seasonLabel({ season: key });
       return h(
         'div',
@@ -36,7 +35,7 @@ mixin(
           'span',
           null,
           tr('settings.season.current', {
-            label: SeasonLogic.seasonLabel({ season: now, holiday: this.season, event: this.eventNow() }),
+            label: SeasonLogic.seasonLabel(this.moment),
           }),
         ),
         h(
@@ -61,7 +60,7 @@ mixin(
     // The Event section, under Season: the choice (shared with the wallpaper through the local server), what is on
     // now, and a button that shows the whole event for a minute.
     eventSection() {
-      const ev = this.eventNow();
+      const ev = this.moment.event;
       return h(
         'div',
         { id: 'event-section', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
@@ -85,7 +84,7 @@ mixin(
           'span',
           null,
           tr('settings.event.current', {
-            label: ev ? tr('event.christmas') + ' · ' + ev.level + '/3' : tr('settings.event.none'),
+            label: ev ? tr('event.christmas') : tr('settings.event.none'),
           }),
         ),
         h(
@@ -95,6 +94,7 @@ mixin(
             style: { padding: '3px 7px', fontSize: 11, alignSelf: 'flex-start' },
             onClick: () => {
               this.eventPreview = EventLogic.startPreview(Date.now());
+              this.computeMoment();
               this.setState({ eventPreviewAt: Date.now() });
             },
           },
@@ -106,12 +106,14 @@ mixin(
       if (!SeasonLogic.CHOICES.includes(choice)) return;
       this.seasonChoice = choice;
       SeasonLogic.saveSeasonChoice(this.storage, choice);
+      this.computeMoment();
       this.setState({ seasonChoice: choice });
     }
     // A preview shows the season for SEASON_PREVIEW_MS, then the choice's own returns.
     previewSeason(key) {
       if (!SeasonLogic.KEYS.includes(key)) return;
       this.seasonPreview = SeasonLogic.startSeasonPreview(key, Date.now());
+      this.computeMoment();
       this.setState({ seasonPreviewAt: Date.now() });
     }
     // The header's season chip: open Settings and scroll the panel (only the panel, never the stage under it) to the

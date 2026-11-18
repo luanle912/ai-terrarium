@@ -105,7 +105,6 @@ export class IslandScene {
     this.goneSids = new Map();
     this.depts = new Map();
     this.firstSnap = true;
-    this.seasonKey = 'default';
     this.canvas = document.createElement('canvas');
     this.k = null;
     this.lodK = 1;
@@ -143,9 +142,16 @@ export class IslandScene {
   get snowShown() {
     return this.host.snowShown;
   }
-  // every island shows the season of the viewer's page
+  // Every island shows the viewer's moment and look (ClaudeOffice#computeMoment), worked out once a frame by the host:
+  // no island keeps its own, so they all turn in the same frame as the host's own island.
+  get moment() {
+    return this.host.moment;
+  }
+  get look() {
+    return this.host.look;
+  }
   seasonNow() {
-    return this.host.seasonNow();
+    return this.host.moment.season;
   }
   get islandCache() {
     return SCENE_ISLAND_CACHE.get(this.k);

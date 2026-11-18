@@ -448,19 +448,21 @@ test("every island's dogs are sent off, not only those of the first to ask", () 
   }
 })
 
-test('the page reserves the lawn whenever it works out the event, and sends its own dogs off', () => {
+test('the page reserves the lawn when the moment\'s event comes or goes, and sends its own dogs off', () => {
   const { ClaudeOffice } = loadWeb('office')
   const was = snapshot()
   const [dog] = DogLogic.create({ ...S.DOG_PLACES, agents: [], hour: 12, snow: 0, calm: false, now: 0, rand: seeded(4) })
   Object.assign(dog, { x: 20.5, y: -9.5, act: 'rest', path: [], until: Infinity })
   const page = { eventChoice: 'on', eventPreview: null, dogs: [dog] }
   try {
+    ClaudeOffice.prototype.computeMoment.call(page) // the moment the page works out every frame
     assert.equal(ClaudeOffice.prototype.eventNow.call(page).level, 3)
     for (const k of L.WALK_OFF) assert.ok(!S.LAWN_WALK.has(k), `${k} still walkable`)
     for (const k of L.ROAM_OFF) assert.ok(!S.DOG_ROAM.has(k), `${k} still roamed`)
     assert.ok(S.DOG_ROAM.has(key(Math.floor(dog.x), Math.floor(dog.y))), 'its dog is put down on the lawn')
     assert.equal(dog.act, 'idle')
     page.eventChoice = 'off'
+    ClaudeOffice.prototype.computeMoment.call(page)
     assert.equal(ClaudeOffice.prototype.eventNow.call(page), null)
     assert.deepEqual(snapshot(), was, 'the lawn is back when the event ends')
   } finally {

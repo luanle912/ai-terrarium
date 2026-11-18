@@ -486,9 +486,8 @@ export const THEMES = {
     shadow: 'rgba(47,91,255,0.15)',
   },
 };
-export function dayFactor() {
-  const d = new Date(),
-    t = d.getHours() + d.getMinutes() / 60;
+export function dayFactor(d = new Date()) {
+  const t = d.getHours() + d.getMinutes() / 60;
   if (t < 5) return 0;
   if (t < 6.5) return (1 - Math.cos(((t - 5) / 1.5) * Math.PI)) / 2;
   if (t < 16.5) return 1;

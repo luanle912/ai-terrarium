@@ -1,5 +1,4 @@
 import { tr } from './i18n.js';
-import { SeasonTree } from './season-tree.js';
 import { SeasonLogic } from './season-logic.js';
 import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
@@ -9,6 +8,8 @@ import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import { EventLogic } from './event-logic.js';
 import { EventLandmark } from './event-landmark.js';
+import { Moment } from './moment.js';
+import { Theme } from './theme.js';
 import {
   BLOCK,
   DOG_PLACES,
@@ -75,7 +76,6 @@ export class ClaudeOffice extends React.Component {
     this.bubbleEls = {};
     this.usedLooks = 0;
     this.last = 0;
-    this.seasonKey = 'default';
     this.seasonChoice = SeasonLogic.loadSeasonChoice(this.storage);
     this.seasonPreview = null;
     this.eventChoice = EventLogic.loadChoice(this.storage);
@@ -116,6 +116,7 @@ export class ClaudeOffice extends React.Component {
     this.nextFlashAt = 0;
     this.preview = null;
     this.lastSky = Date.now();
+    this.computeMoment(); // render() reads it before the first frame
     this.reducedMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
     // Phones (narrow, or a phone on its side) get a compact header: one row of controls plus one sideways-scrolling
     // strip, so the island keeps the height. render() runs every 300 ms (uiTimer), so it simply reads the query each
@@ -393,20 +394,34 @@ export class ClaudeOffice extends React.Component {
     if (e.seed) this.pushSettings({ mode: w.mode, city: w.city });
     this.eventSeeded = true;
   }
-  // The event (web/event-logic.js) on the viewer's clock: a one-minute preview, else the choice in Settings.
-  // Asked several times a frame, so the answer is kept for the second it was worked out in.
+  // The moment (web/moment.js) and its look (web/theme.js), worked out once a frame, paused or not, before anything
+  // moves or is drawn: the choices and previews in Settings, the daylight and the snow on the lawn. Every scene reads
+  // these two, the islands of the world view included (IslandScene asks its host), so nothing keeps its own clock.
+  computeMoment(date = new Date()) {
+    this.moment = Moment.at({
+      date,
+      now: date.getTime(),
+      seasonChoice: this.seasonChoice,
+      seasonPreview: this.seasonPreview,
+      eventChoice: this.eventChoice,
+      eventPreview: this.eventPreview,
+      df: dayFactor(date),
+      snow: this.snowShown || 0,
+    });
+    this.look = Theme.resolve(this.moment);
+    return this.moment;
+  }
+  // The moment's event in the stopgap shape the drawing code still asks for ({ key, since, level 3, eve, day }; see
+  // EventLogic.active), one object while the event stays the same. When it comes or goes, the big tree's cells and
+  // the cathedral's ground are taken out of (or put back into) the walkable ones.
   eventNow() {
-    const now = Date.now(),
-      sec = Math.floor(now / 1000),
-      c = this.eventChoice || 'auto',
-      p = this.eventPreview;
-    if (this.evSec !== sec || this.evFor !== c || this.evPrev !== p) {
-      this.evSec = sec;
-      this.evFor = c;
-      this.evPrev = p;
-      this.evNow = EventLogic.active(new Date(now), c, p, now);
-      EventLogic.block(BLOCK, !!this.evNow); // nobody walks through the big tree while it stands
-      EventLandmark.reserve(EVENT_LAND, !!this.evNow, this.dogs); // nor through the cathedral
+    const e = this.moment && this.moment.event,
+      k = e ? e.key + '@' + e.since : '';
+    if (this.evK !== k) {
+      this.evK = k;
+      this.evNow = e ? { ...e, level: 3, eve: true, day: true } : null;
+      EventLogic.block(BLOCK, !!e); // nobody walks through the big tree while it stands
+      EventLandmark.reserve(EVENT_LAND, !!e, this.dogs); // nor through the cathedral
     }
     return this.evNow;
   }
@@ -414,6 +429,7 @@ export class ClaudeOffice extends React.Component {
     if (!EventLogic.CHOICES.includes(choice)) return;
     this.eventChoice = choice;
     EventLogic.saveChoice(this.storage, choice);
+    this.computeMoment();
     this.setState({ eventChoice: choice });
     if (!fromServer) this.pushSettings();
   }
@@ -481,24 +497,14 @@ export class ClaudeOffice extends React.Component {
   get speed() {
     return this.state.speed || 1;
   }
+  // The small holiday whose trees stand by the office (a key of SeasonTree.SEASONS), or 'default' for none.
   get season() {
-    return this.seasonKey && this.seasonKey !== 'default'
-      ? this.seasonKey
-      : SeasonTree
-        ? SeasonTree.seasonFor()
-        : 'default';
+    return this.moment.holiday || 'default';
   }
-  // The season the island shows (SeasonLogic): a one-minute preview, else the choice in Settings, else the date.
-  // seasonChoice / seasonPreview are set from Settings; until then the date decides.
-  // The Christmas event brings winter with it (EventLogic.season), whatever the date or the choice.
+  // The season the island shows (web/moment.js): a one-minute preview, else the choice in Settings, else the date;
+  // the Christmas event brings winter with it.
   seasonNow() {
-    const key = SeasonLogic.currentSeason({
-      date: new Date(),
-      choice: this.seasonChoice || 'auto',
-      preview: this.seasonPreview || null,
-      now: Date.now(),
-    }).key;
-    return EventLogic.season(this.eventNow(), key);
+    return this.moment.season;
   }
   get treeOn() {
     return this.season !== 'default';
@@ -514,6 +520,7 @@ export class ClaudeOffice extends React.Component {
     if (this.world) return this.worldFrame(ts);
     const dt = Math.min(0.05, (ts - this.last) / 1000);
     this.last = ts;
+    this.computeMoment();
     if (!this.state.paused) {
       this.agents.forEach(a => this.updateAgent(a, dt));
       this.stepDogs(dt);
