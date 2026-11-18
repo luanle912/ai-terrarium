@@ -5,6 +5,7 @@ import { EventLogic } from './event-logic.js';
 import { BIG_TREE_BULBS, BIG_TREE_EXT, BIG_TREE_TOP, drawBigTree } from './island-art-xmas.js';
 import { PAVILION, night } from './island-art.js';
 import { KENNEL } from './office-draw-doghouse.js';
+import { DOORS } from './office-instances.js';
 import { DESKS, DOG_HOUSES, ISLAND, P, PG, SMOKE, W, H, WALL } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 
@@ -143,7 +144,7 @@ const OWNED = new Uint8Array(DESKS.length);
 // Where a desk's decoration sits, off the desk's cell (gx, gy) and up from the floor, and the EXIT door's wreath,
 // in the scene (P).
 export const DECOR_SPOT = [1.55, 0.25, 15],
-  WREATH_SPOT = [0, 7.05, 24];
+  WREATH_SPOT = DOORS.find(d => d.kind === 'exit').at;
 // Where each desk's decoration sits (x, y px) and its depth among the sprites, and the wreaths, worked out once.
 const DESK_AT = new Float32Array(DESKS.length * 3);
 DESKS.forEach((d, i) => {

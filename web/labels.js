@@ -3,11 +3,19 @@
 // "every door has a wreath" follows from one entry in a pack. Pure data, no drawing (tests/labels.test.mjs).
 //   variants  every look the label can take, across all packs (base ones per season, then the events' own)
 //   overlays  everything a pack may lay on top of it (decor), drawn after the variant
-// Each label's list of instances (walls, doors, desks...) joins in a later step.
+//   instances()  the places the label's copies stand (walls, doors, desks...), set by web/office-instances.js so this
+//                file stays free of the scene; [] for a label whose copies are not listed there
 import { SeasonTree } from './season-tree.js';
 
 const SEASONAL = ['fresh', 'green', 'gold', 'bare'];
-const L = (id, group, variants, overlays = []) => ({ id, group, variants, overlays });
+const LISTS = new Map();
+const L = (id, group, variants, overlays = []) => ({
+  id,
+  group,
+  variants,
+  overlays,
+  instances: () => (LISTS.has(id) ? LISTS.get(id)() : []),
+});
 
 // The small holidays of the season tree each have their own holiday tree (themes/holidays.js); Christmas is 'xmas'.
 const HOLIDAY_TREES = Object.keys(SeasonTree.SEASONS).filter(
@@ -58,4 +66,9 @@ const byId = id => BY_ID.get(id) || null;
 for (const l of LIST) Object.freeze(l.variants), Object.freeze(l.overlays), Object.freeze(l);
 Object.freeze(LIST);
 
-export const Labels = { LIST, byId, SEASONAL };
+const setInstances = (id, list) => {
+  if (!BY_ID.has(id)) throw new Error('unknown label ' + id);
+  LISTS.set(id, list);
+};
+
+export const Labels = { LIST, byId, SEASONAL, setInstances };

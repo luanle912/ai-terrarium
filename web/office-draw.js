@@ -9,6 +9,7 @@ import { IslandLife } from './island-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
 import { PropUse } from './prop-use.js';
+import { EXIT, POTS, WINDOWS } from './office-instances.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import {
   DESKS,
@@ -44,7 +45,7 @@ const HOLIDAY_TREES = SeasonIsland.holidayTrees(ISLAND, W, H);
 // (1 - light) x 0.6.
 export const treeDusk = dfB => (1 - dfB / 10) * 0.6;
 // The floor cell the EXIT door's kit stands on (OfficeDecor.kit at P of it).
-export const DOOR_KIT = [0, 5.5];
+export const DOOR_KIT = EXIT.kit;
 mixin(
   ClaudeOffice,
   class {
@@ -351,7 +352,7 @@ mixin(
       if (ev) this.xmasWallLights(G, ev);
       {
         const OD = OfficeDecor;
-        if (OD) [1.6, 4.8, 11.6, 14.8].forEach(x => OD.F.window(OD.kit(ctx, ...P(x, 0)), t, { night: df < 0.5 }));
+        if (OD) WINDOWS.forEach(({ x }) => OD.F.window(OD.kit(ctx, ...P(x, 0)), t, { night: df < 0.5 }));
       }
       {
         const OD = OfficeDecor,
@@ -564,7 +565,7 @@ mixin(
         paint(21.3, 13.2, 'PANTRY', df > 0.5 ? '#8a5a2a' : '#a8763e', 2.5, ALONG_X);
       }
       poly([P(0.05, 6.4), P(0.9, 6.4), P(0.9, 7.6), P(0.05, 7.6)], lerpHex('#3a2f55', '#b5523b', df), null);
-      [1.6, 4.8, 11.6, 14.8].forEach(x => {
+      WINDOWS.forEach(({ x }) => {
         ctx.globalAlpha = 0.07 + (0.22 - 0.07) * df;
         poly(
           [P(x + 0.3, 0.05), P(x + 2.1, 0.05), P(x + 2.6, 1.6), P(x + 0.8, 1.6)],
@@ -595,11 +596,7 @@ mixin(
       this.fateItems(G, items);
       if (ev) this.xmasItems(G, items, ev);
       this.restroomItems(G, items, snow);
-      [
-        [8.5, 13.5],
-        [19.5, 13.5],
-        [19.5, 0.5],
-      ].forEach(([x, y]) =>
+      POTS.forEach(({ x, y }) =>
         items.push({
           z: x + y,
           f: () => {
