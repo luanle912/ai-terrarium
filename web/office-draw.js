@@ -210,6 +210,9 @@ mixin(
         season = this.seasonNow(),
         look = this.look,
         lookK = look.keyOf(ISLAND_PARTS);
+      // the big tree's and the cathedral's cells follow the event on every scene this draws (an IslandScene of the
+      // world view has no envNow of its own to do it)
+      this.eventNow();
       if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season || ic.look !== lookK) {
         // let the browser drop the old bake's canvases now rather than at the next collection
         if (ic) for (const c of [ic.img, ...ic.props.map(p => p.img)]) c.width = c.height = 0;
