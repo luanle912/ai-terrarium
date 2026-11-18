@@ -10,6 +10,7 @@ import { EventLogic } from './event-logic.js';
 import { EventLandmark } from './event-landmark.js';
 import { Moment } from './moment.js';
 import { Theme } from './theme.js';
+import { LookChange } from './look-change.js';
 import {
   BLOCK,
   DOG_PLACES,
@@ -521,6 +522,7 @@ export class ClaudeOffice extends React.Component {
     const dt = Math.min(0.05, (ts - this.last) / 1000);
     this.last = ts;
     this.computeMoment();
+    if (this.look !== this.lastLook) this.seeLook(); // a new Look: everything follows now, paused or not
     if (!this.state.paused) {
       this.agents.forEach(a => this.updateAgent(a, dt));
       this.stepDogs(dt);
@@ -574,12 +576,14 @@ export class ClaudeOffice extends React.Component {
       ev = this.eventNow(),
       fx = EventLogic.weather(SkyLogic.weatherFx(this.wx, now), this.state.weatherMode === 'off' ? null : ev),
       df = dayFactor();
-    // Winter keeps at least its own snow on the lawn, the roofs and the mountain whatever the weather.
+    // Winter keeps at least its own snow on the lawn, the roofs and the mountain whatever the weather. The snow an
+    // event brought melts within seconds once it ends, unless it is snowing (meltUntil, web/office-look.js).
     const season = this.seasonNow();
     {
-      const sn = SkyLogic.stepSnow(this.snow, fx, this.preview, dtMs);
-      this.snow = sn.cover;
-      this.snowShown = Math.max(sn.shown, SeasonLogic.look(season).minSnow);
+      const sn = SkyLogic.stepSnow(this.snow, fx, this.preview, dtMs),
+        melt = this.meltUntil > now && !(fx.snow > 0);
+      this.snow = melt ? LookChange.melt(sn.cover, this.meltUntil - now, dtMs) : sn.cover;
+      this.snowShown = Math.max(sn.shown === sn.cover ? this.snow : sn.shown, SeasonLogic.look(season).minSnow);
     }
     if (fx.storm > 0.5 && !reduced) {
       if (now >= this.nextFlashAt) {

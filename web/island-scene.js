@@ -31,6 +31,7 @@ export const SCENE_METHODS = [
   'log',
   'byId',
   'leave',
+  'pickFate',
   'doneSweep',
   'goalFor',
   'updateAgent',

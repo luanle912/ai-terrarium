@@ -33,6 +33,7 @@ import './office-people.js';
 import './office-util.js';
 import './office.js';
 import './office-agents.js';
+import './office-look.js';
 import './office-draw.js';
 import './office-draw-furniture.js';
 import './office-draw-restroom.js';

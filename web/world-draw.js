@@ -101,6 +101,7 @@ Object.assign(ClaudeOffice.prototype, {
       dt = Math.min(0.05, Math.max(0, (ts - this.last) / 1000));
     this.last = ts;
     this.computeMoment(); // the moment every island of the world reads this frame (IslandScene)
+    if (this.look !== this.lastLook) this.seeLook();
     this.env = this.envNow();
     this.frameTheme = this.theme;
     const st = this.stageEl;

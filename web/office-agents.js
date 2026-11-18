@@ -237,8 +237,11 @@ mixin(
       a.status = 'leaving';
       this.log(a, tr('office.log.sessionEnded'));
       if (WorldLogic.leaveGone(document.visibilityState)) return void (a.gone = true);
-      // How they go (web/fate-logic.js): out of the EXIT door, or some other way that suits the weather, at a spot on
-      // the lawn, in the lake or a few steps along the way. A spot nobody can walk to falls back to the door.
+      this.pickFate(a);
+    }
+    // How they go (web/fate-logic.js): out of the EXIT door, or some other way that suits the weather, at a spot on
+    // the lawn, in the lake or a few steps along the way. A spot nobody can walk to falls back to the door.
+    pickFate(a) {
       const way = bfs(startCell(a.x, a.y), DOOR.tile);
       a.fate = FateLogic.pick(this.fateCtx(), Math.random, this.lastFate, this.forceFate);
       a.fateGoal = FateLogic.goal(a.fate, FATE_PLACES, way, Math.random);
@@ -529,8 +532,10 @@ mixin(
         // The Christmas event's own spots are open by its level, the snow and the ice (EventIdle.open).
         const frozen = SeasonLogic.look(this.seasonNow()).frozen,
           c = this.idleCtx(frozen);
-        if (!SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen) || !EventIdle.stays(IDLE_SPOTS, a.idleSpot, c))
-          a.idleSpot = null;
+        // (Someone the Look just sent away lingers a moment first, a.linger seconds: web/office-look.js.)
+        const stays =
+          SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen) && EventIdle.stays(IDLE_SPOTS, a.idleSpot, c);
+        if (!stays && !(a.linger > 0)) a.idleSpot = null;
         // After ten minutes or so at one thing (a.idleT against a.idleFor) the person goes on to a different one.
         const was = a.idleSpot != null && a.idleT >= a.idleFor ? a.idleSpot : null;
         if (was != null) a.idleSpot = null;
@@ -589,6 +594,7 @@ mixin(
         if (g.key === 'seat' && a.path.length > 1) a.path.splice(a.path.length - 2, 1);
       }
       if (a.actNow && !a.path.length) a.idleT += dt * this.speed; // the stay at an idle spot, walking not counted
+      if (a.linger > 0) a.linger -= dt * this.speed;
       if (a.path.length) {
         a.moving = true;
         let step = 2.6 * this.speed * dt;

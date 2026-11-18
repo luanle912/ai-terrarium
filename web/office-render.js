@@ -201,6 +201,7 @@ mixin(
           status: a.status,
           tool: a.tool,
           actNow: a.actNow,
+          say: a.actNow ? actLabel(a.actNow, this.look) : null,
           target: a.target,
           pinned: pinnedOf(a) || busy(a),
         })),
