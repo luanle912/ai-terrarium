@@ -11,6 +11,7 @@ import { EventLandmark } from './event-landmark.js';
 import { Moment } from './moment.js';
 import { Theme } from './theme.js';
 import { LookChange } from './look-change.js';
+import { SettingsSync } from './settings-sync.js';
 import {
   BLOCK,
   DOG_PLACES,
@@ -81,6 +82,7 @@ export class ClaudeOffice extends React.Component {
     this.seasonPreview = null;
     this.eventChoice = EventLogic.loadChoice(this.storage);
     this.eventPreview = null;
+    this.sync = SettingsSync.create(this.storage); // when the choices were made, what was sent (settings-sync.js)
     this.goneSids = new Map();
     this.depts = new Map();
     this.setCanvas = el => {
@@ -362,38 +364,23 @@ export class ClaudeOffice extends React.Component {
     if (this.onShown) document.removeEventListener('visibilitychange', this.onShown);
     if (this.onPreviewVis) document.removeEventListener('visibilitychange', this.onPreviewVis);
     if (this.onWorldOnline) window.removeEventListener('online', this.onWorldOnline);
+    if (this.onWorldStorage) window.removeEventListener('storage', this.onWorldStorage);
   }
   // ---- weather settings ----
   // `fromServer`: adopting what another page chose (adoptSettings), so it is not posted back.
   setWeather(patch, fromServer) {
     this.setState(patch, () => {
       SkyLogic.saveWeatherSettings(this.storage, { mode: this.state.weatherMode, city: this.state.city });
-      if (!fromServer) this.pushSettings();
+      if (!fromServer) this.pushSettings(true);
       if (this.state.weatherMode === 'real' && (patch.weatherMode === 'real' || 'city' in patch)) this.refreshReal();
       if (this.state.weatherMode !== 'real') this.setState({ realStatus: { state: 'idle', text: '' } });
     });
   }
-  // The local server keeps one weather choice for all its pages (lib/page-settings.js) and sends it in every snapshot,
-  // so the wallpaper app's web view, which has its own storage and no settings panel, follows what was chosen here.
-  // A server that has none yet gets this page's own choice, unless this is the wallpaper (it never chose anything).
+  // The local server keeps one weather and event choice for all its pages (lib/page-settings.js) and sends it in
+  // every snapshot, so the wallpaper app's web view, which has its own storage and no settings panel, follows what was
+  // chosen here. The newest choice wins, and a server that has none yet gets this page's own (SettingsSync.receive).
   adoptSettings(ps) {
-    this.sharedSettings = true;
-    // a snapshot sent before our own change reached the server must not undo it
-    if (Date.now() - (this.pushedAt || 0) < 3000) return;
-    const w = ps && ps.weather;
-    if (!w) {
-      if (!this.wallpaper && !this.settingsSeeded) this.pushSettings();
-      this.settingsSeeded = true;
-      return;
-    }
-    if (w.mode !== this.state.weatherMode || w.city !== this.state.city)
-      this.setWeather({ weatherMode: w.mode, city: w.city, cityDraft: w.city }, true);
-    // the event choice (EventLogic.adopt): a server that has none yet takes this page's own, sent with the weather
-    // the server just gave (this page's own may still be the old one until the state above settles)
-    const e = EventLogic.adopt(ps.event, this.eventChoice, { wallpaper: this.wallpaper, seeded: this.eventSeeded });
-    if (e.take) this.setEventChoice(e.take, true);
-    if (e.seed) this.pushSettings({ mode: w.mode, city: w.city });
-    this.eventSeeded = true;
+    SettingsSync.receive(this, ps);
   }
   // The moment (web/moment.js) and its look (web/theme.js), worked out once a frame, paused or not, before anything
   // moves or is drawn: the choices and previews in Settings, the daylight and the snow on the lawn. Every scene reads
@@ -432,21 +419,11 @@ export class ClaudeOffice extends React.Component {
     EventLogic.saveChoice(this.storage, choice);
     this.computeMoment();
     this.setState({ eventChoice: choice });
-    if (!fromServer) this.pushSettings();
+    if (!fromServer) this.pushSettings(true);
   }
-  pushSettings(weather) {
-    if (!this.sharedSettings || typeof fetch !== 'function') return;
-    this.pushedAt = Date.now();
-    const body = JSON.stringify({
-      weather: weather || { mode: this.state.weatherMode, city: this.state.city },
-      event: this.eventChoice || 'auto',
-    });
-    fetch(this.settingsUrl || '/api/settings', {
-      method: 'POST',
-      headers: { 'X-Terrarium': 'settings', 'Content-Type': 'application/json' },
-      body,
-      cache: 'no-store',
-    }).catch(() => {});
+  // Sends the choices to the local server from any data source (SettingsSync.share); `changed` when made just now.
+  pushSettings(changed) {
+    return SettingsSync.share(this, { touch: !!changed });
   }
   async refreshReal() {
     const city = this.state.city,

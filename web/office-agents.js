@@ -46,15 +46,16 @@ mixin(
           es.onopen = () => this.setState({ live: 'ok' });
           es.onerror = () => this.setState({ live: 'error' });
           es.onmessage = e => {
-            if (this.state.asOthers) return;
             try {
               const snap = JSON.parse(e.data);
-              this.syncLive(snap);
-              // the local server's shared weather choice (ClaudeOffice.adoptSettings), posted back to the same server
+              // the local server's shared choices (ClaudeOffice.adoptSettings), posted back to the same server; they
+              // are the viewer's, so followed while viewing as another person too
               if ('pageSettings' in snap) {
                 this.settingsUrl = new URL('/api/settings', new URL(url, location.href)).href;
                 this.adoptSettings(snap.pageSettings);
               }
+              if (this.state.asOthers) return;
+              this.syncLive(snap);
               this.state.live !== 'ok' && this.setState({ live: 'ok' });
             } catch (err) {}
           };

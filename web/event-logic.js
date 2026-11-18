@@ -7,6 +7,11 @@ const CHOICES = ['auto', 'on', 'off'];
 const EVENT_KEY = 'ai-terrarium.event';
 const PREVIEW_MS = 60_000;
 const startPreview = now => ({ until: now + PREVIEW_MS });
+// What Settings shows while a preview runs: its time left as m:ss, rounded up ('' when none runs).
+function previewClock(preview, now) {
+  const s = preview ? Math.ceil((preview.until - now) / 1000) : 0;
+  return s > 0 ? Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') : '';
+}
 
 // The event at a moment of the viewer's own clock, or null: { key: 'christmas', since, level, eve, day }.
 //   since  whole days from 1 Dec (0-based); choice 'on' and a preview say 14, the full event
@@ -42,12 +47,17 @@ function saveChoice(storage, choice) {
   }
 }
 
-// What a page does with the event choice the local server sends (undefined from a server or a save that has none):
-// take it when it differs, or give the server this page's own, once, when it has none and this page's is not the
-// default. The wallpaper has no settings of its own to give.
-function adopt(server, own, { wallpaper = false, seeded = false } = {}) {
-  if (CHOICES.includes(server)) return { take: server !== own ? server : null, seed: false };
-  return { take: null, seed: !wallpaper && !seeded && own !== 'auto' };
+// What a page does with the shared settings the local server sends (lib/page-settings.js; null while it has none),
+// against this page's own event choice made at localAt (ms, 0 when never stamped). The newest choice wins: `newer`
+// when the server's is later (an unstamped one is the oldest; neither stamped: the server's, as before), then `take`
+// its event when it differs; `push` this page's own when it is later than the server's. The wallpaper has no
+// settings of its own to give.
+const stampOf = v => (v && Number.isFinite(v.updatedAt) && v.updatedAt > 0 ? v.updatedAt : 0);
+function adopt({ server, local, localAt = 0, wallpaper = false }) {
+  const at = server && server.weather ? stampOf(server) : -1,
+    newer = at > localAt || (at === 0 && localAt === 0);
+  const take = newer && CHOICES.includes(server.event) && server.event !== local ? server.event : null;
+  return { take, push: !wallpaper && localAt > at, newer };
 }
 
 // The big tree stands indoors, in the middle of the crossing of the office's two corridors: its foot at TREE_AT (in
@@ -111,6 +121,7 @@ export const EventLogic = {
   EVENT_KEY,
   PREVIEW_MS,
   startPreview,
+  previewClock,
   active,
   cacheKey,
   loadChoice,

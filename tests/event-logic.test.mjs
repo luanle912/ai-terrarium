@@ -146,13 +146,38 @@ test('bulbs lie on the line, through a doubled point too, and none are made for 
   assert.equal(E.lightString([[0, 0], [100, 0]], 10, 0).length, 0)
 })
 
-test("adopting the server's event choice: follow it, seed it once when it has none, never from the wallpaper", () => {
-  const A = E.adopt
-  assert.deepEqual(A('on', 'auto', {}), { take: 'on', seed: false })
-  assert.deepEqual(A('auto', 'auto', {}), { take: null, seed: false })
-  assert.deepEqual(A(undefined, 'off', {}), { take: null, seed: true }, 'an older save has no event: this page gives its own')
-  assert.deepEqual(A(undefined, 'auto', {}), { take: null, seed: false }, 'auto is what a missing one means')
-  assert.deepEqual(A(undefined, 'off', { seeded: true }), { take: null, seed: false }, 'only once')
-  assert.deepEqual(A(undefined, 'off', { wallpaper: true }), { take: null, seed: false })
-  assert.deepEqual(A('party', 'off', {}), { take: null, seed: true }, 'a strange value counts as none')
+test('older server value never overrides a newer local choice', () => {
+  const A = E.adopt, w = { mode: 'off', city: '' }
+  assert.deepEqual(A({ server: { weather: w, event: 'off', updatedAt: 100 }, local: 'on', localAt: 200 }),
+    { take: null, push: true, newer: false }, 'this page chose later: it keeps its own and gives it to the server')
+  assert.deepEqual(A({ server: { weather: w, event: 'off', updatedAt: 300 }, local: 'on', localAt: 200 }),
+    { take: 'off', push: false, newer: true }, 'another page chose later: this one follows')
+  assert.deepEqual(A({ server: { weather: w, event: 'on', updatedAt: 300 }, local: 'on', localAt: 200 }),
+    { take: null, push: false, newer: true }, 'newer but the same choice: nothing to take, the weather may still be')
+  assert.deepEqual(A({ server: { weather: w, event: 'on', updatedAt: 200 }, local: 'on', localAt: 200 }),
+    { take: null, push: false, newer: false }, 'our own value echoed back')
+})
+
+test('adopt: an unstamped value (older tab) is oldest; a server with none gets ours; never the wallpaper', () => {
+  const A = E.adopt, w = { mode: 'off', city: '' }
+  assert.deepEqual(A({ server: { weather: w, event: 'off' }, local: 'on', localAt: 200 }),
+    { take: null, push: true, newer: false })
+  assert.deepEqual(A({ server: { weather: w, event: 'off' }, local: 'on', localAt: 0 }),
+    { take: 'off', push: false, newer: true }, 'neither was ever stamped: the server wins, as before')
+  assert.deepEqual(A({ server: null, local: 'auto', localAt: 0 }), { take: null, push: true, newer: false },
+    'a server with nothing yet gets this page\'s own')
+  assert.deepEqual(A({ server: null, local: 'on', localAt: 9, wallpaper: true }),
+    { take: null, push: false, newer: false })
+  assert.deepEqual(A({ server: { weather: w, event: 'party', updatedAt: 300 }, local: 'on', localAt: 0 }),
+    { take: null, push: false, newer: true }, 'a strange event value is never taken')
+})
+
+test('a running preview tells its time left as m:ss, rounded up; none, or one run out, says nothing', () => {
+  const p = E.startPreview(1000)
+  assert.equal(E.previewClock(p, 1000), '1:00')
+  assert.equal(E.previewClock(p, 1000 + 18_000), '0:42')
+  assert.equal(E.previewClock(p, 1000 + 18_500), '0:42', 'rounded up: 41.5 s left still reads 0:42')
+  assert.equal(E.previewClock(p, 1000 + 59_999), '0:01')
+  assert.equal(E.previewClock(p, 1000 + 60_000), '')
+  assert.equal(E.previewClock(null, 0), '')
 })

@@ -36,6 +36,38 @@ test('a page that knows nothing of the event (an old tab) changes the weather an
   assert.deepEqual(a.set({ weather: { mode: 'random', city: '' }, event: 'auto' }), { weather: { mode: 'random', city: '' }, event: 'auto' })
 })
 
+test('the time of the choice (updatedAt, ms) rides along when it is a number', () => {
+  const w = { mode: 'off', city: '' }
+  assert.deepEqual(ps.clean({ weather: w, event: 'on', updatedAt: 1700 }), { weather: w, event: 'on', updatedAt: 1700 })
+  assert.deepEqual(ps.clean({ weather: w, updatedAt: 'soon' }), { weather: w })
+  assert.deepEqual(ps.clean({ weather: w, updatedAt: -5 }), { weather: w })
+  assert.deepEqual(ps.clean({ weather: w, updatedAt: Infinity }), { weather: w })
+})
+
+test('server set() ignores an older updatedAt', () => {
+  const a = ps.createPageSettings(tmpFile())
+  const w = { mode: 'off', city: '' }
+  a.set({ weather: w, event: 'on', updatedAt: 2000 })
+  assert.deepEqual(a.set({ weather: w, event: 'off', updatedAt: 1000 }), { weather: w, event: 'on', updatedAt: 2000 },
+    'set answers with the newer one it keeps')
+  assert.equal(a.get().event, 'on')
+  assert.deepEqual(a.set({ weather: w, event: 'off', updatedAt: 3000 }), { weather: w, event: 'off', updatedAt: 3000 })
+  assert.equal(a.set({ weather: w, event: 'auto', updatedAt: 3000 }).event, 'auto', 'the same time: the last one wins')
+})
+
+test('a page without updatedAt (older tab) is treated as oldest', () => {
+  const a = ps.createPageSettings(tmpFile())
+  const w = { mode: 'off', city: '' }
+  a.set({ weather: w, event: 'on', updatedAt: 2000 })
+  assert.deepEqual(a.set({ weather: { mode: 'random', city: '' }, event: 'off' }),
+    { weather: w, event: 'on', updatedAt: 2000 })
+  // with nothing stamped yet an older tab still changes it, as before
+  const b = ps.createPageSettings(tmpFile())
+  b.set({ weather: w, event: 'on' })
+  assert.deepEqual(b.set({ weather: w, event: 'off' }), { weather: w, event: 'off' })
+  assert.equal(b.set({ weather: w, event: 'on', updatedAt: 5 }).updatedAt, 5, 'any stamp is newer than none')
+})
+
 test('the choice is kept on disk and read back by the next server', () => {
   const f = tmpFile()
   const a = ps.createPageSettings(f)

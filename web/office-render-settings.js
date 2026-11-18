@@ -5,13 +5,18 @@ import { SeasonLogic } from './season-logic.js';
 import { EventLogic } from './event-logic.js';
 import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker, assetsLink } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
+// The select values that are not choices: the event decides the season, the event preview is running.
+const FORCED = 'forced',
+  PREVIEWING = 'preview';
 mixin(
   ClaudeOffice,
   class {
     // The Season section, under Weather (the local page's panel and the world's): the choice, what shows now and four
     // buttons that show a season for a minute (SeasonLogic.startSeasonPreview).
+    // While the event decides the season (moment.forced) the select says so and nothing in the section can be used.
     seasonSection() {
-      const choice = this.seasonChoice || 'auto',
+      const forced = this.moment.forced.season,
+        choice = forced ? FORCED : this.seasonChoice || 'auto',
         name = key => SeasonLogic.seasonLabel({ season: key });
       return h(
         'div',
@@ -25,8 +30,10 @@ mixin(
             {
               'aria-label': tr('settings.season.mode'),
               value: choice,
+              disabled: forced,
               onChange: e => this.setSeasonChoice(e.target.value),
             },
+            forced && h('option', { value: FORCED, disabled: true }, tr('settings.forcedByEvent')),
             h('option', { value: 'auto' }, SeasonLogic.autoLabel()),
             SeasonLogic.KEYS.map(k => h('option', { key: k, value: k }, name(k))),
           ),
@@ -49,6 +56,7 @@ mixin(
                 className: 'btn',
                 title: tr('settings.season.previewTitle', { label: name(k) }),
                 style: { padding: '3px 7px', fontSize: 11 },
+                disabled: forced,
                 onClick: () => this.previewSeason(k),
               },
               name(k),
@@ -58,9 +66,11 @@ mixin(
       );
     }
     // The Event section, under Season: the choice (shared with the wallpaper through the local server), what is on
-    // now, and a button that shows the whole event for a minute.
+    // now, and a button that shows the whole event for a minute. While the preview runs the select says so with its
+    // time left ("Preview · 0:42", ticking with the panel) and the button cancels it instead of starting it again.
     eventSection() {
-      const ev = this.moment.event;
+      const ev = this.moment.event,
+        clock = EventLogic.previewClock(this.eventPreview, Date.now());
       return h(
         'div',
         { id: 'event-section', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
@@ -72,9 +82,13 @@ mixin(
             'select',
             {
               'aria-label': tr('settings.event.mode'),
-              value: this.eventChoice || 'auto',
-              onChange: e => this.setEventChoice(e.target.value),
+              value: clock ? PREVIEWING : this.eventChoice || 'auto',
+              onChange: e => {
+                this.setEventPreview(false); // a choice made now shows at once
+                this.setEventChoice(e.target.value);
+              },
             },
+            clock && h('option', { value: PREVIEWING, disabled: true }, tr('settings.preview.left', { time: clock })),
             h('option', { value: 'auto' }, tr('settings.event.auto')),
             h('option', { value: 'on' }, tr('settings.event.on')),
             h('option', { value: 'off' }, tr('settings.event.off')),
@@ -92,14 +106,41 @@ mixin(
           {
             className: 'btn',
             style: { padding: '3px 7px', fontSize: 11, alignSelf: 'flex-start' },
-            onClick: () => {
-              this.eventPreview = EventLogic.startPreview(Date.now());
-              this.computeMoment();
-              this.setState({ eventPreviewAt: Date.now() });
-            },
+            onClick: () => this.setEventPreview(!clock),
           },
-          tr('settings.event.preview'),
+          clock ? tr('settings.preview.cancel') : tr('settings.event.preview'),
         ),
+      );
+    }
+    // Starts the event preview (EventLogic.startPreview) or ends it now.
+    setEventPreview(on) {
+      if (!on && !this.eventPreview) return;
+      this.eventPreview = on ? EventLogic.startPreview(Date.now()) : null;
+      this.computeMoment();
+      this.setState({ eventPreviewAt: Date.now() });
+    }
+    // The weather preview buttons (SkyLogic.startPreview through previewWeather), in the local panel and the world's.
+    // While the event decides the weather (moment.forced: rain falls as snow) they say so and cannot be used.
+    weatherPreviews() {
+      const forced = this.moment.forced.weather;
+      return h(
+        'div',
+        { style: { display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' } },
+        WEATHER_PREVIEW.map(([type, label]) =>
+          h(
+            'button',
+            {
+              key: type,
+              className: 'btn',
+              title: tr('settings.weather.previewTitle', { label: WEATHER_LABEL[type] }),
+              style: { padding: '3px 7px', fontSize: 11 },
+              disabled: forced,
+              onClick: () => this.previewWeather(type),
+            },
+            label,
+          ),
+        ),
+        forced && h('span', { style: { fontSize: 11, color: 'var(--muted)' } }, tr('settings.forcedByEvent')),
       );
     }
     setSeasonChoice(choice) {
@@ -310,23 +351,7 @@ mixin(
             'div',
             { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
             h('span', null, tr('settings.weather.current', { label: WEATHER_LABEL[this.wx.to] })),
-            h(
-              'div',
-              { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
-              WEATHER_PREVIEW.map(([type, label]) =>
-                h(
-                  'button',
-                  {
-                    key: type,
-                    className: 'btn',
-                    title: tr('settings.weather.previewTitle', { label: WEATHER_LABEL[type] }),
-                    style: { padding: '3px 7px', fontSize: 11 },
-                    onClick: () => this.previewWeather(type),
-                  },
-                  label,
-                ),
-              ),
-            ),
+            this.weatherPreviews(),
           ),
           this.seasonSection(),
           this.eventSection(),
