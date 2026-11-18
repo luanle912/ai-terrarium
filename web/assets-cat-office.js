@@ -222,8 +222,9 @@ const OLD_DESK = {
 };
 
 // ---- Christmas ----
-// What the office puts on a desk that has an owner from the event's second level, shown on a kit desk; and the
-// wreath on the EXIT door (big) or over a kennel's door (small). The palette is the decoration's own.
+// What the office puts on every desk during the event, someone at it or not, shown on a kit desk; and the wreath on
+// every door: the EXIT's (big; the restroom's are the same size) or over a kennel's door (small). The palette is the
+// decoration's own.
 const DECOR = ['tree', 'stocking', 'tinsel'];
 const DECOR_DESK = { screen: 'code', noMug: false, lit: 1 };
 const own = draw => () => {
@@ -236,7 +237,7 @@ const DESK_DECOR = {
   cat: 'office',
   name: () => tr('assets.item.office.desk-decor'),
   tags: ['animated'],
-  when: { event: { key: 'christmas', level: 2 } },
+  when: { event: { key: 'christmas', level: 1 } },
   where: 'office',
   source: [{ file: 'web/office-draw-xmas.js', fn: 'deskDecor' }],
   axes: [

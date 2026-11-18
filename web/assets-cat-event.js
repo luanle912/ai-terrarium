@@ -15,6 +15,7 @@ import { STRINGS, drawString, glowAt } from './office-draw-xmas.js';
 import { drawCathedral } from './island-art-cathedral.js';
 import { drawOurLady } from './island-art-cathedral-yard.js';
 import { eventTone } from './sky-island.js';
+import { Theme } from './theme.js';
 
 const { axis, dfB, xmasEvent } = AssetsStage;
 // The event an entry shows up with (its `when`), at a level.
@@ -138,12 +139,12 @@ const GIFT_PILE = {
 const atOf = (s, n) => s && (n ? s.at.subarray(0, n * 2) : s.at);
 const PLACES = {
   wall: atOf(
-    STRINGS.find(s => s.z === null),
+    STRINGS.find(s => s.id === 'office.back'),
     12,
   ),
-  kennel: atOf(STRINGS.find(s => s.level === 2 && s.z !== null)),
-  pergola: atOf(STRINGS.findLast(s => s.level === 2)),
-  pavilion: atOf(STRINGS.find(s => s.level === 3)),
+  kennel: atOf(STRINGS.find(s => s.label === 'kennel')),
+  pergola: atOf(STRINGS.find(s => s.label === 'pergola')),
+  pavilion: atOf(STRINGS.find(s => s.label === 'pavilion')),
 };
 const PLACE_IDS = Object.keys(PLACES).filter(k => PLACES[k] && PLACES[k].length);
 const PLACE_LABEL = {
@@ -177,13 +178,23 @@ const STRING_LIGHTS = {
 
 // ---- the landmark ----
 const SITE = EventLandmark.SITE;
-// The event as cathedralItems takes it, per level, on an ordinary night or on Christmas Eve (every bulb burning, a
-// halo round the building).
+// The event as cathedralItems takes it, on an ordinary night or on Christmas Eve (every bulb burning, a halo round the
+// building), under the Christmas look (the whole landmark lit, whatever the page's Event control: D1).
 const LIT = [];
+const XMAS_LOOK = Theme.resolve({
+  season: 'winter',
+  holiday: null,
+  event: { key: 'christmas', since: 0 },
+  key: 'assets|christmas',
+});
 // The office's lights of the landmark for ev, those for the building (back: the halo behind it) or for the yard.
 function lights(s, ev, part) {
   LIT.length = 0;
-  s.host.cathedralItems(s.G, LIT, ev);
+  const G = s.G,
+    keep = G.look;
+  G.look = XMAS_LOOK;
+  s.host.cathedralItems(G, LIT, ev);
+  G.look = keep;
   for (const it of LIT)
     if (part === 'back' ? it.z < SITE.z : part === 'front' ? it.z > SITE.z && it.z < SITE.ladyZ : it.z > SITE.ladyZ)
       it.f();

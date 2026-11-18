@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { loadWeb } from './web.mjs'
+import { loadI18n } from './load-i18n.mjs'
 
 const { Labels } = loadWeb('labels')
 const { Theme } = loadWeb('theme')
@@ -56,4 +57,24 @@ test('a test pack resolves without code changes', () => {
   assert.equal(look.of('tree.island'), 'test')
   assert.equal(look.of('bush'), Theme.resolve({ season: 'summer', holiday: null, event: null, key: 's' }).of('bush'))
   assert.equal(look.has('critter.reindeer'), false)
+})
+
+// Overlays some later task of the plan paints (docs/plans/2026-11-18-asset-labels-plan.md): each one leaves this list
+// in the task that registers its painter, and the test below fails if it is listed and painted at once.
+const LATER = new Set(['tree.far+lights', 'window+frost', 'window+star', 'shelf+garland-small', 'plant.pot+bauble',
+  'clock+holly-sprig'])
+test('every (label, overlay) in every pack has a painter', () => {
+  globalThis.React ??= { createElement: () => null, Component: class {} }
+  loadI18n('vi')
+  loadWeb('office-draw-xmas') // the office's Christmas overlays register their painters on import
+  const { Paint } = loadWeb('paint')
+  const missing = []
+  for (const p of Theme.PACKS)
+    for (const [id, list] of Object.entries(p.decor || {}))
+      for (const o of list) {
+        const k = id + '+' + o
+        if (LATER.has(k)) assert.equal(Paint.has(id, o), false, `${k} is painted: take it off LATER`)
+        else if (!Paint.has(id, o)) missing.push(`${p.key}: ${k}`)
+      }
+  assert.deepEqual(missing, [])
 })

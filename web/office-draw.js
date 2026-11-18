@@ -317,6 +317,7 @@ mixin(
       G.t = t;
       G.df = df;
       G.ev = ev;
+      G.look = this.look;
       G.cold = isCold(snow, df, env);
       this.drawPrints(G, this.printNow || 0);
       for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
@@ -349,7 +350,7 @@ mixin(
       poly([P(W, -WT, 0), P(W, 0, 0), P(W, 0, ZT), P(W, -WT, ZT)], shade(th.wr, -34), null);
       poly([P(-WT, H, 0), P(0, H, 0), P(0, H, ZT), P(-WT, H, ZT)], shade(th.wl, -20), null);
       if (SnowLogic.depth(snow)) this.winterWalls(G, SnowLogic.depth(snow));
-      if (ev) this.xmasWallLights(G, ev);
+      this.xmasWallLights(G);
       {
         const OD = OfficeDecor;
         if (OD) WINDOWS.forEach(({ x }) => OD.F.window(OD.kit(ctx, ...P(x, 0)), t, { night: df < 0.5 }));
@@ -594,7 +595,7 @@ mixin(
       this.smokingItems(G, items, snow);
       this.doghouseItems(G, items, snow, dfB, snB);
       this.fateItems(G, items);
-      if (ev) this.xmasItems(G, items, ev);
+      this.xmasItems(G, items, ev);
       this.restroomItems(G, items, snow);
       POTS.forEach(({ x, y }) =>
         items.push({

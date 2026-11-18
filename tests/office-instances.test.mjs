@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { loadWeb, readWeb } from './web.mjs'
+import { loadI18n } from './load-i18n.mjs'
 
 globalThis.React ??= { createElement: () => null, Component: class {} } // office-scene.js only needs React for h()
 const { WALLS, DOORS, WINDOWS, POTS, CLOCK, SHELF, KENNELS } = loadWeb('office-instances')
@@ -56,4 +57,12 @@ test('the shelf and the clock are where office-draw draws them, read from the li
 test('DOORS and their spots are frozen, so the wreath spot cannot be changed through an alias', () => {
   assert.ok(Object.isFrozen(DOORS))
   for (const d of DOORS) assert.ok(Object.isFrozen(d) && Object.isFrozen(d.at), d.id)
+})
+
+test('STRINGS covers every outer wall, and every door has a wreath spot', () => {
+  loadI18n('vi')
+  const { STRINGS, WREATHS } = loadWeb('office-draw-xmas')
+  for (const w of WALLS.filter(w => w.kind === 'outer'))
+    assert.ok(STRINGS.some(s => s.label === 'wall.outer' && s.inst === w && s.at.length > 0), w.id)
+  assert.deepEqual(WREATHS.map(w => w.door), [...DOORS])
 })

@@ -46,9 +46,9 @@ const corner = (tile, ext) => { const [x, y] = PG(tile[0] + 0.5, tile[1] + 0.5, 
 const [CX, CY] = corner(SITE.at, A.CATHEDRAL_EXT), [LX, LY] = corner(SITE.lady, Y.LADY_EXT)
 
 // One frame's landmark items run in the scene's order, the two baked sprites among them at their own depths.
-function frame(ev, df, { reduced = false, t = 12.3 } = {}) {
+function frame(ev, df, { reduced = false, t = 12.3, look = XMAS } = {}) {
   const log = [], state = {}, ctx = context(log, state), items = [], made = canvases.length
-  ClaudeOffice.prototype.cathedralItems.call({ env: { reduced } }, { ctx, t, df }, items, ev)
+  ClaudeOffice.prototype.cathedralItems.call({ env: { reduced } }, { ctx, t, df, look }, items, ev)
   const own = items.length
   items.push({ z: SITE.z, f: () => log.push({ op: 'cathedral' }) }, { z: SITE.ladyZ, f: () => log.push({ op: 'statue' }) })
   items.sort((a, b) => a.z - b.z).forEach(i => i.f())
@@ -63,6 +63,10 @@ function frame(ev, df, { reduced = false, t = 12.3 } = {}) {
   }
 }
 const DAY = 1, NIGHT = 0, level = (n, eve = false) => ({ key: 'christmas', level: n, eve, day: false })
+// The Christmas look (D1: the whole landmark lit from the event's first day) and one without the landmark.
+const { Theme } = loadWeb('theme')
+const XMAS = Theme.resolve({ season: 'winter', holiday: null, event: { key: 'christmas', since: 0 }, key: 'cath-x' })
+const PLAIN = Theme.resolve({ season: 'winter', holiday: null, event: null, key: 'cath-w' })
 const xy = c => c.a.slice(0, 2)
 
 test('nothing of the building is worked out until a frame first lights it', () => {
@@ -74,18 +78,19 @@ test('nothing of the building is worked out until a frame first lights it', () =
   assert.equal(laid, 3, 'and never again')
 })
 
-test('by day a frame draws the bulbs for its level and nothing else', () => {
+test('by day a frame draws every bulb of the look and nothing else', () => {
   const { facade, eave, rose, star } = A.cathedralLights()
   const shifted = list => Array.from({ length: list.length / 2 }, (_, i) => [list[i * 2] + CX, list[i * 2 + 1] + CY])
-  for (const [n, strings, rects] of [[1, [facade], 10], [2, [facade, eave], 18], [3, [facade, eave, rose], 27]]) {
+  for (const n of [1, 2, 3]) {
+    // the event's level no longer matters: the look lights the whole landmark
     const f = frame(level(n), DAY)
-    assert.equal(f.images.length, 0, `level ${n}: nothing glows by day`)
-    assert.equal(f.rects.length, rects, `level ${n}`)
+    assert.equal(f.images.length, 0, 'nothing glows by day')
+    assert.equal(f.rects.length, 27)
     // each bulb is a 2 px square on its own pixel of the sprite the bake stamped at (CX, CY)
-    assert.deepEqual(f.bulbs.map(xy), strings.flatMap(shifted), `level ${n}: the bulbs' places`)
+    assert.deepEqual(f.bulbs.map(xy), [facade, eave, rose].flatMap(shifted), 'the bulbs\' places')
     const lit = f.bulbs.filter(c => X.BULB.includes(c.fill)).length
-    assert.ok(lit > 0 && lit < f.bulbs.length, `level ${n}: ${lit} of ${f.bulbs.length} bulbs lit`)
-    assert.equal(f.star.length, n >= 3 ? 2 : 0, `level ${n}: the lit star`)
+    assert.ok(lit > 0 && lit < f.bulbs.length, `${lit} of ${f.bulbs.length} bulbs lit`)
+    assert.equal(f.star.length, 2, 'the lit star')
     assert.deepEqual([f.state.globalAlpha, f.state.imageSmoothingEnabled], [1, false], 'the context is left as it was')
     assert.equal(f.own, 2)
   }
@@ -97,8 +102,9 @@ test('by day a frame draws the bulbs for its level and nothing else', () => {
 
 test('after dark the windows, the halos and the manger light up, each over its own baked sprite', () => {
   const { roseAt } = A.cathedralLights(), { halo, manger } = Y.yardLights()
-  for (const n of [1, 2, 3]) {
-    const f = frame(level(n), NIGHT)
+  for (const lv of [1, 2, 3]) {
+    const f = frame(level(lv), NIGHT)
+    const n = 3 // whatever the level, the look's whole landmark
     // everything of the cathedral's after its sprite and before the statue's, everything of the yard's after that
     const sprite = f.at('cathedral'), statue = f.at('statue')
     assert.equal(sprite, 0, `level ${n}: something is drawn under the cathedral`)
@@ -147,6 +153,10 @@ test('the bulbs blink and the star twinkles, but not with reduced motion; on Chr
   assert.equal(distinct(looks(level(3, true), true), 'twinkle'), 1)
 })
 
+test('a look without the landmark lights nothing of it', () => {
+  assert.equal(frame(level(3, true), NIGHT, { look: PLAIN }).own, 0)
+})
+
 test('on Christmas Eve one wide halo stands behind the building', () => {
   const f = frame(level(3, true), NIGHT)
   assert.equal(f.own, 3)
@@ -169,7 +179,7 @@ test('an island with no room for the landmark gets no lights either', async () =
     await import(new URL('../web/office-draw-cathedral.js?no-site', import.meta.url))
     assert.notEqual(ClaudeOffice.prototype.cathedralItems, own.value)
     const items = []
-    ClaudeOffice.prototype.cathedralItems.call({ env: {} }, { ctx: context([]), t: 0, df: 0 }, items, level(3, true))
+    ClaudeOffice.prototype.cathedralItems.call({ env: {} }, { ctx: context([]), t: 0, df: 0, look: XMAS }, items, level(3, true))
     assert.deepEqual(items, [])
   } finally {
     EventLandmark.site = site

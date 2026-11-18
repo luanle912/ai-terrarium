@@ -7,25 +7,32 @@ import { SeasonIsland } from './season-island.js';
 import { DESKS, DOG_HOUSES, H, ISLAND, W, WALL, WC } from './office-scene.js';
 
 // A wall is a run a -> b on the floor plan, z0..z1 up, and the side that faces the camera ('back' the one along x,
-// 'left' along y, 'front' the one at the foot of the restroom block, 'east' its far end).
-const wall = (id, kind, a, b, z1, face, z0 = 0) => ({ id, kind, a, b, z0, z1, face });
+// 'left' along y, 'front' the one at the foot of the restroom block, 'east' its far end). t: how far the face the
+// camera sees stands off the run (the restroom's front and east walls are seen from outside, across their thickness).
+const wall = (id, kind, a, b, z1, face, t = 0, z0 = 0) => ({ id, kind, a, b, z0, z1, face, t });
 const { walls: WW, heights: WH } = WC;
 export const WALLS = [
   wall('office.back', 'outer', [0, 0], [W, 0], WALL + 3, 'back'),
   wall('office.left', 'outer', [0, 0], [0, H], WALL + 3, 'left'),
   wall('wc.back', 'outer', [WC.x0, WC.y0], [WC.x1, WC.y0], WALL + 3, 'back'),
-  wall('wc.front', 'outer', [WC.x0, WW.front.y], [WC.x1, WW.front.y], WH.outer + 3, 'front'),
-  wall('wc.east', 'outer', [WW.east.x, WW.east.y0], [WW.east.x, WW.east.y1], WH.outer + 3, 'east'),
+  wall('wc.front', 'outer', [WC.x0, WW.front.y], [WW.east.x, WW.front.y], WH.outer + 3, 'front', WW.front.t),
+  wall('wc.east', 'outer', [WW.east.x, WW.east.y0], [WW.east.x, WW.east.y1], WH.outer + 3, 'east', WW.east.t),
   wall('wc.pantry', 'inner', [WW.pantry.x, WC.y0], [WW.pantry.x, WC.front], WH.room, 'left'),
   wall('wc.split', 'inner', [WW.split.x, WC.y0], [WW.split.x, WC.front], WH.room, 'left'),
 ];
 
 // The EXIT door: the kit stands on `kit` (the cell), the door's leaf and sign are drawn off it by F.door
-// (web/decor-wall.js), and `at` is the point on the leaf where the wreath hangs.
+// (web/decor-wall.js). A door's `at` is where its wreath hangs: on the EXIT's leaf; on the restroom's front wall over
+// the middle of a doorway (the swing doors move, the wall above them does not), halfway between the door's top and
+// the wall's; a kennel's is its house's cell (the gable's spot is the kennel's own, web/office-draw-doghouse.js).
 export const EXIT = { kit: [0, 5.5] };
 export const DOORS = [
   { id: 'door.exit', kind: 'exit', at: [0, 7.05, 24] },
-  ...WC.doors.map(d => ({ id: 'door.wc.' + d.room, kind: 'wc', at: [(d.x0 + d.x1) / 2, d.y, 0] })),
+  ...WC.doors.map(d => ({
+    id: 'door.wc.' + d.room,
+    kind: 'wc',
+    at: [(d.x0 + d.x1) / 2, WW.front.y + WW.front.t + 0.01, (WH.door + WH.outer) / 2],
+  })),
   ...DOG_HOUSES.map((h, i) => ({ id: 'door.kennel.' + i, kind: 'kennel', at: [h.x, h.y, 0] })),
 ];
 DOORS.forEach(d => Object.freeze(Object.freeze(d.at) && d));
