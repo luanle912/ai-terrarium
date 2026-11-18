@@ -547,7 +547,7 @@ export default {
 "bubble.fate.snowball":"⛄ 우르릉 소리 안 들려?",
 "bubble.fate.bird":"🦅 새가 엄청 크네…",
 "bubble.fate.sleigh":"🛷 방울 소리 아닌가?",
-"bubble.fate.wrapped":"🎁 누가 여기 포장지를 뒀지?",
+"bubble.fate.wrapped":"🎁 누가 포장지를 뒀지?",
 "bubble.fate.skateoff":"⛸️ 얼음이 꽤 단단해 보이네",
 "bubble.fate.chimney":"🧱 굴뚝이 언제 생겼지?",
 "summary.working":"타이핑",

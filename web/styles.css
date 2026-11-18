@@ -145,6 +145,8 @@ button {
   font-size: 11px;
 }
 .settings-panel select {
+  max-width: 150px;
+  text-overflow: ellipsis;
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--fg);

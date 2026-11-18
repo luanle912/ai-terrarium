@@ -338,35 +338,80 @@ export const IDLE_SPOTS = [
   // the Christmas event's own (web/event-idle.js), last so that the others keep their numbers
   ...EVENT_IDLE.spots,
 ];
+// What someone is doing, in words. Each entry reads tr() when it is read, so a language switch shows at once.
 export const ACT_TXT = {
-  table: tr('office.act.table'),
-  meal: tr('office.act.meal'),
-  arcade: tr('office.act.arcade'),
-  foosball: tr('office.act.foosball'),
-  coffee: tr('office.act.coffee'),
-  fridge: tr('office.act.fridge'),
-  water: tr('office.act.water'),
-  microwave: tr('office.act.microwave'),
-  snack: tr('office.act.snack'),
-  smoke: tr('office.act.smoke'),
-  wc: tr('office.act.wc'),
-  phone: tr('office.act.phone'),
-  stretch: tr('office.act.stretch'),
-  bath: tr('office.act.bath'),
-  bench: tr('office.act.bench'),
-  fish: tr('office.act.fish'),
-  snowball: tr('office.act.snowball'),
-  snowman: tr('office.act.snowman'),
-  skate: tr('office.act.skate'),
-  gift: tr('office.act.gift'),
-  cocoa: tr('office.act.cocoa'),
+  get table() {
+    return tr('office.act.table');
+  },
+  get meal() {
+    return tr('office.act.meal');
+  },
+  get arcade() {
+    return tr('office.act.arcade');
+  },
+  get foosball() {
+    return tr('office.act.foosball');
+  },
+  get coffee() {
+    return tr('office.act.coffee');
+  },
+  get fridge() {
+    return tr('office.act.fridge');
+  },
+  get water() {
+    return tr('office.act.water');
+  },
+  get microwave() {
+    return tr('office.act.microwave');
+  },
+  get snack() {
+    return tr('office.act.snack');
+  },
+  get smoke() {
+    return tr('office.act.smoke');
+  },
+  get wc() {
+    return tr('office.act.wc');
+  },
+  get phone() {
+    return tr('office.act.phone');
+  },
+  get stretch() {
+    return tr('office.act.stretch');
+  },
+  get bath() {
+    return tr('office.act.bath');
+  },
+  get bench() {
+    return tr('office.act.bench');
+  },
+  get fish() {
+    return tr('office.act.fish');
+  },
+  get snowball() {
+    return tr('office.act.snowball');
+  },
+  get snowman() {
+    return tr('office.act.snowman');
+  },
+  get skate() {
+    return tr('office.act.skate');
+  },
+  get gift() {
+    return tr('office.act.gift');
+  },
+  get cocoa() {
+    return tr('office.act.cocoa');
+  },
 };
-// What someone is doing, in words: the look (web/theme.js) may name an act's words by another key (Christmas: the
-// coffee is hot cocoa, look.text('office.act.coffee') === 'office.act.cocoa'). Both maps are made once.
-const ACT_KEY = {},
-  ACT_BY_KEY = {};
-for (const k in ACT_TXT) ACT_BY_KEY[(ACT_KEY[k] = 'office.act.' + k)] = ACT_TXT[k];
-export const actLabel = (act, look) => (look && ACT_BY_KEY[look.text(ACT_KEY[act])]) || ACT_TXT[act];
+// The look (web/theme.js) may name an act's words by another key (Christmas: the coffee is hot cocoa,
+// look.text('office.act.coffee') === 'office.act.cocoa').
+const ACT_KEY = {};
+for (const k in ACT_TXT) ACT_KEY[k] = 'office.act.' + k;
+export const actLabel = (act, look) => {
+  const k = look && look.text(ACT_KEY[act]);
+  return (k && k !== ACT_KEY[act] && Object.hasOwn(ACT_TXT, k.slice(11)) && ACT_TXT[k.slice(11)]) || ACT_TXT[act];
+};
 export const SEGS = [],
   EDGE = new Set();
 export const addV = (zi, X, y) => {

@@ -546,7 +546,7 @@ export default {
 "bubble.fate.snowball":"⛄ ได้ยินเสียงครืน ๆ ไหม?",
 "bubble.fate.bird":"🦅 นกตัวใหญ่จัง…",
 "bubble.fate.sleigh":"🛷 นั่นเสียงกระดิ่งหรือเปล่า?",
-"bubble.fate.wrapped":"🎁 ใครวางกระดาษห่อของขวัญไว้ตรงนี้?",
+"bubble.fate.wrapped":"🎁 ใครวางกระดาษห่อของขวัญ?",
 "bubble.fate.skateoff":"⛸️ น้ำแข็งดูแน่นดีนะ",
 "bubble.fate.chimney":"🧱 ปล่องไฟนี่มีตั้งแต่เมื่อไหร่?",
 "summary.working":"กำลังพิมพ์",
