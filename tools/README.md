@@ -3,7 +3,8 @@
 Small scripts for checking the page by hand. They drive a Chrome you start yourself:
 
 ```bash
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=9333 --user-data-dir=/tmp/terrarium-chrome about:blank
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --remote-debugging-port=9333 \
+  --user-data-dir=/tmp/terrarium-chrome about:blank
 ```
 
 - `perf-frame.mjs`: JS time and canvas calls of one frame, the island's bakes, share of GC, at a given date and time.
@@ -11,7 +12,8 @@ Small scripts for checking the page by hand. They drive a Chrome you start yours
 
 Both take `--at 2026-12-20T21:00:00` (the page's clock is shifted), `--url` (default `http://localhost:4317/`) and
 `--eval "js"` or `--eval @file.js`: a script run in the page (awaited) first, e.g.
-`__office.setState({ dataSource: 'sim', agentCount: 16 })` to switch to simulated agents (`window.__office` is the page).
+`__office.setState({ dataSource: 'sim', agentCount: 16 })` to switch to simulated agents (`window.__office` is the
+page).
 
 ## Baseline 2026-11-10 (before the Christmas event; 1512×982 @2x, 9 s, first 60 frames left out)
 
@@ -50,7 +52,7 @@ Again measured alternately with July, on a machine busy with other things.
 | Scene | ms p50 / p95 | canvas calls |
 |---|---|---|
 | 20 Jul 12:00 | 5.3 / 6.6–7.1 | 18,510 |
-| 20 Dec 12:00, event level 3 | 5.2–5.5 / 7.0 | 18,825 (−90 on the baseline: the three small trees drawn every frame are gone) |
+| 20 Dec 12:00, event level 3 | 5.2–5.5 / 7.0 | 18,825 (−90 on the baseline: no three small trees a frame) |
 | 20 Dec 21:00, event level 3 | 5.0–5.7 / 6.2–7.6 | 18,905 (+185) |
 | 20 Dec 21:00, `?wallpaper=1` | 4.1 / 5.9 | 18,870 (+160) |
 
@@ -119,29 +121,38 @@ level 3: by day 24 bulb rectangles and the star's 3; after dark also one sprite 
 manger's light and a glow under each lit bulb (about 12). In July the frame is the same with and without.
 
 Bakes as `perf-frame.mjs` reports them (island + props; the island's is the same code either way): a later bake
-12–14 + 14–23 ms with the landmark and 13–14 + 12–18 ms without; the first bake of a page 36–51 + 11–24 ms and
-35–39 + 12–16 ms. The building is worked out once per event level and snow depth (about 1 ms) and only recoloured
+12–14 + 14–23 ms with the landmark and 13–14 + 12–18 ms without; the first bake of a page 36–51 + 11–24 ms
+and 35–39 + 12–16 ms. The building is worked out once per event level and snow depth (about 1 ms) and only recoloured
 after that, so the difference stays inside the spread, under the 45 ms a later bake may take. GC 0.3–0.5 % either way.
 
 ## After labelled assets and event packs (2026-11-18)
 
 Before is `claude/assets-wiki` @ 69937da (the event in weekly levels), after is `claude/asset-labels` (labels, theme
-packs, Christmas whole from its first day). No agents, the Event choice on Auto, three runs of each alternated
-before / after on a busy machine (the first run of each scene was the slowest on both sides); medians, ranges in
-brackets.
+packs, Christmas whole from its first day, the three event trees by the office stamped from kept sprites). No
+agents, the Event choice on Auto, three runs of each scene alternated before / after; medians, ranges in brackets.
 
-| Scene | ms p50 before / after | ms p95 before / after | canvas calls before → after | bakes (island + props), later runs |
+| Scene | calls before | calls after | ms p50 before / after | ms p95 before / after |
 |---|---|---|---|---|
-| 20 Dec 12:00 | 3.7 (3.4–7.7) / 3.7 (3.6–6.2) | 7.2 / 6.2 | 16,095 → 17,036 (+940) | 39–53 + 14–22 / 36–75 + 14–34 ms |
-| 20 Dec 21:00 | 3.5 (3.3–5.8) / 3.8 (3.5–5.9) | 4.7 / 7.3 | 16,104 → 16,848 (+745) | 38 + 15–18 / 39–44 + 15–16 ms |
-| 20 Jul 12:00 | 3.4 (3.2–5.2) / 3.6 (3.2–5.2) | 4.6 / 5.8 | 15,712 → 15,714 | 33–35 + 6–8 / 34–39 + 7–13 ms |
+| 20 Jul 12:00 | 15,713 | 15,714 | 4.0 (3.5–4.7) / 4.1 (3.7–4.5) | 5.9 / 5.8 |
+| 20 Dec 12:00 | 16,085 | 16,727 | 4.1 (3.6–4.5) / 4.4 (3.9–4.5) | 5.4 / 6.0 |
+| 20 Dec 21:00 | 16,099 | 16,737 | 4.3 (3.7–4.8) / 3.8 (3.7–5.2) | 6.4 / 6.0 |
 
-July is the same frame on both sides. In December the extra calls are what D1 brings on every day of the event,
-counted per call site in a frame: the three holiday trees by the office as decorated Christmas trees (about 280),
-the light strings on the restroom block's walls as well as the office's (about 300), frost and a star on the windows
-(about 140), a decoration on every desk with or without an owner (about 55), the corridor runner (about 45) and the
-shelf, pot plants and clock (about 80). Against the 2026-11-10 baseline above (18,915 by day, 18,721 by night) both are lower, so inside the event's
-budget (+900 day, +1,400 night, +0.4 ms p50); against the branch before, the day is 40 calls over +900 and the p50
-changes by at most +0.3 ms, inside the run-to-run spread. The bakes spread as widely on both sides (the slowest later
-bake 75 ms after and 53 ms before, both in a loaded run). GC 0.1–0.6 % on both
-sides. No page errors in any run.
+The calls today are not those of 2026-11-10 (that July was 18,500, this one is 15,714), so each side is read against
+its own July, in the same scene. What December adds over July:
+
+| | by day (12:00) | by night (21:00) |
+|---|---|---|
+| baseline 2026-11-10, winter without the event | +415 | +221 |
+| after, winter with the event | +1,013 | +1,023 |
+| the event's own cost (after − baseline) | **+598** (budget +900) | **+802** (budget +1,400) |
+
+So inside the budget of docs/specs/2026-11-10-christmas-event-design.md §3.4. Against the branch before, the event
+now costs about +640 calls by day and by night: what it shows on every one of its days (D1), counted per call site
+in a frame. That is the light strings on the restroom block's walls as well as the office's (about 300), frost and
+a star on the windows (about 140), a decoration on every desk with or without an owner (about 55), the corridor
+runner (about 45), and the shelf, pot plants and clock (about 80). The three decorated Christmas trees by the office
+cost 3 `drawImage` calls a frame (web/event-tree-sprite.js: four kept pictures of the tree's lights, one sprite per
+tile by day on the scene's own pixel grid, one tinted sprite for all after dark) instead of about 280 rectangles.
+The p50 moves by −0.5 to +0.3 ms against the same scene before and by at most +0.3 ms against July, inside the
+run-to-run spread. Bakes (island + props) after 36–58 + 8–20 ms, before 42–54 + 10–21 ms, on a busy machine; GC
+0.1–1.0 % on both sides. No page errors in any run.
