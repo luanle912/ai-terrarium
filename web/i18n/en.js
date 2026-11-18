@@ -503,7 +503,7 @@ export default {
 "office.act.snowball":"throwing snowballs",
 "office.act.snowman":"building a snowman",
 "office.act.skate":"ice skating",
-"office.act.gift":"tucking in a present",
+"office.act.gift":"leaving a present",
 "office.act.cocoa":"having hot cocoa",
 "office.sim.talkTopics":["asking about the API schema","sharing types","agreeing on naming","asking for a diff review","reporting a build error"],
 "office.status.working":"Typing",

@@ -503,7 +503,7 @@ export default {
 "office.act.snowball":"雪合戦中",
 "office.act.snowman":"雪だるま作り",
 "office.act.skate":"アイススケート中",
-"office.act.gift":"プレゼントを置いている",
+"office.act.gift":"プレゼント置き中",
 "office.act.cocoa":"ホットココアで一息",
 "office.sim.talkTopics":["APIスキーマの相談","型を共有","命名のすり合わせ","diffのレビュー依頼","ビルドエラーの報告"],
 "office.status.working":"タイピング中",

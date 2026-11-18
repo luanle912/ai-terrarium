@@ -545,7 +545,7 @@ export default {
 "bubble.pantryBreak":"pausa en la cocina",
 "bubble.leaving":"saliendo…",
 "bubble.fate.lightning":"⚡ buen día para pasear…",
-"bubble.fate.wind":"☂️ bien que traje paraguas",
+"bubble.fate.wind":"☂️ ¡bien, traje paraguas!",
 "bubble.fate.freeze":"🥶 hace un poco de frío…",
 "bubble.fate.lake":"🌊 solo un vistazo al lago",
 "bubble.fate.fish":"🐟 ven, pececito…",
