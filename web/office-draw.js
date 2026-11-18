@@ -41,7 +41,7 @@ import { Light } from './light.js';
 import { eventTreeSprite } from './event-tree-sprite.js';
 
 // What the island's bake shows of the look: the outdoor labels and the extras it stands on the lawn.
-const ISLAND_PARTS = Object.freeze([...OUTDOOR_LABELS, 'cane', 'cathedral', 'ourlady']);
+const ISLAND_PARTS = Object.freeze([...OUTDOOR_LABELS, 'snowman.lawn', 'cane', 'cathedral', 'ourlady']);
 // Drawing the office: sky, camera, the floor, walls, planters, pantry and desks.
 // On a holiday these few trees by the office turn into the holiday's tree; the rest keep the season's.
 const HOLIDAY_TREES = SeasonIsland.holidayTrees(ISLAND, W, H);

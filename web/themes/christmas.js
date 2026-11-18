@@ -2,7 +2,11 @@
 // of the event; only the number of gifts under the tree grows with the days. Every label is named in swap, a variant
 // or 'same' (keep what the season shows), so a label nobody thought about cannot slip through unnoticed.
 //   season/weather  the event forces winter and its snow (a floor of snow cover, rain falls as snow)
-//   rules           what the event switches on for the living scene: true, or a weight for a way to leave the island
+//   extras          the things that stand while the event is on: drawn and baked from look.extras.has, and the big
+//                   tree's and the cathedral's cells blocked from the same list (LookChange.BLOCKERS). One source:
+//                   nothing here is also a rule.
+//   rules           what the event switches on for the living scene (look.has): the critters, the idle acts, the ways
+//                   to leave the island; true, or a weight for a way to leave
 //   build           counts that grow with the event's day: [[from day, count], ...]
 
 const SAME = 'same';
@@ -62,18 +66,7 @@ export const CHRISTMAS = {
     'kennel': ['lights'],
     'pavilion': ['lights'],
   },
-  extras: [
-    'tree.big',
-    'gifts',
-    'cane',
-    'cathedral',
-    'ourlady',
-    'critter.reindeer',
-    'critter.elf',
-    'critter.penguin',
-    'critter.santa',
-    'sleigh',
-  ],
+  extras: ['tree.big', 'cane', 'cathedral', 'ourlady'],
   rules: {
     'critter.reindeer': true,
     'critter.elf': true,
@@ -88,10 +81,6 @@ export const CHRISTMAS = {
     'fate.wrapped': 4,
     'fate.skateoff': 5,
     'fate.chimney': 3,
-    'cathedral': true,
-    'tree.big': true,
-    'cane': true,
-    'gifts': true,
   },
   text: { 'office.act.coffee': 'office.act.cocoa' },
   build: {

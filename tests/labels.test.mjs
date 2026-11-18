@@ -1,9 +1,11 @@
 import { test } from 'node:test'
+import { createRequire } from 'node:module'
 import assert from 'node:assert/strict'
 
 import { loadWeb, readWeb } from './web.mjs'
 import { loadI18n } from './load-i18n.mjs'
 
+const require = createRequire(import.meta.url)
 const { Labels } = loadWeb('labels')
 const { Theme } = loadWeb('theme')
 const IDS = Labels.LIST.map(l => l.id)
@@ -106,4 +108,35 @@ test('every variant of every label with more than one has a painter', () => {
 
 test('web/office-draw.js stays at 700 lines or fewer', () => {
   assert.ok(readWeb('office-draw').split('\n').length <= 701, 'move drawing out to a module of its own')
+})
+
+// Pack data nobody reads is a promise the drawing does not keep. An extra is a thing that stands while the pack is on
+// (drawn, baked into the island, blocking cells: look.extras.has, LookChange.BLOCKERS); a rule switches part of the
+// living scene on (look.has). One name is one or the other, never both, so presence and drawing read the same source.
+test('every extra a pack lists is read by the scene, and no name is both an extra and a rule', () => {
+  const { readdirSync } = require('node:fs')
+  const src = readdirSync(new URL('../web/', import.meta.url))
+    .filter(f => f.endsWith('.js'))
+    .map(f => readWeb(f.slice(0, -3)))
+    .join('\n')
+  const { LookChange } = loadWeb('look-change')
+  const unread = [], both = []
+  for (const p of Theme.PACKS) {
+    for (const x of p.extras || []) {
+      const read = src.includes(`extras.has('${x}')`) || LookChange.BLOCKERS.includes(x)
+      if (!read) unread.push(`${p.key}: ${x}`)
+      if (x in (p.rules || {})) both.push(`${p.key}: ${x}`)
+    }
+  }
+  assert.deepEqual(unread, [], 'read nowhere: wire it to its gate or drop it')
+  assert.deepEqual(both, [], 'an extra and a rule at once')
+})
+
+test('the big tree and the cathedral are drawn from the extras, the same source that blocks their cells', () => {
+  const { LookChange } = loadWeb('look-change')
+  assert.deepEqual([...LookChange.BLOCKERS].sort(), ['cathedral', 'tree.big'])
+  assert.match(readWeb('office-draw-xmas'), /look\.extras\.has\('tree\.big'\)/)
+  assert.match(readWeb('office-draw-cathedral'), /look\.extras\.has\('cathedral'\)/)
+  for (const f of ['office-draw-xmas', 'office-draw-cathedral'])
+    assert.doesNotMatch(readWeb(f), /look\.has\('(tree\.big|cathedral)'\)/, f)
 })

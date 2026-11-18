@@ -143,7 +143,7 @@ test('without the event no overlay is laid and no item is pushed', () => {
 test('the drawing reads the look, not the event\'s level', () => {
   for (const name of ['office-draw-xmas', 'office-draw-cathedral', 'office-draw-doghouse'])
     assert.doesNotMatch(readWeb(name), /\.level\s*>=|level >= \d|eventNow\(/, name)
-  assert.match(readWeb('office-draw-cathedral'), /look\.has\('cathedral'\)/)
+  assert.match(readWeb('office-draw-cathedral'), /look\.extras\.has\('cathedral'\)/)
 })
 
 // --- the office's new Christmas variants and overlays (web/office-draw-festive.js) ---

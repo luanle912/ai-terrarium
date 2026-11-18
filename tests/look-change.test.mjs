@@ -36,7 +36,7 @@ test('diff christmas→none lists idle/fate/critter rules off and blockChanged t
   const d = LookChange.diff(XMAS, NONE)
   const off = ['idle.snowball', 'idle.skate', 'fate.sleigh', 'fate.chimney', 'critter.elf', 'critter.santa', 'sleigh']
   for (const r of off) assert.ok(d.rulesOff.has(r), r)
-  assert.ok(d.extrasGone.has('tree.big') && d.extrasGone.has('critter.reindeer'))
+  assert.ok(d.extrasGone.has('tree.big') && d.extrasGone.has('cane'))
   assert.equal(d.blockChanged, true)
   assert.equal(d.blockOn, false)
   assert.ok(d.snowFrom > 0, 'the event brings its snow')

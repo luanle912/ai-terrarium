@@ -180,7 +180,7 @@ export function renderIsland(island, frame, k, env) {
 // winter the snowmen stand among them (SeasonIsland.snowmanTiles).
 // Someone behind a lamp post, a bush, the bench, a tree, a snowman or the pavilion is hidden by it.
 export function renderProps(island, frame, k, env) {
-  const { P, C, look, depth, S } = bakeTools(frame, env),
+  const { P, C, depth, S } = bakeTools(frame, env),
     out = [];
   // ext: [left, up, right, down] px round the point (x + 0.5, y + 0.5) on the lawn
   // (snowy: lying snow settles on its top; the snowmen are snow already)
@@ -224,7 +224,7 @@ export function renderProps(island, frame, k, env) {
       add(d.x, d.y, d.x + d.y + 0.5, TREE_EXT, pt => paintTree(pt, P, C, d), -1, tree !== 'fir');
       out[out.length - 1].tree = true;
     }
-  if (look.frozen && env.block)
+  if (lk.extras.has('snowman.lawn') && env.block)
     for (const m of SeasonIsland.snowmanTiles(island, env.block.W, env.block.H))
       add(m.x, m.y, m.x + m.y + 0.5, SNOWMAN_EXT, pt => drawSnowman(pt, P, C, m), -1, false);
   // The look's outdoor extras (the Christmas event's): they keep more of their colour after dark than the lawn. The

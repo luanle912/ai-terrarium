@@ -293,7 +293,7 @@ mixin(
     // landmark. G.look says what, the big tree's presents too (build('gifts')).
     xmasItems(G, items) {
       const look = G.look;
-      if (look.has('tree.big'))
+      if (look.extras.has('tree.big'))
         items.push({ z: TREE[0] + TREE[1] + 0.02, f: () => this.xmasTree(G, look.build('gifts')) });
       for (const s of STRINGS) {
         const fs = s.z === null ? EMPTY : Paint.overlaysOf(s.label, look);
