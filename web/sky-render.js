@@ -1,6 +1,7 @@
 // Drawing for the sky island: the island (pre-rendered once per resolution and light), its standing props, trees,
 // the sky behind it and the weather in front of it.
 import { SeasonLogic } from './season-logic.js';
+import { Paint } from './paint.js';
 import { hash, mix, night, renderIsland, renderProps } from './sky-island.js';
 import {
   BAND_W,
@@ -120,23 +121,15 @@ function drawBack(ctx, w, h, t, env) {
   }
   inView(ctx, layerView(view, 0.2), () => {
     const far = env.overview ? FAR_OVERVIEW : FAR_ISLANDS,
-      // the season's trees and its lasting snow, as on the main island
+      // the look's far trees (the season's, firs under Christmas) with its decor on them, and the season's lasting
+      // snow, as on the main island (every env has its look: the office's envNow, the /assets scenes)
       look = env.season ? SeasonLogic.look(env.season) : null,
-      trees = (look && look.trees) || 'green',
+      trees = env.look.of('tree.far'),
+      lights = Paint.overlaysOf('tree.far', env.look),
       snowy = !!(look && look.minSnow > 0);
     for (let i = 0; i < far.length; i++) {
       const [fx_, fy, sc, kind] = far[i];
-      farIsland(
-        ctx,
-        w * fx_,
-        hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S,
-        sc * S,
-        col,
-        kind,
-        trees,
-        snowy,
-        env.event >= 2,
-      );
+      farIsland(ctx, w * fx_, hy * fy + Math.sin(t * 0.4 + i) * 1.5 * S, sc * S, col, kind, trees, snowy, lights);
     }
     // Wider than the stage so a pan never shows where the horizon haze ends.
     const hb = ctx.createLinearGradient(0, hy - 18 * S, 0, hy + 18 * S);

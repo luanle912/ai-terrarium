@@ -1,20 +1,22 @@
 import { OutfitLogic } from './outfit-logic.js';
 // Christmas outfits on people (OutfitLogic says who wears what). Everything here draws with the scene's 1px rect R
 // and colours the outfit already holds, so a frame makes no colour strings: a hat is at most 4 rects, a scarf 2.
-const { RED, WHITE, GOLD, COAL } = OutfitLogic,
+const { RED, WHITE, COAL, ELF } = OutfitLogic,
   BREATH = '#b9c9dc',
   BREATH_FAR = '#cfdbe8';
-// The agent's outfit for the event as it stands (null outside it), worked out once and again when the event's level
-// changes, or the agent turns out to be a sub-agent, or changes department. A fate's copy of the agent carries it
-// along. Compared field by field: this runs for every person every frame and must not build a key.
-export function outfitOf(a, ev) {
-  const l = ev ? ev.level : 0,
-    sub = !!a.parent;
-  if (a.outfitL !== l || a.outfitSub !== sub || a.outfitDept !== a.shirt) {
-    a.outfitL = l;
+// The agent's outfit under look (the Look, web/theme.js; null outside the event), worked out once and again when the
+// look's outfit variant changes, or the agent turns out to be a sub-agent, or changes department. A snapshot for a
+// leaving scene (outfitPin, startFate) keeps the outfit it was taken with whatever the look does next. Compared
+// field by field: this runs for every person every frame and must not build a key.
+export function outfitOf(a, look) {
+  if (a.outfitPin) return a.outfit;
+  const sub = !!a.parent,
+    v = look ? look.of(sub ? 'outfit.subagent' : 'outfit.agent') : '';
+  if (a.outfitV !== v || a.outfitSub !== sub || a.outfitDept !== a.shirt) {
+    a.outfitV = v;
     a.outfitSub = sub;
     a.outfitDept = a.shirt;
-    a.outfit = OutfitLogic.outfit(a.sid || a.id, ev, sub, a.shirt);
+    a.outfit = OutfitLogic.outfit(a.sid || a.id, look, sub, a.shirt);
   }
   return a.outfit;
 }
@@ -31,7 +33,7 @@ export function lookUnder(L, o) {
   if (!o || L.hairStyle !== 'cap' || !COVERS[o.hat]) return L;
   return L.bare || (L.bare = { ...L, hairStyle: 'crop' });
 }
-// The colour of the top: the outfit's, or the department's when there is none (or it is only a hat).
+// The colour of the top: the outfit's, or the department's when there is none.
 export const shirtOf = a => (a.outfit && a.outfit.top) || a.shirt;
 export const XMAS = {
   // The puff (breathAt's 1 or 2) in front of a face seen from the front: two pixels by the mouth, then higher up.
@@ -93,25 +95,55 @@ export const XMAS = {
   // What goes over the plain torso instead of the look's own top (sx-4..sx+3, rows by-11..by-5): the outfit's
   // pattern, on the front only. Returns the sleeve colour for the arms.
   top(R, o, sx, by, front) {
-    const k = o.kind;
-    if (k === 'sweater') {
-      R(sx - 4, by - 9, 8, 1, o.trim);
-      R(sx - 4, by - 7, 8, 1, o.hatColor);
-    } else if (k === 'santa' || k === 'coat') R(sx - 4, by - 5, 8, 1, o.trim);
-    else if (k === 'elf') R(sx - 4, by - 7, 8, 1, COAL);
-    if (!front) return o.top;
-    if (k === 'santa') R(sx - 1, by - 10, 2, 5, WHITE);
-    else if (k === 'reindeer') R(sx - 2, by - 9, 4, 4, o.trim);
-    else if (k === 'coat') R(sx, by - 9, 1, 4, o.scarfD);
-    else if (k === 'snowman') {
-      R(sx - 1, by - 9, 1, 1, COAL);
-      R(sx - 1, by - 7, 1, 1, COAL);
-    } else if (k === 'elf') R(sx - 1, by - 7, 2, 1, GOLD);
+    XMAS.pattern(R, o, sx - 4, by - 11, 8, 7, front);
     return o.top;
   },
-  // Asleep on the floor mat: the hat as one small box over the crown of the head (box is the scene's iso box). White
-  // earmuffs would vanish on the pillow, so they show in the sweater's colour.
+  // The outfit's pattern on a torso box w x h px from (x0, y0), in every pose: standing 8 x 7 (top), at the desk seen
+  // from behind, the shoulders out of the bath, a faller. Rows are counted from the top of the box and a row under it
+  // is left out, so a short box (the bath) shows what fits. The front (santa's fur, the belly, the buttons, the elf's
+  // buckle) only from the front.
+  pattern(R, o, x0, y0, w, h, front) {
+    const k = o.kind,
+      cx = x0 + w / 2,
+      row = (r, c) => r < h && R(x0, y0 + r, w, 1, c);
+    if (k === 'sweater') {
+      row(2, o.trim);
+      row(4, o.hatColor);
+    } else if (k === 'santa' || k === 'coat') row(h - 1, o.trim);
+    else if (k === 'elf') row(4, ELF.belt);
+    if (!front) return;
+    if (k === 'santa') R(cx - 1, y0 + 1, 2, h - 2, WHITE);
+    else if (k === 'reindeer' && h > 3) R(cx - 2, y0 + 2, 4, h - 3, o.trim);
+    else if (k === 'coat' && h > 3) R(cx, y0 + 2, 1, h - 3, o.scarfD);
+    else if (k === 'snowman') {
+      R(cx - 1, y0 + 2, 1, 1, COAL);
+      if (h > 4) R(cx - 1, y0 + 4, 1, 1, COAL);
+    } else if (k === 'elf' && h > 4) R(cx - 1, y0 + 4, 2, 1, ELF.buckle);
+  },
+  // Asleep on the floor mat, lying along x with the head at the pillow (box is the scene's iso box; br the breath):
+  // the hat as one small box over the crown (hatSleep, drawn with the head), then over the top (sleep) the scarf at
+  // the neck and the pattern as a thin box on the chest above the blanket. White earmuffs would vanish on the pillow,
+  // so they show in the sweater's colour.
   hatSleep(box, o, x, y) {
     box(x + 0.1, y + 0.5, 0.09, 0.24, 2.5, 7, o.hat === 'muffs' ? o.top : o.hatColor);
   },
+  sleep(box, o, x, y, br) {
+    const k = o.kind,
+      z = 4.5 + br,
+      chest = (dx, dy, w, d, c) => box(x + dx, y + dy, w, d, 0.5, z + 0.4, c);
+    box(x + 0.4, y + 0.44, 0.06, 0.36, 0.5, z + 0.6, k === 'coat' ? o.trim : o.scarf);
+    if (k === 'sweater') chest(0.52, 0.44, 0.04, 0.36, o.trim);
+    else if (k === 'santa') chest(0.46, 0.58, 0.14, 0.08, WHITE);
+    else if (k === 'reindeer') chest(0.48, 0.54, 0.12, 0.16, o.trim);
+    else if (k === 'coat') chest(0.46, 0.61, 0.14, 0.02, o.scarfD);
+    else if (k === 'snowman') {
+      chest(0.5, 0.6, 0.03, 0.04, COAL);
+      chest(0.56, 0.6, 0.03, 0.04, COAL);
+    } else if (k === 'elf') {
+      chest(0.54, 0.44, 0.04, 0.36, ELF.belt);
+      chest(0.54, 0.59, 0.04, 0.06, ELF.buckle);
+    }
+  },
+  // The elf's costume (OutfitLogic.ELF): the sub-agent's outfit and the critter elf (web/critter-sprites.js) read it.
+  elf: ELF,
 };

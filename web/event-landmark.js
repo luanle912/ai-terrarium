@@ -88,7 +88,13 @@ function reserve(land, on, dogs) {
   let kept = KEPT.get(land.roamList);
   if (!kept) {
     if (!on) return;
-    kept = { walk: [...land.walk], roam: [...land.roam], list: [...land.roamList], on: false };
+    kept = {
+      walk: [...land.walk],
+      roam: [...land.roam],
+      list: [...land.roamList],
+      also: (land.also || []).map(o => ({ roam: [...o.roam], list: [...o.roamList] })),
+      on: false,
+    };
     KEPT.set(land.roamList, kept);
   }
   if (kept.on !== on) {
@@ -99,6 +105,14 @@ function reserve(land, on, dogs) {
     for (const k of kept.roam) if (!on || !ROAM_OFF.has(k)) land.roam.add(k);
     land.roamList.length = 0;
     for (const c of kept.list) if (!on || !off(c)) land.roamList.push(c);
+    // other roam grounds cut from the same lawn (the winter one, without the polar bears' corner) lose the site too
+    for (const [i, o] of (land.also || []).entries()) {
+      const k2 = kept.also[i];
+      o.roam.clear();
+      for (const k of k2.roam) if (!on || !ROAM_OFF.has(k)) o.roam.add(k);
+      o.roamList.length = 0;
+      for (const c of k2.list) if (!on || !off(c)) o.roamList.push(c);
+    }
   }
   if (on) shoo(land, dogs || []);
 }

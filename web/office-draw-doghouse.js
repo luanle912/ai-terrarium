@@ -6,6 +6,7 @@ import { shade } from './office-util.js';
 import { SnowLogic } from './snow-logic.js';
 import { snowTones } from './office-draw-winter.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 
 // One roof colour per dog, in DogLogic.BREEDS order: the corgi's red, the husky's blue, the dalmatian's green.
 const ROOF = ['#c8553d', '#3e6fb0', '#3f8f5a'];
@@ -166,7 +167,7 @@ mixin(
             this.doghouseBowl(ctx, L(xb + 0.26, yb - 0.02, 0), roof, N);
             if (i === 0) this.doghouseBone(ctx, L(xb + 0.35, ya - 0.05, 0), N(TRIM));
             if (dog) {
-              this.doghouseSleeper(ctx, dog, door, L(xb, yc, ZB), dfB, snB);
+              this.doghouseSleeper(ctx, dog, door, L(xb, yc, ZB), dfB, snB, G.look.of('dog.costume'));
               if (dog.nap) this.doghouseZs(ctx, L(xb, yc, ZR + 2), t + i * 0.7, N('#e8ecf5'));
             }
           },
@@ -197,10 +198,11 @@ mixin(
     }
     // The dog lying inside its house, head up in the doorway looking out (sprites face right, out of the door):
     // only what the opening shows is drawn. Its 'lie' frame always, which has the head up; the z's
-    // over the roof tell when it sleeps.
-    doghouseSleeper(ctx, d, door, [bx, by], dfB, snB) {
+    // over the roof tell when it sleeps. Dressed as the dogs out on the lawn are (the look's dog.costume, drawDog), not
+    // by a clock of its own.
+    doghouseSleeper(ctx, d, door, [bx, by], dfB, snB, costume) {
       const f = DogSprites.frame(d.breed, 'lie'),
-        img = this.dogSprite(d.breed, 'lie', dfB, snB, this.eventNow()),
+        img = this.dogSprite(d.breed, 'lie', dfB, snB, costume),
         { hc, ht } = headOf(f),
         left = Math.round(bx) - hc,
         top = Math.round(by) - DH + 2 - ht;
@@ -246,7 +248,7 @@ mixin(
     doghouseLantern(ctx, [x, y], df, t, N) {
       x = Math.round(x);
       y = Math.round(y);
-      const glow = df < 0.6 ? 1 - df / 0.6 : 0;
+      const glow = Light.glow(df);
       if (glow > 0.01) {
         const smooth = ctx.imageSmoothingEnabled,
           g = ctx.createRadialGradient(x + 3, y + 4, 0, x + 3, y + 4, 22);

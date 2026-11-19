@@ -6,7 +6,7 @@ import { FateLogic } from './fate-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { PA } from './office-scene.js';
 import { LOOK, hairTones } from './office-people.js';
-import { shirtOf } from './office-people-xmas.js';
+import { outfitOf, shirtOf } from './office-people-xmas.js';
 import { text3 } from './office-util.js';
 import { hash } from './sky-island.js';
 import { ClaudeOffice, mixin } from './office.js';
@@ -448,7 +448,7 @@ mixin(
         day: th && th._day != null ? th._day : 1,
         summer: season === 'summer',
         calm: env.reduced,
-        ev: this.eventNow(),
+        theme: this.look,
       });
     }
     // Someone has reached the place of their fate (a.fated): keep how they looked and where they stood.
@@ -456,7 +456,18 @@ mixin(
       if (!SCENES[a.fate]) return;
       if (!this.fates) this.fates = [];
       if (this.fates.length > 12) this.fates.shift();
-      const who = { ...a, moving: false, path: [], seated: false, sleeping: false, stool: false, actNow: null };
+      // the outfit they wore goes with them (pinned: the scene draws the same one even if the look changes meanwhile)
+      outfitOf(a, this.look);
+      const who = {
+        ...a,
+        moving: false,
+        path: [],
+        seated: false,
+        sleeping: false,
+        stool: false,
+        actNow: null,
+        outfitPin: true,
+      };
       this.fates.push({ kind: a.fate, x: a.x, y: a.y, t0: null, seed: a.id || 1, who });
     }
     // The scenes still playing, as sprites of the scene (the clock starts at a scene's first frame).

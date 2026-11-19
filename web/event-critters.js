@@ -1,10 +1,12 @@
 // The Christmas event's critters as logic (no DOM, no canvas; tests/event-critters.test.mjs): three reindeer grazing
 // on the lawn, two elves carrying presents from the island's edge to a spot beside the front stairs, four penguins
-// on the frozen lake, Santa's sleigh across the sky on Christmas Eve and Santa himself on Christmas Day. The page
-// keeps one world `w` and one list per island and calls step() every frame; pose() says which sprite to show.
+// on the frozen lake, Santa's sleigh across the sky and Santa himself by the tree, all event long (D1b: from its
+// first day). The page keeps one world `w` and one list per island and calls step() every frame; pose() says which
+// sprite to show.
 //
 // w = { roam, roamList, clear, houses, drop, edge, ice, iceSet     the places (places(), worked out once)
-//       level, eve, day     the event (EventLogic.active), level 0 without it
+//       look                the Look (web/theme.js): its rules critter.reindeer/elf/penguin/santa and sleigh say
+//                           who is about; null or a look without them: nobody
 //       frozen, calm        the lake is iced over; the viewer asked for reduced motion
 //       dogs                [{x, y}], who the reindeer look up at
 //       only                'reindeer' on the other islands of the world view
@@ -12,19 +14,16 @@
 import { DogLogic } from './dog-logic.js';
 
 const REINDEER = 3,
-  REINDEER_FROM = 2,
   RANGE = 4,
   SPEED = 0.6,
   NOTICE = 2,
   DT_MAX = 0.25;
 const ELVES = 2,
-  ELF_FROM = 3,
   ELF_SPEED = 1,
   SLIP = 0.15,
   SLIP_FOR = 1.2,
   PLACE_FOR = 1.5;
 const PENGUINS = 4,
-  PENGUIN_FROM = 3,
   SLIDE = 2.5,
   SLIDE_SPEED = 2.2,
   WADDLE_SPEED = 0.5;
@@ -133,7 +132,7 @@ function route(w) {
 }
 const elfRoute = w => known(w).route;
 
-// Where Santa sits on Christmas Day: a lawn cell beside the presents, off the paths, as far as can be from where
+// Where Santa sits (all event long): a lawn cell beside the presents, off the paths, as far as can be from where
 // the elves set theirs down.
 function seat(w, r) {
   const { roam, clear, drop } = w;
@@ -170,14 +169,18 @@ function huddle(ice) {
 
 // How many of each kind the world calls for now: one object, used again.
 const WANT = { reindeer: 0, elf: 0, penguin: 0, santa: 0 };
+const has = (w, rule) => !!(w.look && w.look.has(rule));
 function wanted(w) {
-  const lv = w.level || 0,
-    k = lv ? known(w) : null,
-    own = lv && !w.only;
-  WANT.reindeer = lv >= REINDEER_FROM ? Math.min(REINDEER, k.homes.length) : 0;
-  WANT.elf = own && lv >= ELF_FROM && !w.calm && k.route ? ELVES : 0;
-  WANT.penguin = own && lv >= PENGUIN_FROM && w.frozen && k.huddle ? PENGUINS : 0;
-  WANT.santa = own && w.day && k.seat ? 1 : 0;
+  const own = !w.only,
+    deer = has(w, 'critter.reindeer'),
+    elf = own && !w.calm && has(w, 'critter.elf'),
+    peng = own && w.frozen && has(w, 'critter.penguin'),
+    santa = own && has(w, 'critter.santa'),
+    k = deer || elf || peng || santa ? known(w) : null;
+  WANT.reindeer = deer ? Math.min(REINDEER, k.homes.length) : 0;
+  WANT.elf = elf && k.route ? ELVES : 0;
+  WANT.penguin = peng && k.huddle ? PENGUINS : 0;
+  WANT.santa = santa && k.seat ? 1 : 0;
   return WANT;
 }
 
@@ -416,13 +419,14 @@ function fly(w) {
     w.slider = 0;
     w.slideAt = null;
   }
-  if (!w.level) w.landed = w.placed = 0;
+  const on = has(w, 'sleigh');
+  if (!on) w.landed = w.placed = 0;
   for (const p of w.parcels)
-    if (p.on && (w.now - p.t0 >= FALL_FOR || !w.level)) {
+    if (p.on && (w.now - p.t0 >= FALL_FOR || !on)) {
       p.on = false;
-      if (w.level && w.landed < LANDED_MAX) w.landed++;
+      if (on && w.landed < LANDED_MAX) w.landed++;
     }
-  if (!w.eve || w.calm || w.only || !w.level) {
+  if (!on || w.calm || w.only) {
     w.sleighAt = w.sleighNext = null;
     return;
   }
@@ -497,19 +501,16 @@ function pose(c, t) {
 
 export const EventCritters = {
   REINDEER,
-  REINDEER_FROM,
   RANGE,
   SPEED,
   NOTICE,
   DT_MAX,
   ELVES,
-  ELF_FROM,
   ELF_SPEED,
   SLIP,
   SLIP_FOR,
   PLACE_FOR,
   PENGUINS,
-  PENGUIN_FROM,
   SLIDE,
   SLIDE_SPEED,
   WADDLE_SPEED,

@@ -45,6 +45,7 @@ const RESTART_MIN_MS = 5000;
 const RESTART_SPREAD_MS = 15000;
 const OFFICE_FILE = path.join(__dirname, '..', 'claude-office.html');
 const officePage = createOfficePage(OFFICE_FILE);
+const assetsPage = createOfficePage(path.join(__dirname, '..', 'claude-assets.html'));
 
 function routes(ctx) {
   const { db, deps, limiters, world, helpers } = ctx;
@@ -338,6 +339,18 @@ function routes(ctx) {
       if (!s) return send(res, 200, welcomePage(), { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, ...NO_STORE });
       let page;
       try { page = officePage.get(); } catch { throw new HttpError(500, 'page missing'); }
+      send(res, 200, page.body, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': page.csp, ...NO_STORE });
+    },
+  });
+
+  // The assets wiki: same gate and CSP as the office page, a different shell.
+  list.push({
+    method: 'GET', path: '/assets',
+    handler(req, res) {
+      const s = helpers.requireSession(req);
+      if (!s) return send(res, 200, welcomePage(), { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP, ...NO_STORE });
+      let page;
+      try { page = assetsPage.get(); } catch { throw new HttpError(500, 'page missing'); }
       send(res, 200, page.body, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': page.csp, ...NO_STORE });
     },
   });

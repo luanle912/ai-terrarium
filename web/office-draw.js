@@ -4,11 +4,11 @@ import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
 import { SkyRender } from './sky-render.js';
 import { SnowLogic } from './snow-logic.js';
-import { EventLogic } from './event-logic.js';
 import { IslandLife } from './island-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
 import { PropUse } from './prop-use.js';
+import { CLOCK, EXIT, POTS, SHELF, WINDOWS } from './office-instances.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import {
   DESKS,
@@ -33,13 +33,33 @@ import {
   mix,
   zoneAt,
 } from './office-scene.js';
-import { shade, text3 } from './office-util.js';
+import { isCold, officeG, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Labels, OUTDOOR_LABELS } from './labels.js';
+import { Paint } from './paint.js';
+import { Light } from './light.js';
+import { eventTreeSprite } from './event-tree-sprite.js';
+
+// What the island's bake shows of the look: the outdoor labels and the extras it stands on the lawn.
+const ISLAND_PARTS = Object.freeze([...OUTDOOR_LABELS, 'snowman.lawn', 'cane', 'cathedral', 'ourlady']);
 // Drawing the office: sky, camera, the floor, walls, planters, pantry and desks.
-// The night tint over event trees, in 1/50 steps of its strength (built once, no string per frame).
-const NIGHT_TINT = Array.from({ length: 31 }, (_, i) => 'rgba(13,19,34,' + i / 50 + ')');
 // On a holiday these few trees by the office turn into the holiday's tree; the rest keep the season's.
 const HOLIDAY_TREES = SeasonIsland.holidayTrees(ISLAND, W, H);
+// How strongly a holiday tree takes the lawn's night tint at light level dfB (0..10): SkyRender.night's
+// (1 - light) x 0.6.
+export const treeDusk = dfB => (1 - dfB / 10) * 0.6;
+// The holiday trees are the tree.holiday label's variants: 'none' (the season's tree stays), 'xmas' the decorated
+// Christmas tree, any other a small holiday's own; each drawn by the office's drawEventTree.
+for (const v of Labels.byId('tree.holiday').variants) {
+  const season = v === 'xmas' ? 'christmas' : v;
+  Paint.variant(
+    'tree.holiday',
+    v,
+    v === 'none' ? () => {} : (o, ctx, d, t, k, dusk) => o.drawEventTree(ctx, d, season, t, k, dusk),
+  );
+}
+// The floor cell the EXIT door's kit stands on (OfficeDecor.kit at P of it).
+export const DOOR_KIT = EXIT.kit;
 mixin(
   ClaudeOffice,
   class {
@@ -127,43 +147,22 @@ mixin(
       }
     }
 
-    // One event tree at its tile, tinted for the night by `dusk` (0 = full day). Every event tree of a season looks
-    // the same at a given moment, so after dark the tinted tree is painted once a frame into a scratch canvas (at the
-    // scene's resolution) and stamped at each tile.
+    // One event tree at its tile, tinted for the night by `dusk` (0 = full day): stamped from its sprite
+    // (web/event-tree-sprite.js) when it has one, else drawn straight onto the scene.
     drawEventTree(ctx, d, season, t, k, dusk) {
       const [px, py] = PG(d.x + 0.5, d.y + 0.5, 0),
         X = Math.round(px),
-        Y = Math.round(py);
-      if (dusk < 0.02) {
+        Y = Math.round(py),
+        s = eventTreeSprite(season, X, Y, t, k, dusk);
+      if (!s) {
         ctx.save();
         ctx.translate(X, Y);
         SeasonTree.drawSeasonTree(ctx, 0, 0, season, t);
         ctx.restore();
         return;
       }
-      const sc = this.treeScratch || (this.treeScratch = document.createElement('canvas')),
-        m = this.treeMemo || (this.treeMemo = { t: null, k: 0, dusk: 0, season: '' });
-      if (m.t !== t || m.k !== k || m.dusk !== dusk || m.season !== season) {
-        Object.assign(m, { t, k, dusk, season });
-        const w = Math.ceil(48 * k),
-          h = Math.ceil(58 * k);
-        if (sc.width !== w || sc.height !== h) {
-          sc.width = w;
-          sc.height = h;
-        }
-        const g = sc.getContext('2d');
-        g.setTransform(1, 0, 0, 1, 0, 0);
-        g.globalCompositeOperation = 'source-over';
-        g.clearRect(0, 0, w, h);
-        g.setTransform(k, 0, 0, k, 24 * k, 48 * k);
-        SeasonTree.drawSeasonTree(g, 0, 0, season, t);
-        g.setTransform(1, 0, 0, 1, 0, 0);
-        g.globalCompositeOperation = 'source-atop';
-        g.fillStyle = NIGHT_TINT[Math.min(NIGHT_TINT.length - 1, Math.round(dusk * 50))];
-        g.fillRect(0, 0, w, h);
-      }
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(sc, Math.round((X - 24) * k), Math.round((Y - 48) * k));
+      ctx.drawImage(s.img, s.x, s.y);
       ctx.setTransform(k, 0, 0, k, 0, 0);
     }
     renderK() {
@@ -190,19 +189,23 @@ mixin(
       ctx.imageSmoothingEnabled = false;
       ctx.globalAlpha = 1;
       ctx.clearRect(0, 0, LW, LH);
-      // The island is baked once per resolution / light level / snow level / season and stamped under the office.
+      // The island is baked once per resolution / light level / snow level / season / outdoor look (the variants,
+      // decor and extras of the outdoor labels) and stamped under the office.
       const snow = this.snowShown || 0,
         ic = this.islandCache,
         dfB = Math.round(df * 10),
         snB = Math.round(snow * 10),
         season = this.seasonNow(),
-        ev = this.eventNow(),
-        evK = EventLogic.cacheKey(ev);
-      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season || ic.ev !== evK) {
+        look = this.look,
+        lookK = look.keyOf(ISLAND_PARTS);
+      // the big tree's and the cathedral's cells follow the event on every scene this draws (an IslandScene of the
+      // world view has no envNow of its own to do it)
+      this.eventNow();
+      if (!ic || ic.k !== k || ic.df !== dfB || ic.sn !== snB || ic.season !== season || ic.look !== lookK) {
         // let the browser drop the old bake's canvases now rather than at the next collection
         if (ic) for (const c of [ic.img, ...ic.props.map(p => p.img)]) c.width = c.height = 0;
         const frame = { LW, LH, OX, OY },
-          light = { df: dfB / 10, snow: snB / 10, season, block: { W, H }, event: ev ? ev.level : 0 };
+          light = { df: dfB / 10, snow: snB / 10, season, block: { W, H }, look };
         this.islandCache = {
           img: SkyRender.renderIsland(ISLAND, frame, k, light),
           props: SkyRender.renderProps(ISLAND, frame, k, light),
@@ -210,7 +213,7 @@ mixin(
           df: dfB,
           sn: snB,
           season,
-          ev: evK,
+          look: lookK,
         };
       }
       ctx.save();
@@ -233,42 +236,27 @@ mixin(
         },
         backOf = o => behindWalls(Math.floor(o.x), Math.floor(o.y), DRAW_REACH),
         walker = a => !a.sleeping && !a.seated && !a.wcIn;
-      // The island's trees: on a holiday the few by the office are the holiday's tree (HOLIDAY_TREES); the rest are
-      // the season's, baked among the props. Holiday trees are drawn in their
-      // own colours; after dark each goes through a scratch canvas and takes the same night tint as the lawn
-      // (SkyRender.night: toward #0d1322 by (1 - light) x 0.6), so it does not glow.
-      const tk = SeasonTree && this.treeOn ? this.season : null,
-        info = tk && SeasonTree.SEASONS[tk],
-        holiday = info && (info.type === 'event' || info.type === 'lunar') ? tk : null,
-        dusk = (1 - dfB / 10) * 0.6,
-        // (not at Christmas: one big tree stands on the front lawn instead, web/island-art-xmas.js)
-        held = d => holiday && holiday !== 'christmas' && HOLIDAY_TREES.has(d.x + ',' + d.y);
+      // The island's trees: the few by the office (HOLIDAY_TREES) are the look's holiday tree while one stands
+      // (tree.holiday: a small holiday's own, or 'xmas', the decorated Christmas tree); the rest are the season's,
+      // baked among the props. Holiday trees are drawn in their own colours; after dark each goes through a scratch
+      // canvas and takes the same night tint as the lawn (SkyRender.night: toward #0d1322 by (1 - light) x 0.6), so
+      // it does not glow.
+      const hv = this.look.of('tree.holiday'),
+        holiday = hv !== 'none',
+        plant = Paint.painter('tree.holiday', hv),
+        dusk = treeDusk(dfB),
+        held = d => holiday && HOLIDAY_TREES.has(d.x + ',' + d.y);
       for (const p of this.islandCache.props)
         if (!(p.tree && held(p))) (backOf(p) ? behind : items).push({ z: p.z, f: stamp(p) });
       for (const d of ISLAND.decor) {
         if (d.kind !== 'tree' || !held(d)) continue;
         (backOf(d) ? behind : items).push({
           z: d.x + d.y + 0.5,
-          f: () => this.drawEventTree(ctx, d, holiday, t, k, dusk),
+          f: () => plant(this, ctx, d, t, k, dusk),
         });
       }
-      const poly = (pts, fill, stroke) => {
-        ctx.beginPath();
-        pts.forEach((p, i) =>
-          i ? ctx.lineTo(Math.round(p[0]), Math.round(p[1])) : ctx.moveTo(Math.round(p[0]), Math.round(p[1])),
-        );
-        ctx.closePath();
-        if (fill) {
-          ctx.fillStyle = fill;
-          ctx.fill();
-        }
-        const s = stroke === undefined ? th.stroke : stroke;
-        if (s) {
-          ctx.strokeStyle = s;
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
-      };
+      const G = officeG(ctx, P, th),
+        { poly, box, rect } = G;
       {
         // The plinth: a soft shadow on the lawn around it, then its two visible stone faces and a lit top lip.
         const WT_ = 0.35,
@@ -324,21 +312,14 @@ mixin(
             else step(s.x, s.x + s.len, H + a, H + b, zt, top);
           }
       }
-      const box = (x, y, w, hh, z0, z1, top, l, r) => {
-        poly([P(x, y + hh, z0), P(x + w, y + hh, z0), P(x + w, y + hh, z1), P(x, y + hh, z1)], l || shade(top, -22));
-        poly([P(x + w, y, z0), P(x + w, y + hh, z0), P(x + w, y + hh, z1), P(x + w, y, z1)], r || shade(top, -38));
-        poly([P(x, y, z1), P(x + w, y, z1), P(x + w, y + hh, z1), P(x, y + hh, z1)], top);
-      };
-      const rect = (x, y, w, hh, col) => {
-        ctx.fillStyle = col;
-        ctx.fillRect(Math.round(x), Math.round(y), w, hh);
-      };
-      // cold: breath shows (deep enough snow, daylight, motion allowed)
-      const cold = SnowLogic.depth(snow) >= 2 && df >= 0.6 && !(env && env.reduced),
-        G = { ctx, poly, box, rect, th, t, df, ev, cold };
+      G.t = t;
+      G.df = df;
+      G.look = this.look;
+      G.cold = isCold(snow, df, env);
       this.drawPrints(G, this.printNow || 0);
       for (const d of this.dogs) if (backOf(d)) behind.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
       this.critterItems(G, behind, true, dfB);
+      this.bearItems(G, behind, true, dfB);
       for (const a of this.agents)
         if (walker(a) && backOf(a)) behind.push({ z: a.x + a.y, f: () => this.drawPerson(G, a) });
       behind.sort((p, q) => p.z - q.z).forEach(it => it.f());
@@ -366,10 +347,10 @@ mixin(
       poly([P(W, -WT, 0), P(W, 0, 0), P(W, 0, ZT), P(W, -WT, ZT)], shade(th.wr, -34), null);
       poly([P(-WT, H, 0), P(0, H, 0), P(0, H, ZT), P(-WT, H, ZT)], shade(th.wl, -20), null);
       if (SnowLogic.depth(snow)) this.winterWalls(G, SnowLogic.depth(snow));
-      if (ev) this.xmasWallLights(G, ev);
+      this.xmasWallLights(G);
       {
         const OD = OfficeDecor;
-        if (OD) [1.6, 4.8, 11.6, 14.8].forEach(x => OD.F.window(OD.kit(ctx, ...P(x, 0)), t, { night: df < 0.5 }));
+        if (OD) WINDOWS.forEach(({ x }) => OD.F.window(OD.kit(ctx, ...P(x, 0)), t, { night: Light.night(df) }));
       }
       {
         const OD = OfficeDecor,
@@ -394,7 +375,7 @@ mixin(
               r5: rMin(u5h.resets),
               r7: rMin(u7d.resets),
               variant: 'led',
-              night: df < 0.5,
+              night: Light.night(df),
             },
             t,
             'left',
@@ -415,7 +396,7 @@ mixin(
         box(0.03, 9.68 + k * 0.27, 0.2, 0.2, 22, 22 + hh, col);
       });
       {
-        const [cx, cy] = P(0, 12.8, 42);
+        const [cx, cy] = P(...CLOCK[0].at);
         ctx.fillStyle = '#1a1c24';
         ctx.beginPath();
         ctx.ellipse(cx, cy, 8, 9, 0, 0, Math.PI * 2);
@@ -453,10 +434,13 @@ mixin(
         ctx.lineTo(cx + Math.cos(sA) * 5, cy + Math.sin(sA) * 5.5);
         ctx.stroke();
       }
+      this.dressWalls(G);
       {
         const OD = OfficeDecor;
-        if (OD) OD.F.door(OD.kit(ctx, ...P(0, 5.5)), t);
+        if (OD) OD.F.door(OD.kit(ctx, ...P(DOOR_KIT[0], DOOR_KIT[1])), t);
       }
+      const grain = Light.grain(df),
+        specks = Light.specks(df);
       for (let y = 0; y < H; y++)
         for (let x = 0; x < W; x++) {
           poly(
@@ -464,12 +448,12 @@ mixin(
             (x + y) % 2 ? th.fa : th.fb,
             th.stroke ? '#dfe5ef' : null,
           );
-          if (df > 0.2) {
+          if (grain) {
             ctx.globalAlpha = df;
             poly([P(x, y + 0.5), P(x + 1, y + 0.5), P(x + 1, y + 0.52), P(x, y + 0.52)], shade(th.fa, -18), null);
             ctx.globalAlpha = 1;
           }
-          if (df < 0.8 && (x * 7 + y * 3) % 5 === 0) {
+          if (specks && (x * 7 + y * 3) % 5 === 0) {
             ctx.globalAlpha = 1 - df;
             const [px, py] = P(x + 0.5, y + 0.5);
             rect(px, py, 1, 1, shade(th.fa, 14));
@@ -477,7 +461,8 @@ mixin(
           }
         }
       {
-        const own = this.colOwners();
+        const own = this.colOwners(),
+          tile = Paint.painter('floor.pantry', G.look.of('floor.pantry'));
         for (let y = 0; y < H; y++)
           for (let x = 0; x < W; x++) {
             const zi = zoneAt(x, y);
@@ -493,7 +478,7 @@ mixin(
                 poly([P(jx, y), P(jx + 0.03, y), P(jx + 0.03, y + 0.5), P(jx, y + 0.5)], sm, null);
                 continue;
               }
-              col = (x + y) % 2 ? lerpHex('#2e2d3a', '#ebe7dd', df) : lerpHex('#282734', '#dfdace', df);
+              col = tile(x, y, df);
             } else if (zi < 0) col = mix((x + y) % 2 ? th.fa : th.fb, '#000000', th.stroke ? 0.03 : 0.14);
             else {
               const dk = own[zi];
@@ -505,12 +490,12 @@ mixin(
               col = mix(
                 (x + y) % 2 ? th.fa : th.fb,
                 this.depts.get(dk).color,
-                th.stroke ? 0.14 : df < 0.5 ? 0.3 : 0.34,
+                th.stroke ? 0.14 : Light.night(df) ? 0.3 : 0.34,
               );
             }
             poly([P(x, y), P(x + 1, y), P(x + 1, y + 1), P(x, y + 1)], col, th.stroke ? '#dfe5ef' : null);
           }
-        ctx.strokeStyle = th.stroke ? '#c9d3e3' : df > 0.5 ? '#c9a77a' : '#3a4462';
+        ctx.strokeStyle = th.stroke ? '#c9d3e3' : Light.day(df) ? '#c9a77a' : '#3a4462';
         ctx.lineWidth = 1;
         [
           [9.5, 0, 9.5, H],
@@ -527,6 +512,7 @@ mixin(
             ctx.stroke();
           }
         });
+        Paint.painter('floor.corridor', G.look.of('floor.corridor'))(G);
         // Soft contact shadow where the walls meet the floor.
         [
           [0.45, 0.06],
@@ -566,7 +552,7 @@ mixin(
               z.zx + 3.12,
               z.zy + 3 + len / 2,
               name,
-              th.stroke ? '#9aa3b5' : df > 0.5 ? shade(th.fa, -45) : shade(th.fa, 30),
+              th.stroke ? '#9aa3b5' : Light.day(df) ? shade(th.fa, -45) : shade(th.fa, 30),
               FS,
               ALONG_Y,
             );
@@ -577,12 +563,12 @@ mixin(
           while (name.length > MAXC && /[-_.]/.test(name)) name = name.replace(/^[^-_.]*[-_.]/, '');
           name = name.slice(0, MAXC);
           const len = ((name.length * 4 - 1) * FS) / 16;
-          paint(z.zx + 3.12, z.zy + 3 + len / 2, name, df > 0.5 ? shade(col, -80) : shade(col, 10), FS, ALONG_Y);
+          paint(z.zx + 3.12, z.zy + 3 + len / 2, name, Light.day(df) ? shade(col, -80) : shade(col, 10), FS, ALONG_Y);
         });
-        paint(21.3, 13.2, 'PANTRY', df > 0.5 ? '#8a5a2a' : '#a8763e', 2.5, ALONG_X);
+        paint(21.3, 13.2, 'PANTRY', Light.day(df) ? '#8a5a2a' : '#a8763e', 2.5, ALONG_X);
       }
       poly([P(0.05, 6.4), P(0.9, 6.4), P(0.9, 7.6), P(0.05, 7.6)], lerpHex('#3a2f55', '#b5523b', df), null);
-      [1.6, 4.8, 11.6, 14.8].forEach(x => {
+      WINDOWS.forEach(({ x }) => {
         ctx.globalAlpha = 0.07 + (0.22 - 0.07) * df;
         poly(
           [P(x + 0.3, 0.05), P(x + 2.1, 0.05), P(x + 2.6, 1.6), P(x + 0.8, 1.6)],
@@ -591,7 +577,6 @@ mixin(
         );
         ctx.globalAlpha = 1;
       });
-      if (SeasonTree) this.seasonKey = SeasonTree.seasonFor(new Date());
       {
         const OD = OfficeDecor,
           lit = this.propLit || PropUse.DARK;
@@ -612,13 +597,10 @@ mixin(
       this.smokingItems(G, items, snow);
       this.doghouseItems(G, items, snow, dfB, snB);
       this.fateItems(G, items);
-      if (ev) this.xmasItems(G, items, ev);
+      this.xmasItems(G, items);
       this.restroomItems(G, items, snow);
-      [
-        [8.5, 13.5],
-        [19.5, 13.5],
-        [19.5, 0.5],
-      ].forEach(([x, y]) =>
+      this.dressItems(G, items);
+      POTS.forEach(({ x, y }) =>
         items.push({
           z: x + y,
           f: () => {
@@ -637,20 +619,23 @@ mixin(
       items.push({
         z: 9,
         f: () => {
-          box(9.05, 0.05, 0.9, 0.4, 0, 42, shade(th.trim, -5)); // in the middle of the corridor between the zones
-          [10, 20, 30, 40].forEach(z => box(9.08, 0.06, 0.84, 0.38, z, z + 1, shade(th.trim, -30)));
+          const [sx, sy, sz] = SHELF[0].at,
+            [sw, sd, sh] = SHELF[0].size;
+          box(sx, sy, sw, sd, sz, sh, shade(th.trim, -5)); // in the middle of the corridor between the zones
+          [10, 20, 30, 40].forEach(z => box(sx + 0.03, sy + 0.01, sw - 0.06, sd - 0.02, z, z + 1, shade(th.trim, -30)));
           [
             [12, '#e5484d', '#3e8ed0', '#f5a524'],
             [22, '#46a758', '#e8e2d6', '#8e4ec6'],
             [32, '#12a594', '#5b5bd6', '#e93d82'],
           ].forEach(([z, ...cs]) =>
-            cs.forEach((col, k) => box(9.15 + k * 0.24, 0.12, 0.16, 0.28, z, z + 7 - (k % 2) * 2, col)),
+            cs.forEach((col, k) => box(sx + 0.1 + k * 0.24, sy + 0.07, 0.16, 0.28, z, z + 7 - (k % 2) * 2, col)),
           );
         },
       });
 
       for (const d of this.dogs) if (!backOf(d)) items.push({ z: d.x + d.y, f: () => this.drawDog(G, d, t, dfB, snB) });
       this.critterItems(G, items, false, dfB);
+      this.bearItems(G, items, false, dfB);
       this.idleXmasItems(G, items);
       this.agents.forEach(a => {
         if (a.sleeping) {

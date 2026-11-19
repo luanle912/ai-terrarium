@@ -1,5 +1,4 @@
 import { tr } from './i18n.js';
-import { SeasonTree } from './season-tree.js';
 import { SeasonLogic } from './season-logic.js';
 import { SkyLogic } from './sky-logic.js';
 import { CameraLogic } from './camera-logic.js';
@@ -9,6 +8,10 @@ import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import { EventLogic } from './event-logic.js';
 import { EventLandmark } from './event-landmark.js';
+import { Moment } from './moment.js';
+import { Theme } from './theme.js';
+import { LookChange } from './look-change.js';
+import { SettingsSync } from './settings-sync.js';
 import {
   BLOCK,
   DOG_PLACES,
@@ -75,11 +78,11 @@ export class ClaudeOffice extends React.Component {
     this.bubbleEls = {};
     this.usedLooks = 0;
     this.last = 0;
-    this.seasonKey = 'default';
     this.seasonChoice = SeasonLogic.loadSeasonChoice(this.storage);
     this.seasonPreview = null;
     this.eventChoice = EventLogic.loadChoice(this.storage);
     this.eventPreview = null;
+    this.sync = SettingsSync.create(this.storage); // when the choices were made, what was sent (settings-sync.js)
     this.goneSids = new Map();
     this.depts = new Map();
     this.setCanvas = el => {
@@ -116,6 +119,7 @@ export class ClaudeOffice extends React.Component {
     this.nextFlashAt = 0;
     this.preview = null;
     this.lastSky = Date.now();
+    this.computeMoment(); // render() reads it before the first frame
     this.reducedMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
     // Phones (narrow, or a phone on its side) get a compact header: one row of controls plus one sideways-scrolling
     // strip, so the island keeps the height. render() runs every 300 ms (uiTimer), so it simply reads the query each
@@ -308,7 +312,7 @@ export class ClaudeOffice extends React.Component {
     };
     window.__dogs = { dogs: this.dogs, world: this.dogWorld };
     window.__critters = () => ({ list: this.critters, world: this.critterWorld });
-    // Santa's sleigh sets off now (on Christmas Eve), for checking the flight
+    // Santa's sleigh sets off now (while the event is on), for checking the flight
     window.__sleigh = () => this.critterWorld && EventCritters.flyNow(this.critterWorld);
     window.__office = this; // for tools/shot.mjs --eval: switch to simulated agents, pose someone
     // the first person on the floor drops from the EXIT door, as if they had just gone out (for checking the fall)
@@ -360,53 +364,52 @@ export class ClaudeOffice extends React.Component {
     if (this.onShown) document.removeEventListener('visibilitychange', this.onShown);
     if (this.onPreviewVis) document.removeEventListener('visibilitychange', this.onPreviewVis);
     if (this.onWorldOnline) window.removeEventListener('online', this.onWorldOnline);
+    if (this.onWorldStorage) window.removeEventListener('storage', this.onWorldStorage);
   }
   // ---- weather settings ----
   // `fromServer`: adopting what another page chose (adoptSettings), so it is not posted back.
   setWeather(patch, fromServer) {
     this.setState(patch, () => {
       SkyLogic.saveWeatherSettings(this.storage, { mode: this.state.weatherMode, city: this.state.city });
-      if (!fromServer) this.pushSettings();
+      if (!fromServer) this.pushSettings(true);
       if (this.state.weatherMode === 'real' && (patch.weatherMode === 'real' || 'city' in patch)) this.refreshReal();
       if (this.state.weatherMode !== 'real') this.setState({ realStatus: { state: 'idle', text: '' } });
     });
   }
-  // The local server keeps one weather choice for all its pages (lib/page-settings.js) and sends it in every snapshot,
-  // so the wallpaper app's web view, which has its own storage and no settings panel, follows what was chosen here.
-  // A server that has none yet gets this page's own choice, unless this is the wallpaper (it never chose anything).
+  // The local server keeps one weather and event choice for all its pages (lib/page-settings.js) and sends it in
+  // every snapshot, so the wallpaper app's web view, which has its own storage and no settings panel, follows what was
+  // chosen here. The newest choice wins, and a server that has none yet gets this page's own (SettingsSync.receive).
   adoptSettings(ps) {
-    this.sharedSettings = true;
-    // a snapshot sent before our own change reached the server must not undo it
-    if (Date.now() - (this.pushedAt || 0) < 3000) return;
-    const w = ps && ps.weather;
-    if (!w) {
-      if (!this.wallpaper && !this.settingsSeeded) this.pushSettings();
-      this.settingsSeeded = true;
-      return;
-    }
-    if (w.mode !== this.state.weatherMode || w.city !== this.state.city)
-      this.setWeather({ weatherMode: w.mode, city: w.city, cityDraft: w.city }, true);
-    // the event choice (EventLogic.adopt): a server that has none yet takes this page's own, sent with the weather
-    // the server just gave (this page's own may still be the old one until the state above settles)
-    const e = EventLogic.adopt(ps.event, this.eventChoice, { wallpaper: this.wallpaper, seeded: this.eventSeeded });
-    if (e.take) this.setEventChoice(e.take, true);
-    if (e.seed) this.pushSettings({ mode: w.mode, city: w.city });
-    this.eventSeeded = true;
+    SettingsSync.receive(this, ps);
   }
-  // The event (web/event-logic.js) on the viewer's clock: a one-minute preview, else the choice in Settings.
-  // Asked several times a frame, so the answer is kept for the second it was worked out in.
+  // The moment (web/moment.js) and its look (web/theme.js), worked out once a frame, paused or not, before anything
+  // moves or is drawn: the choices and previews in Settings, the daylight and the snow on the lawn. Every scene reads
+  // these two, the islands of the world view included (IslandScene asks its host), so nothing keeps its own clock.
+  computeMoment(date = new Date()) {
+    this.moment = Moment.at({
+      date,
+      now: date.getTime(),
+      seasonChoice: this.seasonChoice,
+      seasonPreview: this.seasonPreview,
+      eventChoice: this.eventChoice,
+      eventPreview: this.eventPreview,
+      df: dayFactor(date),
+      snow: this.snowShown || 0,
+    });
+    this.look = Theme.resolve(this.moment);
+    return this.moment;
+  }
+  // The moment's event ({ key, since }, as EventLogic.active gives it), one object while the event stays the same.
+  // When it comes or goes, the big tree's cells and the cathedral's ground are taken out of (or put back into) the
+  // walkable ones.
   eventNow() {
-    const now = Date.now(),
-      sec = Math.floor(now / 1000),
-      c = this.eventChoice || 'auto',
-      p = this.eventPreview;
-    if (this.evSec !== sec || this.evFor !== c || this.evPrev !== p) {
-      this.evSec = sec;
-      this.evFor = c;
-      this.evPrev = p;
-      this.evNow = EventLogic.active(new Date(now), c, p, now);
-      EventLogic.block(BLOCK, !!this.evNow); // nobody walks through the big tree while it stands
-      EventLandmark.reserve(EVENT_LAND, !!this.evNow, this.dogs); // nor through the cathedral
+    const e = this.moment && this.moment.event,
+      k = e ? e.key + '@' + e.since : '';
+    if (this.evK !== k) {
+      this.evK = k;
+      this.evNow = e;
+      EventLogic.block(BLOCK, !!e); // nobody walks through the big tree while it stands
+      EventLandmark.reserve(EVENT_LAND, !!e, this.dogs); // nor through the cathedral
     }
     return this.evNow;
   }
@@ -414,22 +417,13 @@ export class ClaudeOffice extends React.Component {
     if (!EventLogic.CHOICES.includes(choice)) return;
     this.eventChoice = choice;
     EventLogic.saveChoice(this.storage, choice);
+    this.computeMoment();
     this.setState({ eventChoice: choice });
-    if (!fromServer) this.pushSettings();
+    if (!fromServer) this.pushSettings(true);
   }
-  pushSettings(weather) {
-    if (!this.sharedSettings || typeof fetch !== 'function') return;
-    this.pushedAt = Date.now();
-    const body = JSON.stringify({
-      weather: weather || { mode: this.state.weatherMode, city: this.state.city },
-      event: this.eventChoice || 'auto',
-    });
-    fetch(this.settingsUrl || '/api/settings', {
-      method: 'POST',
-      headers: { 'X-Terrarium': 'settings', 'Content-Type': 'application/json' },
-      body,
-      cache: 'no-store',
-    }).catch(() => {});
+  // Sends the choices to the local server from any data source (SettingsSync.share); `changed` when made just now.
+  pushSettings(changed) {
+    return SettingsSync.share(this, { touch: !!changed });
   }
   async refreshReal() {
     const city = this.state.city,
@@ -481,24 +475,14 @@ export class ClaudeOffice extends React.Component {
   get speed() {
     return this.state.speed || 1;
   }
+  // The small holiday whose trees stand by the office (a key of SeasonTree.SEASONS), or 'default' for none.
   get season() {
-    return this.seasonKey && this.seasonKey !== 'default'
-      ? this.seasonKey
-      : SeasonTree
-        ? SeasonTree.seasonFor()
-        : 'default';
+    return this.moment.holiday || 'default';
   }
-  // The season the island shows (SeasonLogic): a one-minute preview, else the choice in Settings, else the date.
-  // seasonChoice / seasonPreview are set from Settings; until then the date decides.
-  // The Christmas event brings winter with it (EventLogic.season), whatever the date or the choice.
+  // The season the island shows (web/moment.js): a one-minute preview, else the choice in Settings, else the date;
+  // the Christmas event brings winter with it.
   seasonNow() {
-    const key = SeasonLogic.currentSeason({
-      date: new Date(),
-      choice: this.seasonChoice || 'auto',
-      preview: this.seasonPreview || null,
-      now: Date.now(),
-    }).key;
-    return EventLogic.season(this.eventNow(), key);
+    return this.moment.season;
   }
   get treeOn() {
     return this.season !== 'default';
@@ -514,10 +498,13 @@ export class ClaudeOffice extends React.Component {
     if (this.world) return this.worldFrame(ts);
     const dt = Math.min(0.05, (ts - this.last) / 1000);
     this.last = ts;
+    this.computeMoment();
+    if (this.look !== this.lastLook) this.seeLook(); // a new Look: everything follows now, paused or not
     if (!this.state.paused) {
       this.agents.forEach(a => this.updateAgent(a, dt));
       this.stepDogs(dt);
       this.stepCritters(dt);
+      this.stepBears(dt);
       this.stepProps(dt);
       if (this.agents.some(a => a.gone)) {
         const goneA = this.agents.filter(a => a.gone);
@@ -561,17 +548,20 @@ export class ClaudeOffice extends React.Component {
       this.wx = r.wx;
       this.preview = r.preview;
     } else this.stepWeather(now);
-    // During the Christmas event it snows (unless the weather is switched off in Settings).
+    // An event's look may force its weather (Christmas: it snows), unless the weather is switched off in Settings.
+    // eventNow keeps the event's blocked cells in step with the moment.
+    this.eventNow();
     const reduced = !!(this.reducedMq && this.reducedMq.matches),
-      ev = this.eventNow(),
-      fx = EventLogic.weather(SkyLogic.weatherFx(this.wx, now), this.state.weatherMode === 'off' ? null : ev),
+      fx = EventLogic.weather(SkyLogic.weatherFx(this.wx, now), this.state.weatherMode === 'off' ? null : this.look),
       df = dayFactor();
-    // Winter keeps at least its own snow on the lawn, the roofs and the mountain whatever the weather.
+    // Winter keeps at least its own snow on the lawn, the roofs and the mountain whatever the weather. The snow an
+    // event brought melts within seconds once it ends, unless it is snowing (meltUntil, web/office-look.js).
     const season = this.seasonNow();
     {
-      const sn = SkyLogic.stepSnow(this.snow, fx, this.preview, dtMs);
-      this.snow = sn.cover;
-      this.snowShown = Math.max(sn.shown, SeasonLogic.look(season).minSnow);
+      const sn = SkyLogic.stepSnow(this.snow, fx, this.preview, dtMs),
+        melt = this.meltUntil > now && !(fx.snow > 0);
+      this.snow = melt ? LookChange.melt(sn.cover, this.meltUntil - now, dtMs) : sn.cover;
+      this.snowShown = Math.max(sn.shown === sn.cover ? this.snow : sn.shown, SeasonLogic.look(season).minSnow);
     }
     if (fx.storm > 0.5 && !reduced) {
       if (now >= this.nextFlashAt) {
@@ -591,8 +581,8 @@ export class ClaudeOffice extends React.Component {
       flash: this.flash,
       col: SkyLogic.skyColors(df, hour, fx),
       season,
-      // the Christmas event's level (0: none), for the sky's far islands
-      event: ev ? ev.level : 0,
+      // the look (web/theme.js) the sky's far islands wear
+      look: this.look,
     };
   }
 }

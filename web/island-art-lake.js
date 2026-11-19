@@ -80,7 +80,7 @@ export function lakeField(island) {
   return out;
 }
 
-const WATER = { shallow: '#62b8ea', mid: '#4aa3df', deep: '#3b8fcf', line: '#a9dcf7' },
+export const WATER = { shallow: '#62b8ea', mid: '#4aa3df', deep: '#3b8fcf', line: '#a9dcf7' },
   BANK = { wall: '#6a6474', foot: '#57516a' },
   COBBLE = ['#cfc9bd', '#bdb6aa', '#aaa397'],
   MORTAR = '#8a8478',

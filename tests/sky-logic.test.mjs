@@ -563,3 +563,12 @@ test('a non-snow preview shows the real snow cover underneath, which keeps build
 test('real snow still covers the lawn over about 10 minutes', () => {
   assert.deepEqual(SkyLogic.stepSnow(0, SkyLogic.FX.snow, null, 600_000), { cover: 1, shown: 1 })
 })
+
+test('skyColors never paints #NaNNaNNaN: a NaN light or a weather mix missing a key reads as none of it', () => {
+  const hex = /^#[0-9a-f]{6}$/
+  const partial = { cloud: 0.3, rain: 0, snow: 0, storm: 0 } // no fog, as an older stored weather state may carry
+  for (const [df, fx] of [[NaN, SkyLogic.FX.clear], [0.4, { ...partial, cloud: NaN }], [0.4, partial], [1, {}]])
+    for (const [k, c] of Object.entries(SkyLogic.skyColors(df, 12, fx))) assert.match(c, hex, `${k} at df ${df}`)
+  assert.deepEqual(SkyLogic.skyColors(NaN, 12, SkyLogic.FX.clear), SkyLogic.skyColors(0, 12, SkyLogic.FX.clear))
+  assert.deepEqual(SkyLogic.skyColors(0.4, 12, partial), SkyLogic.skyColors(0.4, 12, { ...partial, fog: 0 }))
+})

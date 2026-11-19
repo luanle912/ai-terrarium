@@ -6,6 +6,8 @@
 // web/island-art.js, so the island's light and snow reach it too.
 import { hash, key } from './island-land.js';
 import { blob, linePx, lit3, mix, OUTLINE } from './island-art.js';
+import { Labels } from './labels.js';
+import { Paint } from './paint.js';
 
 // ---- the grass of a season ----
 // Every grass colour of the island (the lawn's checker, the lip over the shore, the mountain's skirt) leans toward the
@@ -61,7 +63,7 @@ function trunk(pt, C, x, y, h) {
   ctx.fillRect(x + 1, y - h, 1, h);
 }
 // One island tree at its tile d: kind 'fresh' (spring), 'green' (summer), 'gold' (autumn), 'bare' (winter) or 'fir'
-// (winter during the Christmas event).
+// (the Christmas event's look).
 export function drawSeasonTree(pt, P, C, d, kind) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
     x = Math.round(px),
@@ -116,6 +118,9 @@ export function drawSeasonTree(pt, P, C, d, kind) {
     C(OUTLINE),
   );
 }
+// The island trees are the tree.island label's variants: the look picks which one every tree is (web/sky-island.js).
+for (const v of Labels.byId('tree.island').variants)
+  Paint.variant('tree.island', v, (pt, P, C, d) => drawSeasonTree(pt, P, C, d, v));
 // Winter: a bare trunk forking into a crown of twigs, each branch topped with a line of snow.
 const BRANCHES = [
   [0, -12, -5, -19],

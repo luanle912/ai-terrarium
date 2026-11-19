@@ -113,15 +113,17 @@ function layout({ roam, roamList, clear, iceSet, ice, drop, avoid = [], huddle, 
   return { spots, pitch, rink };
 }
 
-// Whether a spot can be used under c = { level (0: no event), snow (depth 0..3), frozen, calm }. Spots that are not
-// the event's are always fine.
+// Whether a spot can be used under c = { look (web/theme.js, or null), snow (depth 0..3), frozen, calm }: the look
+// opens an act by its rule (idle.snowball, idle.snowman, idle.skate, idle.gift), then the snow and the ice decide.
+// Spots that are not the event's are always fine.
+const RULE = { snowball: 'idle.snowball', snowman: 'idle.snowman', skate: 'idle.skate', gift: 'idle.gift' };
 function fine(spot, c) {
   if (!spot || !spot.event) return true;
-  if (!c.level) return false;
+  if (!c.look || !c.look.has(RULE[spot.act])) return false;
   if (spot.act === 'snowball') return c.snow >= 2 && !c.calm;
   if (spot.act === 'snowman') return c.snow >= 2;
   if (spot.act === 'skate') return !!c.frozen && !c.calm;
-  return c.level >= 2;
+  return true;
 }
 const open = (spots, free, c) => free.filter(i => fine(spots[i], c));
 const stays = (spots, i, c) => i == null || fine(spots[i], c);

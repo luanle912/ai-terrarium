@@ -5,6 +5,7 @@ import { shade } from './office-util.js';
 import { SnowLogic } from './snow-logic.js';
 import { snowTones } from './office-draw-winter.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 mixin(
   ClaudeOffice,
   class {
@@ -72,9 +73,10 @@ mixin(
                 null,
               );
           // after dark the entrance light leaves a warm pool on the stones, under everyone standing there
-          if (df < 0.6) {
+          const pool = Light.glow(df);
+          if (pool > 0) {
             const [lx, ly] = PG(X + 0.4, Y + 3.8, 0.6);
-            ctx.globalAlpha = 0.22 * (1 - df / 0.6);
+            ctx.globalAlpha = 0.22 * pool;
             ctx.fillStyle = '#ffd98a';
             ctx.beginPath();
             ctx.ellipse(lx, ly, 18, 9, 0, 0, Math.PI * 2);
@@ -222,7 +224,7 @@ mixin(
             R(ex - 1, ey - 1, 2, 1, '#1a1a1a');
           }
           gbox(X + 0.1, Y + 3.62, 0.14, 0.14, 0, 9, metal);
-          const glow = df < 0.6;
+          const glow = Light.glow(df) > 0;
           gbox(
             X + 0.08,
             Y + 3.6,

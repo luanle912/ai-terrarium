@@ -1,7 +1,6 @@
 // The Christmas event's still pieces, painted once so they cost nothing per frame: the one big tree with its tinsel
 // and presents (a sprite of its own, web/office-draw-xmas.js) and the candy canes (the island's bake). What blinks
 // or glows on them is drawn every frame by web/office-draw-xmas.js from the tables here.
-import { EventLogic } from './event-logic.js';
 import { OUTLINE } from './island-art.js';
 
 // The big tree's sprite: [left, up, right, down] px round the middle of its tile.
@@ -38,9 +37,9 @@ const GIFT_BOXES = [
 ];
 
 // The big tree at its tile (EventLogic.TREE_TILE): a trunk, four tiers of fir lit from the left with ragged lower
-// edges, a line of gold tinsel across each, the unlit star, and the presents the level brings. T maps a colour
-// through the bake's light (a tree keeps more of its colour after dark than the lawn does).
-export function drawBigTree(pt, P, T, tile, level) {
+// edges, a line of gold tinsel across each, the unlit star, and `gifts` presents (Look.build('gifts')). T maps a
+// colour through the bake's light (a tree keeps more of its colour after dark than the lawn does).
+export function drawBigTree(pt, P, T, tile, gifts) {
   const [px, py] = P(tile[0] + 0.5, tile[1] + 0.5, 0),
     x = Math.round(px),
     y = Math.round(py),
@@ -82,7 +81,7 @@ export function drawBigTree(pt, P, T, tile, level) {
   R(-3, BIG_TREE_TOP + 2, 7, 1, '#e2a93c');
   R(0, BIG_TREE_TOP + 5, 1, 2, '#e2a93c');
   // presents
-  GIFT_BOXES.slice(0, EventLogic.GIFTS[level] || 0).forEach(([gx, w, h, paper, ribbon], i) => {
+  GIFT_BOXES.slice(0, gifts || 0).forEach(([gx, w, h, paper, ribbon], i) => {
     const gy = -3 + (i % 3);
     R(gx - 1, gy - 1, w + 2, h + 2, OUTLINE);
     R(gx, gy, w, h, paper);
@@ -92,7 +91,7 @@ export function drawBigTree(pt, P, T, tile, level) {
   });
 }
 
-// A candy cane stuck in the snow beside a lamp post (from the event's second level): [left, up, right, down].
+// A candy cane stuck in the snow beside a lamp post (the look's extra 'cane'): [left, up, right, down].
 export const CANE_EXT = [4, 14, 5, 2];
 export function drawCandyCane(pt, P, T, l) {
   const [px, py] = P(l.x + 0.86, l.y + 0.62, 0),

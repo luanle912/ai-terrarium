@@ -145,12 +145,20 @@ button {
   font-size: 11px;
 }
 .settings-panel select {
+  max-width: 150px;
+  text-overflow: ellipsis;
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--fg);
   padding: 4px 8px;
   font-family: inherit;
   font-size: 11px;
+}
+/* What the event decides for now (the season, the weather previews) is shown but cannot be used. */
+.settings-panel select:disabled,
+.settings-panel button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 /* World mode: the "← Overview" (world.view.all) button on one island. A chunky pixel plaque that presses down when
    clicked; it arrives as the clouds part, and names the Esc key where there is a keyboard. */

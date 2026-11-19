@@ -2,7 +2,7 @@
 // the big tree stands and how a string of lights is laid out.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadWeb } from './web.mjs'
+import { loadWeb, readWeb } from './web.mjs'
 import { loadSkyLogic } from './load-sky-logic.mjs'
 
 const SkyLogic = loadSkyLogic()
@@ -11,42 +11,36 @@ const { SeasonTree } = loadWeb('season-tree')
 const W = 27, H = 14
 const island = SkyLogic.buildIsland({ W, H })
 const at = (y, m, d, h = 12, mi = 0, s = 0) => new Date(y, m - 1, d, h, mi, s)
-const lvl = d => { const e = E.active(d, 'auto'); return e ? e.level : null }
+const on = d => E.active(d, 'auto') !== null
+const since = d => { const e = E.active(d, 'auto'); return e ? e.since : null }
 
-test('the calendar: three levels through December, nothing before or after', () => {
-  assert.equal(lvl(at(2026, 11, 30)), null)
-  for (const [d, l] of [[1, 1], [7, 1], [8, 2], [14, 2], [15, 3], [26, 3]]) assert.equal(lvl(at(2026, 12, d)), l, `${d} Dec`)
-  assert.equal(lvl(at(2026, 12, 27)), null)
-  assert.equal(lvl(at(2027, 1, 1)), null)
+test('the calendar: the whole event from 1 to 26 Dec (D1: no levels), with days since 1 Dec', () => {
+  assert.equal(on(at(2026, 11, 30)), false)
+  for (const d of [1, 7, 8, 14, 15, 26])
+    assert.deepEqual(E.active(at(2026, 12, d), 'auto'), { key: 'christmas', since: d - 1 }, `${d} Dec`)
+  assert.equal(on(at(2026, 12, 27)), false)
+  assert.equal(on(at(2027, 1, 1)), false)
   assert.equal(E.active(at(2026, 12, 10), 'auto').key, 'christmas')
 })
 
 test('the edges are exact to the second, in a leap year too', () => {
   for (const y of [2026, 2028]) {
-    assert.equal(lvl(at(y, 11, 30, 23, 59, 59)), null)
-    assert.equal(lvl(at(y, 12, 1, 0, 0, 0)), 1)
-    assert.equal(lvl(at(y, 12, 26, 23, 59, 59)), 3)
-    assert.equal(lvl(at(y, 12, 27, 0, 0, 0)), null)
-    const eve = d => E.active(d, 'auto').eve, day = d => E.active(d, 'auto').day
-    assert.equal(eve(at(y, 12, 24, 17, 59, 59)), false)
-    assert.equal(eve(at(y, 12, 24, 18, 0, 0)), true)
-    assert.equal(eve(at(y, 12, 25, 5, 59, 59)), true)
-    assert.equal(eve(at(y, 12, 25, 6, 0, 0)), false)
-    assert.equal(day(at(y, 12, 24, 23, 59, 59)), false)
-    assert.equal(day(at(y, 12, 25, 0, 0, 0)), true)
-    assert.equal(day(at(y, 12, 25, 23, 59, 59)), true)
-    assert.equal(day(at(y, 12, 26, 0, 0, 0)), false)
+    assert.equal(on(at(y, 11, 30, 23, 59, 59)), false)
+    assert.equal(on(at(y, 12, 1, 0, 0, 0)), true)
+    assert.equal(since(at(y, 12, 1, 0, 0, 0)), 0)
+    assert.equal(on(at(y, 12, 26, 23, 59, 59)), true)
+    assert.equal(on(at(y, 12, 27, 0, 0, 0)), false)
   }
 })
 
-test('the choice: off hides it in December, on shows all of it in July (no eve, no day), a preview lasts a minute', () => {
+test('the choice: off hides it in December, on shows all of it in July (Santa and the sleigh too), a preview lasts a minute', () => {
   assert.equal(E.active(at(2026, 12, 20), 'off'), null)
-  assert.deepEqual(E.active(at(2026, 7, 20), 'on'), { key: 'christmas', level: 3, eve: false, day: false })
-  assert.equal(E.active(at(2026, 12, 3), 'on').level, 3)
+  assert.deepEqual(E.active(at(2026, 7, 20), 'on'), { key: 'christmas', since: 14 })
+  assert.deepEqual(E.active(at(2026, 12, 3), 'on'), { key: 'christmas', since: 14 })
   assert.equal(E.active(at(2026, 7, 20), 'auto'), null)
   assert.equal(E.active(at(2026, 7, 20), 'nonsense'), null)
   const p = E.startPreview(1000)
-  assert.equal(E.active(at(2026, 7, 20), 'off', p, 1000 + 59_000).level, 3)
+  assert.deepEqual(E.active(at(2026, 7, 20), 'off', p, 1000 + 59_000), { key: 'christmas', since: 14 })
   assert.equal(E.active(at(2026, 7, 20), 'off', p, 1000 + 60_000), null)
 })
 
@@ -61,9 +55,9 @@ test('the choice is kept in storage; anything else reads as auto', () => {
   assert.deepEqual(E.CHOICES, ['auto', 'on', 'off'])
 })
 
-test("the bake's key: nothing without the event, one per level", () => {
-  assert.equal(E.cacheKey(null), '')
-  assert.deepEqual([1, 2, 3].map(level => E.cacheKey({ key: 'christmas', level })), ['x1', 'x2', 'x3'])
+test('the event is only its key and its days since 1 Dec: no levels, no bake key of its own (the look keys it)', () => {
+  assert.deepEqual(Object.keys(E.active(at(2026, 12, 20), 'auto')), ['key', 'since'])
+  assert.equal(E.cacheKey, undefined)
 })
 
 test('the big tree stands indoors, in the middle of the crossing of the two corridors, and people walk round it', () => {
@@ -89,26 +83,42 @@ test('the big tree stands indoors, in the middle of the crossing of the two corr
 })
 
 test('while the event is on the season is winter, whatever the date or the choice in Settings', () => {
-  const ev = { key: 'christmas', level: 3, eve: false, day: false }
+  const ev = { key: 'christmas', since: 14 }
   for (const k of ['spring', 'summer', 'autumn', 'winter']) {
     assert.equal(E.season(ev, k), 'winter')
     assert.equal(E.season(null, k), k)
   }
 })
 
-test('while the event is on it snows: rain and storm turn to snow, and it never stops', () => {
-  const ev = { key: 'christmas', level: 1, eve: false, day: false }
+test('while the event is on it snows: rain and storm turn to snow, and it never stops (the weather is the pack\'s)', () => {
+  const { Theme } = loadWeb('theme')
+  const { CHRISTMAS } = loadWeb('themes/christmas')
+  const key = (s, e) => [s, e ? e.key + '@' + e.since : '-', '-'].join('|')
+  const ev = { key: 'christmas', since: 0 },
+    look = Theme.resolve({ season: 'winter', holiday: null, event: ev, key: key('winter', ev) }),
+    winter = Theme.resolve({ season: 'winter', holiday: null, event: null, key: key('winter', null) })
+  assert.equal(look.snow, CHRISTMAS.weather.snowFloor, 'the snow floor comes from the pack')
+  assert.equal(look.rainToSnow, true)
+  assert.equal(winter.rainToSnow, false)
+  assert.equal(E.SNOWFALL, undefined, 'no copy of the pack\'s number in the logic')
   const clear = { cloud: 0.2, rain: 0, snow: 0, storm: 0, fog: 0 }
-  assert.equal(E.weather(clear, ev), clear, 'the same object, changed in place')
-  assert.equal(clear.snow, E.SNOWFALL)
-  assert.ok(E.SNOWFALL >= 0.3 && E.SNOWFALL <= 0.6, 'a light fall')
-  const storm = E.weather({ cloud: 1, rain: 1, snow: 0, storm: 1, fog: 0 }, ev)
+  assert.equal(E.weather(clear, look), clear, 'the same object, changed in place')
+  assert.equal(clear.snow, look.snow)
+  assert.ok(look.snow >= 0.3 && look.snow <= 0.6, 'a light fall')
+  const storm = E.weather({ cloud: 1, rain: 1, snow: 0, storm: 1, fog: 0 }, look)
   assert.deepEqual([storm.rain, storm.storm, storm.snow], [0, 0, 1])
-  const heavy = E.weather({ cloud: 0.7, rain: 0, snow: 1, storm: 0, fog: 0 }, ev)
+  const heavy = E.weather({ cloud: 0.7, rain: 0, snow: 1, storm: 0, fog: 0 }, look)
   assert.equal(heavy.snow, 1)
-  assert.equal(E.weather({ cloud: 0.5, rain: 0, snow: 0, storm: 0, fog: 1 }, ev).fog, 1, 'fog stays')
+  assert.equal(E.weather({ cloud: 0.5, rain: 0, snow: 0, storm: 0, fog: 1 }, look).fog, 1, 'fog stays')
   const off = { cloud: 1, rain: 1, snow: 0, storm: 1, fog: 0 }
-  assert.deepEqual(E.weather({ ...off }, null), off, 'no event: untouched')
+  assert.deepEqual(E.weather({ ...off }, null), off, 'no look (the weather off): untouched')
+  assert.deepEqual(E.weather({ ...off }, winter), off, 'a look whose packs force no weather: untouched')
+  // a pack that only keeps a floor, without turning rain to snow
+  assert.deepEqual(E.weather({ ...off }, { snow: 0.2, rainToSnow: false }), { ...off, snow: 0.2 })
+})
+
+test('the office forces the weather from its look, not from the event', () => {
+  assert.match(readWeb('office'), /EventLogic\.weather\(.*: this\.look\)/)
 })
 
 test('a string of lights: bulbs a gap apart along the line, never more than the most allowed', () => {
@@ -125,7 +135,7 @@ test('a string of lights: bulbs a gap apart along the line, never more than the 
   assert.ok(E.lightString(line, 2, 20).length / 2 <= 20)
   assert.equal(E.lightString([[0, 0]], 10, 5).length, 0)
   assert.equal(E.MAX_BULBS, 120)
-  assert.deepEqual(E.GIFTS, [0, 2, 5, 9])
+  assert.equal(E.GIFTS, undefined, 'the gifts under the tree are the Christmas pack\'s build (Look.build)')
 })
 
 test('the Christmas trees by the office start with December now', () => {
@@ -144,13 +154,38 @@ test('bulbs lie on the line, through a doubled point too, and none are made for 
   assert.equal(E.lightString([[0, 0], [100, 0]], 10, 0).length, 0)
 })
 
-test("adopting the server's event choice: follow it, seed it once when it has none, never from the wallpaper", () => {
-  const A = E.adopt
-  assert.deepEqual(A('on', 'auto', {}), { take: 'on', seed: false })
-  assert.deepEqual(A('auto', 'auto', {}), { take: null, seed: false })
-  assert.deepEqual(A(undefined, 'off', {}), { take: null, seed: true }, 'an older save has no event: this page gives its own')
-  assert.deepEqual(A(undefined, 'auto', {}), { take: null, seed: false }, 'auto is what a missing one means')
-  assert.deepEqual(A(undefined, 'off', { seeded: true }), { take: null, seed: false }, 'only once')
-  assert.deepEqual(A(undefined, 'off', { wallpaper: true }), { take: null, seed: false })
-  assert.deepEqual(A('party', 'off', {}), { take: null, seed: true }, 'a strange value counts as none')
+test('older server value never overrides a newer local choice', () => {
+  const A = E.adopt, w = { mode: 'off', city: '' }
+  assert.deepEqual(A({ server: { weather: w, event: 'off', updatedAt: 100 }, local: 'on', localAt: 200 }),
+    { take: null, push: true, newer: false }, 'this page chose later: it keeps its own and gives it to the server')
+  assert.deepEqual(A({ server: { weather: w, event: 'off', updatedAt: 300 }, local: 'on', localAt: 200 }),
+    { take: 'off', push: false, newer: true }, 'another page chose later: this one follows')
+  assert.deepEqual(A({ server: { weather: w, event: 'on', updatedAt: 300 }, local: 'on', localAt: 200 }),
+    { take: null, push: false, newer: true }, 'newer but the same choice: nothing to take, the weather may still be')
+  assert.deepEqual(A({ server: { weather: w, event: 'on', updatedAt: 200 }, local: 'on', localAt: 200 }),
+    { take: null, push: false, newer: false }, 'our own value echoed back')
+})
+
+test('adopt: an unstamped value (older tab) is oldest; a server with none gets ours; never the wallpaper', () => {
+  const A = E.adopt, w = { mode: 'off', city: '' }
+  assert.deepEqual(A({ server: { weather: w, event: 'off' }, local: 'on', localAt: 200 }),
+    { take: null, push: true, newer: false })
+  assert.deepEqual(A({ server: { weather: w, event: 'off' }, local: 'on', localAt: 0 }),
+    { take: 'off', push: false, newer: true }, 'neither was ever stamped: the server wins, as before')
+  assert.deepEqual(A({ server: null, local: 'auto', localAt: 0 }), { take: null, push: true, newer: false },
+    'a server with nothing yet gets this page\'s own')
+  assert.deepEqual(A({ server: null, local: 'on', localAt: 9, wallpaper: true }),
+    { take: null, push: false, newer: false })
+  assert.deepEqual(A({ server: { weather: w, event: 'party', updatedAt: 300 }, local: 'on', localAt: 0 }),
+    { take: null, push: false, newer: true }, 'a strange event value is never taken')
+})
+
+test('a running preview tells its time left as m:ss, rounded up; none, or one run out, says nothing', () => {
+  const p = E.startPreview(1000)
+  assert.equal(E.previewClock(p, 1000), '1:00')
+  assert.equal(E.previewClock(p, 1000 + 18_000), '0:42')
+  assert.equal(E.previewClock(p, 1000 + 18_500), '0:42', 'rounded up: 41.5 s left still reads 0:42')
+  assert.equal(E.previewClock(p, 1000 + 59_999), '0:01')
+  assert.equal(E.previewClock(p, 1000 + 60_000), '')
+  assert.equal(E.previewClock(null, 0), '')
 })

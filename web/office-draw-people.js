@@ -2,6 +2,7 @@ import { SkyRender } from './sky-render.js';
 import { DogLogic } from './dog-logic.js';
 import { DogSprites } from './dog-sprites.js';
 import { DogXmas } from './dog-sprites-xmas.js';
+import { Paint } from './paint.js';
 import { SmokeLogic } from './smoke-logic.js';
 import { DESKS, ISLAND, OX, OY, P, PA, PG, TH, TW, outdoors } from './office-scene.js';
 import { WATER_Z } from './island-land.js';
@@ -9,6 +10,7 @@ import { LOOK, PERSON } from './office-people.js';
 import { XMAS, breathAt, lookUnder, outfitOf, shirtOf } from './office-people-xmas.js';
 import { ICON, ST, shade, text3 } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 // Drawing people (at desks, walking, asleep, in the pond) and the office dogs.
 mixin(
   ClaudeOffice,
@@ -144,7 +146,7 @@ mixin(
 
     drawPerson(G, a) {
       const { ctx, poly, box, rect, th, t } = G,
-        o = outfitOf(a, G.ev);
+        o = outfitOf(a, G.look);
       if (a.sleeping) return this.drawSleeper(G, a);
       let [sx, sy] = a.seated ? P(a.x, a.y, 11.5) : PA(a.x, a.y, a.actNow === 'skate' ? WATER_Z : 0);
       sx = Math.round(sx);
@@ -169,6 +171,10 @@ mixin(
         }
         R(sx - 4, y0 - 5, 8, 4, shirtOf(a));
         R(sx + 2, y0 - 5, 2, 4, shade(shirtOf(a), -30));
+        if (o) {
+          XMAS.pattern(R, o, sx - 4, y0 - 5, 8, 4, true);
+          XMAS.scarf(R, o, sx, y0 - 5);
+        }
         R(sx - 3, y0 - 11, 6, 6, a.skin);
         R(sx + 2, y0 - 11, 1, 6, shade(a.skin, -25));
         PERSON.hairBath(R, LOOK(a), sx, y0, a.skin);
@@ -313,6 +319,7 @@ mixin(
         R(sx + 2, sy - 11, 3, 11, shD);
         R(sx - 5, sy - 11, 10, 1, shL);
         R(sx - 1, sy - 10, 1, 9, shD);
+        if (o) XMAS.pattern(R, o, sx - 5, sy - 11, 10, 8, false);
         R(sx - 1, sy - 13, 3, 2, skD);
         const hy = sy - 21 + (skey === 'reading' ? 1 : 0);
         if (skey === 'visitor' || skey === 'permission') PERSON.hairProfile(R, L, sx, hy, sh, sk);
@@ -380,7 +387,9 @@ mixin(
         const act = !a.moving && st === 'idle' ? a.actNow : null;
         const tp = t + a.id * 1.37; // per-person phase, so a group of smokers never moves in step
         if (act && (!sit || act === 'smoke')) {
-          if (!(G.ev && this.xmasArms(R, act, sx, by, tp, slv, slvD, sk, a)))
+          // the event's own arms: its acts (only open under its look), and cocoa where the look makes the coffee so
+          const own = act !== 'coffee' || G.look.text('office.act.coffee') === 'office.act.cocoa';
+          if (!(own && this.xmasArms(R, act, sx, by, tp, slv, slvD, sk, a)))
             this.actArms(R, act, sx, by, act === 'smoke' ? tp : t, slv, slvD, sk);
         } else if (up) {
           R(sx - 6, by - 17, 2, 7, slv);
@@ -432,8 +441,9 @@ mixin(
           const { drag, exhale } = SmokeLogic.cycle(tp),
             [ex, ey] = drag ? [sx - 1, by - 13] : [sx + 7, by - 8],
             reduced = this.env && this.env.reduced;
-          if (G.df < 0.6) {
-            ctx.globalAlpha = 0.35 * (1 - G.df / 0.6);
+          const ember = Light.glow(G.df);
+          if (ember > 0) {
+            ctx.globalAlpha = 0.35 * ember;
             R(ex - 1, ey, 3, 1, '#ff9a3d');
             R(ex, ey - 1, 1, 3, '#ff9a3d');
             ctx.globalAlpha = 1;
@@ -516,16 +526,13 @@ mixin(
       }
     }
     // A dog's frame baked once per light level and snow level (like the island), then stamped with one drawImage.
-    // With `ev` (the event from its second week) the dog is dressed and the sprite is DogXmas.PAD rows taller (cv.pad).
-    dogSprite(breed, name, dfB, snB, ev) {
-      const x = ev && ev.level >= 2,
-        k = breed + '/' + name + '/' + dfB + '/' + snB + (x ? '/x' : ''),
+    // costume is the look's dog.costume variant: dressed ('xmas', DogXmas), the sprite is DogXmas.PAD rows taller.
+    dogSprite(breed, name, dfB, snB, costume) {
+      const k = DogXmas.key(breed, name, dfB, snB, costume),
         hit = this.dogSprites.get(k);
       if (hit) return hit;
       if (this.dogSprites.size > 300) this.dogSprites.clear();
-      const f0 = DogSprites.frame(breed, name),
-        f = x ? DogXmas.dress(breed, name, f0) : f0,
-        pal = x ? DogXmas.palFor(breed) : DogSprites.BREEDS[breed].pal,
+      const { f, pal } = Paint.painter('dog.costume', costume || 'none')(breed, name, DogSprites.frame(breed, name)),
         cv = document.createElement('canvas');
       cv.width = f.w;
       cv.height = f.h;
@@ -556,7 +563,7 @@ mixin(
       const { ctx, th, rect } = G,
         p = DogLogic.pose(d, t),
         f = DogSprites.frame(d.breed, p.frame),
-        img = this.dogSprite(d.breed, p.frame, dfB, snB, G.ev);
+        img = this.dogSprite(d.breed, p.frame, dfB, snB, G.look.of('dog.costume'));
       let [sx, sy] = PG(d.x, d.y);
       sx = Math.round(sx);
       sy = Math.round(sy);
@@ -616,7 +623,7 @@ mixin(
     }
     drawSleeper(G, a) {
       const { ctx, poly, box, rect, th, t } = G,
-        o = outfitOf(a, G.ev),
+        o = outfitOf(a, G.look),
         d = DESKS[a.desk],
         x = d.gx,
         y = d.gy;
@@ -653,6 +660,7 @@ mixin(
       if (o) XMAS.hatSleep(box, o, x, y);
       else if (a.parent) box(x + 0.18, y + 0.48, 0.08, 0.28, 6.5, 7, '#ffd166');
       box(x + 0.4, y + 0.44, 0.34, 0.36, 0.5, 4.5 + br, shirtOf(a));
+      if (o) XMAS.sleep(box, o, x, y, br);
       const top = shirtOf(a),
         bl = shade(top, -50) === top ? '#5b8def' : ['#3e8ed0', '#e5484d', '#46a758', '#8e4ec6'][a.id % 4];
       box(x + 0.6, y + 0.4, 0.62, 0.44, 0.5, 4 + br * 0.6, bl);

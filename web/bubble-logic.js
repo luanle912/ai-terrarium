@@ -4,15 +4,16 @@ const SHOW_MS = 6000,
   FADE_MS = 600,
   COOL_MS = 15000,
   MAX_TALKING = 4;
-// What counts as a new line: the status, plus the tool for work and the activity for a break. A tool change while
-// still working is a minor change and waits out COOL_MS; any status change speaks at once.
+// What counts as a new line: the status, plus the tool for work and the activity for a break with the words it is
+// said in (`say`: the Look may change them, coffee -> cocoa). A tool change while still working is a minor change
+// and waits out COOL_MS; any status change speaks at once.
 function topic(a) {
   if (a.status === 'working') return 'working:' + ((a.tool && a.tool[0]) || '');
-  if (a.status === 'idle') return 'idle:' + (a.actNow || '');
+  if (a.status === 'idle') return 'idle:' + (a.actNow || '') + (a.say ? ':' + a.say : '');
   if (a.status === 'talking' || a.status === 'waiting') return a.status + ':' + (a.target || '');
   return a.status;
 }
-// mem: Map kept between calls. agents: [{id, status, tool, actNow, target, pinned}], pinned = always shown
+// mem: Map kept between calls. agents: [{id, status, tool, actNow, say, target, pinned}], pinned = always shown
 // (needs approval, error, selected, hovered). Returns Map id -> 'show' | 'fade'; agents not in it have no bubble.
 function step(mem, agents, now) {
   const ids = new Set();

@@ -14,14 +14,15 @@ import { IslandLakeLife } from './island-lake-life.js';
 import { IslandSeasonLife } from './island-season-life.js';
 import { SeasonIsland } from './season-island.js';
 import { SeasonLogic } from './season-logic.js';
+import { Light } from './light.js';
 
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const TW = 16,
   TH = 8;
 
 // ---- pure logic ----
-// Lamps light up as the day fades: off at df >= 0.8, full at df <= 0.2.
-const lampGlow = df => clamp01((0.8 - df) / 0.6);
+// Lamps light up as the day fades: off at df >= 0.8, full at df <= 0.2 (Light.lamp).
+const lampGlow = Light.lamp;
 // Wind for the vines: a breeze, more in rain, most in a storm.
 const windOf = fx => Math.min(1.4, 0.15 + 0.6 * fx.rain + 0.8 * fx.storm);
 // The falls run up to twice as hard in the rain.
@@ -54,6 +55,13 @@ function fill(arr, pool, n) {
     for (let i = 0; i < n; i++) arr[i] = pool[i];
   }
 }
+// Bird j of a flock's V: its rank behind the leader, its px off the flight line (alternate sides, 5 px per rank), and
+// its wing at time t while flapping (0 up, 1 spread).
+// The V of a flock: how far each rank trails the one before it, as a share of the crossing's width.
+const V_GAP = 0.014;
+const vRank = j => (j + 1) >> 1,
+  vSide = j => (j % 2 ? -1 : 1) * vRank(j) * 5,
+  wingAt = (t, j) => Math.floor(t * 4 + j * 0.6) & 1;
 // Birds by day (df > 0.6) and fireflies at night (df < 0.3), as offsets the drawing places on the island.
 // birds: x 0..1 along the crossing, y px off the flight line, lane 0..1 (how high the line runs), dir +1 / -1, wing
 // 0 (up) / 1 (spread). flies: dx, dy in tiles off their anchor, dz px above the ground, a brightness 0..1.
@@ -80,16 +88,15 @@ function creatures(t, df, seed) {
     for (let j = 0; j < n; j++) {
       // a loose V: the leader in front, the others trailing on alternate sides
       const b = LIFE.birds[j],
-        rank = (j + 1) >> 1,
-        side = j % 2 ? -1 : 1,
-        p = u - rank * 0.014 - hash(fi, j, 25) * 0.006;
+        rank = vRank(j),
+        p = u - rank * V_GAP - hash(fi, j, 25) * 0.006;
       b.x = dir > 0 ? p : 1 - p;
-      b.y = side * rank * 5 + Math.sin(t * 1.1 + j * 1.7) * 1.5;
+      b.y = vSide(j) + Math.sin(t * 1.1 + j * 1.7) * 1.5;
       b.lane = lane;
       b.dir = dir;
       // flap in short bursts, glide in between
       const flapping = Math.sin(t * 0.45 + j * 1.3) > -0.3;
-      b.wing = flapping ? Math.floor(t * 4 + j * 0.6) & 1 : 1;
+      b.wing = flapping ? wingAt(t, j) : 1;
     }
   }
   fill(LIFE.flies, FLY_POOL, df < 0.3 ? FLIES : 0);
@@ -666,6 +673,9 @@ function drawLife(ctx, island, PG, t, env) {
   if (!still && fx.rain < 0.5 && fx.storm < 0.3) drawBirds(ctx, g, P, life);
 }
 
+// for the /assets catalogue (web/assets-cat-animals.js): the flock and the fireflies on their own
+export { drawBirds, drawFlies, palette as lifePalette, V_GAP, vRank, vSide, wingAt };
+
 export const IslandLife = {
   lampGlow,
   fallFlow,
@@ -675,4 +685,7 @@ export const IslandLife = {
   drawLife,
   drawLampLight,
   drawLanternLight,
+  // for the /assets catalogue: the scene px of the island's moving parts, and the rainbow over the main fall
+  geometry,
+  drawRainbow,
 };

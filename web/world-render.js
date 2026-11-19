@@ -1,7 +1,7 @@
 // World mode React tree: header, the island panel or phone sheet, and the world settings panel.
 import { tr } from './i18n.js';
 import { WorldLogic } from './world-logic.js';
-import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker } from './office-scene.js';
+import { h, languagePicker, assetsLink } from './office-scene.js';
 import { ClaudeOffice } from './office.js';
 import { GOLD, MUTED, TITLE, okColor } from './world-ui.js';
 Object.assign(ClaudeOffice.prototype, {
@@ -304,6 +304,7 @@ Object.assign(ClaudeOffice.prototype, {
         tr('settings.title'),
       ),
       languagePicker(),
+      assetsLink(),
       h(
         'label',
         null,
@@ -373,23 +374,7 @@ Object.assign(ClaudeOffice.prototype, {
           },
           st.realStatus.text,
         ),
-      h(
-        'div',
-        { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
-        WEATHER_PREVIEW.map(([type, label]) =>
-          h(
-            'button',
-            {
-              key: type,
-              className: 'btn',
-              title: tr('settings.weather.previewTitle', { label: WEATHER_LABEL[type] }),
-              style: { padding: '3px 7px', fontSize: 11 },
-              onClick: () => this.previewWeather(type),
-            },
-            label,
-          ),
-        ),
-      ),
+      this.weatherPreviews(),
       this.seasonSection(),
       this.eventSection(),
     );

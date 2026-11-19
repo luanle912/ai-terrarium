@@ -5,6 +5,8 @@
 // the scene's logical px through P (the lawn level projection) and takes its colours through C(colour, snowAmount),
 // which applies the island's light and snow.
 import { hash, N4 } from './island-land.js';
+import { Paint } from './paint.js';
+import { SnowLogic } from './snow-logic.js';
 
 // Colour helpers for '#rrggbb' strings, shared by the island modules (web/sky-island.js re-exports them).
 export const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
@@ -454,14 +456,27 @@ export function boulder(pt, C, sx, sy, s) {
     C(OUTLINE),
   );
 }
-// A round bush of two or three leafy clumps with a dark outline, lit from the upper left; some carry red berries.
-// In fruit (spring) every bush carries more of them, small red and purple ones.
-export function drawBush(pt, P, C, d, fruit) {
+// A round bush of two or three leafy clumps with a dark outline, lit from the upper left, as the look's variant of
+// the bush label: 'plain' (some carry red berries), 'fruit' (spring: every bush carries more of them, small red and
+// purple ones) or 'holly' (the Christmas event: dark glossy leaves, every bush thick with red berries in little
+// bunches). The same clumps, so every variant stands on the same footprint. snow ({ S, depth }, the bake's lying
+// snow) settles on holly as a small cap on its clumps' tops; the other variants take the bake's snowOnTop instead
+// (bushSnowOnTop: on glossy holly that whitens the seams between its pixels and it reads pale mint).
+export const bushSnowOnTop = variant => variant !== 'holly';
+const BUSH_TONES = {
+  plain: ['#5fb35a', '#3f9046', '#2f7136', '#24402c'],
+  holly: ['#2f7a4a', '#1f5e3a', '#164a2d', '#14301f'],
+};
+export function drawBush(pt, P, C, d, variant = 'plain', snow = null) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),
+    fruit = variant === 'fruit',
+    holly = variant === 'holly',
     big = hash(d.x, d.y, 41) > 0.5,
-    berries = fruit || hash(d.x, d.y, 43) > 0.6,
-    ripe = fruit ? 0.82 : 0.93,
-    tones = lit3(C('#5fb35a', 0.75), C('#3f9046', 0.55), C('#2f7136', 0.45)),
+    berries = fruit || holly || hash(d.x, d.y, 43) > 0.6,
+    ripe = fruit ? 0.82 : holly ? 0.86 : 0.93,
+    [l, m, k, out] = BUSH_TONES[holly ? 'holly' : 'plain'],
+    // holly's glossy leaves take (almost) none of the snow's tint: dark green with red berries under full cover
+    tones = holly ? lit3(C(l, 0.15), C(m), C(k)) : lit3(C(l, 0.75), C(m, 0.55), C(k, 0.45)),
     clumps = big
       ? [
           [-3, 0, 4.2, 4],
@@ -479,13 +494,33 @@ export function drawBush(pt, P, C, d, fruit) {
     py - 4,
     clumps,
     (u, v, i, j) => {
-      const h = berries ? hash(i, j, d.x * 7 + d.y) : 0;
-      if (h <= ripe) return tones(u, v);
+      // holly berries come in bunches: a berry beside a ripe pixel's right-hand neighbour, so two or three together
+      const h = berries ? hash(holly ? i >> 1 : i, j, d.x * 7 + d.y) : 0;
+      if (h <= ripe) return holly && u + v < -0.7 && hash(i, j, 44) > 0.7 ? C('#5fa978', 0.15) : tones(u, v);
+      if (holly) return (i + j) & 1 ? C('#c8323a') : C('#e8505a');
       return fruit && h > 0.91 ? C('#8e4ec6') : C('#d94a5a');
     },
-    C('#24402c'),
+    C(out),
   );
+  if (holly && snow && snow.depth >= 1) hollySnow(pt.ctx, Math.round(px), Math.round(py - 4), clumps, snow);
 }
+// Snow on holly: the top one or two pixels (by the depth) of the middle of each clump, lit along the very top.
+function hollySnow(ctx, X, Y, clumps, { S, depth }) {
+  const h = Math.min(2, depth),
+    inside = (i, j) => clumps.some(([dx, dy, rx, ry]) => ((i + 0.5 - dx) / rx) ** 2 + ((j + 0.5 - dy) / ry) ** 2 <= 1);
+  for (const [dx, dy, rx, ry] of clumps)
+    for (let i = Math.ceil(dx - rx * 0.55); i < dx + rx * 0.55; i++) {
+      let j = Math.floor(dy - ry) - 1;
+      while (!inside(i, j) && j < dy) j++;
+      if (inside(i, j - 1) || !inside(i, j)) continue; // not the bush's top here: another clump stands over it
+      for (let n = 0; n < h && inside(i, j + n); n++) {
+        ctx.fillStyle = S(n === 0 && h > 1 ? SnowLogic.PAL.lit : SnowLogic.PAL.base);
+        ctx.fillRect(X + i, Y + j + n, 1, 1);
+      }
+    }
+}
+for (const v of ['plain', 'fruit', 'holly'])
+  Paint.variant('bush', v, (pt, P, C, d, snow) => drawBush(pt, P, C, d, v, snow));
 // A mushroom or two: a red cap with white spots or a brown one on a cream stem, with the outline.
 export function drawMushroom(pt, P, C, d) {
   const [px, py] = P(d.x + 0.5, d.y + 0.5, 0),

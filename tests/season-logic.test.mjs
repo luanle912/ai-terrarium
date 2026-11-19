@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import { loadWeb } from './web.mjs'
 
 const { SeasonLogic } = loadWeb('season-logic')
+const { tr } = loadWeb('i18n')
 const d = (y, m, day) => new Date(y, m - 1, day, 12)
 
 test('seasonOf follows the month boundaries', () => {
@@ -60,28 +61,30 @@ test('storage that is broken or empty gives auto', () => {
   assert.equal(SeasonLogic.loadSeasonChoice(ok), 'auto')
 })
 
+const mo = (season, holiday = null, event = null) => ({ season, holiday, event })
+
 test('seasonLabel shows the season, plus the holiday when one is active', () => {
-  const plain = SeasonLogic.seasonLabel('autumn', 'default')
+  const plain = SeasonLogic.seasonLabel(mo('autumn'))
   assert.ok(plain.length > 0)
-  const holiday = SeasonLogic.seasonLabel('autumn', 'midautumn')
+  const holiday = SeasonLogic.seasonLabel(mo('autumn', 'midautumn'))
   assert.ok(holiday.startsWith(plain + ' · '), holiday)
-  assert.equal(SeasonLogic.seasonLabel('autumn', 'autumn'), plain)
-  assert.equal(SeasonLogic.seasonLabel('autumn'), plain)
+  assert.equal(SeasonLogic.seasonLabel(mo('autumn', 'autumn')), plain)
+  assert.equal(SeasonLogic.seasonLabel(mo('autumn', 'christmas')), plain, 'christmas is an event now, not a holiday')
 })
 
 test('the header chip names the season shown, in its own colour, or the holiday in the holiday colour', () => {
   const accents = new Set()
   for (const k of SeasonLogic.KEYS) {
-    const c = SeasonLogic.seasonChip(k, 'default')
-    assert.equal(c.label, SeasonLogic.seasonLabel(k))
+    const c = SeasonLogic.seasonChip(mo(k))
+    assert.equal(c.label, SeasonLogic.seasonLabel(mo(k)))
     assert.match(c.accent, /^#[0-9a-f]{6}$/)
     accents.add(c.accent)
   }
   assert.equal(accents.size, 4, 'each season its own colour')
-  // a forced or previewed winter during an autumn holiday still says winter first
-  const w = SeasonLogic.seasonChip('winter', 'midautumn')
-  assert.ok(w.label.startsWith(SeasonLogic.seasonLabel('winter') + ' · '), w.label)
-  assert.notEqual(w.accent, SeasonLogic.seasonChip('winter').accent)
-  // the plain season entries of the holiday-tree table are not holidays
-  assert.deepEqual(SeasonLogic.seasonChip('spring', 'autumn'), SeasonLogic.seasonChip('spring'))
+  const w = SeasonLogic.seasonChip(mo('winter', 'midautumn'))
+  assert.ok(w.label.startsWith(SeasonLogic.seasonLabel(mo('winter')) + ' · '), w.label)
+  assert.notEqual(w.accent, SeasonLogic.seasonChip(mo('winter')).accent)
+  assert.deepEqual(SeasonLogic.seasonChip(mo('spring', 'autumn')), SeasonLogic.seasonChip(mo('spring')))
+  const x = SeasonLogic.seasonChip(mo('winter', null, { key: 'christmas', since: 0 }))
+  assert.ok(x.label.includes(tr('event.christmas')), x.label)
 })

@@ -3,17 +3,21 @@ import { tr } from './i18n.js';
 import { BubbleLogic } from './bubble-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { EventLogic } from './event-logic.js';
-import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker } from './office-scene.js';
+import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker, assetsLink } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
+// The select values that are not choices: the event decides the season, the event preview is running.
+const FORCED = 'forced',
+  PREVIEWING = 'preview';
 mixin(
   ClaudeOffice,
   class {
     // The Season section, under Weather (the local page's panel and the world's): the choice, what shows now and four
     // buttons that show a season for a minute (SeasonLogic.startSeasonPreview).
+    // While the event decides the season (moment.forced) the select says so and nothing in the section can be used.
     seasonSection() {
-      const now = this.seasonNow(),
-        choice = this.seasonChoice || 'auto',
-        name = key => SeasonLogic.seasonLabel(key);
+      const forced = this.moment.forced.season,
+        choice = forced ? FORCED : this.seasonChoice || 'auto',
+        name = key => SeasonLogic.seasonLabel({ season: key });
       return h(
         'div',
         { id: 'season-section', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
@@ -26,13 +30,21 @@ mixin(
             {
               'aria-label': tr('settings.season.mode'),
               value: choice,
+              disabled: forced,
               onChange: e => this.setSeasonChoice(e.target.value),
             },
+            forced && h('option', { value: FORCED, disabled: true }, tr('settings.forcedByEvent')),
             h('option', { value: 'auto' }, SeasonLogic.autoLabel()),
             SeasonLogic.KEYS.map(k => h('option', { key: k, value: k }, name(k))),
           ),
         ),
-        h('span', null, tr('settings.season.current', { label: SeasonLogic.seasonLabel(now, this.season) })),
+        h(
+          'span',
+          null,
+          tr('settings.season.current', {
+            label: SeasonLogic.seasonLabel(this.moment),
+          }),
+        ),
         h(
           'div',
           { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
@@ -44,6 +56,7 @@ mixin(
                 className: 'btn',
                 title: tr('settings.season.previewTitle', { label: name(k) }),
                 style: { padding: '3px 7px', fontSize: 11 },
+                disabled: forced,
                 onClick: () => this.previewSeason(k),
               },
               name(k),
@@ -53,9 +66,11 @@ mixin(
       );
     }
     // The Event section, under Season: the choice (shared with the wallpaper through the local server), what is on
-    // now, and a button that shows the whole event for a minute.
+    // now, and a button that shows the whole event for a minute. While the preview runs the select says so with its
+    // time left ("Preview · 0:42", ticking with the panel) and the button cancels it instead of starting it again.
     eventSection() {
-      const ev = this.eventNow();
+      const ev = this.moment.event,
+        clock = EventLogic.previewClock(this.eventPreview, Date.now());
       return h(
         'div',
         { id: 'event-section', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
@@ -67,9 +82,13 @@ mixin(
             'select',
             {
               'aria-label': tr('settings.event.mode'),
-              value: this.eventChoice || 'auto',
-              onChange: e => this.setEventChoice(e.target.value),
+              value: clock ? PREVIEWING : this.eventChoice || 'auto',
+              onChange: e => {
+                this.setEventPreview(false); // a choice made now shows at once
+                this.setEventChoice(e.target.value);
+              },
             },
+            clock && h('option', { value: PREVIEWING, disabled: true }, tr('settings.preview.left', { time: clock })),
             h('option', { value: 'auto' }, tr('settings.event.auto')),
             h('option', { value: 'on' }, tr('settings.event.on')),
             h('option', { value: 'off' }, tr('settings.event.off')),
@@ -79,7 +98,7 @@ mixin(
           'span',
           null,
           tr('settings.event.current', {
-            label: ev ? tr('event.christmas') + ' · ' + ev.level + '/3' : tr('settings.event.none'),
+            label: ev ? tr('event.christmas') : tr('settings.event.none'),
           }),
         ),
         h(
@@ -87,25 +106,57 @@ mixin(
           {
             className: 'btn',
             style: { padding: '3px 7px', fontSize: 11, alignSelf: 'flex-start' },
-            onClick: () => {
-              this.eventPreview = EventLogic.startPreview(Date.now());
-              this.setState({ eventPreviewAt: Date.now() });
-            },
+            onClick: () => this.setEventPreview(!clock),
           },
-          tr('settings.event.preview'),
+          clock ? tr('settings.preview.cancel') : tr('settings.event.preview'),
         ),
       );
     }
-    setSeasonChoice(choice) {
+    // Starts the event preview (EventLogic.startPreview) or ends it now.
+    setEventPreview(on) {
+      if (!on && !this.eventPreview) return;
+      this.eventPreview = on ? EventLogic.startPreview(Date.now()) : null;
+      this.computeMoment();
+      this.setState({ eventPreviewAt: Date.now() });
+    }
+    // The weather preview buttons (SkyLogic.startPreview through previewWeather), in the local panel and the world's.
+    // While the event decides the weather (moment.forced: rain falls as snow) they say so and cannot be used.
+    weatherPreviews() {
+      const forced = this.moment.forced.weather;
+      return h(
+        'div',
+        { style: { display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' } },
+        WEATHER_PREVIEW.map(([type, label]) =>
+          h(
+            'button',
+            {
+              key: type,
+              className: 'btn',
+              title: tr('settings.weather.previewTitle', { label: WEATHER_LABEL[type] }),
+              style: { padding: '3px 7px', fontSize: 11 },
+              disabled: forced,
+              onClick: () => this.previewWeather(type),
+            },
+            label,
+          ),
+        ),
+        forced && h('span', { style: { fontSize: 11, color: 'var(--muted)' } }, tr('settings.forcedByEvent')),
+      );
+    }
+    // Shared with the other pages like the event choice (SettingsSync); `fromServer` when it came from one of them.
+    setSeasonChoice(choice, fromServer) {
       if (!SeasonLogic.CHOICES.includes(choice)) return;
       this.seasonChoice = choice;
       SeasonLogic.saveSeasonChoice(this.storage, choice);
+      this.computeMoment();
       this.setState({ seasonChoice: choice });
+      if (!fromServer) this.pushSettings(true);
     }
     // A preview shows the season for SEASON_PREVIEW_MS, then the choice's own returns.
     previewSeason(key) {
       if (!SeasonLogic.KEYS.includes(key)) return;
       this.seasonPreview = SeasonLogic.startSeasonPreview(key, Date.now());
+      this.computeMoment();
       this.setState({ seasonPreviewAt: Date.now() });
     }
     // The header's season chip: open Settings and scroll the panel (only the panel, never the stage under it) to the
@@ -148,6 +199,7 @@ mixin(
             tr('settings.title'),
           ),
           languagePicker(),
+          assetsLink(),
           h(
             'label',
             null,
@@ -301,23 +353,7 @@ mixin(
             'div',
             { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
             h('span', null, tr('settings.weather.current', { label: WEATHER_LABEL[this.wx.to] })),
-            h(
-              'div',
-              { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } },
-              WEATHER_PREVIEW.map(([type, label]) =>
-                h(
-                  'button',
-                  {
-                    key: type,
-                    className: 'btn',
-                    title: tr('settings.weather.previewTitle', { label: WEATHER_LABEL[type] }),
-                    style: { padding: '3px 7px', fontSize: 11 },
-                    onClick: () => this.previewWeather(type),
-                  },
-                  label,
-                ),
-              ),
-            ),
+            this.weatherPreviews(),
           ),
           this.seasonSection(),
           this.eventSection(),

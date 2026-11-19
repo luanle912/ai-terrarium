@@ -4,6 +4,7 @@ import { PropUse } from './prop-use.js';
 import { P, lerpHex, mix } from './office-scene.js';
 import { shade, vacantTheme } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 // Each pantry piece's prop index (web/prop-use.js), and one options object reused for every piece (drawing is
 // synchronous), so the pieces read o.night and o.use without an object per piece per frame.
 const PROP_OF = PropUse.layoutProps(PantryItems.LAYOUT),
@@ -96,7 +97,7 @@ mixin(
       const { ctx, th, t, df } = G,
         PI = PantryItems;
       if (!PI) return;
-      const isNight = df < 0.5,
+      const isNight = Light.night(df),
         lit = this.propLit || PropUse.DARK;
       const Z = PI.depths(PI.LAYOUT);
       PI.LAYOUT.forEach(([name, rx, ry, rz], i) => {
@@ -133,8 +134,8 @@ mixin(
       if (at)
         scr =
           { error: '#e5484d', permission: '#f5a524', done: '#46a758', idle: shade(th.off, 10) }[st] ||
-          (df < 0.5 ? '#0f2233' : th.stroke ? '#2f5bff' : '#203040');
-      if (at && df < 0.7 && st !== 'idle') {
+          (Light.night(df) ? '#0f2233' : th.stroke ? '#2f5bff' : '#203040');
+      if (at && Light.screen(df) && st !== 'idle') {
         ctx.globalAlpha = 0.16 * (1 - df);
         poly(
           [P(gx + 0.3, gy + 0.9), P(gx + 1.7, gy + 0.9), P(gx + 1.7, gy + 2), P(gx + 0.3, gy + 2)],
@@ -205,7 +206,7 @@ mixin(
         if (acc === 0) {
           box(gx + 0.12, gy + 0.74, 0.06, 0.06, 11, 22, metal);
           box(gx + 0.06, gy + 0.66, 0.22, 0.16, 21, 24, '#ffd166');
-          if (df < 0.7 && at) {
+          if (Light.screen(df) && at) {
             ctx.globalAlpha = 0.12 * (1 - df);
             poly(
               [P(gx, gy + 0.4, 11), P(gx + 0.6, gy + 0.4, 11), P(gx + 0.6, gy + 0.9, 11), P(gx, gy + 0.9, 11)],
