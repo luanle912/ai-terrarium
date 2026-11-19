@@ -1,6 +1,6 @@
 # ai-terrarium: inventory of drawable things (for a `/assets` wiki page)
 
-Worktree `~/ai-terrarium/.claude/worktrees/assets-wiki` (branch `claude/assets-wiki`). Every path below is under `web/` unless it says otherwise. Line numbers are where the function starts.
+Taken on the branch `claude/assets-wiki`. Every path below is under `web/` unless it says otherwise. Line numbers are where the function starts.
 
 ## 0. Things to know first
 
