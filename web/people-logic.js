@@ -83,4 +83,4 @@ function look(sid) {
     acc: take(sid, 'acc', S.acc),
   };
 }
-export const PeopleLogic = { hash, genderOf, look, SKIN, HAIR, PANTS, SKIRT, LAYER, STYLE };
+export const PeopleLogic = { hash, roll, genderOf, look, SKIN, HAIR, PANTS, SKIRT, LAYER, STYLE };

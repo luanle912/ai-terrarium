@@ -11,7 +11,11 @@ const S = loadWeb('office-scene')
 const { DESKS, IDLE_SPOTS, BLOCK, W, H, behindWalls, DRAW_REACH } = S
 const { bfs, startCell } = loadWeb('office-util')
 const { TeleportLogic: TL } = loadWeb('teleport-logic')
+const { TpStyles } = loadWeb('tp-styles')
 const { T } = TL
+// The tests written for the magic circle keep it; the styles' own cases set what they need and come back to it.
+const pin = () => (TpStyles.reset(), TpStyles.setChoice('circle'))
+pin()
 
 const CHAIRS = DESKS.map(d => [d.gx + 1, d.gy + 1.45])
 const seg = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1])
@@ -79,6 +83,21 @@ test('plan teleports only from a break to work', () => {
     assert.equal(TL.plan(a, ctx(a, was, 'seat')), null, `from ${was}`)
   for (const key of ['idle4', 'wash27', 'sleep', 'exit', 'fate', 'sub2-0'])
     assert.equal(TL.plan(a, ctx(a, 'idle3', key)), null, `to ${key}`)
+})
+
+test('the desk it lands for: its own for a seat, the visited person\'s for a visit', () => {
+  const g = { ...visit(DESKS[13], 0), key: 'visit5-0' }, o = IDLE_SPOTS[3].pt
+  const a = agentAt(o, g, { desk: 12 }), host = { id: 5, desk: 13, x: 0, y: 0, path: [], moving: false, seated: true }
+  assert.equal(TL.plan(a, { ...ctx(a, 'idle3', g.key), agents: [a, host] }).desk, 13)
+  const b = agentAt(o, seat(DESKS[12]), { desk: 12 })
+  assert.equal(TL.plan(b, ctx(b, 'idle3', 'seat')).desk, 12)
+  // a visit whose host has gone: the own desk
+  assert.equal(TL.plan(a, ctx(a, 'idle3', g.key)).desk, 12)
+  // re-aimed early to a visit: the desk follows
+  b.tp = TL.plan(b, ctx(b, 'idle3', 'seat'))
+  b.tp.u = 0.05
+  b.path = route(o, g)
+  assert.equal(TL.plan(b, { ...ctx(b, 'idle3', g.key), agents: [b, host] }).desk, 13)
 })
 
 test('a walk under 12 tiles is walked', () => {
@@ -505,6 +524,11 @@ test('look for a cut rewinds', () => {
   const c = [0.05, 0.15, 0.25].map(d => at(0.35, d, true))
   assert.ok(c[0].alpha < c[1].alpha && c[2].alpha === 1 && c.every(L => L.show === 1))
   assert.ok(near(at(0.35, 0.05, true).l.ring, 0) && at(0.3, 0.05, true).o.ring <= 1)
+  // the circle drawn for a slow style rewinds from the cut's core time, not its real seconds
+  const d = TpStyles.durs('upload', 20), cut = TL.real(0.2, d)
+  assert.ok(cut > T.L_IN)
+  const L = look(cut, { cut, d }), U = look(0.2)
+  assert.deepEqual([L.show, L.white, L.l.ring], [U.show, U.white, 0])
 })
 
 test('look fills the object it is given, every field every time', () => {
@@ -634,4 +658,286 @@ test('look pins flash, wave, spin and the column fade', () => {
   // A calm cut at 0.5, halfway through its rewind: both still circles at half what they were.
   const c = look(0.625, { cut: 0.5 }, true)
   assert.ok(near(c.o.ring, 0.5) && near(c.l.ring, 0.5 * 0.625), `${c.o.ring} ${c.l.ring}`)
+})
+
+// ---- styles: four segment durations, travel time, switch at departure ----
+
+const RUN = TpStyles.durs('dashrun', 1000) // ground, long
+const Ds = [TL.DD, RUN, TpStyles.durs('goldaura', 0), [0.6, 2.0, 0.7, 0.4], [1.2, 0.4, 1.0, 1.0]]
+
+test('core and real: inverse for every profile, the identity for the circle', () => {
+  for (const d of Ds)
+    for (let k = -20; k <= 400; k++) {
+      const c = k / 100
+      assert.ok(near(TL.core(TL.real(c, d), d), c, 1e-12), `${d} at ${c}`)
+      assert.ok(near(TL.real(TL.core(c, d), d), c, 1e-12), `${d} at real ${c}`)
+    }
+  for (let k = -20; k <= 200; k++) {
+    const u = k / 100 + 1e-3
+    assert.equal(TL.core(u, TL.DD), u)
+    assert.equal(TL.real(u, TL.DD), u)
+    assert.equal(TL.core(u), u, 'no d: the circle')
+  }
+  assert.equal(TL.DD, TpStyles.DD)
+  assert.deepEqual(TL.CB, [0, 0.42, 0.54, 0.92, 1.35])
+  // each core breakpoint at the end of its real segment
+  const d = [0.6, 2.0, 0.7, 0.4]
+  assert.ok(near(TL.real(TL.DEP, d), 0.6) && near(TL.real(T.RELEASE, d), 3.3) && near(TL.real(T.END, d), 3.7))
+  assert.ok(near(TL.core(-0.3, d), -0.3) && near(TL.core(4.7, d), T.END + 1), 'slope 1 outside')
+})
+
+// From (0.5, 0.5) down to y 10.5, then right along it: the route and the straight line differ.
+const ell = over => {
+  const path = []
+  for (let y = 0.5; y <= 10.5; y++) path.push([0.5, y])
+  for (let x = 1.5; x <= 24.5; x++) path.push([x, 10.5])
+  return row(0.5, 2, { path, ...over })
+}
+
+test('plan writes the style, its durations, the switch and the travel length to the landing', () => {
+  pin()
+  const g = ell(),
+    tp = TL.plan(g, ctx(g, 'idle3', 'seat', { chairs: [], style: 'dashrun' }))
+  assert.equal(tp.style, 'dashrun')
+  const along = 10 + (tp.x1 - 0.5)
+  assert.ok(near(tp.len, along), `${tp.len} tiles along the route to the landing`)
+  assert.ok(tp.len < TL.rest(g.path, 0), 'to the landing, not the seat')
+  assert.deepEqual(tp.d, TpStyles.durs('dashrun', along))
+  assert.equal(tp.swAt, TL.DEP)
+  assert.deepEqual(tp.route, [[0.5, 0.5], ...g.path.slice(0, tp.i + 1)])
+  assert.equal(tp.mk, 0)
+  const a = ell(),
+    air = TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [], style: 'cutpaste' }))
+  assert.ok(near(air.len, Math.hypot(air.x1 - 0.5, 10)), 'air: the straight line')
+  assert.equal(air.route, null, 'no route in the air')
+  const h = ell(),
+    hid = TL.plan(h, { ...ctx(h, 'idle26', 'seat', { chairs: [], style: 'cutpaste' }), prev: prev('idle26', { hid: true }) })
+  assert.deepEqual(hid.route, [[0.5, 0.5], ...h.path.slice(0, hid.i + 1)], 'a hidden start keeps it, to leave unseen')
+  assert.ok(near(hid.len, Math.hypot(hid.x1 - 0.5, 10)), 'still the straight line')
+  const s = ell(),
+    still = TL.plan(s, ctx(s, 'idle3', 'seat', { chairs: [], style: 'goldaura' }))
+  assert.equal(still.swAt, T.SWITCH, 'no travel: switch while unseen, as the circle')
+  const c = ell(),
+    circ = TL.plan(c, ctx(c, 'idle3', 'seat', { chairs: [] }))
+  assert.deepEqual([circ.style, circ.d, circ.swAt, circ.route], ['circle', TL.DD, T.SWITCH, null])
+})
+
+test('plan: a fixed choice, off, calm', () => {
+  pin()
+  TpStyles.setChoice('gitbranch')
+  let a = ell()
+  assert.equal(TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [] })).style, 'gitbranch')
+  TpStyles.setChoice('off')
+  a = ell()
+  assert.equal(TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [] })), null, 'off: everyone walks')
+  a = ell()
+  assert.equal(TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [], style: 'dashrun' })).style, 'dashrun', 'c.style wins')
+  TpStyles.setChoice('dashrun')
+  TpStyles.useCalm(() => true)
+  a = ell()
+  const calm = TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [] }))
+  assert.deepEqual([calm.style, calm.d, calm.swAt], ['dashrun', TL.DD, T.SWITCH], 'calm plans the circle timeline')
+  pin()
+})
+
+test('pays reads the durations: a slow style must still beat the walk', () => {
+  pin()
+  const go = (n, style) => {
+    const a = row(0.5, n + 1)
+    return TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [], style }))
+  }
+  assert.ok(go(12, 'circle'))
+  assert.ok(go(12, 'dashrun'))
+  assert.equal(go(12, 'upload'), null, 'its longer timeline does not pay over 12 tiles')
+  assert.ok(go(13, 'upload'))
+  const a = row(0.5, 14),
+    tp = TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [] }))
+  assert.equal(TL.pays(a, tp.i, 0, 1, tp.d), true)
+  assert.equal(TL.pays(a, tp.i, 0, 1, [1.2, 2.4, 1.0, 1.0]), false)
+})
+
+test('an early re-aim keeps the style, clock and switch, and takes the new trip as a fresh plan would', () => {
+  pin()
+  for (const [style, u] of [
+    ['dashrun', 0.2],
+    ['dashrun', -0.3],
+    ['cutpaste', 0.1],
+    ['upload', -0.12],
+  ]) {
+    const a = ell()
+    a.tp = { ...TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [], style })), u }
+    const old = a.tp
+    a.path = (old.route || [[0.5, 0.5], ...a.path]).slice(1, 12)
+    a.path = a.path.concat([[1.5, 11.5], [1.5, 12.5], [1.5, 13.5], [1.5, 14.5], [1.5, 15.5], [1.5, 16.5]])
+    const tp = TL.plan(a, ctx(a, 'seat', 'visit3-0', { chairs: [] })),
+      f = { ...a, tp: null },
+      fresh = TL.plan(f, ctx(f, 'idle3', 'visit3-0', { chairs: [], style }))
+    assert.deepEqual([tp.style, tp.swAt, tp.u, tp.cut, tp.d[0]], [old.style, old.swAt, u, null, old.d[0]], style)
+    assert.notDeepEqual([tp.x1, tp.y1], [old.x1, old.y1])
+    assert.deepEqual([tp.i, tp.len, tp.d], [fresh.i, fresh.len, fresh.d], `${style} at ${u}: as a fresh plan`)
+    assert.ok(tp.len < old.len - 1, 'a shorter trip')
+  }
+  const a = ell()
+  a.tp = { ...TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [], style: 'dashrun' })), u: 0.2 }
+  const old = a.tp
+  a.path = old.route.slice(1, 12).concat([[1.5, 11.5], [1.5, 12.5], [1.5, 13.5], [1.5, 14.5], [1.5, 15.5]])
+  const tp = TL.plan(a, ctx(a, 'seat', 'visit3-0', { chairs: [] }))
+  assert.deepEqual(tp.route, [[old.x0, old.y0], ...a.path.slice(0, tp.i + 1)])
+  // re-aim compares on the core clock: 0.3 s into a 0.5 s departure is past L_IN, so the landing stays put
+  a.tp = { ...old, u: 0.36 }
+  a.path = old.route.slice(1).concat([[24.5, 11.5]])
+  const kept = TL.plan(a, ctx(a, 'seat', 'visit3-0', { chairs: [] }))
+  assert.deepEqual([kept.x1, kept.y1, kept.cut], [old.x1, old.y1, null])
+  // kept past L_IN on a new way to the same landing: the route is the new one
+  a.path = [[0.6, 0.6], ...old.route.slice(1), [24.5, 11.5]]
+  const late = TL.plan(a, ctx(a, 'seat', 'visit3-0', { chairs: [] }))
+  assert.deepEqual([late.x1, late.y1, late.cut], [old.x1, old.y1, null])
+  assert.deepEqual(late.route, [[a.x, a.y], ...a.path.slice(0, late.i + 1)])
+})
+
+test('a slow style re-aims on its own clocks', () => {
+  pin()
+  // goldaura departs over 1.1 s: 0.52 s in is core 0.2, still early, so it re-aims rather than calls off
+  const a = ell()
+  a.tp = TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [], style: 'goldaura' }))
+  const old = (a.tp = { ...a.tp, u: TL.real(0.2, a.tp.d) })
+  assert.ok(old.u > T.L_IN)
+  a.path = old.route ? old.route.slice(1, 12) : a.path.slice(0, 11)
+  a.path = a.path.concat([[1.5, 11.5], [1.5, 12.5], [1.5, 13.5], [1.5, 14.5], [1.5, 15.5]])
+  const tp = TL.plan(a, ctx(a, 'seat', 'visit3-0', { chairs: [] }))
+  assert.equal(tp.cut, null, 're-aimed')
+  assert.notDeepEqual([tp.x1, tp.y1], [old.x1, old.y1])
+  // a slow departure and arrival, re-aimed early to a short walk at 1.5x: even its shorter trip no longer pays
+  const b = row(0.5, 31)
+  b.tp = { ...TL.plan(b, ctx(b, 'idle3', 'seat', { chairs: [], style: 'upload', speed: 1.5 })), u: 0.05 }
+  b.path = row(0.5, 13).path
+  const i = TL.landing([b.x, b.y], b.path),
+    d = TpStyles.durs('upload', i)
+  assert.ok(i >= 0 && TL.pays(b, i, 0.05, 1.5, TL.DD) && !TL.pays(b, i, 0.05, 1.5, d))
+  const off = TL.plan(b, ctx(b, 'seat', 'visit3-0', { chairs: [], speed: 1.5 }))
+  assert.equal(off.cut, 0.05, 'called off')
+})
+
+test('step keeps a stool sitter seated until core SQUEEZE, on a long departure too', () => {
+  pin()
+  const a = row(0.5, 31, { stool: false })
+  a.tp = { ...TL.plan(a, { ...ctx(a, 'idle3', 'seat', { chairs: [], style: 'goldaura' }), prev: prev('idle3', { stool: 2 }) }) }
+  const sq = TL.real(T.SQUEEZE, a.tp.d)
+  assert.ok(sq > 0.5, `${sq} s on the real clock`)
+  a.tp.u = sq - 0.05
+  TL.step(a, 0)
+  assert.equal(a.stool, 2, 'still seated')
+  a.tp.u = sq + 0.01
+  TL.step(a, 0)
+  assert.equal(a.stool, false, 'up')
+})
+
+test('a hidden starter begins at L_IN on the core clock, so every landing fades in from its start', () => {
+  pin()
+  for (const style of ['circle', 'dashrun', 'goldaura', 'printer3d', 'pipe', 'portal', 'upload']) {
+    const a = row(0.5, 31),
+      tp = TL.plan(a, { prev: prev('idle26', { hid: true }), key: 'seat', agents: [a], chairs: [], speed: 1, style })
+    assert.ok(near(tp.u, TL.real(T.L_IN, tp.d), 1e-12), style)
+    assert.ok(near(TL.core(tp.u, tp.d), T.L_IN, 1e-9), `${style}: core ${TL.core(tp.u, tp.d)}`)
+  }
+})
+
+test('step on the core clock: switch at departure for a traveller, release and end at their real times', () => {
+  pin()
+  const a = row(0.5, 31, { dirFront: false, stool: false })
+  a.tp = TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [], style: 'dashrun' }))
+  const { d, x1, y1 } = a.tp,
+    dt = 1 / 60,
+    at = {}
+  let u = 0
+  while (a.tp) {
+    const x = a.x,
+      r = TL.step(a, dt)
+    u += dt
+    if (x !== a.x && at.sw == null) at.sw = u
+    if (!r && at.rel == null) at.rel = u
+    if (!a.tp) at.end = u
+  }
+  const within = (got, want) => got >= want - 1e-9 && got < want + dt + 1e-9
+  assert.ok(within(at.sw, TL.real(TL.DEP, d)), `switched at ${at.sw}`)
+  assert.ok(within(at.rel, TL.real(T.RELEASE, d)), `released at ${at.rel}`)
+  assert.ok(within(at.end, TL.real(T.END, d)), `ended at ${at.end}`)
+  assert.deepEqual([a.x, a.y], [x1, y1])
+  // dt 1 crosses every point in a few calls
+  const b = row(0.5, 31)
+  b.tp = TL.plan(b, ctx(b, 'idle3', 'seat', { chairs: [], style: 'dashrun' }))
+  let n = 0
+  while (b.tp && n < 10) (TL.step(b, 1), n++)
+  assert.ok(n <= 4 && b.tp === null, `${n} calls`)
+})
+
+test('a goal change after departure never cuts a traveller; the circle still cuts before its switch', () => {
+  pin()
+  const a = row(0.5, 31)
+  a.tp = TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [], style: 'dashrun' }))
+  TL.step(a, TL.real(TL.DEP, a.tp.d) + 0.01)
+  assert.ok(a.tp.sw, 'switched at departure')
+  const flying = a.tp
+  assert.equal(TL.plan(a, ctx(a, 'seat', 'idle4')), flying, 'kept: walks on from the landing')
+  const b = row(0.5, 31)
+  b.tp = TL.plan(b, ctx(b, 'idle3', 'seat', { chairs: [] }))
+  TL.step(b, 0.45)
+  assert.equal(b.tp.sw, false)
+  assert.equal(TL.plan(b, ctx(b, 'seat', 'idle4')).cut, 0.45)
+})
+
+test('unseen and look on the core clock of a long profile', () => {
+  pin()
+  const tp = { ...held().tp, d: RUN, style: 'dashrun', swAt: TL.DEP }
+  const at = c => ({ ...tp, u: TL.real(c, RUN) })
+  assert.equal(TL.unseen(at(T.LAND - 0.01)), true)
+  assert.equal(TL.unseen(at(T.LAND + 1e-6)), false)
+  assert.equal(TL.unseen({ ...held().tp, u: 0.85 }), true, 'DD as before')
+  const flat = (L, out = []) => {
+    for (const v of Object.values(L)) typeof v === 'object' ? flat(v, out) : out.push(v)
+    return out
+  }
+  for (const c of [0.1, 0.3, 0.45, 0.6, 0.9]) {
+    const got = flat(TL.look(at(c), false, TL.newLook())),
+      want = flat(look(c))
+    got.forEach((g, k) => assert.ok(near(g, want[k], 1e-9), `look at core ${c}, field ${k}: ${g} != ${want[k]}`))
+  }
+})
+
+test('phase: segment fractions, switch, queue and the rewind', () => {
+  pin()
+  const tp = { ...held().tp, d: RUN, style: 'dashrun', swAt: TL.DEP }
+  const P = (u, over = {}, calm = false) => TL.phase({ ...tp, u, ...over }, calm, TL.newPhase())
+  const R = c => TL.real(c, RUN)
+  // core, dep, trip, arr, fade, sw, q
+  const rows = [
+    [-0.2, -1, -1, -1, -1, false, 1],
+    [0.21, 0.5, -1, -1, -1, false, 0],
+    [0.48, -1, 0.5, -1, -1, true, 0],
+    [0.73, -1, -1, 0.5, -1, true, 0],
+    [1.135, -1, -1, -1, 0.5, true, 0],
+    [1.4, -1, -1, -1, -1, true, 0],
+  ]
+  for (const [c, ...want] of rows) {
+    const L = P(c < 0 ? c : R(c))
+    const got = [L.dep, L.trip, L.arr, L.fade, L.sw, L.q]
+    got.forEach((g, k) => assert.ok(typeof g === 'boolean' ? g === want[k] : near(g, want[k], 1e-9), `${c} field ${k}`))
+    assert.ok(near(L.u, c, 1e-9) && near(L.v, c, 1e-9) && L.C === 1 && !L.cut && L.d === RUN)
+    assert.equal(L.secs, c < 0 ? c : R(c))
+  }
+  // a cut at core 0.3 rewinds over CUT real seconds: v runs back to 0, C to 0, never switched
+  const cut = R(0.3),
+    mid = P(cut + T.CUT / 2, { cut })
+  assert.ok(mid.cut && near(mid.C, 0.5) && near(mid.v, 0.15) && !mid.sw)
+  assert.ok(near(mid.dep, 0.15 / 0.42))
+  // the rewind's own clock passes swAt, yet nothing switches while it rewinds
+  for (let u = cut; u <= cut + T.CUT; u += 0.01) assert.equal(P(u, { cut }).sw, false, `rewind at ${u}`)
+  assert.ok(TL.core(cut + T.CUT, RUN) > TL.DEP)
+  // a segment starts on its first instant: exactly DEP is the trip's 0, not the departure's 1
+  const at = TL.phase({ ...tp, d: TL.DD, u: TL.DEP }, false, TL.newPhase())
+  assert.deepEqual([at.dep, at.trip], [-1, 0])
+  assert.equal(P(R(0.3), {}, true).calm, true)
+  assert.equal(P(0.1, { hide: true }).hide, true)
+  const out = TL.newPhase()
+  assert.equal(TL.phase({ ...tp, u: 0.1 }, false, out), out, 'fills the object it is given')
 })

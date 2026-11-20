@@ -67,3 +67,18 @@ test('POST /api/settings saves the choice; it needs our own origin and the X-Ter
     assert.deepEqual(s.get(), { weather: { mode: 'real', city: 'Hue' } })
   } finally { srv.close() }
 })
+
+test('the teleport style choice rides along: kept when it looks like an id, dropped otherwise, kept from an old page', () => {
+  const w = { mode: 'off', city: '' }
+  // the server checks only the shape: an id the page does not know (zz9) is dropped by the page, not here
+  assert.deepEqual(ps.clean({ weather: w, teleport: 'bolt' }), { weather: w, teleport: 'bolt' })
+  assert.deepEqual(ps.clean({ weather: w, teleport: 'zz9' }), { weather: w, teleport: 'zz9' })
+  assert.deepEqual(ps.clean({ weather: w, teleport: 'random' }), { weather: w, teleport: 'random' })
+  assert.deepEqual(ps.clean({ weather: w, teleport: 'off', event: 'on' }), { weather: w, event: 'on', teleport: 'off' })
+  for (const bad of ['Bolt', 'x', 'a'.repeat(17), 'a b', 3, null, { id: 'bolt' }])
+    assert.deepEqual(ps.clean({ weather: w, teleport: bad }), { weather: w }, String(bad))
+  const a = ps.createPageSettings(tmpFile())
+  a.set({ weather: w, teleport: 'smoke' })
+  assert.equal(a.set({ weather: { mode: 'random', city: '' } }).teleport, 'smoke', 'an old page leaves it')
+  assert.equal(a.set({ weather: w, teleport: 'pipe' }).teleport, 'pipe')
+})

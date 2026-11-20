@@ -14,6 +14,8 @@ const { ClaudeOffice } = loadWeb('office')
 loadWeb('office-agents')
 const { IslandScene } = loadWeb('island-scene')
 const { TeleportLogic: TL } = loadWeb('teleport-logic')
+const { TpStyles } = loadWeb('tp-styles')
+TpStyles.setChoice('circle') // the circle's tests keep the circle
 const { T } = TL
 
 const DT = 1 / 60
@@ -405,4 +407,55 @@ test('a visitor to desk 15 slot 2 does not land on the stairs', () => {
   assert.match(v[2].goalKey, /^visit50-2$/)
   const { x1, y1 } = v[2].tp
   assert.ok(!(y1 === S.H + 0.5 && x1 > 22 && x1 < 24), `lands at ${x1},${y1}`)
+})
+
+// ---- styles: every one alone, mixed, a fixed choice, off ----
+
+// The 16-person return in one style choice; what each person did.
+function showerIn(choice, { speed = 1 } = {}) {
+  TpStyles.reset()
+  TpStyles.setChoice(choice)
+  try {
+    return withRandom(() => {
+      const p = page(park())
+      p.state.speed = speed
+      p.agents.forEach(a => (a.status = 'working'))
+      const { seen } = run(p)
+      const all = [...seen.values()]
+      return { last: Math.max(...all.map(s => s.seatedAt)), tps: all.filter(s => s.tp).map(s => s.tp) }
+    })
+  } finally {
+    TpStyles.reset()
+    TpStyles.setChoice('circle')
+  }
+}
+
+test('every style alone: sixteen seated within 7.8 s, at least 13 of them teleported', () => {
+  for (const { id } of TpStyles.STYLES) {
+    const r = showerIn(id)
+    assert.ok(r.last < 7.8, `${id}: all seated after ${r.last} s`)
+    assert.ok(r.tps.length >= 13, `${id}: ${r.tps.length} teleported`)
+    assert.ok(r.tps.every(tp => tp.style === id), id)
+  }
+})
+
+test('random styles: one per person, everyone seated within 7.8 s', () => {
+  const r = showerIn('random')
+  assert.ok(r.last < 7.8, `seated after ${r.last} s`)
+  assert.ok(new Set(r.tps.map(tp => tp.style)).size >= 8, 'a mix of styles')
+  assert.ok(r.tps.every(tp => TpStyles.RANDOM.includes(tp.style)))
+})
+
+test('a fixed choice gives everyone that style; off walks everyone', () => {
+  const fixed = showerIn('dashrun')
+  assert.ok(fixed.tps.length >= 13 && fixed.tps.every(tp => tp.style === 'dashrun'))
+  const off = showerIn('off')
+  assert.equal(off.tps.length, 0)
+})
+
+test('at speed 3 a slow style teleports fewer than the circle', () => {
+  const circle = showerIn('circle', { speed: 3 }),
+    slow = showerIn('upload', { speed: 3 })
+  assert.equal(circle.tps.length, 10)
+  assert.ok(slow.tps.length < 10, `${slow.tps.length} uploads`)
 })

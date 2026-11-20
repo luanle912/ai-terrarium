@@ -3,6 +3,7 @@ import { tr } from './i18n.js';
 import { BubbleLogic } from './bubble-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { EventLogic } from './event-logic.js';
+import './tp-settings.js';
 import { WEATHER_LABEL, WEATHER_PREVIEW, h, languagePicker } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
 mixin(
@@ -321,6 +322,7 @@ mixin(
           ),
           this.seasonSection(),
           this.eventSection(),
+          this.teleportSection(),
           isSim &&
             h(
               'label',

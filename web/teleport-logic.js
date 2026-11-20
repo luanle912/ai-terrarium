@@ -1,13 +1,21 @@
 // The magic teleport back to work, as logic (no DOM, no canvas; tests/teleport-logic.test.mjs): someone on a break
 // far from where they work is drawn into a magic circle and lands a few steps from their desk.
 // The state lives on the agent as `a.tp` (null when none):
-//   { was, u, i, x0, y0, x1, y1, hide, free, stool, sw, cut, again }
+//   { was, u, i, x0, y0, x1, y1, hide, free, stool, sw, cut, again, style, d, swAt, len, route, mk }
 //   was     the lounge goal key that made it eligible        u     clock in s (negative while queued)
 //   i       landing index into a.path                         x0,y0 where they leave from; x1,y1 the landing
 //   hide    started unseen in a restroom stall               free  outside the queue (stall user or bather)
 //   stool   the stool pose kept until fully white            sw    moved to the landing
 //   cut     null, or the u at which it was called off (it then rewinds for T.CUT)
 //   again   work called while it rewound: planned afresh from the break when the rewind ends
+//   style   web/tp-styles.js id         d     real seconds of the four core segments (DD: the circle, core = real)
+//   swAt    core time of the switch    len   tiles to the landing
+//   route   the polyline to the landing, for ground styles and hidden starters (null otherwise)
+//   mk      bits of the lasting marks already born (office-draw-teleport.js)
+//   desk    the desk it lands by: a visit's host's, else the own
+// Every T time below is on the core clock: core(tp.u, tp.d).
+import { TpStyles } from './tp-styles.js';
+
 // plan() decides at a goal change, step() runs the clock in updateAgent, look() turns the clock into what to draw.
 const FAR = 12, // tiles: a shorter walk to work is walked
   KEEP = 3.5, // tiles left to walk after landing
@@ -32,6 +40,29 @@ const T = {
   CUT: 0.25, // length of the rewind after a cut
 };
 
+const DEP = 0.42, // core time the departure ends and the travel starts
+  ARR = 0.54, // core time the travel ends
+  CB = [0, DEP, ARR, T.RELEASE, T.END],
+  { DD } = TpStyles;
+// Real clock to core clock, piecewise linear over d; slope 1 while queued and after the last segment.
+function core(u, d) {
+  if (!d || d === DD || u <= 0) return u;
+  let r0 = 0;
+  for (let j = 0; j < 4; j++) {
+    if (u < r0 + d[j]) return CB[j] + ((u - r0) / d[j]) * (CB[j + 1] - CB[j]);
+    r0 += d[j];
+  }
+  return CB[4] + (u - r0);
+}
+function real(c, d) {
+  if (!d || d === DD || c <= 0) return c;
+  let r0 = 0;
+  for (let j = 0; j < 4; j++) {
+    if (c < CB[j + 1]) return r0 + ((c - CB[j]) / (CB[j + 1] - CB[j])) * d[j];
+    r0 += d[j];
+  }
+  return r0 + (c - CB[4]);
+}
 const seg = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const WORK = key => key === 'seat' || key.startsWith('visit');
 const LOUNGE = key => !!key && (key.startsWith('idle') || key.startsWith('wash'));
@@ -71,9 +102,21 @@ function occupied(a, agents) {
   return out;
 }
 // Whether a teleport starting at clock u and landing on path[i] saves GAIN over the walk at this speed.
-function pays(a, i, u, speed) {
+function pays(a, i, u, speed, d) {
   const v = WALK * (speed || 1);
-  return (seg([a.x, a.y], a.path[0]) + rest(a.path, 0)) / v - (T.RELEASE - u + rest(a.path, i) / v) >= GAIN;
+  return (seg([a.x, a.y], a.path[0]) + rest(a.path, 0)) / v - (real(T.RELEASE, d) - u + rest(a.path, i) / v) >= GAIN;
+}
+const ground = id => !!TpStyles.BY_ID[id] && TpStyles.BY_ID[id].kind === 'ground';
+const routeTo = (a, i) => [[a.x, a.y], ...a.path.slice(0, i + 1)];
+// Tiles to path[i]: along the route for a ground style, else the straight line.
+const lenTo = (a, i, style) =>
+  ground(style) ? seg([a.x, a.y], a.path[0]) + rest(a.path, 0) - rest(a.path, i) : seg([a.x, a.y], a.path[i]);
+// A visit goal is visit<id>-<slot>; a host that has gone leaves the own desk.
+function deskFor(a, key, agents) {
+  if (!key.startsWith('visit')) return a.desk;
+  const id = key.slice(5, key.lastIndexOf('-')),
+    host = agents.find(o => String(o.id) === id);
+  return host ? host.desk : a.desk;
 }
 // The agent's next `tp` at a goal change (a.path already holds the new route). Pure.
 // c: { prev: { was, hid, stool, act } taken before the goal-change resets, key, agents, chairs, stairs, speed }.
@@ -86,20 +129,40 @@ function plan(a, c) {
   const was = old ? old.was : prev.was;
   const ok = LOUNGE(was) && WORK(key),
     taken = ok ? occupied(a, c.agents).concat(c.stairs || []) : [];
-  const i = ok ? landing([a.x, a.y], a.path, taken, c.chairs.filter((_, k) => k !== a.desk)) : -1;
+  const i = ok
+    ? landing(
+        [a.x, a.y],
+        a.path,
+        taken,
+        c.chairs.filter((_, k) => k !== a.desk),
+      )
+    : -1;
   if (old) {
-    if (i < 0 || (old.u < T.L_IN && !pays(a, i, old.u, c.speed))) return old.u > 0 ? { ...old, cut: old.u } : null;
-    if (old.u < T.L_IN) return { ...old, i, x1: a.path[i][0], y1: a.path[i][1] };
+    const early = core(old.u, old.d) < T.L_IN,
+      route = k => (old.route ? routeTo(a, k) : old.route);
+    // Early, the trip is still ahead: it is timed for the new landing, while d[0] and swAt hold.
+    const len = early && i >= 0 ? lenTo(a, i, old.style) : old.len,
+      d = early && old.d !== DD ? TpStyles.durs(old.style, len) : old.d;
+    if (i < 0 || (early && !pays(a, i, old.u, c.speed, d))) return old.u > 0 ? { ...old, cut: old.u } : null;
+    const desk = deskFor(a, key, c.agents);
+    if (early) return { ...old, i, x1: a.path[i][0], y1: a.path[i][1], route: route(i), desk, len, d };
     // The landing circle is showing: keep it if the new route passes there, else call it off and start again.
     const j = a.path.findIndex(p => p[0] === old.x1 && p[1] === old.y1);
-    return j >= 0 && j < a.path.length - 1 ? { ...old, i: j } : { ...old, cut: old.u, again: true };
+    if (j < 0 || j >= a.path.length - 1) return { ...old, cut: old.u, again: true };
+    return { ...old, i: j, route: route(j), desk };
   }
   if (i < 0) return null;
+  const style = c.style || TpStyles.styleFor(a);
+  if (!style) return null;
+  const g = ground(style),
+    len = lenTo(a, i, style),
+    d = TpStyles.calm() ? DD : TpStyles.durs(style, len);
   const free = !!prev.hid || prev.act === 'bath';
   let q = 0;
   if (!free) for (const o of c.agents) if (o !== a && o.tp && !o.tp.free && o.tp.cut == null && o.tp.u < STAGGER) q++;
-  const u = prev.hid ? T.L_IN : q ? -STAGGER * Math.min(q, QUEUE) : 0;
-  if (!pays(a, i, u, c.speed)) return null;
+  // a stall user's departure is unseen: start where the landing starts, so it fades in rather than pops
+  const u = prev.hid ? real(T.L_IN, d) : q ? -STAGGER * Math.min(q, QUEUE) : 0;
+  if (!pays(a, i, u, c.speed, d)) return null;
   const [x1, y1] = a.path[i];
   return {
     was,
@@ -115,6 +178,13 @@ function plan(a, c) {
     sw: false,
     cut: null,
     again: false,
+    style,
+    d,
+    swAt: d[1] > DD[1] ? DEP : T.SWITCH, // a traveller is at the landing from the start of its trip
+    len,
+    route: g || prev.hid ? routeTo(a, i) : null, // a hidden start leaves where it is first seen
+    mk: 0,
+    desk: deskFor(a, key, c.agents),
   };
 }
 // Runs the clock (sim time, not scaled by speed). Mutates only the agent; true while the person is held.
@@ -135,8 +205,9 @@ function step(a, dt) {
     a.moving = false;
     return true;
   }
-  if (!tp.sw) a.stool = tp.u < T.SQUEEZE ? tp.stool : false; // seated pose kept until fully white
-  if (!tp.sw && tp.u >= T.SWITCH) {
+  const cu = core(tp.u, tp.d);
+  if (!tp.sw) a.stool = cu < T.SQUEEZE ? tp.stool : false; // seated pose kept until fully white
+  if (!tp.sw && cu >= (tp.swAt || T.SWITCH)) {
     tp.sw = true;
     a.x = tp.x1;
     a.y = tp.y1;
@@ -144,14 +215,14 @@ function step(a, dt) {
     const d = a.path[0][0] - a.x + a.path[0][1] - a.y;
     a.dirFront = d > 0.0001 ? true : d < -0.0001 ? false : a.dirFront;
   }
-  if (tp.u >= T.END) a.tp = null;
-  if (tp.u >= T.RELEASE) return false;
+  if (cu >= T.END) a.tp = null;
+  if (cu >= T.RELEASE) return false;
   a.moving = false;
   return true;
 }
 // The speech bubble is hidden from the plan (queue included, so a return shower's bubbles do not pile up over the
 // circles) until the colours are back.
-const unseen = tp => !!tp && tp.cut == null && tp.u < T.LAND;
+const unseen = tp => !!tp && tp.cut == null && core(tp.u, tp.d) < T.LAND;
 
 const clamp = x => (x < 0 ? 0 : x > 1 ? 1 : x);
 const r = (u, a, b) => clamp((u - a) / (b - a));
@@ -259,7 +330,8 @@ function calmLook(L, u, hide) {
 }
 // The clock to what shows, written into `out` (from newLook), every field on every call. Reads only tp.
 function look(tp, calm, out) {
-  const u = tp.u;
+  const u = core(tp.u, tp.d),
+    cut = tp.cut == null ? 0 : core(tp.cut, tp.d);
   if (tp.cut == null) {
     if (calm) calmLook(out, u, tp.hide);
     else {
@@ -269,28 +341,77 @@ function look(tp, calm, out) {
     return out;
   }
   // A cut rewinds: the origin end and the person run back from `cut` to 0 while both circles fade.
-  const C = 1 - r(u, tp.cut, tp.cut + T.CUT),
-    v = tp.cut * C;
+  const C = 1 - r(tp.u, tp.cut, tp.cut + T.CUT),
+    v = cut * C;
   if (calm) {
     calmLook(out, v, tp.hide);
-    out.o.ring = tp.hide ? 0 : C * calmO(tp.cut);
+    out.o.ring = tp.hide ? 0 : C * calmO(cut);
     out.o.dim = 0;
-    setEnd(out.l, C * calmL(tp.cut), 0, 1, 0);
+    setEnd(out.l, C * calmL(cut), 0, 1, 0);
     return out;
   }
   origin(out, v, tp.hide);
   const o = out.o;
   if (!tp.hide) {
     o.ring = C;
-    o.spin = 0.9 * u;
+    o.spin = 0.9 * tp.u;
   }
   o.dim = o.flash = 0;
   o.wave = o.motes = out.bolt = -1;
-  setEnd(out.l, tp.cut >= T.L_IN ? C : 0, 0, out2(r(tp.cut, T.L_IN, 0.46)), 0);
+  setEnd(out.l, cut >= T.L_IN ? C : 0, 0, out2(r(cut, T.L_IN, 0.46)), 0);
+  return out;
+}
+// What a style draws from (office-draw-teleport.js X.L): both clocks, the rewind and each core segment's 0-1.
+const newPhase = () => ({
+  u: 0,
+  v: 0,
+  d: DD,
+  cut: false,
+  C: 1,
+  calm: false,
+  hide: false,
+  q: 0,
+  sw: false,
+  secs: 0,
+  dep: -1,
+  trip: -1,
+  arr: -1,
+  fade: -1,
+});
+const part = (v, j) => (v >= CB[j] && v < CB[j + 1] ? (v - CB[j]) / (CB[j + 1] - CB[j]) : -1);
+function phase(tp, calm, out) {
+  const d = tp.d || DD,
+    cut = tp.cut != null,
+    u = core(tp.u, d),
+    C = cut ? 1 - r(tp.u, tp.cut, tp.cut + T.CUT) : 1,
+    v = cut ? core(tp.cut, d) * C : u;
+  out.u = u;
+  out.v = v;
+  out.d = d;
+  out.cut = cut;
+  out.C = C;
+  out.calm = !!calm;
+  out.hide = !!tp.hide;
+  out.q = tp.u < 0 ? 1 : 0;
+  out.sw = !cut && u >= (tp.swAt || T.SWITCH);
+  out.secs = tp.u;
+  out.dep = part(v, 0);
+  out.trip = part(v, 1);
+  out.arr = part(v, 2);
+  out.fade = part(v, 3);
   return out;
 }
 
 export const TeleportLogic = {
+  DEP,
+  ARR,
+  CB,
+  DD,
+  core,
+  real,
+  pays,
+  newPhase,
+  phase,
   FAR,
   KEEP,
   BUSY,

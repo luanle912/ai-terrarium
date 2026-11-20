@@ -377,7 +377,7 @@ mixin(
         else PERSON.legs(R, L, sx, by, sh, l1, l2, a.dirFront);
         const sw = a.moving ? (walk ? 1 : -1) : 0,
           wave = st === 'talking' && !a.moving ? Math.floor(t * 4) % 2 : 0,
-          up = st === 'done' && !a.moving;
+          up = (st === 'done' || a.armsUp) && !a.moving;
         const act = !a.moving && st === 'idle' ? a.actNow : null;
         const tp = t + a.id * 1.37; // per-person phase, so a group of smokers never moves in step
         if (act && (!sit || act === 'smoke')) {
@@ -477,7 +477,7 @@ mixin(
           ctx.strokeRect(sx - 4.5, hy - 1.5, 9, 19);
         }
       }
-      if (!a.seated) {
+      if (!a.seated && !a.bare) {
         const [hx, hy] = this.headPos(a),
           col = (ST[st] || ST.working)[1];
         if (st === 'thinking') {

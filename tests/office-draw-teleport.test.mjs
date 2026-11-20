@@ -34,6 +34,8 @@ const D = loadWeb('office-draw-teleport')
 const madeAtLoad = canvases.length
 const { IslandScene } = loadWeb('island-scene')
 const { TeleportLogic: TL } = loadWeb('teleport-logic')
+const { TpStyles } = loadWeb('tp-styles')
+TpStyles.setChoice('circle') // the circle's tests keep the circle
 const { PA } = S
 
 const ORIGIN = [21.5, 10.5], LAND = [3.5, 4.5]
@@ -398,4 +400,304 @@ test('no idle Z beside the column while a cut rewinds to idle', () => {
   }
   assert.ok(zs(null) > 0, 'idle and no teleport: the Z')
   for (const u of [0.37, 0.45, 0.5]) assert.equal(zs({ ...mover(u, { cut: 0.33 }).tp, u }), 0, `rewinding at ${u}`)
+})
+
+// ---- the dispatcher: styles, kinds, marks, the person ----
+
+const { DRAW } = loadWeb('tp-style-index')
+const P_ = loadWeb('tp-person').TpPerson
+const ROUTE = [ORIGIN, [12.5, 10.5], [3.5, 10.5], LAND]
+// Someone mid-teleport in style `id` at core time c.
+function styled(id, c, over = {}) {
+  const prof = TpStyles.BY_ID[id],
+    route = prof.kind === 'ground' ? ROUTE.map(p => [...p]) : null,
+    d = TpStyles.durs(id, 20),
+    swAt = d[1] > 0.12 ? TL.DEP : TL.T.SWITCH,
+    a = mover(0, over)
+  const sw = over.cut == null && c >= swAt
+  Object.assign(a.tp, { u: c < 0 ? c : TL.real(c, d), style: id, d, swAt, len: 20, route, mk: 0, sw })
+  if (sw) [a.x, a.y] = [a.tp.x1, a.tp.y1]
+  return a
+}
+// Swaps a draw object into the index for one test.
+function withStyle(id, S, fn) {
+  const was = DRAW[id]
+  DRAW[id] = S
+  try {
+    return fn()
+  } finally {
+    DRAW[id] = was
+  }
+}
+const recorder = (log, over = {}) => ({
+  back: (X, end) => log.push(['back', end]),
+  floor: (X, end) => log.push(['floor', end]),
+  stand: (X, end) => log.push(['stand', end]),
+  trip: X => log.push(['trip', X.L.trip]),
+  person: X => X.L.sw && X.L.trip >= 0,
+  marks: [],
+  ...over,
+})
+
+test('a style without a draw object draws the circle on its own clock', () => {
+  withStyle('dashrun', null, () => {
+    for (const c of [0.1, 0.3, 0.48, 0.6, 1.0]) {
+      const s = frame([styled('dashrun', c, { id: 7 })]),
+        o = frame([mover(c, { id: 7 })])
+      assert.deepEqual(s.zs, o.zs, `items at core ${c}`)
+      assert.equal(s.paints, o.paints, `calls at core ${c}`)
+    }
+  })
+  const plain = mover(0.3)
+  delete plain.tp.style
+  assert.ok(frame([plain]).items.length > 0, 'no style: the circle')
+})
+
+test('calm draws every style as the circle, calm', () => {
+  TpStyles.useCalm(() => true)
+  try {
+    const log = []
+    withStyle('dashrun', recorder(log), () => {
+      const f = frame([styled('dashrun', 0.48), styled('cutpaste', 0.6)])
+      assert.equal(log.length, 0, 'the style is not asked')
+      assert.equal(f.ops('clip').length, 0)
+      assert.equal(f.ops('fillRect').length, 0, 'the calm circle only stamps its sprite')
+      assert.ok(!f.zs.includes(1e9))
+    })
+  } finally {
+    TpStyles.reset()
+    TpStyles.setChoice('circle')
+  }
+})
+
+test('items sit at their depth per kind', () => {
+  const log = []
+  // ground: back below and stand above the walker at each end, the trip on its route tile
+  withStyle('dashrun', recorder(log), () => {
+    const a = styled('dashrun', 0.48),
+      f = frame([a], { run: false })
+    const [x0, y0] = ORIGIN, [x1, y1] = LAND
+    for (const z of [x0 + y0 - 0.01, x0 + y0 + 0.01, x1 + y1 - 0.01, x1 + y1 + 0.01]) assert.ok(f.zs.some(v => near(v, z)), `${z}`)
+    assert.equal(f.zs.filter(z => z === -0.5).length, 2, 'a floor item at each end')
+    const trip = f.zs.find(z => z > 1 && ![x0 + y0, x1 + y1].some(e => Math.abs(z - e) < 0.02))
+    // half way along the route by length: on the leg from (12.5, 10.5) to (3.5, 10.5)
+    assert.ok(trip > 14 && trip < 23.1, `trip at ${trip}`)
+    assert.ok(!f.zs.includes(1e9))
+  })
+  // air: no ground() is the overlay; low over the ground sorts at the ground point; high is the overlay by depth
+  const air = h => recorder(log, { ground: (X, out) => ((out[0] = 9), (out[1] = 9), (out[2] = h), true) })
+  withStyle('cutpaste', recorder(log), () => assert.ok(frame([styled('cutpaste', 0.5)], { run: false }).zs.includes(1e9)))
+  withStyle('cutpaste', air(10), () => {
+    const zs = frame([styled('cutpaste', 0.5)], { run: false }).zs
+    assert.ok(zs.some(z => near(z, 18.01)), 'low: at the ground point')
+    assert.ok(zs.includes(-0.5) && zs.filter(z => z === -0.5).length === 3, 'and a shadow on the floor')
+  })
+  withStyle('cutpaste', air(80), () => {
+    const zs = frame([styled('cutpaste', 0.5)], { run: false }).zs
+    assert.ok(zs.some(z => near(z, 1e9 + 18 / 1e3)), 'high: the overlay, sorted by ground depth')
+  })
+  // none: never a trip item
+  withStyle('pipe', recorder(log, { need: () => 0xff }), () => {
+    const zs = frame([styled('pipe', 0.5)], { run: false }).zs
+    assert.ok(zs.length > 0 && zs.every(z => z < 100), 'no trip')
+  })
+})
+
+test('a stretch over the lounge rug gets one item just over the rug, only when asked for and drawn', () => {
+  const RUG = loadWeb('tp-kit').Kit.RUG_Z
+  assert.ok(RUG > 19 && RUG < 19.5, 'over the rug item, under anything standing on it')
+  const zs = S => {
+    const log = []
+    return withStyle('gitbranch', recorder(log, S(log)), () => [frame([styled('gitbranch', 0.48)]).zs, log])
+  }
+  const [on, log] = zs(log => ({ need: () => 8 | 256, rug: X => log.push(['rug', X.L.trip]) }))
+  assert.equal(on.filter(z => z === RUG).length, 1)
+  assert.deepEqual(log.filter(e => e[0] === 'rug').length, 1, 'and it draws')
+  assert.equal(zs(() => ({ need: () => 8 })).flat().filter(z => z === RUG).length, 0, 'not asked for')
+  assert.equal(zs(() => ({ need: () => 8 | 256 }))[0].filter(z => z === RUG).length, 0, 'no rug hook')
+})
+
+test('a style can draw just over the landing desk, under anyone in front of it', () => {
+  const a = styled('packet', 0.7), want = S.DESKS[a.desk].gx + S.DESKS[a.desk].gy + 1.51
+  const run = (need, over = {}) => {
+    const log = []
+    const f = withStyle('packet', recorder(log, { need: () => need, desk: X => log.push(['desk', X.L.v]), ...over }),
+      () => frame([a]))
+    return [f.zs.filter(z => near(z, want)).length, log.filter(e => e[0] === 'desk').length]
+  }
+  assert.equal(D.TP_PART.DESK, 512)
+  assert.deepEqual(run(8 | 512), [1, 1])
+  assert.deepEqual(run(8), [0, 0], 'not asked for')
+  assert.deepEqual(run(8 | 512, { desk: undefined }), [0, 0], 'no desk hook')
+})
+
+test('a hidden starter has no origin items; its route starts off the restroom floor', () => {
+  const log = []
+  withStyle('dashrun', recorder(log, { trip: X => log.push(X.route(0, [])) }), () => {
+    const a = styled('dashrun', 0.48, { hide: true })
+    a.tp.route = [[29.5, 1.6], [28.5, 3.5], [27.5, 5.5], [26.5, 6.5], ...ROUTE.slice(1)]
+    const f = frame([a])
+    assert.ok(!f.zs.some(z => near(z, ORIGIN[0] + ORIGIN[1] - 0.01) || near(z, ORIGIN[0] + ORIGIN[1] + 0.01)))
+    const [, , tx, ty] = log.find(e => typeof e[0] === 'number')
+    assert.deepEqual([tx, ty], [26.5, 6.5], 'the first point off the restroom floor')
+  })
+})
+
+test('a hidden air start leaves from the first point off the restroom floor, not the stall', () => {
+  const log = [], { RestroomLogic } = loadWeb('restroom-logic')
+  const out = X => log.push({ arc: X.arc(0, 40), tx0: X.tx0, ty0: X.ty0, chord: X.route(0.5, []), dir: [...X.dir0] })
+  withStyle('upload', recorder(log, { trip: out }), () => {
+    const a = styled('upload', 0.48, { hide: true, from: [29.5, 1.6] })
+    a.tp.route = [[29.5, 1.6], [28.5, 3.5], [27.5, 5.5], [26.5, 6.5], ...ROUTE.slice(1)]
+    frame([a])
+    const got = log.find(e => e.arc)
+    assert.ok(RestroomLogic.onFloor(S.WC, 29.5, 1.6), 'from a stall')
+    assert.ok(!RestroomLogic.onFloor(S.WC, got.tx0, got.ty0), `origin ${got.tx0},${got.ty0} off the restroom floor`)
+    assert.deepEqual([got.tx0, got.ty0], [26.5, 6.5])
+    assert.deepEqual(got.arc, PA(26.5, 6.5).map(Math.round), 'the arc starts there')
+    assert.deepEqual(got.chord.slice(2, 4), [(26.5 + LAND[0]) / 2, (6.5 + LAND[1]) / 2], 'an air route: the chord from there')
+    assert.ok(got.dir[0] < 0, 'heading west along the chord')
+  })
+})
+
+test('X.lite counts bright teleports, cut and queued ones left out', () => {
+  const seen = []
+  withStyle('dashrun', recorder([], { trip: X => seen.push(X.lite) }), () => {
+    const crowd = n => Array.from({ length: n }, (_, j) => styled('dashrun', 0.48, { id: 900 + j }))
+    frame(crowd(TL.LITE))
+    assert.ok(seen.length && seen.every(l => l === false))
+    seen.length = 0
+    frame(crowd(TL.LITE + 1))
+    assert.ok(seen.every(l => l === true))
+    seen.length = 0
+    frame(crowd(TL.LITE).concat([styled('dashrun', -0.3, { id: 990 }), styled('dashrun', 0.3, { id: 991, cut: 0.1 })]))
+    assert.ok(seen.every(l => l === false))
+  })
+})
+
+test('lasting marks: born once, aged on printNow, capped, drawn without the agent, then dropped', () => {
+  const got = []
+  const S = recorder([], {
+    marks: [
+      { at: 'dep', end: 0, ttl: 3, layer: 'floor' },
+      { at: 'arr', end: 1, ttl: 2, layer: 'stand' },
+    ],
+    drawMark: (X, m, age) => got.push([m.k, age, X.a, X.tp]),
+  })
+  withStyle('gitbranch', S, () => {
+    const scene = { agents: [], env: {}, printNow: 10 }
+    const run = () => {
+      const items = [],
+        ctx = context([]),
+        G = { ctx, df: 1, t: 0, th: { shadow: '#000' }, poly() {}, rect() {} }
+      ClaudeOffice.prototype.tpItems.call(scene, G, items)
+      items.sort((p, q) => p.z - q.z).forEach(i => i.f())
+      return items
+    }
+    const a = styled('gitbranch', 0.3, { id: 77 })
+    scene.agents = [a]
+    run()
+    assert.equal(scene.tpMarks, undefined, 'nothing before departure ends')
+    a.tp.u = TL.real(0.45, a.tp.d)
+    run()
+    run()
+    assert.equal(scene.tpMarks.length, 1, 'the origin mark, once')
+    assert.deepEqual([scene.tpMarks[0].x, scene.tpMarks[0].y, scene.tpMarks[0].t0], [...ORIGIN, 10])
+    a.tp.u = TL.real(0.7, a.tp.d)
+    run()
+    assert.equal(scene.tpMarks.length, 2)
+    // cut or calm: none born
+    const b = styled('gitbranch', 0.7, { id: 78, cut: 0.2 })
+    scene.agents = [b]
+    run()
+    assert.equal(scene.tpMarks.length, 2, 'not in a cut')
+    // the agent has gone: still drawn, a and tp null; aged on printNow; dropped at ttl
+    scene.agents = []
+    got.length = 0
+    scene.printNow = 11.5
+    const items = run()
+    assert.deepEqual(got.map(g => [g[0], g[1], g[2], g[3]]).sort(), [[0, 1.5, null, null], [1, 1.5, null, null]])
+    assert.ok(items.some(i => i.z === -0.5) && items.some(i => near(i.z, LAND[0] + LAND[1] + 0.01)))
+    // under reduced motion they keep fading but draw nothing
+    scene.env = { reduced: true }
+    assert.equal(run().length, 0)
+    assert.equal(scene.tpMarks.length, 2)
+    scene.env = {}
+    // dropped on the instant its ttl is up
+    scene.printNow = 12
+    run()
+    assert.deepEqual(scene.tpMarks.map(m => m.k), [0])
+    scene.printNow = 12.5
+    run()
+    assert.deepEqual(scene.tpMarks.map(m => m.k), [0], 'the 2 s one is gone')
+    scene.printNow = 13.5
+    assert.equal(run().length, 0)
+    assert.equal(scene.tpMarks.length, 0)
+    // capped at 32, oldest first; each scene keeps its own list
+    for (let j = 0; j < 40; j++) {
+      scene.agents = [styled('gitbranch', 0.45, { id: 1000 + j })]
+      run()
+    }
+    assert.equal(scene.tpMarks.length, 32)
+    assert.equal(scene.tpMarks[0].seed, 1008)
+    const other = { agents: [], env: {} }
+    ClaudeOffice.prototype.tpItems.call(other, { ctx: context([]), df: 1 }, [])
+    assert.equal(other.tpMarks, undefined)
+  })
+})
+
+test('tpPerson: the style decides; true at the spot while the body travels', () => {
+  withStyle('dashrun', recorder([]), () => {
+    const page = { env: {}, agents: [], tpPerson: ClaudeOffice.prototype.tpPerson, drawPerson() {} }
+    const G = { ctx: context([]), df: 1, t: 0, th: {}, poly() {}, rect() {} }
+    assert.equal(page.tpPerson(G, styled('dashrun', 0.48)), true, 'travelling')
+    assert.equal(page.tpPerson(G, styled('dashrun', 0.7)), false, 'arrived')
+  })
+  // the person hook sees the frame's snow, as the other hooks do
+  const { SnowLogic } = loadWeb('snow-logic'), snow = []
+  withStyle('dashrun', recorder([], { person: X => (snow.push(X.snow), false) }), () => {
+    const page = { env: {}, agents: [], snowShown: 3, tpPerson: ClaudeOffice.prototype.tpPerson }
+    page.tpPerson({ ctx: context([]), df: 1, t: 0, th: {}, poly() {}, rect() {} }, styled('dashrun', 0.48))
+  })
+  assert.ok(SnowLogic.depth(3) > 0)
+  assert.deepEqual(snow, [SnowLogic.depth(3)])
+})
+
+// A real page and agent for the body passes.
+function realPage() {
+  loadWeb('office-agents')
+  const p = Object.assign(Object.create(ClaudeOffice.prototype), {
+    agents: [], state: { speed: 1, paused: false, sel: null }, env: {}, seq: 0, depts: new Map(),
+  })
+  const a = Object.assign(p.addAgent({}), { status: 'done', x: 10.5, y: 6.5, moving: false, seated: false, tp: null })
+  const log = [],
+    ctx = context(log),
+    rect = (x, y, w, h, c) => ((ctx.fillStyle = c), ctx.fillRect(Math.round(x), Math.round(y), w, h)),
+    G = { ctx, poly() {}, box() {}, rect, th: { ...S.THEMES.day, stroke: '#33415c' }, t: 1.3, df: 1, ev: null, cold: false }
+  return { p, a, log, G }
+}
+
+test('the body pass: armsUp and bare, fields restored after a throw, no stroke in the remap', () => {
+  const { p, a, log, G } = realPage()
+  const X = { page: p, a, G, ctx: G.ctx }
+  P_.body(X, { pose: 'stand', bare: false })
+  const done = log.length
+  log.length = 0
+  P_.body(X, { pose: 'up' })
+  const bare = log.length
+  assert.ok(bare < done, `no done icon over a bare body (${bare} < ${done})`)
+  const before = JSON.stringify(a)
+  const thrower = { ...X, page: { drawPerson: () => { throw new Error('boom') } } }
+  assert.throws(() => P_.body(thrower, { pose: 'walk', front: false, status: 'thinking' }))
+  assert.equal(JSON.stringify(a), before, 'fields restored')
+  assert.equal(P_.isBusy(), false)
+  log.length = 0
+  P_.body(X, { tint: '#ffffff', sx: 0.5 })
+  assert.equal(log.filter(c => c.op === 'strokeRect').length, 0, 'no unmapped blueprint outline')
+  assert.ok(log.filter(c => c.op === 'fillRect').every(c => c.fill === '#ffffff'))
+  // capture records instead of painting
+  log.length = 0
+  const cap = P_.capture(X, { mirror: true }, P_.newCapture())
+  assert.equal(log.filter(c => c.op === 'fillRect').length, 0)
+  assert.ok(cap.n > 20 && cap.n <= P_.MAXCAP && cap.cols.length > 3)
 })

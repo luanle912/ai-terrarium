@@ -8,6 +8,7 @@ import { EventCritters } from './event-critters.js';
 import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import { EventLogic } from './event-logic.js';
+import { TpStyles } from './tp-styles.js';
 import { EventLandmark } from './event-landmark.js';
 import { TeleportLogic } from './teleport-logic.js';
 import {
@@ -80,6 +81,7 @@ export class ClaudeOffice extends React.Component {
     this.seasonChoice = SeasonLogic.loadSeasonChoice(this.storage);
     this.seasonPreview = null;
     this.eventChoice = EventLogic.loadChoice(this.storage);
+    TpStyles.setChoice(TpStyles.loadChoice(this.storage));
     this.eventPreview = null;
     this.goneSids = new Map();
     this.depts = new Map();
@@ -389,9 +391,11 @@ export class ClaudeOffice extends React.Component {
       this.setWeather({ weatherMode: w.mode, city: w.city, cityDraft: w.city }, true);
     // the event choice (EventLogic.adopt): a server that has none yet takes this page's own, sent with the weather
     // the server just gave (this page's own may still be the old one until the state above settles)
-    const e = EventLogic.adopt(ps.event, this.eventChoice, { wallpaper: this.wallpaper, seeded: this.eventSeeded });
+    const e = EventLogic.adopt(ps.event, this.eventChoice, { wallpaper: this.wallpaper, seeded: this.eventSeeded }),
+      tp = TpStyles.adopt(ps.teleport, TpStyles.choice(), { wallpaper: this.wallpaper, seeded: this.eventSeeded });
     if (e.take) this.setEventChoice(e.take, true);
-    if (e.seed) this.pushSettings({ mode: w.mode, city: w.city });
+    if (tp.take) this.setTpChoice(tp.take, true);
+    if (e.seed || tp.seed) this.pushSettings({ mode: w.mode, city: w.city });
     this.eventSeeded = true;
   }
   // The event (web/event-logic.js) on the viewer's clock: a one-minute preview, else the choice in Settings.
@@ -424,6 +428,7 @@ export class ClaudeOffice extends React.Component {
     const body = JSON.stringify({
       weather: weather || { mode: this.state.weatherMode, city: this.state.city },
       event: this.eventChoice || 'auto',
+      teleport: TpStyles.choice(),
     });
     fetch(this.settingsUrl || '/api/settings', {
       method: 'POST',
