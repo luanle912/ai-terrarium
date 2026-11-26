@@ -82,6 +82,7 @@ export class ClaudeOffice extends React.Component {
     this.seasonPreview = null;
     this.eventChoice = EventLogic.loadChoice(this.storage);
     TpStyles.setChoice(TpStyles.loadChoice(this.storage));
+    TpStyles.useHoliday(now => this.tpHoliday(now));
     this.eventPreview = null;
     this.goneSids = new Map();
     this.depts = new Map();
@@ -505,6 +506,12 @@ export class ClaudeOffice extends React.Component {
       now: Date.now(),
     }).key;
     return EventLogic.season(this.eventNow(), key);
+  }
+  // The holiday this page shows, for the teleports. EventLogic.active, not eventNow: no blocking side effects at
+  // planning time. The tree from the calendar, not seasonKey: the world view never runs this page's draw().
+  tpHoliday(now) {
+    const ev = EventLogic.active(new Date(now), this.eventChoice || 'auto', this.eventPreview || null, now);
+    return TpStyles.holidayOf(SeasonTree ? SeasonTree.seasonFor(new Date(now)) : 'default', ev);
   }
   get treeOn() {
     return this.season !== 'default';

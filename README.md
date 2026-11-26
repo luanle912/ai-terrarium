@@ -75,7 +75,7 @@ Open your browser → **http://localhost:4317** — that's it.
 | ⚡ | **Real-time** | Sessions appear and disappear as you open and close Claude Code |
 | 🔍 | **Session status** | See who's working, thinking, waiting for permission, talking, or idle — monitors show the current activity (code editor, terminal, reading, thinking) |
 | ✨ | **Magic teleport** | Agents on a break far from their desk come back through a magic circle and a pillar of light, landing a few steps from their seat — no more long walks back when you return to the page |
-| 🎲 | **Teleport styles** | Thirteen more ways back besides the circle (lightning run, data packet, cut and paste, 3D print, respawn, smoke bomb, twin gates and more). Settings → Teleport picks: Random gives each person a style of their own, Off has everyone walk, or pick one style for all |
+| 🎲 | **Teleport styles** | Thirty-five more ways back besides the circle (lightning run, data packet, caped hero, flying carpet, frog hop, jetpack, flying saucer, paper crane and more), with a sleigh, a lion dance, a star lantern and a bat swarm for Christmas, Tết, Mid-Autumn and Halloween. Settings → Teleport picks: Random gives each person a style of their own (the holiday's on a holiday), Off has everyone walk, or pick one style for all |
 | 🏢 | **Departments** | Sessions are grouped by working directory into up to four department zones with labelled floors |
 | 🤖 | **Sub-agents** | Child agents appear as smaller desks next to their parent |
 | 💤 | **Vacant desks** | Unclaimed desks look greyed out; empty departments show an EMPTY label |
@@ -184,7 +184,7 @@ Open the ⚙ panel in the bottom-right corner of the office:
 - The preview buttons (*Clear, Cloudy, Rain, Storm, Snow, Fog*) show a weather right away.
 - The mode and city are remembered in this browser. With "reduce motion" turned on in your OS, lightning does not flash and rain and snow are lighter.
 - **Event** (under *Season*) is the Christmas event: *Auto* shows it from 1 to 26 December, a little more each week; *On* shows all of it now (winter and snowfall included, whatever the date), *Off* never. The button previews it for a minute. The choice is shared with the wallpaper.
-- **Teleport** (under *Event*): *Random* (the default) gives each person a style of their own, *Off* has everyone walk, or pick one style for everyone. The choice is kept in this browser and shared with the wallpaper.
+- **Teleport** (under *Event*): *Random* (the default) gives each person a style of their own, and everyone the holiday's style on Christmas, Tết, Mid-Autumn or Halloween; *Off* has everyone walk, or pick one style for everyone, which wins over a holiday. The choice is kept in this browser and shared with the wallpaper.
 
 ---
 

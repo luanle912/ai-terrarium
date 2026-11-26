@@ -1,7 +1,5 @@
 // Shared helpers for the teleport styles (web/tp-style-*.js): pixel rasters and bakes, easings, depth rules for the
-// floor, route and arc sampling, cheap batched shards and a 3x5 pixel font. Nothing here holds per-frame state.
-// Some of the contract (TpX.arc and anchors, TpPerson rot and flip, marks other than at 'arr' on the floor) has no
-// user among the current styles; it is kept for the flying styles planned next.
+// floor, route sampling, cheap batched shards and a 3x5 pixel font. Nothing here holds per-frame state.
 import { H, OX, OY, PA, PG, TH, TW, W, WC } from './office-scene.js';
 import { hash } from './island-grid.js';
 import { PantryItems } from './pantry-items.js';

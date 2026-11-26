@@ -92,14 +92,14 @@ page.tpPerson = function (G, a) {
 }
 page.drawPerson = function (G, a) {
   depth++
-  const p0 = C.paint, b0 = C.body, n0 = C.passes
+  const p0 = C.paint, b0 = C.body, n0 = C.passes, alpha = G.ctx.globalAlpha
   tpRet = null
   try {
     drawPerson.call(this, G, a)
   } finally {
     const all = C.paint - p0, nested = C.body - b0
-    if (depth > 1) (C.passes++, (C.body += all - nested))
-    else if (!tpRet) (C.passes++, (C.body += all - nested))
+    if (depth > 1) (C.passes++, (C.body += all - nested), C.alphas.push(alpha))
+    else if (!tpRet) (C.passes++, (C.body += all - nested), C.alphas.push(alpha))
     if (depth === 1) C.extra += Math.max(0, C.passes - n0 - 1)
     depth--
   }
@@ -128,7 +128,8 @@ function frame(agents, cfg = {}) {
   if (!cfg.keep) page.tpMarks = []
   page.env = { reduced: !!cfg.reduced }
   page.snowShown = cfg.snow || 0
-  Object.assign(C, { paint: 0, path: 0, log: [], bad: [], saves: 0, restores: 0, passes: 0, body: 0, extra: 0 })
+  Object.assign(C, { paint: 0, path: 0, log: [], bad: [], saves: 0, restores: 0, passes: 0, body: 0, extra: 0,
+    alphas: [] })
   const { G, state, depth: d } = sceneG(cfg), items = []
   page.tpItems(G, items)
   const tpItems = items.length
@@ -142,7 +143,7 @@ function frame(agents, cfg = {}) {
   if (s.dash.length) C.bad.push('line dash left set')
   if (C.saves !== C.restores || d()) C.bad.push(`save ${C.saves} / restore ${C.restores}`)
   return { paint: C.paint - C.body, path: C.path, passes: C.passes, extra: C.extra, items: tpItems, bad: [...C.bad],
-    log: C.log.join('|'), walker: C.walker }
+    log: C.log.join('|'), walker: C.walker, alphas: [...C.alphas] }
 }
 // Puts agent a mid-teleport in style id at real clock u.
 function pose(a, id, u, over = {}) {
@@ -233,6 +234,9 @@ test('the sources keep to the drawing rules', () => {
     }
     assert.ok(!/\bimport\(/.test(code), `${f}: no dynamic import`)
     for (const re of BAN) assert.ok(!re.test(code), `${f}: ${re}`)
+    // no words in the art: they would stay English in every language
+    for (const m of code.matchAll(/\.text\((?:[^'`,()]*,\s*)?['`]([^'`]*)['`]/g))
+      assert.ok(!/\p{L}/u.test(m[1]), `${f}: '${m[1]}'`)
     const made = (code.match(/document\.createElement/g) || []).length
     assert.equal(made, f === 'tp-kit.js' ? 1 : 0, `${f}: canvases only through Kit.atlas`)
   }
@@ -267,10 +271,11 @@ for (const id of IDS)
     assert.deepEqual(sweep(id, base), [])
     assert.equal(K.made.length, again, 'no canvas on a second sweep')
     assert.equal(K.grads, grads, 'no gradient per frame')
-    // the same frame twice draws the same
+    // the same frame twice draws the same (a mark born in the first is born again: frame() empties the list)
     for (const c of [0.2, 0.48, 0.7]) {
-      const a = pose(people[0], id, TL.real(c, d))
-      assert.equal(frame([a], base).log, frame([a], base).log, `${id} at core ${c}`)
+      const a = pose(people[0], id, TL.real(c, d)), once = frame([a], base).log
+      a.tp.mk = 0
+      assert.equal(once, frame([a], base).log, `${id} at core ${c}`)
     }
     // a crowd of eleven: lite, within the lite cap each, no extra body pass (the circle is exempt from that)
     const crowd = people.slice(0, 11).map((a, j) => pose(a, id, TL.real(0.5, d) + 0.001 * j, { from: [21.5 + j, 10.5] }))
@@ -297,6 +302,57 @@ test('no landing draws before L_IN, so a hidden start fades in from its first fr
   report(out)
 })
 
+// A flier from a hidden start lands like anyone else: the arrival draws the person every frame until the walker.
+// Holiday air styles too: sleigh and starlantern carry a body, bats gathers back through capture() passes.
+test('a flying style draws the person through the whole arrival of a hidden start', () => {
+  TpStyles.reset()
+  const base = GRID[0], out = [], fly = ({ tier, kind }) => tier === 'F' || (tier === 'H' && kind === 'air')
+  for (const id of IDS.filter(i => fly(TpStyles.BY_ID[i]) && DRAW[i])) {
+    const d = TpStyles.durs(id, 20)
+    for (let c = TL.ARR; c < T.RELEASE; c += 0.01) {
+      const f = frame([pose(people[0], id, TL.real(c, d), { hide: true })], base)
+      if (!f.passes) out.push(`${id} at core ${c.toFixed(2)}: no body`)
+    }
+  }
+  report(out, 40)
+})
+
+// The flier fades in at the stall's exit from L_IN, so its ground shadow must too (ground()'s out[3]).
+test('a hidden start fades the ground shadow in with the flier, no dark blob alone at the exit', () => {
+  TpStyles.reset()
+  const { Kit } = loadWeb('tp-kit'), was = Kit.shadow, got = [], out = []
+  Kit.shadow = (ctx, x, y, w, al) => (got.push(al), was(ctx, x, y, w, al))
+  try {
+    for (const id of IDS.filter(i => TpStyles.BY_ID[i].kind === 'air' && DRAW[i])) {
+      const d = TpStyles.durs(id, 20)
+      got.length = 0
+      frame([pose(people[0], id, TL.real(T.L_IN + 0.002, d), { hide: true })], GRID[0])
+      const hi = got.filter(al => al > 0.3)
+      if (hi.length) out.push(`${id}: shadow alpha ${hi.map(al => al.toFixed(2))}`)
+    }
+  } finally {
+    Kit.shadow = was
+  }
+  report(out)
+})
+
+// A cut rewinds to the person standing where they were: the last frames before the walker takes over draw them whole,
+// so they do not fade out and pop back (only the effect fades with L.C).
+test('a cut ends with the person drawn whole, not faded out before the walker pops back', () => {
+  TpStyles.reset()
+  const base = GRID[0], out = []
+  for (const id of IDS) {
+    const d = TpStyles.durs(id, 20)
+    for (const c of [0.05, 0.21].map(k => TL.real(k, d)))
+      for (const k of [1, 2]) {
+        const f = frame([pose(people[0], id, c + T.CUT - k / 60, { cut: c })], base)
+        const low = f.alphas.filter(al => al < 0.95)
+        if (low.length) out.push(`${id} cut at ${c.toFixed(2)} s, ${k} frame(s) before the end: body alpha ${low}`)
+      }
+  }
+  report(out, 40)
+})
+
 // 16 people 0.15 s apart from 16 spots to 16 desks; the peak of paint plus 68 per extra body pass.
 function shower(styleOf, df) {
   const from = j => [21.5 + (j % 4), 3.5 + j * 0.6], to = j => [2.5 + (j % 8) * 2, 4.5 + Math.floor(j / 8) * 6]
@@ -319,8 +375,11 @@ test('a 16-person shower stays under 900 calls a frame, every style alone and mi
       const peak = shower(() => id, df)
       assert.ok(peak <= 900, `${id} at df ${df}: ${peak}`)
     }
-    const mixed = shower(j => IDS[j % IDS.length], df)
-    assert.ok(mixed <= 900, `mixed at df ${df}: ${mixed}`)
+    // Every style in some mixed shower of 16, whatever the registry's length.
+    for (let s = 0; s < IDS.length; s += 16) {
+      const mixed = shower(j => IDS[(s + j) % IDS.length], df)
+      assert.ok(mixed <= 900, `mixed from ${IDS[s]} at df ${df}: ${mixed}`)
+    }
   }
 })
 
@@ -351,6 +410,49 @@ function marks(id, cfg) {
   page.printNow = 0
   return out
 }
+
+// Whatever the frame phase, a mark is drawn on its birth frame, even into an empty list, and its age there is the
+// real time since its point, so the live end and the mark hand over without a gap.
+test('lasting marks: drawn on the birth frame, aged from their exact point', () => {
+  TpStyles.reset()
+  const ids = IDS.filter(id => DRAW[id] && DRAW[id].marks && DRAW[id].marks.length), out = [], dt = 1 / 30
+  for (const id of ids) {
+    const S = DRAW[id], own = S.drawMark, d = TpStyles.durs(id, 20), a = people[0]
+    const calls = new Map()
+    S.drawMark = function (X, m, age) {
+      calls.set(m, age)
+      return own.call(this, X, m, age)
+    }
+    try {
+      for (const off of [0, dt / 3, (2 * dt) / 3]) {
+        page.tpMarks = []
+        a.tp = null
+        const seen = new Set()
+        for (let u = off; u < TL.real(T.END, d); u += dt) {
+          const mk = a.tp ? a.tp.mk : 0
+          pose(a, id, u)
+          a.tp.mk = mk
+          page.printNow = u
+          calls.clear()
+          frame([a], { keep: true })
+          for (const m of page.tpMarks) {
+            if (seen.has(m)) continue
+            seen.add(m)
+            const at = S.marks[m.k].at, c = at === 'dep' ? TL.DEP : at === 'arr' ? TL.ARR : T.RELEASE
+            const want = u - TL.real(c, d), tag = `${id} mark ${m.k} born at u ${u.toFixed(3)}`
+            if (!calls.has(m)) out.push(`${tag}: not drawn on its birth frame`)
+            else if (Math.abs(calls.get(m) - want) > 1e-9) out.push(`${tag}: age ${calls.get(m)}, want ${want}`)
+          }
+        }
+      }
+    } finally {
+      S.drawMark = own
+      page.tpMarks = []
+      page.printNow = 0
+    }
+  }
+  report(out)
+})
 
 test('lasting marks: born once, within budget and the context rules while they fade, then gone', () => {
   TpStyles.reset()

@@ -40,14 +40,14 @@ test('shards: one fill per colour, moved or skipped per rect', () => {
   assert.deepEqual(log.filter(c => c[0] === 'fill').map(c => c.at(-1)), ['#a'])
 })
 
-test('route, arc, desk and hanging points', () => {
+test('route and desk', () => {
   const route = [[0.5, 0.5], [10.5, 0.5], [10.5, 5.5]]
   const q = Kit.along(route, 0, 0.5, [])
   assert.deepEqual([q[2], q[3], q[4]], [8, 0.5, true], 'half of 15 tiles along')
   assert.deepEqual(q.slice(0, 2), S.PA(8, 0.5).map(Math.round))
   assert.deepEqual(Kit.along(route, 1, 0, []).slice(2, 4), [10.5, 0.5], 'a hidden head skipped')
   const { DRAW } = loadWeb('tp-style-index'), was = DRAW.dashrun, got = {}
-  DRAW.dashrun = { trip: X => Object.assign(got, { arc: X.arc(0.5, 40), desk: X.desk(), hang: X.anchors(3, 40), X }) }
+  DRAW.dashrun = { trip: X => Object.assign(got, { desk: X.desk(), X }) }
   try {
     const d = [0.5, 1.2, 0.5, 0.4], a = { id: 3, desk: 2, x: 21.5, y: 10.5, path: [], tp: null }
     a.tp = { u: 0.5 + 0.6, x0: 21.5, y0: 10.5, x1: 3.5, y1: 4.5, cut: null, hide: false, style: 'dashrun', d, swAt: 0.42,
@@ -56,7 +56,6 @@ test('route, arc, desk and hanging points', () => {
     ClaudeOffice.prototype.tpItems.call({ agents: [a], env: {} }, { ctx: ctxLog([]), df: 1, t: 0 }, items)
     items.forEach(i => i.f())
     const { X } = got
-    assert.deepEqual(got.arc, [Math.round((X.x0 + X.x1) / 2), Math.round((X.y0 + X.y1) / 2 - 40)])
     const D = S.DESKS[2]
     assert.deepEqual(got.desk.slice(0, 2), S.P(D.gx + 1, D.gy + 0.22, 23.6).map(Math.round))
     assert.ok(Math.abs(got.desk[2] - (D.gx + D.gy + 1.51)) < 1e-9)
@@ -68,8 +67,6 @@ test('route, arc, desk and hanging points', () => {
     const V = S.DESKS[5]
     assert.deepEqual(got.desk.slice(0, 2), S.P(V.gx + 1, V.gy + 0.22, 23.6).map(Math.round))
     delete a.tp.desk
-    assert.equal(got.hang.length, 3)
-    assert.ok(got.hang.every(([x, y]) => y === Math.min(X.y0, X.y1) - 190 && x > X.x1 && x < X.x0))
     assert.ok(Math.abs(Math.hypot(...X.dir0) - 1) < 1e-9 && X.dir0[0] < 0, 'screen direction of the first leg')
   } finally {
     DRAW.dashrun = was

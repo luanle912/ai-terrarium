@@ -38,7 +38,7 @@ function page(over = {}) {
   return { p, saved, pushed }
 }
 
-test('the section lists Random, Off and every style by name', () => {
+test('the section lists Random, Off and every style by name, the holiday ones apart', () => {
   TpStyles.reset()
   const { p } = page(),
     el = p.teleportSection(),
@@ -54,8 +54,10 @@ test('the section lists Random, Off and every style by name', () => {
     assert.ok(!text(o).startsWith('tp.style.'), `${o.props.value} has an English name`)
   }
   const groups = all(sel, 'optgroup')
-  assert.deepEqual(groups.map(g => g.props.label), [tr('settings.teleport.styles')])
+  assert.equal(opts.length, 38)
+  assert.deepEqual(groups.map(g => g.props.label), [tr('settings.teleport.styles'), tr('settings.teleport.holidays')])
   assert.deepEqual(all(groups[0], 'option').map(o => o.props.value), TpStyles.RANDOM)
+  assert.deepEqual(all(groups[1], 'option').map(o => o.props.value).sort(), Object.values(TpStyles.HOLIDAY).sort())
   assert.equal(text(all(el, 'label')[0]).startsWith(tr('settings.teleport')), true)
 })
 
@@ -80,6 +82,8 @@ test('adoptSettings takes the server choice; a server with none is seeded once w
   const { p, pushed } = page({ wallpaper: false })
   p.adoptSettings({ weather: { mode: 'off', city: '' }, teleport: 'gitbranch' })
   assert.equal(TpStyles.choice(), 'gitbranch')
+  p.adoptSettings({ weather: { mode: 'off', city: '' }, teleport: 'mole' })
+  assert.equal(TpStyles.choice(), 'mole')
   assert.equal(pushed.length, 0, 'taken from the server: not posted back')
   const q = page({ wallpaper: false })
   TpStyles.setChoice('pipe')

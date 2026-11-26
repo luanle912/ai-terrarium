@@ -2,7 +2,6 @@
 // teleport playing gets its style's items (web/tp-style-<id>.js through web/tp-style-index.js) at the right depths,
 // the person is drawn the way the style shows them, and lasting marks (a scorch) fade on the floor.
 // A style without a draw object and every teleport under reduced motion are drawn by the magic circle.
-// arc(), anchors() and the needOf fallback have no user among the current styles: kept for the flying styles next.
 import { TeleportLogic } from './teleport-logic.js';
 import { TpStyles } from './tp-styles.js';
 import { DRAW } from './tp-style-index.js';
@@ -48,7 +47,7 @@ class TpX {
     this.L = TeleportLogic.newPhase();
     this.dir0 = [1, 0];
     this.dir1 = [1, 0];
-    this.gnd = [0, 0, 0];
+    this.gnd = [0, 0, 0, 1];
     this.look = null;
   }
   fill(page, G, a, k, all, calm, lite, lo, snow) {
@@ -130,12 +129,6 @@ class TpX {
     out[4] = this.tx1 - this.tx0 + this.ty1 - this.ty0 >= 0;
     return out;
   }
-  // [px, py] on a parabola h px above the chord between the two feet.
-  arc(p, h, out = [0, 0]) {
-    out[0] = Math.round(Kit.lerp(this.x0, this.x1, p));
-    out[1] = Math.round(Kit.lerp(this.y0, this.y1, p) - 4 * h * p * (1 - p));
-    return out;
-  }
   // [px, py, z]: the middle of the landing desk's monitor screen and a depth just over the desk.
   desk(out = [0, 0, 0]) {
     const d = this.a && DESKS[this.tp.desk == null ? this.a.desk : this.tp.desk];
@@ -149,18 +142,6 @@ class TpX {
     out[0] = Math.round(p[0]);
     out[1] = Math.round(p[1]);
     out[2] = d.gx + d.gy + 1.5 + 0.01;
-    return out;
-  }
-  // n virtual hanging points along the chord, 150 px above the top of an arc h px high (nothing drawn there).
-  anchors(n, h, out = []) {
-    const top = Math.min(this.y0, this.y1) - h - 150;
-    for (let j = 0; j < n; j++) {
-      const p = (j + 0.5) / n,
-        q = out[j] || (out[j] = [0, 0]);
-      q[0] = Math.round(Kit.lerp(this.x0, this.x1, p));
-      q[1] = Math.max(8, Math.round(top));
-    }
-    out.length = n;
     return out;
   }
   hash(k, salt) {
@@ -189,7 +170,8 @@ const XS = [],
 // The last frame's teleport list and crowd flag, for tpPerson in the same frame.
 const FRAME = { page: null, all: [], lite: false };
 
-// The style's items this frame: its own need, else every hook it has (the trip only while travelling).
+// The style's items this frame: its own need, else every hook it has (the trip only while travelling); every drawn
+// style has a need, the fallback serves the tests' recorder styles.
 function needOf(S, X) {
   if (S.need) return S.need(X);
   return (
@@ -237,19 +219,22 @@ function tripItems(X, items, n) {
       items.push({ z: RP[2] + RP[3] + 0.01, f: () => S.trip(X) });
     return;
   }
-  const g = X.gnd,
-    has = !!(S.ground && S.ground(X, g));
+  const g = X.gnd;
+  g[3] = 1; // the pool keeps last frame's fade
+  const has = !!(S.ground && S.ground(X, g));
   const z = !has ? 1e9 : g[2] < LOW ? g[0] + g[1] + 0.01 : 1e9 + (g[0] + g[1]) / 1e3;
   items.push({ z, f: () => S.trip(X) });
   if (has && n & 128) {
-    const [gx, gy, h] = g,
+    const [gx, gy, h, fade] = g,
       p = PA(gx, gy),
       px = Math.round(p[0]),
       py = Math.round(p[1]);
-    items.push({ z: Kit.floorZ(gx, gy), f: () => Kit.shadow(X.ctx, px, py, 14, 0.9 * (1 - Math.min(1, h / 160))) });
+    const al = 0.9 * fade * (1 - Math.min(1, h / 160));
+    items.push({ z: Kit.floorZ(gx, gy), f: () => Kit.shadow(X.ctx, px, py, 14, al) });
   }
 }
-// A lasting mark is born on the first drawn frame past its point, once per teleport, never in a cut or calm.
+// A lasting mark is born on the first drawn frame past its point, once per teleport, never in a cut or calm. Its age
+// counts from the point itself, so the live end hands over to it without a frame's gap.
 function birth(page, X, now) {
   const marks = X.S.marks,
     tp = X.tp;
@@ -267,9 +252,10 @@ function birth(page, X, now) {
       x: m.end ? tp.x1 : X.tx0,
       y: m.end ? tp.y1 : X.ty0,
       dir: [dir[0], dir[1]],
-      t0: now,
+      t0: now - (tp.u - TeleportLogic.real(at, tp.d)),
       ttl: m.ttl,
       seed: X.a.id,
+      hide: !!tp.hide,
     });
   });
 }
@@ -296,8 +282,7 @@ mixin(
   class {
     // Every teleport's items (queued ones only their dim circle) and the lasting marks still fading.
     tpItems(G, items) {
-      const marks = this.tpMarks && this.tpMarks.length;
-      if (!marks && !this.agents.some(hasTp)) return;
+      if (!(this.tpMarks && this.tpMarks.length) && !this.agents.some(hasTp)) return;
       const tps = this.agents.filter(hasTp),
         calm = calmOf(this),
         lo = G.ctx.getTransform().a < 1,
@@ -318,7 +303,8 @@ mixin(
         if (need & Kit.PART.RUG && X.S.rug) items.push({ z: Kit.RUG_Z, f: () => X.S.rug(X) });
         if (need & Kit.PART.DESK && X.S.desk) items.push({ z: X.desk(DZ)[2], f: () => X.S.desk(X) });
       });
-      if (marks) markItems(this, G, items, now, lo, calm, snow);
+      // read again: a mark born this frame is drawn this frame
+      if (this.tpMarks && this.tpMarks.length) markItems(this, G, items, now, lo, calm, snow);
     }
     // Draws the person as the teleport shows them; false leaves drawPerson to draw them as usual. Runs at the walker's
     // depth, which is the landing from a traveller's switch: its body in flight belongs to trip(), so this hides it.

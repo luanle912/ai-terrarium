@@ -439,6 +439,18 @@ const recorder = (log, over = {}) => ({
   ...over,
 })
 
+// Call counts can differ slightly: a stub runs on its own durations, not the circle's.
+test('every unfinished style (a stub) draws the circle on its own clock', () => {
+  const stubs = Object.keys(DRAW).filter(k => DRAW[k] === null)
+  for (const id of stubs)
+    for (const c of [0.1, 0.3, 0.48, 0.6, 1.0]) {
+      const s = frame([styled(id, c, { id: 7 })]),
+        o = frame([mover(c, { id: 7 })])
+      assert.deepEqual(s.zs, o.zs, `${id}: items at core ${c}`)
+      assert.ok(s.paints > 0 && Math.abs(s.paints - o.paints) <= 4, `${id}: ${s.paints} calls at core ${c}`)
+    }
+})
+
 test('a style without a draw object draws the circle on its own clock', () => {
   withStyle('dashrun', null, () => {
     for (const c of [0.1, 0.3, 0.48, 0.6, 1.0]) {
@@ -503,6 +515,17 @@ test('items sit at their depth per kind', () => {
   })
 })
 
+// A hidden start fades the flier in from L_IN: ground()'s out[3] fades its shadow with it (the pool resets it to 1).
+test('an air shadow takes the alpha ground() reports in out[3], and 1 when it reports none', () => {
+  const shade = a3 => {
+    const ground = (X, out) => ((out[0] = 9), (out[1] = 9), (out[2] = 0), a3 != null && (out[3] = a3), true)
+    return withStyle('cutpaste', recorder([], { ground, trip: () => {} }), () =>
+      frame([styled('cutpaste', 0.5)]).ops('fillRect').map(c => c.alpha))
+  }
+  assert.deepEqual(shade(0.25), [0.9 * 0.25, 0.9 * 0.25])
+  assert.deepEqual(shade(null), [0.9, 0.9], 'not carried over from the last frame')
+})
+
 test('a stretch over the lounge rug gets one item just over the rug, only when asked for and drawn', () => {
   const RUG = loadWeb('tp-kit').Kit.RUG_Z
   assert.ok(RUG > 19 && RUG < 19.5, 'over the rug item, under anything standing on it')
@@ -545,7 +568,7 @@ test('a hidden starter has no origin items; its route starts off the restroom fl
 
 test('a hidden air start leaves from the first point off the restroom floor, not the stall', () => {
   const log = [], { RestroomLogic } = loadWeb('restroom-logic')
-  const out = X => log.push({ arc: X.arc(0, 40), tx0: X.tx0, ty0: X.ty0, chord: X.route(0.5, []), dir: [...X.dir0] })
+  const out = X => log.push({ arc: [X.x0, X.y0], tx0: X.tx0, ty0: X.ty0, chord: X.route(0.5, []), dir: [...X.dir0] })
   withStyle('upload', recorder(log, { trip: out }), () => {
     const a = styled('upload', 0.48, { hide: true, from: [29.5, 1.6] })
     a.tp.route = [[29.5, 1.6], [28.5, 3.5], [27.5, 5.5], [26.5, 6.5], ...ROUTE.slice(1)]
@@ -554,7 +577,7 @@ test('a hidden air start leaves from the first point off the restroom floor, not
     assert.ok(RestroomLogic.onFloor(S.WC, 29.5, 1.6), 'from a stall')
     assert.ok(!RestroomLogic.onFloor(S.WC, got.tx0, got.ty0), `origin ${got.tx0},${got.ty0} off the restroom floor`)
     assert.deepEqual([got.tx0, got.ty0], [26.5, 6.5])
-    assert.deepEqual(got.arc, PA(26.5, 6.5).map(Math.round), 'the arc starts there')
+    assert.deepEqual(got.arc, PA(26.5, 6.5).map(Math.round), 'the flight starts there')
     assert.deepEqual(got.chord.slice(2, 4), [(26.5 + LAND[0]) / 2, (6.5 + LAND[1]) / 2], 'an air route: the chord from there')
     assert.ok(got.dir[0] < 0, 'heading west along the chord')
   })
@@ -602,10 +625,13 @@ test('lasting marks: born once, aged on printNow, capped, drawn without the agen
     run()
     run()
     assert.equal(scene.tpMarks.length, 1, 'the origin mark, once')
-    assert.deepEqual([scene.tpMarks[0].x, scene.tpMarks[0].y, scene.tpMarks[0].t0], [...ORIGIN, 10])
+    // aged from DEP itself, not from the frame that found it
+    const late0 = a.tp.u - TL.real(TL.DEP, a.tp.d)
+    assert.deepEqual([scene.tpMarks[0].x, scene.tpMarks[0].y, scene.tpMarks[0].t0], [...ORIGIN, 10 - late0])
     a.tp.u = TL.real(0.7, a.tp.d)
     run()
     assert.equal(scene.tpMarks.length, 2)
+    const late1 = a.tp.u - TL.real(TL.ARR, a.tp.d)
     // cut or calm: none born
     const b = styled('gitbranch', 0.7, { id: 78, cut: 0.2 })
     scene.agents = [b]
@@ -616,7 +642,11 @@ test('lasting marks: born once, aged on printNow, capped, drawn without the agen
     got.length = 0
     scene.printNow = 11.5
     const items = run()
-    assert.deepEqual(got.map(g => [g[0], g[1], g[2], g[3]]).sort(), [[0, 1.5, null, null], [1, 1.5, null, null]])
+    const r9 = v => +v.toFixed(9)
+    assert.deepEqual(got.map(g => [g[0], r9(g[1]), g[2], g[3]]).sort(), [
+      [0, r9(1.5 + late0), null, null],
+      [1, r9(1.5 + late1), null, null],
+    ])
     assert.ok(items.some(i => i.z === -0.5) && items.some(i => near(i.z, LAND[0] + LAND[1] + 0.01)))
     // under reduced motion they keep fading but draw nothing
     scene.env = { reduced: true }

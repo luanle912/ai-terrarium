@@ -750,6 +750,10 @@ test('pays reads the durations: a slow style must still beat the walk', () => {
   assert.ok(go(12, 'dashrun'))
   assert.equal(go(12, 'upload'), null, 'its longer timeline does not pay over 12 tiles')
   assert.ok(go(13, 'upload'))
+  const held = id => `${TL.real(T.RELEASE, TpStyles.durs(id, 13)).toFixed(1)} s held`
+  assert.ok(go(13, 'frog'), `${held('frog')} and 4 tiles walked beat a 5 s walk`)
+  assert.equal(go(13, 'balloons'), null, `${held('balloons')} and 4 tiles walked save under 0.5 s`)
+  assert.ok(go(30, 'balloons'))
   const a = row(0.5, 14),
     tp = TL.plan(a, ctx(a, 'idle3', 'seat', { chairs: [] }))
   assert.equal(TL.pays(a, tp.i, 0, 1, tp.d), true)
@@ -834,7 +838,7 @@ test('step keeps a stool sitter seated until core SQUEEZE, on a long departure t
 
 test('a hidden starter begins at L_IN on the core clock, so every landing fades in from its start', () => {
   pin()
-  for (const style of ['circle', 'dashrun', 'goldaura', 'printer3d', 'pipe', 'portal', 'upload']) {
+  for (const style of ['circle', 'dashrun', 'goldaura', 'printer3d', 'pipe', 'portal', 'upload', 'cannon', 'frog']) {
     const a = row(0.5, 31),
       tp = TL.plan(a, { prev: prev('idle26', { hid: true }), key: 'seat', agents: [a], chairs: [], speed: 1, style })
     assert.ok(near(tp.u, TL.real(T.L_IN, tp.d), 1e-12), style)

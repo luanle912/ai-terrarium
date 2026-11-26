@@ -362,31 +362,33 @@ test('back to work while it rewinds: the rewind plays out, then a fresh teleport
   }
 })
 
-test('a bather leaves from the pond, not from the skate bank', () => {
-  const si = IDLE_SPOTS.findIndex(s => s.act === 'bath'),
-    sp = IDLE_SPOTS[si]
-  assert.ok(CRITTER_PLACES.water.has(sp.tile.join(',')), 'the bath is in the lake')
-  const a = parked(si, 0),
-    p = page([a])
-  a.status = 'working'
-  p.updateAgent(a, DT)
-  assert.ok(a.tp && a.tp.free)
-  assert.deepEqual([a.x, a.y, a.tp.x0, a.tp.y0], [...sp.pt, ...sp.pt])
-  // Called off: rewound in the pond, then walks out of it.
-  while (a.tp.u < 0.3) p.updateAgent(a, DT)
-  a.status = 'idle'
-  p.updateAgent(a, DT)
-  assert.ok(a.tp.cut != null)
-  assert.deepEqual([a.x, a.y], sp.pt)
-  // Walking away (no teleport) still steps out at the bank, as before.
-  const b = parked(si, 0),
-    q = page([b])
-  b.idleSpot = null
-  q.updateAgent(b, 0)
-  const s = EVENT_IDLE.spots.find(e => e.act === 'skate')
-  assert.ok(!b.tp && b.goalKey.startsWith('idle'))
-  assert.deepEqual([b.x, b.y], [s.tile[0] + 0.5, s.tile[1] + 0.5])
-})
+// Seeded: the walk-away half picks its goal with Math.random.
+test('a bather leaves from the pond, not from the skate bank', () =>
+  withRandom(() => {
+    const si = IDLE_SPOTS.findIndex(s => s.act === 'bath'),
+      sp = IDLE_SPOTS[si]
+    assert.ok(CRITTER_PLACES.water.has(sp.tile.join(',')), 'the bath is in the lake')
+    const a = parked(si, 0),
+      p = page([a])
+    a.status = 'working'
+    p.updateAgent(a, DT)
+    assert.ok(a.tp && a.tp.free)
+    assert.deepEqual([a.x, a.y, a.tp.x0, a.tp.y0], [...sp.pt, ...sp.pt])
+    // Called off: rewound in the pond, then walks out of it.
+    while (a.tp.u < 0.3) p.updateAgent(a, DT)
+    a.status = 'idle'
+    p.updateAgent(a, DT)
+    assert.ok(a.tp.cut != null)
+    assert.deepEqual([a.x, a.y], sp.pt)
+    // Walking away (no teleport) still steps out at the bank, as before.
+    const b = parked(si, 0),
+      q = page([b])
+    b.idleSpot = null
+    q.updateAgent(b, 0)
+    const s = EVENT_IDLE.spots.find(e => e.act === 'skate')
+    assert.ok(!b.tp && b.goalKey.startsWith('idle'))
+    assert.deepEqual([b.x, b.y], [s.tile[0] + 0.5, s.tile[1] + 0.5])
+  }))
 
 test('the bather skips the queue in the real shower', () =>
   withRandom(() => {
@@ -409,12 +411,13 @@ test('a visitor to desk 15 slot 2 does not land on the stairs', () => {
   assert.ok(!(y1 === S.H + 0.5 && x1 > 22 && x1 < 24), `lands at ${x1},${y1}`)
 })
 
-// ---- styles: every one alone, mixed, a fixed choice, off ----
+// ---- styles: every one alone, mixed, a holiday, a fixed choice, off ----
 
 // The 16-person return in one style choice; what each person did.
-function showerIn(choice, { speed = 1 } = {}) {
+function showerIn(choice, { speed = 1, holiday = null } = {}) {
   TpStyles.reset()
   TpStyles.setChoice(choice)
+  if (holiday) TpStyles.useHoliday(() => holiday)
   try {
     return withRandom(() => {
       const p = page(park())
@@ -443,7 +446,14 @@ test('random styles: one per person, everyone seated within 7.8 s', () => {
   const r = showerIn('random')
   assert.ok(r.last < 7.8, `seated after ${r.last} s`)
   assert.ok(new Set(r.tps.map(tp => tp.style)).size >= 8, 'a mix of styles')
-  assert.ok(r.tps.every(tp => TpStyles.RANDOM.includes(tp.style)))
+  assert.ok(r.tps.every(tp => TpStyles.RANDOM.includes(tp.style)), 'no holiday style on a normal day')
+})
+
+test('on a holiday its style takes over; a fixed choice still wins', () => {
+  const xmas = showerIn('random', { holiday: 'christmas' })
+  assert.ok(xmas.tps.length >= 13 && xmas.tps.every(tp => tp.style === 'sleigh'))
+  const fixed = showerIn('frog', { holiday: 'christmas' })
+  assert.ok(fixed.tps.length >= 13 && fixed.tps.every(tp => tp.style === 'frog'))
 })
 
 test('a fixed choice gives everyone that style; off walks everyone', () => {
@@ -455,7 +465,9 @@ test('a fixed choice gives everyone that style; off walks everyone', () => {
 
 test('at speed 3 a slow style teleports fewer than the circle', () => {
   const circle = showerIn('circle', { speed: 3 }),
-    slow = showerIn('upload', { speed: 3 })
+    slow = showerIn('upload', { speed: 3 }),
+    slowest = showerIn('balloons', { speed: 3 })
   assert.equal(circle.tps.length, 10)
   assert.ok(slow.tps.length < 10, `${slow.tps.length} uploads`)
+  assert.ok(slowest.tps.length < 10, `${slowest.tps.length} balloons`)
 })
