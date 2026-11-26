@@ -262,9 +262,9 @@ test('wired into the page, the world view and the bubbles', () => {
   assert.match(readWeb('office-draw'), /this\.fateItems\(G, items\);\n\s*this\.tpItems\(G, items\);/)
   assert.match(
     readWeb('office-draw-people'),
-    /drawPerson\(G, a\) \{\n\s*const \{[^}]*\} = G,\n\s*o = outfitOf\(a, G\.ev\);\n\s*if \(a\.tp && this\.tpPerson\(G, a\)\) return;/,
+    /drawPerson\(G, a\) \{\n\s*const \{[^}]*\} = G,\n\s*o = outfitOf\(a, G\.look\);\n\s*if \(a\.tp && this\.tpPerson\(G, a\)\) return;/,
   )
-  assert.match(readWeb('office-draw-fate'), /const who = \{[^\n]*\};\n\s*who\.tp = null;/)
+  assert.match(readWeb('office-draw-fate'), /const who = \{[^}]*outfitPin: true,\n\s*tp: null,\n\s*\};/)
   const office = readWeb('office')
   assert.match(office, /^import \{ TeleportLogic \} from '\.\/teleport-logic\.js';$/m)
   assert.match(office, /el\.style\.visibility = TeleportLogic\.unseen\(a\.tp\) \? 'hidden' : '';/)
@@ -285,6 +285,7 @@ test('the speech bubble hides while the person is white or gone', () => {
   const page = Object.assign(Object.create(ClaudeOffice.prototype), {
     agents: [a, b], state: { paused: true, speed: 1 }, world: null, last: 1000, bubbleEls: { [a.id]: el, [b.id]: el2 },
     draw() {}, drawSky() {}, envNow: () => ({}), doneSweep() {}, stepDogs() {}, stepCritters() {}, stepProps() {},
+    stepBears() {}, seeLook() {},
     headPos: () => [100, 100],
   })
   ClaudeOffice.prototype.frame.call(page, 1016)
@@ -395,7 +396,7 @@ test('no idle Z beside the column while a cut rewinds to idle', () => {
         ctx.fillRect(Math.round(x), Math.round(y), w, h)
       }
     a.tp = tp
-    p.drawPerson({ ctx, poly() {}, box() {}, rect, th: S.THEMES.day, t: 1.3, df: 1, ev: null, cold: false }, a)
+    p.drawPerson({ ctx, poly() {}, box() {}, rect, th: S.THEMES.day, t: 1.3, df: 1, look: null, cold: false }, a)
     return log.filter(c => c.op === 'fillRect' && c.fill === '#e6e9ef' && c.a[2] === 1 && c.a[3] === 1).length
   }
   assert.ok(zs(null) > 0, 'idle and no teleport: the Z')
@@ -703,7 +704,7 @@ function realPage() {
   const log = [],
     ctx = context(log),
     rect = (x, y, w, h, c) => ((ctx.fillStyle = c), ctx.fillRect(Math.round(x), Math.round(y), w, h)),
-    G = { ctx, poly() {}, box() {}, rect, th: { ...S.THEMES.day, stroke: '#33415c' }, t: 1.3, df: 1, ev: null, cold: false }
+    G = { ctx, poly() {}, box() {}, rect, th: { ...S.THEMES.day, stroke: '#33415c' }, t: 1.3, df: 1, look: null, cold: false }
   return { p, a, log, G }
 }
 

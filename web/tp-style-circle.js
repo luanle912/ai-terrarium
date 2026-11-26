@@ -2,7 +2,8 @@
 // white and thinning into the light. The circle and the rings are pixel sprites baked once, on the first teleport
 // drawn; a frame only stamps them. Its clock is TeleportLogic.look on the core clock.
 import { TeleportLogic } from './teleport-logic.js';
-import { glowAt, glowSprite } from './office-draw-xmas.js';
+import { glowSprite } from './office-draw-xmas.js';
+import { Light } from './light.js';
 import { Kit } from './tp-kit.js';
 
 const { ellipse, line, bake, atlas, hash, out2, in2, ease, clamp, frac } = Kit;
@@ -128,7 +129,7 @@ function floorFx(G, e, cx, cy, seed, pool, s, lo) {
     sm = ctx.imageSmoothingEnabled;
   if (e.ring > 0 && pool) {
     ctx.imageSmoothingEnabled = true;
-    ctx.globalAlpha = Math.min(1, e.ring * (0.28 + 0.52 * glowAt(G.df) + 0.4 * e.flash));
+    ctx.globalAlpha = Math.min(1, e.ring * (0.28 + 0.52 * Light.glow(G.df) + 0.4 * e.flash));
     const w = Math.round(73 * s),
       h = Math.round(37 * s);
     ctx.drawImage(glowSprite('#5ef2ff', 64), Math.round(cx - 36 * s), Math.round(cy - 18 * s), w, h);

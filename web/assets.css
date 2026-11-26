@@ -1,0 +1,677 @@
+/* The /assets page (claude-assets.html, web/assets-ui*.js), on top of web/styles.css: the game's own dark navy
+   surfaces, Pixelify Sans for names and headings, JetBrains Mono for the rest, 2 px borders and hard offset shadows
+   like the world view's back plaque. Previews sit on a checker whose squares are 4 of the item's own pixels. */
+.as-app {
+  --ink: #0b0e14;
+  --panel: #121722;
+  --line: #232a39;
+  --soft: #aab2c5;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --sel: var(--warn);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+.as-icon {
+  flex: none;
+  display: block;
+}
+kbd {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  padding: 1px 4px;
+  background: var(--ink);
+}
+
+/* ---- header ---- */
+.as-header {
+  flex: none;
+  background: var(--ink);
+  border-bottom: 2px solid var(--line);
+  position: relative;
+  z-index: 5;
+}
+.as-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px 8px;
+}
+.as-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.as-logo {
+  color: #ffffff;
+  letter-spacing: 0.02em;
+}
+.as-brand-dot {
+  color: var(--muted);
+}
+.as-brand-sub {
+  color: var(--warn);
+}
+.as-brand:hover .as-logo {
+  color: var(--warn);
+}
+.as-back {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 9px 4px 7px;
+  color: #ffffff;
+  background: var(--surface);
+  border: 2px solid var(--fg);
+  box-shadow: 3px 3px 0 var(--shadow);
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.as-back:hover {
+  background: #1d2433;
+  color: #ffffff;
+}
+.as-back:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--shadow);
+}
+.as-search {
+  flex: 1;
+  max-width: 420px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  height: 32px;
+  background: var(--panel);
+  border: 2px solid var(--border);
+  color: var(--muted);
+}
+.as-search:focus-within {
+  border-color: var(--warn);
+  box-shadow: 3px 3px 0 rgba(255, 209, 102, 0.25);
+  color: var(--warn);
+}
+.as-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 12px;
+}
+.as-search input::placeholder {
+  color: #5d6578;
+}
+.as-lang label {
+  display: flex;
+  align-items: center;
+  font-size: 0;
+}
+.as-lang select {
+  background: var(--panel);
+  border: 2px solid var(--border);
+  color: var(--fg);
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  height: 32px;
+}
+.as-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 0 16px 10px;
+  overflow-x: auto;
+}
+.as-ctl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+}
+.as-ctl-label {
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5d6578;
+}
+
+/* ---- segmented pixel buttons ---- */
+.as-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  background: var(--ink);
+  border: 2px solid var(--border);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.as-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  min-height: 26px;
+  background: transparent;
+  border: 0;
+  box-shadow: inset -2px 0 0 var(--border);
+  color: var(--soft);
+  font-family: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.as-seg-btn:last-child {
+  box-shadow: none;
+}
+.as-seg-btn:hover {
+  background: #1d2433;
+  color: #ffffff;
+}
+.as-seg-btn.on {
+  background: var(--fg);
+  color: var(--ink);
+  font-weight: 600;
+}
+.as-seg-btn:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: -2px;
+}
+.as-seg-held .as-seg-btn.on {
+  background: #9fd3ff;
+}
+.as-seg-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--soft);
+}
+/* "Winter while Xmas is on", next to the label of a season row the event holds */
+.as-held-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  color: #9fd3ff;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  white-space: nowrap;
+}
+.as-swatch {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+}
+/* a control with many choices (the theme packs) as a drop-down of the same pixel look */
+.as-choice {
+  min-height: 30px;
+  max-width: 190px;
+  padding: 3px 8px;
+  background: var(--ink);
+  border: 2px solid var(--border);
+  box-shadow: 2px 2px 0 var(--shadow);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.as-choice:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: 0;
+}
+
+/* ---- layout ---- */
+.as-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.as-rail {
+  flex: none;
+  width: 224px;
+  overflow-y: auto;
+  padding: 16px 12px 20px;
+  border-right: 2px solid var(--line);
+  background: #0c1018;
+  display: flex;
+  flex-direction: column;
+}
+.as-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 18px 22px 48px;
+}
+
+/* ---- rail ---- */
+.as-rail-h {
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #5d6578;
+  margin: 2px 6px 8px;
+}
+.as-rail-h:not(:first-child) {
+  margin-top: 20px;
+}
+.as-cats,
+.as-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.as-cat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  color: #c5cbd8;
+  text-decoration: none;
+  border: 2px solid transparent;
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.as-cat-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  background: var(--accent);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.as-cat-n {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+.as-cat:hover {
+  background: var(--surface);
+  color: #ffffff;
+}
+.as-cat.on {
+  background: var(--surface);
+  border-color: var(--accent);
+  color: #ffffff;
+  box-shadow: 3px 3px 0 var(--shadow);
+}
+.as-cat.on .as-cat-n {
+  color: var(--accent);
+}
+.as-cat.none {
+  opacity: 0.4;
+}
+.as-cat:focus-visible,
+.as-filter:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: 1px;
+}
+.as-filter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 0;
+  color: var(--soft);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.as-filter:hover {
+  color: #ffffff;
+  background: var(--surface);
+}
+.as-check {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid currentColor;
+  color: var(--tag);
+}
+.as-filter.on {
+  color: #ffffff;
+}
+.as-filter.on .as-check {
+  background: var(--tag);
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+.as-rail-foot {
+  margin-top: auto;
+  padding: 18px 6px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.as-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #5d6578;
+}
+
+/* ---- tags ---- */
+.as-tag-season {
+  --tag: #6fd08c;
+}
+.as-tag-event {
+  --tag: #ff7a85;
+}
+.as-tag-night {
+  --tag: #a78bfa;
+}
+.as-tag-snow {
+  --tag: #cfe8ff;
+}
+.as-tag-animated {
+  --tag: #5ef2ff;
+}
+.as-tag-state {
+  --tag: #ffd166;
+}
+.as-tag-catalogue-only {
+  --tag: #8b93a7;
+}
+.as-tag-cat {
+  --tag: var(--accent);
+}
+.as-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.as-tag {
+  font-size: 9.5px;
+  line-height: 14px;
+  padding: 0 5px;
+  color: var(--tag);
+  border: 1px solid var(--tag);
+  background: var(--ink);
+  white-space: nowrap;
+}
+.as-tag-catalogue-only {
+  border-style: dashed;
+}
+.as-tag-cat {
+  color: var(--ink);
+  background: var(--tag);
+  font-weight: 600;
+}
+
+/* ---- grid ---- */
+.as-main-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 18px;
+}
+.as-title {
+  margin: 0;
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 30px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1;
+  padding-bottom: 8px;
+  background: linear-gradient(var(--accent), var(--accent)) left bottom / 40px 4px no-repeat;
+}
+.as-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.as-clear,
+.as-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.as-clear:hover,
+.as-btn:hover {
+  border-color: var(--warn);
+  color: #ffffff;
+}
+.as-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(198px, 1fr));
+  gap: 14px;
+}
+.as-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 0.1s steps(2, end),
+    box-shadow 0.1s steps(2, end);
+}
+.as-card:hover,
+.as-card:focus-visible {
+  transform: translate(-3px, -3px);
+  border-color: var(--accent);
+  box-shadow:
+    3px 3px 0 var(--accent),
+    7px 7px 0 var(--shadow);
+  outline: 0;
+  color: inherit;
+}
+.as-card.on {
+  border-color: var(--sel);
+  box-shadow:
+    3px 3px 0 var(--sel),
+    7px 7px 0 var(--shadow);
+}
+.as-card-stage {
+  position: relative;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0d1119;
+  border-bottom: 2px solid var(--line);
+}
+.as-count {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 0 5px;
+  line-height: 15px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--soft);
+  background: var(--ink);
+  border: 1px solid var(--border);
+}
+.as-card-body {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.as-card-name {
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.15;
+  color: #ffffff;
+  /* a long name wraps to a second line instead of being cut */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* ---- previews ---- */
+.as-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* fills its box; the canvas is sized to fit inside it (AssetsPaint.fitZoom), so it is never squashed */
+.as-preview.as-fit {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+.as-canvas {
+  display: block;
+  flex: none;
+  image-rendering: pixelated;
+  background-color: #121722;
+  background-image: conic-gradient(#181e2b 25%, transparent 0 50%, #181e2b 0 75%, transparent 0);
+  background-size: calc(var(--cell, 8px) * 2) calc(var(--cell, 8px) * 2);
+  box-shadow: 0 0 0 1px #1d2331;
+}
+.as-broken {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 14px;
+  color: #ff7a85;
+  border: 2px dashed #ff5a66;
+  background: #1c1016;
+  font-size: 11px;
+  cursor: help;
+}
+
+/* ---- empty ---- */
+.as-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 72px 16px;
+  color: #3a4256;
+  text-align: center;
+}
+.as-empty-t {
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 22px;
+  color: var(--fg);
+}
+.as-empty-s {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+/* ---- the conversion table: a row per label, a column per pack ---- */
+/* the table scrolls sideways in its own box on a narrow screen, never the page */
+.as-table-wrap {
+  overflow-x: auto;
+  border: 2px solid var(--line);
+  background: var(--surface);
+}
+.as-table {
+  display: grid;
+  grid-template-columns: minmax(120px, 170px) repeat(4, minmax(132px, 1fr));
+  min-width: 660px;
+}
+.as-trow {
+  display: contents;
+}
+.as-th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  background: var(--ink);
+  border-bottom: 2px solid var(--line);
+  font-family: 'Pixelify Sans', monospace;
+  font-size: 14px;
+  color: #ffffff;
+}
+.as-tlabel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--line);
+  box-shadow: inset 4px 0 0 var(--accent);
+}
+.as-tlabel-id {
+  font-size: 12px;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+.as-tlabel-n {
+  font-size: 11px;
+  color: var(--muted);
+}
+.as-tcell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid var(--line);
+  border-left: 2px solid var(--line);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.as-tcell:hover,
+.as-tcell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.as-tcell-none {
+  cursor: default;
+}
+.as-tcell-none:hover {
+  outline: 0;
+}
+.as-tcell-stage {
+  height: 112px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0d1119;
+  color: #3a4256;
+  font-size: 11px;
+}
+.as-tcell-l {
+  padding: 4px 8px 6px;
+  font-size: 10px;
+  color: var(--soft);
+  overflow-wrap: anywhere;
+}

@@ -115,7 +115,7 @@ function departing(from, at = 0.2, desk = 12) {
   const mirrorX = () => {
     STAMPS.length = 0
     const items = []
-    p.tpItems({ ctx: rec(), poly() {}, box() {}, rect() {}, th: S.THEMES.day, t: 1, df: 1, ev: null }, items)
+    p.tpItems({ ctx: rec(), poly() {}, box() {}, rect() {}, th: S.THEMES.day, t: 1, df: 1, look: null }, items)
     items.forEach(it => it.f())
     return STAMPS.filter(s => s.length === 9 && s[1] === 0 && s[2] === 0).map(s => s[5]).join(' ')
   }

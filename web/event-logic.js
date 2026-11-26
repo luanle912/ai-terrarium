@@ -7,30 +7,25 @@ const CHOICES = ['auto', 'on', 'off'];
 const EVENT_KEY = 'ai-terrarium.event';
 const PREVIEW_MS = 60_000;
 const startPreview = now => ({ until: now + PREVIEW_MS });
-
-// The event at a moment of the viewer's own clock, or null: { key: 'christmas', level, eve, day }.
-//   level 1  1-7 Dec    lights on the office, wreaths, hats
-//   level 2  8-14 Dec   candy canes, desk decorations, the kennels and the pergola lit, whole outfits
-//   level 3  15-26 Dec  everything
-//   eve      24 Dec 18:00 to 25 Dec 06:00      day  all of 25 Dec
-// choice 'on' shows level 3 whatever the date (never eve or day), 'off' nothing; a preview shows level 3 until it
-// runs out, whatever the choice.
-function active(date, choice, preview, now) {
-  if (preview && now < preview.until) return { key: 'christmas', level: 3, eve: false, day: false };
-  if (choice === 'on') return { key: 'christmas', level: 3, eve: false, day: false };
-  if (choice !== 'auto' || date.getMonth() !== 11) return null;
-  const d = date.getDate(),
-    h = date.getHours();
-  if (d > 26) return null;
-  return {
-    key: 'christmas',
-    level: d <= 7 ? 1 : d <= 14 ? 2 : 3,
-    eve: (d === 24 && h >= 18) || (d === 25 && h < 6),
-    day: d === 25,
-  };
+// What Settings shows while a preview runs: its time left as m:ss, rounded up ('' when none runs).
+function previewClock(preview, now) {
+  const s = preview ? Math.ceil((preview.until - now) / 1000) : 0;
+  return s > 0 ? Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') : '';
 }
-// What the island's bake is keyed by: '' without the event, 'x1'..'x3' by level.
-const cacheKey = ev => (ev ? 'x' + ev.level : '');
+
+// The event at a moment of the viewer's own clock, or null: { key: 'christmas', since }, since being whole days from
+// 1 Dec (0-based); choice 'on' and a preview say 14, the full event. The event is whole from its first day (D1): what
+// it shows is the look's (web/theme.js), which only counts the days for the presents under the tree.
+// The event runs 1-26 Dec. choice 'off' shows nothing; a preview shows the event until it runs out, any choice.
+const SINCE_FULL = 14;
+const make = since => ({ key: 'christmas', since });
+function active(date, choice, preview, now) {
+  if (preview && now < preview.until) return make(SINCE_FULL);
+  if (choice === 'on') return make(SINCE_FULL);
+  if (choice !== 'auto' || date.getMonth() !== 11) return null;
+  const d = date.getDate();
+  return d > 26 ? null : make(d - 1);
+}
 
 function loadChoice(storage) {
   try {
@@ -49,12 +44,17 @@ function saveChoice(storage, choice) {
   }
 }
 
-// What a page does with the event choice the local server sends (undefined from a server or a save that has none):
-// take it when it differs, or give the server this page's own, once, when it has none and this page's is not the
-// default. The wallpaper has no settings of its own to give.
-function adopt(server, own, { wallpaper = false, seeded = false } = {}) {
-  if (CHOICES.includes(server)) return { take: server !== own ? server : null, seed: false };
-  return { take: null, seed: !wallpaper && !seeded && own !== 'auto' };
+// What a page does with the shared settings the local server sends (lib/page-settings.js; null while it has none),
+// against this page's own event choice made at localAt (ms, 0 when never stamped). The newest choice wins: `newer`
+// when the server's is later (an unstamped one is the oldest; neither stamped: the server's, as before), then `take`
+// its event when it differs; `push` this page's own when it is later than the server's. The wallpaper has no
+// settings of its own to give.
+const stampOf = v => (v && Number.isFinite(v.updatedAt) && v.updatedAt > 0 ? v.updatedAt : 0);
+function adopt({ server, local, localAt = 0, wallpaper = false }) {
+  const at = server && server.weather ? stampOf(server) : -1,
+    newer = at > localAt || (at === 0 && localAt === 0);
+  const take = newer && CHOICES.includes(server.event) && server.event !== local ? server.event : null;
+  return { take, push: !wallpaper && localAt > at, newer };
 }
 
 // The big tree stands indoors, in the middle of the crossing of the office's two corridors: its foot at TREE_AT (in
@@ -70,14 +70,18 @@ function block(set, on) {
 // While the event is on the season is winter, whatever the date or the season chosen in Settings: snow on the lawn,
 // frozen lakes, snowmen.
 const season = (ev, key) => (ev ? 'winter' : key);
-// And it snows. fx is the weather's mix of effects (SkyLogic.weatherFx: cloud, rain, snow, storm, fog; a fresh
-// object each frame), changed in place: rain and storm fall as snow, and there is always at least a light fall.
-const SNOWFALL = 0.45;
-function weather(fx, ev) {
-  if (!ev) return fx;
-  fx.snow = Math.max(fx.snow, fx.rain, SNOWFALL);
-  fx.rain = 0;
-  fx.storm = 0;
+// And it snows, as the look's packs say (themes/christmas.js weather; web/theme.js): fx is the weather's mix of
+// effects (SkyLogic.weatherFx: cloud, rain, snow, storm, fog; a fresh object each frame), changed in place. Under
+// look.rainToSnow rain and storm fall as snow; look.snow is the least that falls. No look (the weather switched off in
+// Settings): untouched.
+function weather(fx, look) {
+  if (!look) return fx;
+  if (look.rainToSnow) {
+    fx.snow = Math.max(fx.snow, fx.rain);
+    fx.rain = 0;
+    fx.storm = 0;
+  }
+  if (look.snow > fx.snow) fx.snow = look.snow;
   return fx;
 }
 
@@ -112,16 +116,14 @@ function lightString(points, gap, max) {
 }
 
 const MAX_BULBS = 120;
-// Presents under the big tree by level (index 0: no event).
-const GIFTS = [0, 2, 5, 9];
 
 export const EventLogic = {
   CHOICES,
   EVENT_KEY,
   PREVIEW_MS,
   startPreview,
+  previewClock,
   active,
-  cacheKey,
   loadChoice,
   saveChoice,
   adopt,
@@ -130,8 +132,6 @@ export const EventLogic = {
   block,
   season,
   weather,
-  SNOWFALL,
   lightString,
   MAX_BULBS,
-  GIFTS,
 };

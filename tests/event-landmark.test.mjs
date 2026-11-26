@@ -17,6 +17,8 @@ const A = loadWeb('island-art-cathedral')
 const Y = loadWeb('island-art-cathedral-yard')
 const { SeasonIsland } = loadWeb('season-island')
 const { SnowLogic } = loadWeb('snow-logic')
+const { Theme } = loadWeb('theme')
+const { Moment } = loadWeb('moment')
 const { bfs } = loadWeb('office-util')
 const { ISLAND: I, W, H } = S
 
@@ -61,7 +63,10 @@ const facts = () => {
     roam: S.DOG_ROAM, roamList: S.DOG_PLACES.roamList, clear: S.DOG_CLEAR, houses: S.DOG_HOUSES, stairs: S.STAIRS,
     water: I.pond.cells, skip: [],
   })
-  const w = { ...pl, level: 3, eve: false, day: true, frozen: true, calm: false, now: 0, rand: seeded(), dogs: [] }
+  const date = new Date(2026, 11, 20, 12),
+    moment = Moment.at({ date, now: date.getTime(), seasonChoice: 'auto', eventChoice: 'auto', df: 1, snow: 0.8 }),
+    look = Theme.resolve(moment)
+  const w = { ...pl, look, frozen: true, calm: false, now: 0, rand: seeded(), dogs: [] }
   const list = E.create(w), deer = list.filter(c => c.kind === 'reindeer')
   return {
     drop: pl.drop, edge: pl.edge, route: E.elfRoute(w),
@@ -271,8 +276,11 @@ test('nobody walks through it while the event is on, and everything else is wher
     assert.equal(S.DOG_ROAM.size, was.roam.length - 30)
     assert.deepEqual(S.DOG_PLACES.roamList.map(c => key(...c)), [...S.DOG_ROAM], 'the list and the set still agree')
     assert.ok(S.EVENT_LAND.walk === S.LAWN_WALK && S.EVENT_LAND.roam === S.DOG_ROAM)
-    assert.ok(S.DOG_ROAM === S.CRITTER_PLACES.roam && S.DOG_ROAM === S.DOG_PLACES.roam, 'one set, shared')
-    assert.ok(S.EVENT_LAND.roamList === S.DOG_PLACES.roamList && S.CRITTER_PLACES.roamList === S.DOG_PLACES.roamList)
+    assert.ok(S.DOG_ROAM === S.DOG_PLACES.roam && S.EVENT_LAND.roamList === S.DOG_PLACES.roamList, 'one set, shared')
+    // the critters roam the winter ground (the dogs' without the polar bears' corner): the site is off it too
+    assert.ok(S.CRITTER_PLACES.roam === S.DOG_ROAM_WINTER)
+    for (const k of L.ROAM_OFF) assert.ok(!S.DOG_ROAM_WINTER.has(k), `${k} still roamed in winter`)
+    assert.ok(S.DOG_PLACES_WINTER.roamList.every(c => !L.ROAM_OFF.has(key(...c))))
     assert.equal(pieces(S.DOG_ROAM, true), 1, 'the dogs get everywhere')
     assert.equal(pieces(S.LAWN_WALK, false), 1, 'and so do people')
     assert.deepEqual(facts(), today)
@@ -445,19 +453,21 @@ test("every island's dogs are sent off, not only those of the first to ask", () 
   }
 })
 
-test('the page reserves the lawn whenever it works out the event, and sends its own dogs off', () => {
+test('the page reserves the lawn when the moment\'s event comes or goes, and sends its own dogs off', () => {
   const { ClaudeOffice } = loadWeb('office')
   const was = snapshot()
   const [dog] = DogLogic.create({ ...S.DOG_PLACES, agents: [], hour: 12, snow: 0, calm: false, now: 0, rand: seeded(4) })
   Object.assign(dog, { x: 20.5, y: -9.5, act: 'rest', path: [], until: Infinity })
   const page = { eventChoice: 'on', eventPreview: null, dogs: [dog] }
   try {
-    assert.equal(ClaudeOffice.prototype.eventNow.call(page).level, 3)
+    ClaudeOffice.prototype.computeMoment.call(page) // the moment the page works out every frame
+    assert.deepEqual(ClaudeOffice.prototype.eventNow.call(page), { key: 'christmas', since: 14 })
     for (const k of L.WALK_OFF) assert.ok(!S.LAWN_WALK.has(k), `${k} still walkable`)
     for (const k of L.ROAM_OFF) assert.ok(!S.DOG_ROAM.has(k), `${k} still roamed`)
     assert.ok(S.DOG_ROAM.has(key(Math.floor(dog.x), Math.floor(dog.y))), 'its dog is put down on the lawn')
     assert.equal(dog.act, 'idle')
     page.eventChoice = 'off'
+    ClaudeOffice.prototype.computeMoment.call(page)
     assert.equal(ClaudeOffice.prototype.eventNow.call(page), null)
     assert.deepEqual(snapshot(), was, 'the lawn is back when the event ends')
   } finally {

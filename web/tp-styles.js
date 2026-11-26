@@ -123,12 +123,6 @@ function saveChoice(storage, c) {
     return false;
   }
 }
-// What a page does with the server's choice: take it when it differs, or seed the server once with a non-default own.
-function adopt(server, own, { wallpaper = false, seeded = false } = {}) {
-  if (CHOICES.includes(server)) return { take: server !== own ? server : null, seed: false };
-  return { take: null, seed: !wallpaper && !seeded && own !== 'random' };
-}
-
 export const TpStyles = {
   KEY,
   DD,
@@ -153,7 +147,6 @@ export const TpStyles = {
   },
   loadChoice,
   saveChoice,
-  adopt,
   reset() {
     cur = 'random';
     holidayFn = null;

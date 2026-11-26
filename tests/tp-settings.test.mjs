@@ -1,5 +1,5 @@
 // The teleport style in Settings (web/tp-settings.js): Random, Off and every style by name, the choice saved in the
-// browser, posted to the local server and adopted from it like the event choice.
+// browser and shared through the local server like the event choice (web/settings-sync.js).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { loadWeb, readWeb } from './web.mjs'
@@ -77,20 +77,36 @@ test('choosing a style applies it, saves it and posts it; from the server it is 
   TpStyles.reset()
 })
 
-test('adoptSettings takes the server choice; a server with none is seeded once with this page own', () => {
+test('a newer server choice is taken, an older one is not; a server with none is seeded with this page own', () => {
   TpStyles.reset()
-  const { p, pushed } = page({ wallpaper: false })
-  p.adoptSettings({ weather: { mode: 'off', city: '' }, teleport: 'gitbranch' })
+  const { SettingsSync: S } = loadWeb('settings-sync'),
+    weather = { mode: 'off', city: '' },
+    host = over => page({ sync: S.create(null), world: null, setEventChoice() {}, setSeasonChoice() {}, ...over }),
+    { p, pushed } = host()
+  S.receive(p, { weather, teleport: 'gitbranch', updatedAt: 10 })
   assert.equal(TpStyles.choice(), 'gitbranch')
-  p.adoptSettings({ weather: { mode: 'off', city: '' }, teleport: 'mole' })
+  S.receive(p, { weather, teleport: 'mole', updatedAt: 5 })
+  assert.equal(TpStyles.choice(), 'gitbranch', 'an older value changes nothing')
+  S.receive(p, { weather, teleport: 'mole', updatedAt: 20 })
   assert.equal(TpStyles.choice(), 'mole')
   assert.equal(pushed.length, 0, 'taken from the server: not posted back')
-  const q = page({ wallpaper: false })
+  const log = [],
+    fetch = async (url, o) => (log.push(JSON.parse(o.body)), { ok: true, json: async () => ({}) }),
+    q = host()
   TpStyles.setChoice('pipe')
-  q.p.adoptSettings({ weather: { mode: 'off', city: '' } })
-  assert.equal(q.pushed.length, 1, 'seeded')
-  q.p.adoptSettings({ weather: { mode: 'off', city: '' } })
-  assert.equal(q.pushed.length, 1, 'once')
+  S.receive(q.p, { weather }, { fetch })
+  assert.equal(log.length, 1, 'seeded')
+  assert.equal(log[0].teleport, 'pipe')
+  TpStyles.reset()
+})
+
+test('the world view follows a choice made in another of its tabs', () => {
+  TpStyles.reset()
+  const { SettingsSync: S } = loadWeb('settings-sync'),
+    { p, pushed } = page({ storage: { getItem: k => (k === TpStyles.KEY ? 'frog' : null), setItem() {} } })
+  S.follow(p, TpStyles.KEY)
+  assert.equal(TpStyles.choice(), 'frog')
+  assert.equal(pushed.length, 0)
   TpStyles.reset()
 })
 
@@ -98,6 +114,6 @@ test('the page loads the saved choice and sends it with the others', () => {
   const office = readWeb('office')
   assert.match(office, /^import \{ TpStyles \} from '\.\/tp-styles\.js';$/m)
   assert.match(office, /TpStyles\.setChoice\(TpStyles\.loadChoice\(this\.storage\)\);/)
-  assert.match(office, /teleport: TpStyles\.choice\(\),/)
+  assert.match(readWeb('settings-sync'), /teleport: TpStyles\.choice\(\),/)
   assert.match(readWeb('office-render-settings'), /this\.eventSection\(\),\n\s*this\.teleportSection\(\),/)
 })

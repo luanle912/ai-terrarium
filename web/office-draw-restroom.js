@@ -10,6 +10,7 @@ import { RESTROOM_GLYPH, shade } from './office-util.js';
 import { SnowLogic } from './snow-logic.js';
 import { snowOnWall, snowTones } from './office-draw-winter.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 // Drawing the smoking corner and the restroom block.
 // Each room's two basins' prop indices (web/prop-use.js).
 const BASIN = {
@@ -41,7 +42,7 @@ mixin(
       if (!PI) return;
       const K = PI.kit(ctx, ...P(0, 0)),
         { box, fL, fR, top, R } = K,
-        night = df < 0.5;
+        night = Light.night(df);
       const ACC = { m: L.rooms.m.accent, f: L.rooms.f.accent },
         WHITE = '#f6f4ee',
         STEEL = '#c9d3e3',
@@ -49,7 +50,7 @@ mixin(
         WORK = '#efe9dc';
       const lit = this.propLit || PropUse.DARK,
         cap = shade(th.trim, 18),
-        glow = df < 0.6 ? 1 - df / 0.6 : 0;
+        glow = Light.glow(df);
       // stall doors are shut, with a red light, while someone is inside (RestroomLogic.visit 'inside')
       const occupied = new Set();
       for (const a of this.agents)
@@ -150,7 +151,7 @@ mixin(
       // the lobby's name painted on its planks along the walkway, in the same paint as PANTRY
       {
         const [lx, ly] = L.lobby.label;
-        this.restroomPaint(ctx, P(lx, ly), tr('office.wc.lobby'), df > 0.5 ? '#8a5a2a' : '#a8763e', 2);
+        this.restroomPaint(ctx, P(lx, ly), tr('office.wc.lobby'), Light.day(df) ? '#8a5a2a' : '#a8763e', 2);
       }
 
       // ---- the back wall, exactly the office's: wall, skirting, top band and cap, cut end ----

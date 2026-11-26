@@ -2,6 +2,8 @@
 // view.
 import { CameraLogic } from './camera-logic.js';
 import { hash, hex, mix, toHex } from './sky-island.js';
+import { Paint } from './paint.js';
+import { Labels } from './labels.js';
 export const rgba = (hexc, a) => {
   const [r, g, b] = hex(hexc);
   return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
@@ -180,14 +182,17 @@ const farDims = sc => {
   const hw = Math.max(8, Math.round(20 * sc));
   return { hw, L: hw + 3, T: Math.round(hw / 2 + 26 * sc + 8), B: Math.round(hw / 2 + 36 * sc + 12) };
 };
-// festive: the Christmas event from its second level on (a lit fir, a snowman, a cabin with a lit window).
-export function farIsland(ctx, x, y, sc, col, kind = 'plain', trees = 'green', snowy = false, festive = false) {
+// trees: the look's variant of the far trees (tree.far: the season's, or 'fir' with a snowman and a cabin with a lit
+// window on the other islands); overlays: the painters of the look's decor on them (Paint.overlaysOf('tree.far',
+// look): the fir's lights), laid on the tree island's tree.
+const NONE = Object.freeze([]);
+export function farIsland(ctx, x, y, sc, col, kind = 'plain', trees = 'green', snowy = false, overlays = NONE) {
   const res = Math.max(1, Math.ceil(globalThis.devicePixelRatio || 1)),
     { L, T, B } = farDims(sc),
     key = kind;
   let s = farSprites.get(key);
   if (!s) farSprites.set(key, (s = { c: document.createElement('canvas'), id: '' }));
-  const id = [sc, col.haze, res, trees, snowy, festive].join('|');
+  const id = sc + '|' + col.haze + '|' + res + '|' + trees + '|' + snowy + '|' + idsOf(overlays);
   if (s.id !== id) {
     s.id = id;
     const w = 2 * L * res,
@@ -201,7 +206,7 @@ export function farIsland(ctx, x, y, sc, col, kind = 'plain', trees = 'green', s
       g.clearRect(0, 0, w, h);
     }
     g.setTransform(res, 0, 0, res, L * res, T * res);
-    paintFarIsland(g, sc, col.haze, kind, trees, snowy, festive);
+    paintFarIsland(g, sc, col.haze, kind, trees, snowy, overlays);
   }
   const prevAlpha = ctx.globalAlpha,
     prevSmooth = ctx.imageSmoothingEnabled;
@@ -211,8 +216,15 @@ export function farIsland(ctx, x, y, sc, col, kind = 'plain', trees = 'green', s
   ctx.imageSmoothingEnabled = prevSmooth;
   ctx.globalAlpha = prevAlpha;
 }
+// The overlays' ids, one string per overlay list (the lists are frozen and kept by Paint.overlaysOf).
+const OVERLAY_IDS = new WeakMap();
+const idsOf = list => {
+  let s = OVERLAY_IDS.get(list);
+  if (s === undefined) OVERLAY_IDS.set(list, (s = list.map(f => f.overlay).join(',')));
+  return s;
+};
 // The far island round (0, 0), the middle of its grass top, in whole pixels.
-function paintFarIsland(g, sc, haze, kind, trees, snowy, festive) {
+export function paintFarIsland(g, sc, haze, kind, trees, snowy, overlays = NONE) {
   const far = farness(sc),
     hz = c => mix(c, haze, 0.12 + 0.38 * far),
     R = (x, y, w, h, c) => {
@@ -268,9 +280,11 @@ function paintFarIsland(g, sc, haze, kind, trees, snowy, festive) {
       len = 2 + Math.floor(hash(k, 11, 29) * 4);
     R(i - hw, bottoms[i] - len + 2, 1, len, hz(k % 2 ? '#5e3d26' : '#3e7d3a'));
   }
-  if (kind === 'tree' && festive) farFir(R, hz, sc, OUT);
-  else if (kind === 'tree') farTree(R, hz, sc, trees, OUT);
-  else if (kind === 'rock') {
+  const fir = trees === 'fir';
+  if (kind === 'tree') {
+    Paint.painter('tree.far', trees)(R, hz, sc, OUT);
+    for (const f of overlays) f(R, hz, sc, trees);
+  } else if (kind === 'rock') {
     // a boulder (lit on the left, flat where it sits) and a bush beside it, outlined like the tree
     const r = Math.max(3, Math.round(5 * sc));
     farBlob(
@@ -299,9 +313,9 @@ function paintFarIsland(g, sc, haze, kind, trees, snowy, festive) {
       OUT,
       0,
     );
-    if (festive) farSnowman(R, hz, -Math.round(hw * 0.5), OUT);
+    if (fir) farSnowman(R, hz, -Math.round(hw * 0.5), OUT);
   } else {
-    if (festive) farCabin(R, hz, -Math.round(hw * 0.35), OUT);
+    if (fir) farCabin(R, hz, -Math.round(hw * 0.35), OUT);
     // a little spring on the right of the top, spilling over the front-right edge as a waterfall into the haze
     const wx = Math.round(hw * 0.42),
       i = wx + hw,
@@ -346,10 +360,11 @@ function farBlob(R, cx, cy, blobs, [base, dark, light], OUT, floor = Infinity) {
       R(cx + px, cy + py, 1, 1, c);
     }
 }
-// The Christmas event's far islands: a small fir with coloured bulbs and a star; a snowman; a cabin, its window lit.
+// The Christmas look's far islands: a small fir; a snowman; a cabin, its window lit. The fir's lights (coloured bulbs
+// and a star) are the tree.far 'lights' overlay, laid over it.
+const firShape = sc => ({ h: Math.max(9, Math.round(15 * sc)), tx: -Math.round(2 * sc) });
 function farFir(R, hz, sc, OUT) {
-  const h = Math.max(9, Math.round(15 * sc)),
-    tx = -Math.round(2 * sc);
+  const { h, tx } = firShape(sc);
   R(tx - 1, -3, 2, 4, hz('#5a3b22'));
   for (let r = 0; r < h; r++) {
     const w = 1 + Math.floor(((r % Math.ceil(h / 3)) + r * 0.35) * 0.9);
@@ -357,11 +372,16 @@ function farFir(R, hz, sc, OUT) {
     R(tx - w, -3 - h + r, w, 1, hz('#3aa05a'));
     R(tx, -3 - h + r, w, 1, hz('#2a8048'));
   }
+}
+function farLights(R, hz, sc, trees) {
+  if (trees !== 'fir') return;
+  const { h, tx } = firShape(sc);
   ['#ff5a66', '#ffd166', '#5ec8ff', '#ff5a66', '#ffd166'].forEach((c, i) =>
     R(tx - 2 + ((i * 3) % 5), -4 - Math.round(((i + 0.5) * (h - 3)) / 5), 1, 1, c),
   );
   R(tx - 1, -4 - h, 2, 2, '#ffe27a');
 }
+Paint.overlay('tree.far', 'lights', farLights);
 function farSnowman(R, hz, x, OUT) {
   R(x - 3, -5, 6, 5, OUT);
   R(x - 2, -9, 4, 4, OUT);
@@ -416,5 +436,12 @@ function farTree(R, hz, sc, trees, OUT) {
   if (trees === 'fresh')
     for (let k = 0; k < 4; k++) R(tx - r + 2 + k * Math.round(r / 2), cy - 1 + (k % 2) * 3, 1, 1, hz('#f4b8cf'));
 }
+// The far trees are the tree.far label's variants: the look picks the one on every far tree island.
+for (const v of Labels.byId('tree.far').variants)
+  Paint.variant(
+    'tree.far',
+    v,
+    v === 'fir' ? (R, hz, sc, OUT) => farFir(R, hz, sc, OUT) : (R, hz, sc, OUT) => farTree(R, hz, sc, v, OUT),
+  );
 // env: {df, hour, fx:{cloud,rain,snow,storm,fog}, col: SkyLogic.skyColors(...), reduced, view?: island camera view}
 // The gradient, sun, moon and stars stay put; clouds, far islands and birds follow the camera by depth.

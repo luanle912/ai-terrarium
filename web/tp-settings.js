@@ -1,6 +1,6 @@
 // The Teleport section of Settings (under Event): Random (one style per person, the holiday's own on a holiday),
-// Off (everyone walks) or one style for everyone. The choice lives in web/tp-styles.js; office.js loads, posts and
-// adopts it.
+// Off (everyone walks) or one style for everyone. The choice lives in web/tp-styles.js; office.js loads it and
+// web/settings-sync.js shares it.
 import { tr } from './i18n.js';
 import { TpStyles } from './tp-styles.js';
 import { h } from './office-scene.js';
@@ -63,7 +63,7 @@ mixin(
             'select',
             {
               'aria-label': tr('settings.teleport.mode'),
-              style: { width: '100%' },
+              style: { width: '100%', maxWidth: '100%' },
               value: TpStyles.choice(),
               onChange: e => this.setTpChoice(e.target.value),
             },
@@ -81,7 +81,7 @@ mixin(
       TpStyles.setChoice(choice);
       TpStyles.saveChoice(this.storage, choice);
       this.setState({ tpChoice: choice });
-      if (!fromServer) this.pushSettings();
+      if (!fromServer) this.pushSettings(true);
     }
   },
 );

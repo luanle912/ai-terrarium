@@ -4,7 +4,8 @@
 // night rows) into one small atlas; the person is one clipped body pass.
 import { Kit } from './tp-kit.js';
 import { TeleportLogic } from './teleport-logic.js';
-import { glowAt, glowSprite } from './office-draw-xmas.js';
+import { glowSprite } from './office-draw-xmas.js';
+import { Light } from './light.js';
 import { shirtOf } from './office-people-xmas.js';
 
 const { atlas, bake, r, out2, in2, lerp, frac } = Kit;
@@ -146,7 +147,7 @@ function posts(X, end) {
 }
 // A soft light at night only: smoothing on for the 64 px sprite, as the circle does.
 function glow(X, colour, x, y, w, h, a) {
-  const g = a * glowAt(X.df);
+  const g = a * Light.glow(X.df);
   if (g <= 0 || X.lite) return;
   const ctx = X.ctx,
     sm = ctx.imageSmoothingEnabled;

@@ -2,7 +2,8 @@
 // A green gate opens at the landing, a figure rises in its flare and steps out, then each gate folds away with a pop.
 // The gates are upright pixel ovals baked once (spin and opening frames, a white flash, a floor pool per colour).
 import { Kit } from './tp-kit.js';
-import { glowAt, glowSprite } from './office-draw-xmas.js';
+import { glowSprite } from './office-draw-xmas.js';
+import { Light } from './light.js';
 
 const { ellipse, bake, atlas, clamp, r, out2, frac } = Kit;
 const RX = 9,
@@ -240,7 +241,7 @@ const GA = { mode: 'off', p: 0, k: 0, open: 0, flare: 0 };
 // Halo behind the gate; the floor pool under it.
 function back(X, end) {
   const g = gateAt(X.L.v, end, GA),
-    a = (g.open * (0.18 + 0.6 * glowAt(X.df)) + 0.35 * g.flare) * X.L.C;
+    a = (g.open * (0.18 + 0.6 * Light.glow(X.df)) + 0.35 * g.flare) * X.L.C;
   if (a <= 0) return;
   const [gx, gy] = spotOf(X, end),
     ctx = X.ctx,
@@ -253,7 +254,7 @@ function back(X, end) {
 }
 function floor(X, end) {
   const g = gateAt(X.L.v, end, GA),
-    a = g.open * (0.55 + 0.45 * glowAt(X.df)) * X.L.C;
+    a = g.open * (0.55 + 0.45 * Light.glow(X.df)) * X.L.C;
   if (a <= 0) return;
   const [gx, gy] = spotOf(X, end);
   X.ctx.globalAlpha = a;

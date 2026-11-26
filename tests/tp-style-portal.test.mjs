@@ -120,7 +120,7 @@ test('a cut toward an idle spot the other way leaves both gates where they stood
     const gates = () => {
       STAMPS.length = 0
       const items = []
-      p.tpItems({ ctx: rec(), poly() {}, box() {}, rect() {}, th: S.THEMES.day, t: 1, df: 1, ev: null }, items)
+      p.tpItems({ ctx: rec(), poly() {}, box() {}, rect() {}, th: S.THEMES.day, t: 1, df: 1, look: null }, items)
       items.forEach(it => it.f())
       return STAMPS.filter(s => s.length === 9).map(s => s.slice(5, 7).join(',')).sort().join(' ')
     }

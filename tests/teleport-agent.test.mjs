@@ -266,6 +266,8 @@ test('pause freezes the clock in the office, the world island runs', () => {
     stepDogs: noop,
     stepCritters: noop,
     stepProps: noop,
+    stepBears: noop,
+    seeLook: noop,
   })
   p.updateAgent(a, DT)
   const u = a.tp.u
@@ -283,6 +285,7 @@ test('pause freezes the clock in the office, the world island runs', () => {
     stepDogs: noop,
     stepCritters: noop,
     stepProps: noop,
+    stepBears: noop,
   })
   isl.frame(0.05)
   assert.ok(Math.abs(a.tp.u - u - 0.066) < 1e-9)

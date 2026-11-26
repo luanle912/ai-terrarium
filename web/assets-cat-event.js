@@ -1,0 +1,248 @@
+// The /assets catalogue: the Christmas event. Santa by the tree, his sleigh and the parcels it drops, the elves and
+// the pile of presents they make (critter sprites, web/critter-sprites.js, through the office's own methods), the
+// strings of lights (web/office-draw-xmas.js; the candy canes by the lamps are in outdoor), and the landmark:
+// Notre-Dame of Saigon and the statue with the crib before it, baked by web/island-art-cathedral.js and
+// web/island-art-cathedral-yard.js and lit by web/office-draw-cathedral.js. Everything is whole from the event's first
+// day (D1), so each piece shows as the game shows it whatever the page's Event control.
+import { tr } from './i18n.js';
+import { AssetsStage } from './assets-stage.js';
+import { ACT, critterEntry, frames } from './assets-cat-animals.js';
+import { CRITTER_PLACES, PG } from './office-scene.js';
+import { EventCritters } from './event-critters.js';
+import { EventLandmark } from './event-landmark.js';
+import { PILE } from './office-draw-critters.js';
+import { STRINGS, drawString } from './office-draw-xmas.js';
+import { drawCathedral } from './island-art-cathedral.js';
+import { drawOurLady } from './island-art-cathedral-yard.js';
+import { DRESSED, eventTone } from './sky-island.js';
+import { Theme } from './theme.js';
+import { Light } from './light.js';
+
+const { axis, dfB } = AssetsStage;
+// When the Christmas pieces show up (their `when`): with the Christmas pack.
+const XMAS = 'christmas';
+// The outdoor Christmas pieces' colours (web/sky-island.js eventTone), one function per daylight.
+const TONES = new Map();
+const tonesOf = df => {
+  let T = TONES.get(df);
+  if (!T) TONES.set(df, (T = eventTone(df)));
+  return T;
+};
+// One sprite of a critter from the office's cache (light, facing), its feet on (ox, oy) as drawCritter stands it.
+function stamp(ctx, view, kind, frame, flip) {
+  const s = AssetsStage.stage(ctx, view),
+    img = s.host.critterSprite(kind, frame, dfB(view), false, flip);
+  ctx.drawImage(img, view.ox - img.ax, view.oy - img.fh);
+}
+
+// ---- the critters ----
+const SANTA_NOW = { kind: 'santa', id: 0, act: 'sit', face: 1 };
+const SANTA = {
+  id: 'event.santa',
+  cat: 'event',
+  name: () => tr('assets.item.event.santa'),
+  tags: ['animated'],
+  when: { event: XMAS },
+  where: 'office',
+  source: [
+    { file: 'web/critter-sprites.js', fn: 'KINDS.santa' },
+    { file: 'web/event-critters.js', fn: 'pose' },
+  ],
+  axes: [axis('act', () => tr('assets.axis.act'), frames(['moving', 'sit', 'wave'], ACT))],
+  uses: ['light'],
+  draw(ctx, view, t) {
+    const f = view.pick.act === 'moving' ? EventCritters.pose(SANTA_NOW, t).frame : view.pick.act;
+    stamp(ctx, view, 'santa', f, false);
+  },
+};
+const SLEIGH = {
+  id: 'event.sleigh',
+  cat: 'event',
+  name: () => tr('assets.item.event.sleigh'),
+  when: { event: XMAS },
+  where: 'sky',
+  source: [
+    { file: 'web/critter-sprites.js', fn: 'KINDS.sleigh' },
+    { file: 'web/office-draw-critters.js', fn: 'drawSleigh' },
+  ],
+  axes: [
+    axis('direction', () => tr('assets.axis.direction'), [
+      { id: 'right', label: () => tr('assets.direction.right') },
+      { id: 'left', label: () => tr('assets.direction.left') },
+    ]),
+  ],
+  uses: ['light'],
+  draw: (ctx, view) => stamp(ctx, view, 'sleigh', 'fly', view.pick.direction === 'left'),
+};
+const PARCEL = {
+  id: 'event.parcel',
+  cat: 'event',
+  name: () => tr('assets.item.event.parcel'),
+  when: { event: XMAS },
+  where: 'sky',
+  source: [
+    { file: 'web/critter-sprites.js', fn: 'KINDS.parcel' },
+    { file: 'web/office-draw-critters.js', fn: 'drawSleigh' },
+  ],
+  axes: [axis('frame', () => tr('assets.axis.frame'), frames(['chute', 'box']))],
+  uses: ['light'],
+  draw: (ctx, view) => stamp(ctx, view, 'parcel', view.pick.frame, false),
+};
+const ELF = critterEntry({
+  id: 'event.elf',
+  name: () => tr('assets.item.event.elf'),
+  kind: 'elf',
+  moving: ['carry', 'back'],
+  when: { event: XMAS },
+  where: 'lawn',
+});
+// The pile by the front stairs, as many presents as the elves and the sleigh have brought.
+const DROP = CRITTER_PLACES.drop || [0, 0];
+// The draw under way, read by the fixed functions handed to the stage's scene() (no closure per frame).
+const NOW = { s: null, view: null, n: 0, eve: true };
+const aim = (ctx, view, t) => {
+  NOW.view = view;
+  return (NOW.s = AssetsStage.stage(ctx, view, t));
+};
+const drawPile = () => NOW.s.host.drawPile(NOW.s.G, NOW.n, 0, dfB(NOW.view));
+const GIFT_PILE = {
+  id: 'event.gift-pile',
+  cat: 'event',
+  name: () => tr('assets.item.event.gift-pile'),
+  when: { event: XMAS },
+  where: 'lawn',
+  source: [
+    { file: 'web/office-draw-critters.js', fn: 'drawPile' },
+    { file: 'web/office-draw-critters.js', fn: 'paintPile' },
+  ],
+  axes: [
+    axis(
+      'count',
+      () => tr('assets.axis.count'),
+      // the full pile first, so the card shows it
+      PILE.map((_, i) => PILE.length - i).map(n => ({ id: String(n), label: () => tr('assets.pile.count', { n }) })),
+    ),
+  ],
+  uses: ['light'],
+  draw(ctx, view) {
+    const s = aim(ctx, view);
+    NOW.n = Math.max(1, Math.min(PILE.length, +view.pick.count || 1));
+    s.scene(DROP[0] + 0.5, DROP[1] + 0.5, 0, drawPile, true);
+  },
+};
+
+// ---- the strings of lights ----
+// One string of each kind the office hangs (a dozen bulbs of the long one under the back wall's cap), laid out by
+// EventLogic.lightString in the scene and shown from its first bulb.
+const atOf = (s, n) => s && (n ? s.at.subarray(0, n * 2) : s.at);
+const PLACES = {
+  wall: atOf(
+    STRINGS.find(s => s.id === 'office.back'),
+    12,
+  ),
+  kennel: atOf(STRINGS.find(s => s.label === 'kennel')),
+  pergola: atOf(STRINGS.find(s => s.label === 'pergola')),
+  pavilion: atOf(STRINGS.find(s => s.label === 'pavilion')),
+};
+const PLACE_IDS = Object.keys(PLACES).filter(k => PLACES[k] && PLACES[k].length);
+const PLACE_LABEL = {
+  wall: () => tr('assets.lights.wall'),
+  kennel: () => tr('assets.lights.kennel'),
+  pergola: () => tr('assets.lights.pergola'),
+  pavilion: () => tr('assets.lights.pavilion'),
+};
+const STRING_LIGHTS = {
+  id: 'event.string-lights',
+  cat: 'event',
+  name: () => tr('assets.item.event.string-lights'),
+  tags: ['animated'],
+  when: { event: XMAS },
+  where: 'lawn',
+  source: [
+    { file: 'web/office-draw-xmas.js', fn: 'drawString' },
+    { file: 'web/event-logic.js', fn: 'lightString' },
+  ],
+  axes: [axis('placement', () => tr('assets.axis.placement'), frames(PLACE_IDS, PLACE_LABEL))],
+  uses: ['light'],
+  draw(ctx, view, t) {
+    const at = PLACES[view.pick.placement] || PLACES[PLACE_IDS[0]],
+      glow = Light.glow(view.env.df);
+    ctx.save();
+    ctx.translate(view.ox - at[0], view.oy - at[1]);
+    drawString(ctx, at, t, glow, false, glow > 0.01);
+    ctx.restore();
+  },
+};
+
+// ---- the landmark ----
+const SITE = EventLandmark.SITE;
+// The landmark's lights as cathedralItems lays them, on an ordinary night or on Christmas Eve (every bulb burning, a
+// halo round the building), under the Christmas look (the whole landmark lit, whatever the page's Event control: D1).
+const LIT = [];
+const XMAS_LOOK = Theme.resolve({
+  season: 'winter',
+  holiday: null,
+  event: { key: 'christmas', since: 0 },
+  key: 'assets|christmas',
+});
+// The office's lights of the landmark, Christmas Eve's or not, those for the building (back: the halo behind it) or
+// for the yard.
+function lights(s, eve, part) {
+  LIT.length = 0;
+  const G = s.G,
+    keep = G.look;
+  G.look = XMAS_LOOK;
+  s.host.cathedralItems(G, LIT, eve);
+  G.look = keep;
+  for (const it of LIT)
+    if (part === 'back' ? it.z < SITE.z : part === 'front' ? it.z > SITE.z && it.z < SITE.ladyZ : it.z > SITE.ladyZ)
+      it.f();
+}
+const LANDMARK_SOURCE = { file: 'web/office-draw-cathedral.js', fn: 'cathedralItems' };
+function drawChurch() {
+  const { s, view, eve } = NOW;
+  lights(s, eve, 'back');
+  drawCathedral(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, DRESSED, SITE.at);
+  lights(s, eve, 'front');
+}
+function drawLady() {
+  const { s, view } = NOW;
+  drawOurLady(s.pt, PG, tonesOf(view.env.df), s.S, s.depth, DRESSED, SITE.lady);
+  lights(s, false, 'yard');
+}
+const CATHEDRAL = {
+  id: 'event.cathedral',
+  cat: 'event',
+  name: () => tr('assets.item.event.cathedral'),
+  tags: ['animated'],
+  when: { event: XMAS },
+  where: 'lawn',
+  source: [{ file: 'web/island-art-cathedral.js', fn: 'drawCathedral' }, LANDMARK_SOURCE],
+  axes: [
+    axis('eve', () => tr('assets.axis.eve'), [
+      { id: 'night', label: () => tr('assets.eve.night') },
+      { id: 'eve', label: () => tr('assets.eve.eve') },
+    ]),
+  ],
+  uses: ['light', 'snow'],
+  draw(ctx, view, t) {
+    const s = aim(ctx, view, t);
+    NOW.eve = view.pick.eve === 'eve';
+    s.scene(SITE.at[0] + 0.5, SITE.at[1] + 0.5, 0, drawChurch, true);
+  },
+};
+const OUR_LADY = {
+  id: 'event.our-lady',
+  cat: 'event',
+  name: () => tr('assets.item.event.our-lady'),
+  when: { event: XMAS },
+  where: 'lawn',
+  source: [{ file: 'web/island-art-cathedral-yard.js', fn: 'drawOurLady' }, LANDMARK_SOURCE],
+  uses: ['light', 'snow'],
+  draw(ctx, view, t) {
+    const s = aim(ctx, view, t);
+    s.scene(SITE.lady[0] + 0.5, SITE.lady[1] + 0.5, 0, drawLady, true);
+  },
+};
+
+export const EVENT = [SANTA, SLEIGH, PARCEL, ELF, GIFT_PILE, STRING_LIGHTS, CATHEDRAL, OUR_LADY];

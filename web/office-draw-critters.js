@@ -8,9 +8,10 @@ import { DogLogic } from './dog-logic.js';
 import { CritterSprites } from './critter-sprites.js';
 import { EventCritters } from './event-critters.js';
 import { WATER_Z } from './island-land.js';
-import { glowAt, glowSprite } from './office-draw-xmas.js';
+import { glowSprite } from './office-draw-xmas.js';
 import { CRITTER_PLACES, DRAW_REACH, LW, OX, OY, TH, TW, behindWalls } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 
 const NOSE_GLOW = '#ff4d4d',
   NIGHT = '#0d1322',
@@ -22,10 +23,12 @@ function paint(kind, name, dfB, red, flip) {
     K = CritterSprites.KINDS[kind],
     pal = red ? { ...K.pal, ...CritterSprites.RUDOLPH } : K.pal,
     cv = document.createElement('canvas'),
-    dim = DogLogic.nightMix(dfB / 10);
-  cv.width = f.w;
-  cv.height = f.h + 2;
+    dim = DogLogic.nightMix(dfB / 10),
+    pad = K.outline ? 1 : 0; // white on snow needs a thin edge to be seen
+  cv.width = f.w + 2 * pad;
+  cv.height = f.h + 2 + pad;
   const c = cv.getContext('2d');
+  c.translate(pad, pad);
   if (flip) {
     c.translate(f.w, 0);
     c.scale(-1, 1);
@@ -37,6 +40,13 @@ function paint(kind, name, dfB, red, flip) {
     c.fill();
   }
   cv.nx = -1;
+  if (pad) {
+    const on = (x, y) => y >= 0 && y < f.h && x >= 0 && x < f.w && f.rows[y][x] !== '.';
+    c.fillStyle = SkyRender.mix(K.outline, NIGHT, dim);
+    for (let y = -1; y <= f.h; y++)
+      for (let x = -1; x <= f.w; x++)
+        if (!on(x, y) && (on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1))) c.fillRect(x, y, 1, 1);
+  }
   f.rows.forEach((row, y) => {
     for (let x = 0; x < f.w; x++) {
       const ch = row[x];
@@ -50,14 +60,14 @@ function paint(kind, name, dfB, red, flip) {
     }
   });
   // the column under the critter's middle, in the picture as painted
-  cv.ax = flip ? f.w - 1 - f.ax : f.ax;
-  cv.fh = f.h;
+  cv.ax = pad + (flip ? f.w - 1 - f.ax : f.ax);
+  cv.fh = f.h + pad;
   return cv;
 }
 
 // The pile of presents at CRITTER_PLACES.drop: up to PLACED_MAX the elves brought and LANDED_MAX from the sleigh,
 // each [x, y] px from the pile's middle (y up) with its paper and ribbon; painted back to front.
-const PILE = [
+export const PILE = [
   [-9, 4, '#3e8ed0', '#f4f1e8'],
   [0, 5, '#c8323a', '#ffd166'],
   [8, 4, '#46a758', '#c8323a'],
@@ -117,9 +127,7 @@ mixin(
       if (!w) {
         w = this.critterWorld = {
           ...CRITTER_PLACES,
-          level: 0,
-          eve: false,
-          day: false,
+          look: null,
           frozen: false,
           calm: false,
           now: 0,
@@ -129,10 +137,7 @@ mixin(
         };
         this.critters = [];
       }
-      const ev = this.eventNow();
-      w.level = ev ? ev.level : 0;
-      w.eve = !!ev && ev.eve;
-      w.day = !!ev && ev.day;
+      w.look = this.look;
       w.frozen = !!this.dogWorld.frozen;
       w.calm = !!this.dogWorld.calm;
       EventCritters.step(this.critters, w, dt);
@@ -141,7 +146,7 @@ mixin(
     // and with the front ones the pile of presents.
     critterItems(G, list, back, dfB) {
       const w = this.critterWorld;
-      if (!w || !w.level) return;
+      if (!w) return;
       for (const c of this.critters)
         if (c.act !== 'away' && behindWalls(Math.floor(c.x), Math.floor(c.y), DRAW_REACH) === back)
           list.push({ z: c.x + c.y, f: () => this.drawCritter(G, c, dfB) });
@@ -156,8 +161,9 @@ mixin(
         y = Math.round(OY + (c.x + c.y) * TH - (c.kind === 'penguin' ? WATER_Z : 0)) - img.fh - p.dy;
       G.ctx.drawImage(img, x, y);
       // Rudolph's nose glows after dark
-      if (c.red && G.df < 0.6 && img.nx >= 0) {
-        G.ctx.globalAlpha = glowAt(G.df);
+      const nose = c.red ? Light.glow(G.df) : 0;
+      if (nose > 0 && img.nx >= 0) {
+        G.ctx.globalAlpha = nose;
         G.ctx.drawImage(this.noseGlow || (this.noseGlow = glowSprite(NOSE_GLOW, 8)), x + img.nx - 4, y + img.ny - 4);
         G.ctx.globalAlpha = 1;
       }
@@ -174,7 +180,7 @@ mixin(
     // the front one the presents it let go, coming down under their parachutes to the pile by the stairs.
     drawSleigh(ctx, back, w, h) {
       const cw = this.critterWorld;
-      if (!cw || !cw.level || !cw.parcels) return;
+      if (!cw || !cw.parcels) return;
       const k = Math.max(2, Math.round(w / 500)),
         H0 = 0.1 * h;
       if (back) {

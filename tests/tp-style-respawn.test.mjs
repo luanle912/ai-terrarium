@@ -125,7 +125,7 @@ const ctx = new Proxy({}, {
   set: (_, k, v) => ((LOG.st[k] = v), true),
 })
 LOG.st = {}
-const G = { ctx, poly: noop, box: noop, rect: noop, th: S.THEMES.day, t: 2.4, df: 1, ev: null, cold: false }
+const G = { ctx, poly: noop, box: noop, rect: noop, th: S.THEMES.day, t: 2.4, df: 1, look: null, cold: false }
 const ORIGIN = [10.5, 8.5], LANDING = [3.5, 4.5]
 const extent = c => {
   let top = 1e9, bot = -1e9

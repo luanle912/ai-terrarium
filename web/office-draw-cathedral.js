@@ -6,9 +6,10 @@ import { EventLandmark } from './event-landmark.js';
 import { stamp } from './island-art.js';
 import { CATHEDRAL_EXT, cathedralLights } from './island-art-cathedral.js';
 import { LADY_EXT, yardLights } from './island-art-cathedral-yard.js';
-import { drawString, glowAt, glowSprite, litStar } from './office-draw-xmas.js';
+import { drawString, glowSprite, litStar } from './office-draw-xmas.js';
 import { H, ISLAND, PG, W } from './office-scene.js';
 import { ClaudeOffice, mixin } from './office.js';
+import { Light } from './light.js';
 
 // Where the bake put the two sprites (web/sky-island.js): the same site, or none on an island without room for it.
 const HERE = EventLandmark.site(ISLAND, { W, H }),
@@ -54,7 +55,7 @@ function windowSprite() {
 }
 // Christmas Eve: one wide warm halo round the building, drawn before its sprite so it shows behind the towers.
 function eveHalo(ctx, df) {
-  const glow = glowAt(df);
+  const glow = Light.glow(df);
   if (glow <= 0.01) return;
   const smooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = true;
@@ -63,13 +64,13 @@ function eveHalo(ctx, df) {
   ctx.globalAlpha = 1;
   ctx.imageSmoothingEnabled = smooth;
 }
-// The cathedral's lights over its baked sprite: after dark the windows and a soft halo on the rose; the facade's
-// string, the eave's from the second level, the rose's ring and the lit star from the third. `still` (reduced
-// motion) stops the blinking and the twinkle; on Christmas Eve every bulb burns.
-function cathedralGlow(ctx, t, df, ev, still) {
-  const glow = glowAt(df),
+// The cathedral's lights over its baked sprite: after dark the windows and a soft halo on the rose; the strings of the
+// facade, the eave and the rose and the lit star, all from the event's first day (D1). `still` (reduced motion) stops
+// the blinking and the twinkle; on Christmas Eve (`eve`) every bulb burns.
+function cathedralGlow(ctx, t, df, eve, still) {
+  const glow = Light.glow(df),
     dark = glow > 0.01,
-    steady = still || ev.eve,
+    steady = still || eve,
     smooth = ctx.imageSmoothingEnabled,
     { facade, eave, rose, roseAt, star } = lights();
   if (dark) {
@@ -82,28 +83,24 @@ function cathedralGlow(ctx, t, df, ev, still) {
   }
   ctx.imageSmoothingEnabled = true;
   drawString(ctx, facade, t, glow, steady, dark);
-  if (ev.level >= 2) drawString(ctx, eave, t, glow, steady, dark);
-  if (ev.level >= 3) {
-    drawString(ctx, rose, t, glow, steady, dark);
-    litStar(ctx, CX + star[0], CY + star[1], still ? 0 : Math.floor(t * 2) % 2, glow);
-  }
+  drawString(ctx, eave, t, glow, steady, dark);
+  drawString(ctx, rose, t, glow, steady, dark);
+  litStar(ctx, CX + star[0], CY + star[1], still ? 0 : Math.floor(t * 2) % 2, glow);
   ctx.imageSmoothingEnabled = smooth;
 }
-// After dark, a soft halo on the statue and, from the second level, the manger's light in the crib.
-function yardGlow(ctx, df, level) {
-  const glow = glowAt(df);
+// After dark, a soft halo on the statue and the manger's light in the crib.
+function yardGlow(ctx, df) {
+  const glow = Light.glow(df);
   if (glow <= 0.01) return;
   const smooth = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = true;
   ctx.globalAlpha = 0.55 * glow;
   ctx.drawImage(glowSprite('#fff3b0', 24), LX + YARD.halo[0] - 12, LY + YARD.halo[1] - 12);
-  if (level >= 2) {
-    ctx.globalAlpha = glow;
-    ctx.fillStyle = '#ffe9a8';
-    ctx.fillRect(LX + MX, LY + MY, MW, MH);
-    ctx.globalAlpha = 0.8 * glow;
-    ctx.drawImage(glowSprite('#ffd98a'), LX + MX - 5, LY + MY - 5);
-  }
+  ctx.globalAlpha = glow;
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillRect(LX + MX, LY + MY, MW, MH);
+  ctx.globalAlpha = 0.8 * glow;
+  ctx.drawImage(glowSprite('#ffd98a'), LX + MX - 5, LY + MY - 5);
   ctx.globalAlpha = 1;
   ctx.imageSmoothingEnabled = smooth;
 }
@@ -111,13 +108,15 @@ function yardGlow(ctx, df, level) {
 mixin(
   ClaudeOffice,
   class {
-    // The landmark's lights among the scene's sprites, each right after its baked sprite (ev is never null here).
-    cathedralItems(G, items, ev) {
-      if (!HERE) return;
+    // The landmark's lights among the scene's sprites, each right after its baked sprite, while the look has the
+    // landmark (G.look); eve: Christmas Eve's (every bulb burning, a halo behind the building), which the page shows
+    // all the event long (D1b) and /assets beside an ordinary night.
+    cathedralItems(G, items, eve) {
+      if (!HERE || !G.look.extras.has('cathedral')) return;
       const still = !!(this.env && this.env.reduced);
-      if (ev.eve) items.push({ z: SITE.z - 0.01, f: () => eveHalo(G.ctx, G.df) });
-      items.push({ z: SITE.z + 0.01, f: () => cathedralGlow(G.ctx, G.t, G.df, ev, still) });
-      items.push({ z: SITE.ladyZ + 0.01, f: () => yardGlow(G.ctx, G.df, ev.level) });
+      if (eve) items.push({ z: SITE.z - 0.01, f: () => eveHalo(G.ctx, G.df) });
+      items.push({ z: SITE.z + 0.01, f: () => cathedralGlow(G.ctx, G.t, G.df, eve, still) });
+      items.push({ z: SITE.ladyZ + 0.01, f: () => yardGlow(G.ctx, G.df) });
     }
   },
 );

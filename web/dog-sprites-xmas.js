@@ -1,4 +1,5 @@
 import { DogSprites } from './dog-sprites.js';
+import { Paint } from './paint.js';
 // What the dogs wear at Christmas, as pixels laid over each frame of web/dog-sprites.js: antlers and a red nose for
 // the corgi, a red scarf for the husky, a red sweater with a white collar for the dalmatian. The pixels are worked
 // out from the frame itself (its collar pixel 'c' marks the neck), so a new frame is dressed without a table; the
@@ -109,4 +110,12 @@ function dress(breed, name, f) {
   }
   return dressed.get(k);
 }
-export const DogXmas = { PAL, PAD, overlay, palFor, dress };
+// The dog costume is the look's dog.costume variant (web/labels.js): 'xmas' is this dress, 'none' the bare dog.
+const isDressed = costume => costume === 'xmas';
+// Each variant is a painter that dresses frame f of a breed for the office's bake (dogSprite): { f, pal }, the frame
+// to paint and its palette. Run once per baked sprite, not a frame.
+Paint.variant('dog.costume', 'none', (breed, name, f) => ({ f, pal: DogSprites.BREEDS[breed].pal }));
+Paint.variant('dog.costume', 'xmas', (breed, name, f) => ({ f: dress(breed, name, f), pal: palFor(breed) }));
+// The office's cache key of a baked dog frame: breed, frame, light and snow level, and the costume by name.
+const key = (breed, name, dfB, snB, costume) => breed + '/' + name + '/' + dfB + '/' + snB + '/' + (costume || 'none');
+export const DogXmas = { PAL, PAD, overlay, palFor, dress, dressed: isDressed, key };

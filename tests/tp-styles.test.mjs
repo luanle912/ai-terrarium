@@ -132,7 +132,7 @@ test('calm is injected, false by default and after reset', () => {
   assert.equal(R.calm(), false)
 })
 
-test('the choice in storage and from the server', () => {
+test('the choice in storage', () => {
   const store = v => {
     const s = { v, set: null, getItem: () => s.v, setItem: (k, x) => (s.set = [k, x]) }
     return s
@@ -153,11 +153,4 @@ test('the choice in storage and from the server', () => {
   assert.deepEqual(s.set, ['ai-terrarium.teleport', 'random'])
   assert.equal(R.saveChoice({ setItem() { throw new Error('full') } }, 'pipe'), false)
   assert.equal(R.saveChoice(null, 'pipe'), false)
-  assert.deepEqual(R.adopt('frog', 'random'), { take: 'frog', seed: false })
-  assert.deepEqual(R.adopt('frog', 'frog'), { take: null, seed: false })
-  assert.deepEqual(R.adopt(undefined, 'frog'), { take: null, seed: true })
-  assert.deepEqual(R.adopt(undefined, 'random'), { take: null, seed: false })
-  assert.deepEqual(R.adopt(undefined, 'frog', { wallpaper: true }), { take: null, seed: false })
-  assert.deepEqual(R.adopt(undefined, 'frog', { seeded: true }), { take: null, seed: false })
-  assert.deepEqual(R.adopt('bogus', 'frog'), { take: null, seed: true })
 })

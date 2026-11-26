@@ -117,7 +117,7 @@ mixin(
               snowman: '⛄ ',
               skate: '⛸️ ',
               gift: '🎁 ',
-            }[a.actNow] || '☕ ') + (actLabel(a.actNow, this.eventNow()) || tr('bubble.pantryBreak'))
+            }[a.actNow] || '☕ ') + (actLabel(a.actNow, this.look) || tr('bubble.pantryBreak'))
           );
         case 'leaving':
           return fateLine(a.fate) || tr('bubble.leaving');
@@ -135,8 +135,8 @@ mixin(
         ls = live,
         others = isLive && this.state.asOthers;
       const cnt = k => this.agents.filter(a => !a.leaving && k.includes(a.status)).length;
-      // the season shown, a preview or the Settings choice included; the holiday's name while its trees are up
-      const seasonInfo = SeasonLogic.seasonChip(this.seasonNow(), this.treeOn ? this.season : null);
+      // the moment's season, a preview or the Settings choice included; the small holiday's or the event's name
+      const seasonInfo = SeasonLogic.seasonChip(this.moment);
       const summary = [
         [tr('summary.working'), ['working'], '#3e8ed0'],
         [tr('summary.thinking'), ['thinking'], '#5b8def'],
@@ -201,6 +201,7 @@ mixin(
           status: a.status,
           tool: a.tool,
           actNow: a.actNow,
+          say: a.actNow ? actLabel(a.actNow, this.look) : null,
           target: a.target,
           pinned: pinnedOf(a) || busy(a),
         })),

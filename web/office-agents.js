@@ -20,18 +20,12 @@ import {
   IDLE_SPOTS,
   LAWN_WALK,
   SIM_DEPTS,
-  STAIRS,
   W,
   colOf,
 } from './office-scene.js';
 import { ERRS, PERM, ST, TALK, TOOLS, bfs, clock, cwdKey, pick, rnd, shortOf, startCell } from './office-util.js';
 import { ClaudeOffice, mixin } from './office.js';
 const ON_LAWN = (x, y) => LAWN_WALK.has(Math.floor(x) + ',' + Math.floor(y));
-const CHAIRS = DESKS.map(d => [d.gx + 1, d.gy + 1.45]);
-// Stair cells: a teleport landing there would lie across the steps.
-const STEPS = STAIRS.flatMap(s =>
-  Array.from({ length: s.len }, (_, k) => (s.side === 'east' ? [W + 0.5, s.y + k + 0.5] : [s.x + k + 0.5, H + 0.5])),
-);
 // Agents: the simulated office and the live feed, desks and departments, where each agent goes next.
 mixin(
   ClaudeOffice,
@@ -53,15 +47,16 @@ mixin(
           es.onopen = () => this.setState({ live: 'ok' });
           es.onerror = () => this.setState({ live: 'error' });
           es.onmessage = e => {
-            if (this.state.asOthers) return;
             try {
               const snap = JSON.parse(e.data);
-              this.syncLive(snap);
-              // the local server's shared weather choice (ClaudeOffice.adoptSettings), posted back to the same server
+              // the local server's shared choices (ClaudeOffice.adoptSettings), posted back to the same server; they
+              // are the viewer's, so followed while viewing as another person too
               if ('pageSettings' in snap) {
                 this.settingsUrl = new URL('/api/settings', new URL(url, location.href)).href;
                 this.adoptSettings(snap.pageSettings);
               }
+              if (this.state.asOthers) return;
+              this.syncLive(snap);
               this.state.live !== 'ok' && this.setState({ live: 'ok' });
             } catch (err) {}
           };
@@ -214,6 +209,7 @@ mixin(
         dirFront: true,
         seated: !parent && !!seated,
         idleSpot: null,
+        idleT: 0,
         stool: false,
         actNow: null,
       };
@@ -243,8 +239,11 @@ mixin(
       a.status = 'leaving';
       this.log(a, tr('office.log.sessionEnded'));
       if (WorldLogic.leaveGone(document.visibilityState)) return void (a.gone = true);
-      // How they go (web/fate-logic.js): out of the EXIT door, or some other way that suits the weather, at a spot on
-      // the lawn, in the lake or a few steps along the way. A spot nobody can walk to falls back to the door.
+      this.pickFate(a);
+    }
+    // How they go (web/fate-logic.js): out of the EXIT door, or some other way that suits the weather, at a spot on
+    // the lawn, in the lake or a few steps along the way. A spot nobody can walk to falls back to the door.
+    pickFate(a) {
       const way = bfs(startCell(a.x, a.y), DOOR.tile);
       a.fate = FateLogic.pick(this.fateCtx(), Math.random, this.lastFate, this.forceFate);
       a.fateGoal = FateLogic.goal(a.fate, FATE_PLACES, way, Math.random);
@@ -532,15 +531,29 @@ mixin(
         }
         // Men use WC NAM and women WC NỮ (RestroomLogic.roomOf); about one idle choice in four is a free stall there.
         // On the frozen lakes nobody fishes or bathes: whoever is there leaves (SeasonLogic.idleStays).
-        // The Christmas event's own spots are open by its level, the snow and the ice (EventIdle.open).
+        // The Christmas event's own spots are open by the look, the snow and the ice (EventIdle.open).
         const frozen = SeasonLogic.look(this.seasonNow()).frozen,
           c = this.idleCtx(frozen);
-        if (!SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen) || !EventIdle.stays(IDLE_SPOTS, a.idleSpot, c))
-          a.idleSpot = null;
+        // (Someone the Look just sent away lingers a moment first, a.linger seconds: web/office-look.js.)
+        const stays =
+          SeasonLogic.idleStays(IDLE_SPOTS, a.idleSpot, frozen) && EventIdle.stays(IDLE_SPOTS, a.idleSpot, c);
+        if (!stays && !(a.linger > 0)) a.idleSpot = null;
+        // After ten minutes or so at one thing (a.idleT against a.idleFor) the person goes on to a different one.
+        const was = a.idleSpot != null && a.idleT >= a.idleFor ? a.idleSpot : null;
+        if (was != null) a.idleSpot = null;
         if (a.idleSpot == null || taken.has(a.idleSpot)) {
           const all = IDLE_SPOTS.map((_, i) => i).filter(i => !taken.has(i)),
-            free = EventIdle.open(IDLE_SPOTS, SeasonLogic.idleOpen(IDLE_SPOTS, all, frozen), c);
-          a.idleSpot = RestroomLogic.pickIdle(IDLE_SPOTS, free, a.wcDone ? null : RestroomLogic.roomOf(a), Math.random);
+            free = EventIdle.open(IDLE_SPOTS, SeasonLogic.idleOpen(IDLE_SPOTS, all, frozen), c),
+            room = a.wcDone && was == null ? null : RestroomLogic.roomOf(a);
+          a.idleSpot = RestroomLogic.pickIdle(
+            IDLE_SPOTS,
+            RestroomLogic.moveOn(IDLE_SPOTS, free, was),
+            room,
+            Math.random,
+          );
+          a.wcDone = a.wcDone && was == null;
+          a.idleT = 0;
+          a.idleFor = RestroomLogic.stint(Math.random);
         }
         if (a.idleSpot != null) {
           const sp = IDLE_SPOTS[a.idleSpot];
@@ -584,11 +597,11 @@ mixin(
           .map(p => [p[0] + 0.5, p[1] + 0.5])
           .concat([g.pt]);
         if (g.key === 'seat' && a.path.length > 1) a.path.splice(a.path.length - 2, 1);
-        const c = { prev, key: g.key, agents: this.agents, chairs: CHAIRS, stairs: STEPS, speed: this.speed };
-        a.tp = TeleportLogic.plan(a, c);
+        a.tp = this.tpPlan(a, g.key, prev);
       }
-      // Held still while a teleport plays (web/teleport-logic.js).
-      if (a.tp && TeleportLogic.step(a, dt)) return;
+      if (a.actNow && !a.path.length) a.idleT += dt * this.speed; // the stay at an idle spot, walking not counted
+      if (a.linger > 0) a.linger -= dt * this.speed;
+      if (a.tp && TeleportLogic.step(a, dt)) return; // held still while a teleport plays (web/teleport-logic.js)
       if (a.path.length) {
         a.moving = true;
         let step = 2.6 * this.speed * dt;

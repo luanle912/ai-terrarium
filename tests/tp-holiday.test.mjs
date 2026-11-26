@@ -1,5 +1,6 @@
 // The teleports' holiday is the one the page shows (web/office.js tpHoliday): the Christmas event as Settings → Event
-// sets it (auto, on, off, its preview), else the holiday trees by the office; every world island shows the same.
+// sets it (auto, on, off, its preview), else the holiday trees by the office (none while a season is picked by hand,
+// web/moment.js); every world island shows the same.
 import { test, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { loadWeb } from './web.mjs'
@@ -16,7 +17,6 @@ for (const m of ['office-render', 'office-render-panels', 'office-render-header'
 const { IslandScene } = loadWeb('island-scene')
 const { TpStyles } = loadWeb('tp-styles')
 const { EventLogic } = loadWeb('event-logic')
-const { SeasonTree } = loadWeb('season-tree')
 
 const at = (m, d) => new Date(2026, m, d, 12).getTime()
 const NOV = at(10, 18),
@@ -25,14 +25,13 @@ const NOV = at(10, 18),
   TET = at(1, 10)
 const someone = { id: 1, sid: 'sess_holiday' }
 
-// A real page on a fixed clock, its tree key set as draw() sets it.
+// A real page on a fixed clock.
 function page(now, { event = 'auto', preview = null } = {}) {
   TpStyles.reset()
   TpStyles.setChoice('random')
   const p = new ClaudeOffice({})
   p.eventChoice = event
   p.eventPreview = preview
-  p.seasonKey = SeasonTree.seasonFor(new Date(now))
   return p
 }
 
@@ -67,7 +66,7 @@ test('holiday trees: Halloween and Tet follow the trees; the Christmas event win
   assert.equal(TpStyles.styleFor(someone, HALLOWEEN), 'bats', 'Event is Christmas only; the trees still stand')
   p.seasonChoice = 'summer'
   p.seasonPreview = { key: 'spring', until: HALLOWEEN + 60_000 }
-  assert.equal(TpStyles.holidayNow(HALLOWEEN + 1000), 'halloween', 'a season choice or preview keeps the trees')
+  assert.equal(TpStyles.holidayNow(HALLOWEEN + 1000), null, 'a season picked by hand has no holiday trees')
   page(HALLOWEEN, { event: 'on' })
   assert.equal(TpStyles.styleFor(someone, HALLOWEEN), 'sleigh')
   page(TET)
@@ -90,8 +89,8 @@ test('every world island shows the holiday its host gives the teleports', () => 
     try {
       const host = page(now, { event, preview }),
         island = new IslandScene(host, 'i1')
-      island.seasonKey = SeasonTree.seasonFor(new Date(now))
-      const shown = TpStyles.holidayOf(island.season, island.eventNow())
+      host.computeMoment(new Date(now))
+      const shown = TpStyles.holidayOf(island.moment.holiday || 'default', island.eventNow())
       assert.equal(TpStyles.holidayNow(now), shown, `${new Date(now).toDateString()} event ${event}`)
     } finally {
       mock.timers.reset()
@@ -99,10 +98,9 @@ test('every world island shows the holiday its host gives the teleports', () => 
   }
 })
 
-test('the holiday follows the calendar, not a tree key the page has not redrawn (the world view skips draw)', () => {
+test('the holiday follows the calendar, not a moment the page has not worked out yet (the world view skips draw)', () => {
   const p = page(HALLOWEEN, { event: 'off' })
-  assert.equal(p.seasonKey, 'halloween')
+  p.computeMoment(new Date(HALLOWEEN))
   assert.equal(TpStyles.holidayNow(NOV), null, 'Halloween is over by 18 November')
-  p.seasonKey = 'default'
-  assert.equal(TpStyles.holidayNow(TET), 'tet', 'Tet starts while the key still says default')
+  assert.equal(TpStyles.holidayNow(TET), 'tet', 'Tet starts before the next computeMoment')
 })

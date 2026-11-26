@@ -4,8 +4,8 @@
 // web/island-art.js, web/island-art-mountain.js and web/island-art-lake.js.
 import {
   drawBench,
-  drawBush,
   drawLamp,
+  bushSnowOnTop,
   drawMushroom,
   drawRock,
   drawUnderside,
@@ -20,7 +20,7 @@ import {
 import { drawMountain, drawPool } from './island-art-mountain.js';
 import { drawLakeDecor, drawPavilion, drawWater, PAVILION_EXT } from './island-art-lake.js';
 import { hash, WATER_Z } from './island-land.js';
-import { drawSeasonFlowers, drawSeasonTree, drawSnowman, seasonC, SNOWMAN_EXT, TREE_EXT } from './island-art-season.js';
+import { drawSeasonFlowers, drawSnowman, seasonC, SNOWMAN_EXT, TREE_EXT } from './island-art-season.js';
 import { SeasonIsland } from './season-island.js';
 import { SeasonLogic } from './season-logic.js';
 import { SnowLogic } from './snow-logic.js';
@@ -28,6 +28,7 @@ import { CANE_EXT, drawCandyCane } from './island-art-xmas.js';
 import { CATHEDRAL_EXT, drawCathedral } from './island-art-cathedral.js';
 import { drawOurLady, LADY_EXT } from './island-art-cathedral-yard.js';
 import { EventLandmark } from './event-landmark.js';
+import { Paint } from './paint.js';
 import { drawIcicles, drawSnowEdge, drawSnowLawn, snowOnTop, snowTile } from './island-art-snow.js';
 export { hash, hex, mix, toHex, WATER_Z };
 // Night pulls every island colour toward the same deep blue the office uses after dark (web/island-art.js).
@@ -39,7 +40,7 @@ export const SNOW = '#eef3f7';
 // (SeasonLogic; summer, the standard, when missing), env.block the office block {W, H} the island is built round.
 const TW = 16,
   TH = 8;
-function bakeTools(frame, env) {
+export function bakeTools(frame, env) {
   const { OX, OY } = frame,
     look = SeasonLogic.look(env.season),
     P = (x, y, z = 0) => [OX + (x - y) * TW, OY + (x + y) * TH - z],
@@ -49,6 +50,12 @@ function bakeTools(frame, env) {
     S = c => SnowLogic.night(c, env.df);
   return { P, C, look, depth, S };
 }
+
+// The colour function of the Christmas event's outdoor pieces under daylight df: they keep more of their colour after
+// dark than the lawn does.
+export const eventTone = df => c => night(c, 1 - (1 - df) * 0.55);
+// The cathedral and the statue are dressed in full from the event's first day (D1): their top dressing level.
+export const DRESSED = 3;
 
 // The island as one image the size of the scene canvas. The land (underside, lawn, lake, mountain) is painted first on
 // its own canvas so it can be ringed with the 1 px outline; the pool at the mountain's foot, the stepping stones,
@@ -168,12 +175,12 @@ export function renderIsland(island, frame, k, env) {
 // Everything that stands up off the lawn, each baked into its own small sprite at the island image's resolution and
 // light: [{ x, y, z, img, dx, dy, lamp, lantern }]. (x, y) is its tile, z its depth among the scene's sorted sprites
 // (x + y of the point that decides what it hides), dx, dy where the sprite goes in canvas px, lamp the lamp's index or
-// -1, lantern true for the pavilion. The island's trees, in the season's colours, are marked tree: true, so the scene
-// can leave out the few that turn into a holiday's tree; in winter the snowmen stand among them
-// (SeasonIsland.snowmanTiles).
+// -1, lantern true for the pavilion. The island's trees, in the look's variant (tree.island), are marked tree: true,
+// so the office can draw the look's holiday tree (tree.holiday) in place of the few by it (web/office-draw.js); in
+// winter the snowmen stand among them (SeasonIsland.snowmanTiles).
 // Someone behind a lamp post, a bush, the bench, a tree, a snowman or the pavilion is hidden by it.
 export function renderProps(island, frame, k, env) {
-  const { P, C, look, depth, S } = bakeTools(frame, env),
+  const { P, C, depth, S } = bakeTools(frame, env),
     out = [];
   // ext: [left, up, right, down] px round the point (x + 0.5, y + 0.5) on the lawn
   // (snowy: lying snow settles on its top; the snowmen are snow already)
@@ -201,31 +208,39 @@ export function renderProps(island, frame, k, env) {
   add(rest.bench.x, rest.bench.y, rest.bench.x + rest.bench.y + 1, [13, 15, 13, 8], pt =>
     drawBench(pt, P, C, rest.bench),
   );
+  // Every bush and tree wears the look's variant of its label (env.look, web/theme.js), drawn by its painter
+  // (web/paint.js): under the Christmas event holly and firs, the firs lightly snowed (they bring their own snow).
+  // Holly lays its own small snow cap (bushSnowOnTop, web/island-art.js).
+  const lk = env.look,
+    bushSnow = bushSnowOnTop(lk.of('bush')),
+    snow = { S, depth },
+    bush = Paint.painter('bush', lk.of('bush')),
+    tree = lk.of('tree.island'),
+    paintTree = Paint.painter('tree.island', tree);
   for (const d of island.decor)
-    if (d.kind === 'bush') add(d.x, d.y, d.x + d.y + 0.5, [11, 15, 11, 4], pt => drawBush(pt, P, C, d, look.fruit));
-  // During the Christmas event winter's bare trees are firs, lightly snowed (they bring their own snow).
-  const fir = !!env.event && look.trees === 'bare',
-    trees = fir ? 'fir' : look.trees;
+    if (d.kind === 'bush') add(d.x, d.y, d.x + d.y + 0.5, [11, 15, 11, 4], pt => bush(pt, P, C, d, snow), -1, bushSnow);
   for (const d of island.decor)
     if (d.kind === 'tree') {
-      add(d.x, d.y, d.x + d.y + 0.5, TREE_EXT, pt => drawSeasonTree(pt, P, C, d, trees), -1, !fir);
+      add(d.x, d.y, d.x + d.y + 0.5, TREE_EXT, pt => paintTree(pt, P, C, d), -1, tree !== 'fir');
       out[out.length - 1].tree = true;
     }
-  if (look.frozen && env.block)
+  if (lk.extras.has('snowman.lawn') && env.block)
     for (const m of SeasonIsland.snowmanTiles(island, env.block.W, env.block.H))
       add(m.x, m.y, m.x + m.y + 0.5, SNOWMAN_EXT, pt => drawSnowman(pt, P, C, m), -1, false);
-  // The Christmas event's outdoor pieces (env.event is its level): they keep more of their colour after dark than
-  // the lawn. The candy canes, and the cathedral with the statue before it where the back lawn is free.
-  if (env.event && env.block) {
-    const T = c => night(c, 1 - (1 - env.df) * 0.55),
+  // The look's outdoor extras (the Christmas event's): they keep more of their colour after dark than the lawn. The
+  // candy canes, and the cathedral with the statue before it where the back lawn is free, fully dressed (D1).
+  if (env.block && (lk.extras.has('cane') || lk.extras.has('cathedral') || lk.extras.has('ourlady'))) {
+    const T = eventTone(env.df),
       lm = EventLandmark.site(island, env.block);
-    if (env.event >= 2)
+    if (lk.extras.has('cane'))
       for (const l of island.lamps) add(l.x, l.y, l.x + l.y + 1.3, CANE_EXT, pt => drawCandyCane(pt, P, T, l));
-    if (lm) {
-      const [cx, cy] = lm.at,
-        [lx, ly] = lm.lady;
-      add(cx, cy, lm.z, CATHEDRAL_EXT, pt => drawCathedral(pt, P, T, S, depth, env.event, lm.at), -1, false);
-      add(lx, ly, lm.ladyZ, LADY_EXT, pt => drawOurLady(pt, P, T, S, depth, env.event, lm.lady), -1, false);
+    if (lm && lk.extras.has('cathedral')) {
+      const [cx, cy] = lm.at;
+      add(cx, cy, lm.z, CATHEDRAL_EXT, pt => drawCathedral(pt, P, T, S, depth, DRESSED, lm.at), -1, false);
+    }
+    if (lm && lk.extras.has('ourlady')) {
+      const [lx, ly] = lm.lady;
+      add(lx, ly, lm.ladyZ, LADY_EXT, pt => drawOurLady(pt, P, T, S, depth, DRESSED, lm.lady), -1, false);
     }
   }
   return out;

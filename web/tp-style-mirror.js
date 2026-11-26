@@ -2,7 +2,8 @@
 // reflection and walks into the glass with a ripple; at the landing a second mirror rises, the glass ripples and they
 // step out of it, their back reflected behind them, before it sinks into its pool. Mirror, glass veil, ripples, glints,
 // the white flash and the pools are pixel sprites baked once; a frame only stamps them.
-import { glowAt, glowSprite } from './office-draw-xmas.js';
+import { glowSprite } from './office-draw-xmas.js';
+import { Light } from './light.js';
 import { Kit } from './tp-kit.js';
 import { BLOCK, TH, TW } from './office-scene.js';
 
@@ -356,7 +357,7 @@ export const STYLE = {
       h = Math.round(MH * rise),
       ctx = X.ctx;
     if (h <= 0) return;
-    const glow = glowAt(X.df);
+    const glow = Light.glow(X.df);
     if (glow > 0) {
       const sm = ctx.imageSmoothingEnabled;
       ctx.imageSmoothingEnabled = true;

@@ -104,7 +104,7 @@ class TpX {
     this.df = G.df == null ? 1 : G.df;
     this.night = this.df < 0.35;
     this.snow = snow;
-    this.ev = G.ev || null;
+    this.gLook = G.look || null;
     this.seed = id * 0.37;
   }
   ends(x0, y0, x1, y1) {

@@ -4,6 +4,7 @@
 import { Kit } from './tp-kit.js';
 import { TpPerson } from './tp-person.js';
 import { outdoors } from './office-scene.js';
+import { Light } from './light.js';
 
 const { clamp, r, out2, ease, frac } = Kit;
 const DEP = 0.42,
@@ -27,7 +28,7 @@ const PAL = [
   ['#56607c', '#b3bacb', '#dde2ec'],
 ];
 const palOf = (X, tx, ty) =>
-  X.night ? PAL[2] : X.snow > 0 && outdoors(tx, ty) ? PAL[3] : X.df < 0.6 ? PAL[1] : PAL[0];
+  X.night ? PAL[2] : X.snow > 0 && outdoors(tx, ty) ? PAL[3] : X.df < Light.GLOW ? PAL[1] : PAL[0];
 
 // Tiles along the route from its first seen point and whether it crosses the rug, cached per route array.
 const LENS = new WeakMap();

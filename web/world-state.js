@@ -3,6 +3,7 @@ import { tr } from './i18n.js';
 import { WorldLogic } from './world-logic.js';
 import { ClaudeOffice } from './office.js';
 import { IslandScene } from './island-scene.js';
+import { SettingsSync } from './settings-sync.js';
 import {
   DEVICE_KEY,
   HEX_ID,
@@ -110,6 +111,12 @@ Object.assign(ClaudeOffice.prototype, {
     if (!this.onWorldOnline) {
       this.onWorldOnline = () => this.relink({ type: 'online' });
       window.addEventListener('online', this.onWorldOnline);
+    }
+    // The hub's page cannot reach the local server, so its shared settings are its own storage: a choice made in
+    // another tab of the world is followed here as the local page follows the server's (SettingsSync.follow).
+    if (!this.onWorldStorage) {
+      this.onWorldStorage = e => this.world && SettingsSync.follow(this, e.key);
+      window.addEventListener('storage', this.onWorldStorage);
     }
     // Phones (<= 480 px) fold the "Máy mới" notices into one line and use a 16 px name field (no zoom on focus).
     if (!this.phoneMq && window.matchMedia) {

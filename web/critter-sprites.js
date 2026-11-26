@@ -1,11 +1,13 @@
 // Pixel sprites for the Christmas event's critters (reindeer, elves, penguins, Santa, his sleigh, the presents it
-// drops), all drawn facing right; the page mirrors them to face left. Same form as web/dog-sprites.js: each letter
-// is a palette colour ('.' is empty), the bottom row is where the feet touch the ground and `ax` is the column
-// under the critter's middle. Pure data (tests/critter-sprites.test.mjs).
+// drops) and for winter's polar bears, all drawn facing right; the page mirrors them to face left. Same form as
+// web/dog-sprites.js: each letter is a palette colour ('.' is empty), the bottom row is where the feet touch the
+// ground and `ax` is the column under the critter's middle. Pure data (tests/critter-sprites.test.mjs).
 import { OutfitLogic } from './outfit-logic.js';
+import { XMAS } from './office-people-xmas.js';
 
 const { RED, WHITE, GOLD } = OutfitLogic,
   GREEN = '#2f8f4e',
+  E = XMAS.elf,
   DARK = '#2a1c14';
 
 // The reindeer's head and neck over its back, then its trunk; the legs are what changes between frames.
@@ -70,7 +72,8 @@ const KINDS = {
   },
   elf: {
     ax: 3,
-    pal: { g: GREEN, G: '#1f6b3a', r: RED, R: '#96242b', s: '#f0c8a0', k: DARK, y: GOLD, w: WHITE },
+    // the sub-agent's costume (XMAS.elf): coat and its shade, red trim and scarf, a dark belt, the gold buckle and bell
+    pal: { g: E.coat, G: E.coatD, r: E.trim, R: E.trimD, b: E.belt, s: '#f0c8a0', k: DARK, y: E.bell, w: WHITE },
     frames: {
       walk1: [
         '..y....',
@@ -79,9 +82,9 @@ const KINDS = {
         '.rrrrr.',
         'sssks..',
         '.ssss..',
-        '.gggg..',
+        '.rrrr..',
         '.ggggs.',
-        '.Gyyg..',
+        '.byyb..',
         '.gggg..',
         '.g..g..',
         'kk..kk.',
@@ -93,9 +96,9 @@ const KINDS = {
         '.rrrrr.',
         'sssks..',
         '.ssss..',
-        '.gggg..',
+        '.rrrr..',
         'sgggg..',
-        '.Gyyg..',
+        '.byyb..',
         '.gggg..',
         '..gg...',
         '..kkk..',
@@ -107,9 +110,9 @@ const KINDS = {
         '.rrrrr....',
         'sssks.....',
         '.ssss.yy..',
-        '.gggg.ry..',
+        '.rrrr.ry..',
         '.ggggsryrr',
-        '.GyygsyyyR',
+        '.byybsyyyR',
         '.gggg.ryrR',
         '.g..g.....',
         'kk..kk....',
@@ -121,9 +124,9 @@ const KINDS = {
         '.rrrrr....',
         'sssks.yy..',
         '.ssss.ry..',
-        '.ggggsryrr',
+        '.rrrrsryrr',
         '.ggggsyyyR',
-        '.Gyyg.ryrR',
+        '.byyb.ryrR',
         '.gggg.....',
         '..gg......',
         '..kkk.....',
@@ -136,9 +139,9 @@ const KINDS = {
         '..rrrrr...',
         '.sssks....',
         '..ssss.yy.',
-        '.ggggs.ry.',
+        '.rrrrs.ry.',
         '.gggggsryr',
-        '.Gyyg.yyyR',
+        '.byyb.yyyR',
         '.g..g.ryrR',
         'kk..kk....',
       ],
@@ -150,9 +153,9 @@ const KINDS = {
         '.rrrrr....',
         'sssks.....',
         '.ssss.....',
-        '.gggg.....',
+        '.rrrr.....',
         'sgggg..y..',
-        '.Gyyg.kry.',
+        '.byyb.kry.',
         '.gggggkyyy',
         '.GggggkryR',
       ],
@@ -263,6 +266,57 @@ const KINDS = {
       ],
       box: ['..yy.y...', '.rryrr...', '.yyyyy...', '.rryrR...', '.rryrR...'],
     },
+  },
+};
+// The polar bears by the igloo (web/polar-bears.js): there all winter, not only for Christmas. The mother is the
+// biggest thing on the lawn; her cub is half her size. Their back legs are drawn first, then the front ones.
+const FUR = { w: '#f4f2ea', W: '#cfd3dc', s: '#a9b0bf', k: '#1d2029' };
+const BEAR_TOP = [
+  '....wwwwwwwwww........',
+  '..wwwwwwwwwwwwww..w...',
+  '.wwwwwwwwwwwwwwwwwwww.',
+  'wwwwwwwwwwwwwwwwwwkwww',
+  'wwwwwwwwwwwwwwwwwwwwwk',
+  'WwwwwwwwwwwwwwwWWwww..',
+  'WWwwwwwwwwwwwwwW......',
+  '.WWWWWWWWWWWWWW.......',
+];
+const BEAR_LEGS = {
+  stand: ['.WwW..WwW..WwW..WwW...', '.WwW..WwW..WwW..WwW...', '.sss..sss..sss..sss...'],
+  walk1: ['WwW..WwW...WwW..WwW...', 'Ww....wW..Ww.....wW...', 'ss....ss..ss.....ss...'],
+  walk2: ['.WwWwW......WwWwW.....', '..WwW........WwW......', '..sss........sss......'],
+};
+const CUB_TOP = ['..wwwww.....', '.wwwwwwww.w.', 'wwwwwwwwwwkw', 'wwwwwwwwwwwk', 'WwwwwwwwwW..'];
+const CUB_LEGS = {
+  stand: ['.Ww.W..Ww.W.', '.s..s..s..s.'],
+  walk1: ['Ww..W..Ww..W', 's...s..s...s'],
+  walk2: ['..WwW...WwW.', '..ss.....ss.'],
+};
+KINDS.bear = {
+  ax: 10,
+  outline: '#6f788c',
+  pal: FUR,
+  frames: {
+    ...Object.fromEntries(Object.keys(BEAR_LEGS).map(k => [k, [...BEAR_TOP, ...BEAR_LEGS[k]]])),
+    // lying down, head up, front paws out
+    lie: [
+      '.................w.w..',
+      '.....wwwwwwww...wwwww.',
+      '...wwwwwwwwwwwwwwwkwww',
+      '.wwwwwwwwwwwwwwwwwwwwk',
+      'wwwwwwwwwwwwwwwwwwww..',
+      'WWwwwwwwwwwwwwwWsssss.',
+      '.WWWWWWWWWWWWWWW......',
+    ],
+  },
+};
+KINDS.cub = {
+  ax: 5,
+  outline: '#6f788c',
+  pal: FUR,
+  frames: {
+    ...Object.fromEntries(Object.keys(CUB_LEGS).map(k => [k, [...CUB_TOP, ...CUB_LEGS[k]]])),
+    lie: ['.........w.w', '..wwwww.wwww', '.wwwwwwwwwkw', 'wwwwwwwwwwwk', 'WWwwwwwwWss.', '.WWWWWWW....'],
   },
 };
 const RUDOLPH = { n: '#ff4d4d' };

@@ -4,6 +4,7 @@ import { Kit } from './tp-kit.js';
 import { TpPerson } from './tp-person.js';
 import { PERSON, LOOK, hairTones } from './office-people.js';
 import { XMAS, lookUnder, outfitOf, shirtOf } from './office-people-xmas.js';
+import { Light } from './light.js';
 
 const { r, out2, in2, bake, atlas, ellipse } = Kit;
 const DEP = 0.42,
@@ -170,7 +171,7 @@ const hatR = (x, y, w, h, c) => {
 function goldHair(X, sx, hy, gold, spike) {
   const a = X.a,
     ctx = X.ctx,
-    o = outfitOf(a, X.ev),
+    o = outfitOf(a, X.gLook),
     L = lookUnder(LOOK(a), o),
     hat = o && o.hat;
   if (gold <= 0) return;
@@ -342,8 +343,8 @@ function aura(X, px, py, a, front) {
   const ctx = X.ctx,
     f = Math.floor(X.t * 14 + X.seed * 7) % AF;
   if (!front && !X.lite && X.night) {
-    // as office-draw-xmas.js glowAt: nothing by day, full at night
-    ctx.globalAlpha = a * X.L.C * (X.df >= 0.6 ? 0.35 : 0.95 - X.df);
+    // faint until the lights come on (Light.GLOW), then brighter as it darkens
+    ctx.globalAlpha = a * X.L.C * (X.df >= Light.GLOW ? 0.35 : 0.95 - X.df);
     X.stamp(art(), 0, AH + RH, HW, HH, px - HW / 2, py - 52, HW, HH);
   }
   ctx.globalAlpha = a * X.L.C * (front ? 0.28 : 0.9 + 0.1 * Math.sin(X.t * 19));

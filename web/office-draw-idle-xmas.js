@@ -31,9 +31,8 @@ mixin(
   class {
     // What the event's idle spots depend on (EventIdle.open): one object per scene, used again.
     idleCtx(frozen) {
-      const c = this.idleC || (this.idleC = { level: 0, snow: 0, frozen: false, calm: false }),
-        ev = this.eventNow();
-      c.level = ev ? ev.level : 0;
+      const c = this.idleC || (this.idleC = { look: null, snow: 0, frozen: false, calm: false });
+      c.look = this.look;
       c.snow = SnowLogic.depth(this.snowShown || 0);
       c.frozen = !!frozen;
       c.calm = !!(this.env && this.env.reduced);
@@ -95,7 +94,8 @@ mixin(
     idleXmasItems(G, items) {
       G_T.t = G.t;
       this.snowBoth = false;
-      if (!G.ev) return;
+      const look = G.look;
+      if (!look.has('idle.snowball') && !look.has('idle.snowman') && !look.has('idle.skate')) return;
       let s0 = null,
         s1 = null;
       for (const a of this.agents) {

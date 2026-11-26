@@ -7,6 +7,10 @@ import { loadWeb, readWeb } from './web.mjs'
 const Fate = loadWeb('fate-logic').FateLogic
 const { look } = loadWeb('season-logic').SeasonLogic
 const FX = loadWeb('sky-logic').SkyLogic.FX
+const { Theme } = loadWeb('theme')
+const { Moment } = loadWeb('moment')
+const lookAt = (date, eventChoice = 'auto') =>
+  Theme.resolve(Moment.at({ date, now: date.getTime(), seasonChoice: 'auto', eventChoice, df: 1, snow: 0.8 }))
 const cond = (weather, season, day = 1) =>
   Fate.conditions({ fx: FX[weather], look: look(season), day, summer: season === 'summer', calm: false })
 const possible = c => Fate.KINDS.filter(k => Fate.weights(c)[k] > 0)
@@ -117,25 +121,25 @@ test('every fate but the door has a scene length', () => {
   for (const k of Fate.KINDS) assert.ok(k === 'exit' || Fate.FATES[k].dur > 2, k)
 })
 
-test('the four Christmas ways out need the event; the sleigh only comes on Christmas Eve and Day', () => {
+test('the four Christmas ways out are the look\'s fate rules, all from the event\'s first day (D1b)', () => {
   const xmas = ['sleigh', 'wrapped', 'skateoff', 'chimney']
-  const ev = { key: 'christmas', level: 3, eve: false, day: false }
-  const withEv = (weather, season, e, calm = false) =>
-    Fate.conditions({ fx: FX[weather], look: look(season), day: 1, summer: season === 'summer', calm, ev: e })
+  const XMAS = lookAt(new Date(2026, 11, 20, 12)), DAY0 = lookAt(new Date(2026, 11, 1, 12))
+  const WINTER = lookAt(new Date(2026, 11, 20, 12), 'off')
+  const withEv = (weather, season, theme, calm = false) =>
+    Fate.conditions({ fx: FX[weather], look: look(season), day: 1, summer: season === 'summer', calm, theme })
   for (const w of Object.keys(FX)) for (const s of ['spring', 'summer', 'autumn', 'winter'])
     for (const k of xmas) assert.equal(Fate.weights(cond(w, s))[k], 0, `${k} in ${w} ${s} without the event`)
-  const on = Fate.weights(withEv('snow', 'winter', ev))
-  assert.equal(on.sleigh, 0)
-  assert.ok(on.wrapped > 0 && on.chimney > 0 && on.skateoff > 0)
-  assert.equal(Fate.weights(withEv('clear', 'summer', ev)).skateoff, 0, 'no ice, no skating off')
-  assert.equal(Fate.weights(withEv('snow', 'winter', { ...ev, eve: true })).sleigh, 10)
-  assert.equal(Fate.weights(withEv('snow', 'winter', { ...ev, day: true })).sleigh, 10)
-  const calm = Fate.weights(withEv('snow', 'winter', { ...ev, eve: true }, true))
+  for (const k of xmas) assert.equal(Fate.weights(withEv('snow', 'winter', WINTER))[k], 0, `${k}: winter, event off`)
+  for (const t of [XMAS, DAY0])
+    assert.deepEqual(xmas.map(k => Fate.weights(withEv('snow', 'winter', t))[k]), [4, 4, 5, 3])
+  assert.equal(Fate.weights(withEv('clear', 'summer', XMAS)).skateoff, 0, 'no ice, no skating off')
+  const ev = XMAS
+  const calm = Fate.weights(withEv('snow', 'winter', ev, true))
   assert.deepEqual(Fate.KINDS.filter(k => calm[k] > 0), ['exit'])
   for (const k of xmas) assert.equal(Fate.pick(cond('clear', 'summer'), () => 0.5, null, k), k)
   const places = { lawn: [[3, 20]], lake: [[32, 17], [32, 18]] }
   assert.ok(places.lake.some(c => c.join() === Fate.goal('skateoff', places, [], () => 0.3).tile.join()))
   assert.deepEqual(Fate.goal('sleigh', places, [], () => 0).tile, [3, 20])
   assert.equal(Fate.KINDS.length, 21)
-  assert.ok(seen(withEv('snow', 'winter', { ...ev, eve: true })).has('sleigh'))
+  assert.ok(seen(withEv('snow', 'winter', ev)).has('sleigh'))
 })

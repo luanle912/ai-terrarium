@@ -70,10 +70,15 @@ const D = loadWeb('office-draw-teleport')
 const { TeleportLogic: TL } = loadWeb('teleport-logic')
 const { TpStyles } = loadWeb('tp-styles')
 const { DRAW } = loadWeb('tp-style-index')
-const { EventLogic } = loadWeb('event-logic')
+const { Moment } = loadWeb('moment')
+const { Theme } = loadWeb('theme')
 const { T } = TL
 const CIRCLE = DRAW.circle
-const EV = EventLogic.active(new Date(2026, 11, 20, 12), 'on', null, 0)
+// The page's look on a plain July day and under the Christmas event (outfits, hats), as computeMoment makes it.
+const lookAt = (date, eventChoice) =>
+  Theme.resolve(Moment.at({ date, now: date.getTime(), seasonChoice: 'auto', eventChoice, df: 1, snow: 0 }))
+const PLAIN = lookAt(new Date(2026, 6, 20, 12), 'off'),
+  XMAS = lookAt(new Date(2026, 11, 20, 12), 'on')
 const ORIGIN = [21.5, 10.5], LAND = [3.5, 4.5], ROUTE = [ORIGIN, [12.5, 10.5], [3.5, 10.5], LAND]
 // Straight across the lounge rug, then on to the landing (plan always ends the route there).
 const RUGWAY = [[24.5, 12.5], [24.5, 3.5], [12.5, 3.5], [3.5, 3.5], LAND]
@@ -105,7 +110,7 @@ page.drawPerson = function (G, a) {
   }
 }
 const people = Array.from({ length: 16 }, () => page.addAgent({}))
-function sceneG({ df = 1, ev = null, theme = 'day' } = {}) {
+function sceneG({ df = 1, look = PLAIN, theme = 'day' } = {}) {
   const { ctx, state, depth: d } = context(C)
   const poly = (pts, fill, stroke) => {
     ctx.beginPath()
@@ -118,7 +123,7 @@ function sceneG({ df = 1, ev = null, theme = 'day' } = {}) {
   const th = S.THEMES[theme]
   const box = (x, y, w, hh, z0, z1, top) => poly([S.P(x, y, z1), S.P(x + w, y, z1), S.P(x + w, y + hh, z1), S.P(x, y + hh, z1)], top)
   const rect = (x, y, w, hh, col) => ((ctx.fillStyle = col), ctx.fillRect(Math.round(x), Math.round(y), w, hh))
-  return { G: { ctx, poly, box, rect, th, t: 2.4, df, ev, cold: false }, state, depth: d }
+  return { G: { ctx, poly, box, rect, th, t: 2.4, df, look, cold: false }, state, depth: d }
 }
 // One frame of the given agents: tp items plus each walker, sorted, run. Returns this frame's tallies.
 function frame(agents, cfg = {}) {
@@ -164,8 +169,8 @@ function pose(a, id, u, over = {}) {
   return a
 }
 const GRID = []
-for (const df of [1, 0.2]) for (const snow of [0, 3]) for (const ev of [null, EV]) for (const theme of ['day', 'blueprint'])
-  GRID.push({ df, snow, ev, theme })
+for (const df of [1, 0.2]) for (const snow of [0, 3]) for (const look of [PLAIN, XMAS]) for (const theme of ['day', 'blueprint'])
+  GRID.push({ df, snow, look, theme })
 const IDS = TpStyles.STYLES.map(s => s.id)
 const CAPS = { normal: 60, lite: 30, queued: 8, path: 400 }
 // A hidden start may show nothing while its landing fades in from L_IN, until the departure would have ended.
@@ -224,7 +229,7 @@ test('the sources keep to the drawing rules', () => {
     /console\./, /fillText|strokeText/]
   // Shared art and pure logic only: the page modules (office.js, office-agents.js, the dispatcher) would be cycles.
   const ALLOW = new Set(['tp-kit', 'tp-person', 'teleport-logic', 'tp-styles', 'office-scene', 'office-draw-xmas',
-    'office-people', 'office-people-xmas', 'island-grid', 'pantry-items', 'restroom-logic'])
+    'office-people', 'office-people-xmas', 'island-grid', 'pantry-items', 'restroom-logic', 'light'])
   for (const m of ['office', 'office-agents', 'office-draw-teleport', 'tp-style-index']) assert.ok(!ALLOW.has(m))
   for (const f of files) {
     const code = readFileSync(new URL(f, dir), 'utf8')

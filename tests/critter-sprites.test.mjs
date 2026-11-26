@@ -12,6 +12,8 @@ const NEED = {
   santa: [['sit', 'wave'], 14, 16],
   sleigh: [['fly'], 48, 16],
   parcel: [['chute', 'box'], 9, 13],
+  bear: [['stand', 'walk1', 'walk2', 'lie'], 22, 12],
+  cub: [['stand', 'walk1', 'walk2', 'lie'], 12, 8],
 }
 const FLOATING = ['sleigh/fly', 'parcel/chute']
 
@@ -36,7 +38,7 @@ test('every kind has its frames, no larger than its box, in its own palette', ()
 
 test('the two steps of a walk differ', () => {
   for (const [k, a, b] of [['reindeer', 'walk1', 'walk2'], ['elf', 'walk1', 'walk2'], ['elf', 'carry1', 'carry2'],
-    ['penguin', 'waddle1', 'waddle2'], ['santa', 'sit', 'wave']])
+    ['penguin', 'waddle1', 'waddle2'], ['santa', 'sit', 'wave'], ['bear', 'walk1', 'walk2'], ['cub', 'walk1', 'walk2']])
     assert.notDeepEqual(C.frame(k, a).rows, C.frame(k, b).rows, `${k} ${a}/${b}`)
 })
 

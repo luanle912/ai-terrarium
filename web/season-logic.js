@@ -88,27 +88,31 @@ function saveSeasonChoice(storage, choice) {
   }
 }
 
-// "Autumn", or "Autumn · Mid-Autumn Festival" while a holiday tree is active
-// (the plain season entries of SEASONS are not holidays).
-function seasonLabel(key, holidayKey) {
-  const name =
-    key === 'spring'
-      ? tr('season.spring')
-      : key === 'summer'
-        ? tr('season.summer')
-        : key === 'autumn'
-          ? tr('season.autumn')
-          : tr('season.winter');
-  const holiday = SeasonTree.SEASONS[holidayKey];
-  return holiday && holiday.type !== 'season' && holiday.type !== 'none' ? name + ' · ' + holiday.label : name;
+// A moment's small holiday that has its own tree (the plain season entries and Christmas are not holidays).
+const holidayOf = key => {
+  const h = SeasonTree.SEASONS[key];
+  return h && key !== 'christmas' && h.type !== 'season' && h.type !== 'none' ? h : null;
+};
+const SEASON_NAME = {
+  spring: () => tr('season.spring'),
+  summer: () => tr('season.summer'),
+  autumn: () => tr('season.autumn'),
+  winter: () => tr('season.winter'),
+};
+// "Autumn", "Autumn · Mid-Autumn Festival" on a small holiday, "Winter · Christmas" while the event is on.
+// m is a moment (web/moment.js): { season, holiday, event }.
+function seasonLabel(m) {
+  const name = SEASON_NAME[KEYS.includes(m.season) ? m.season : 'summer']();
+  if (m.event) return name + ' · ' + tr('event.christmas');
+  const holiday = holidayOf(m.holiday);
+  return holiday ? name + ' · ' + holiday.label : name;
 }
-// The header chip: the season shown (a preview or the Settings choice included) in the season's colour, or, while a
-// holiday tree is up, "Season · Holiday" in the holiday's colour.
+// The header chip: the season shown (a preview or the Settings choice included) in the season's colour, or, with a
+// holiday tree up, "Season · Holiday" in the holiday's colour; the event's own colour while it is on.
 const ACCENT = { spring: '#f7a8c4', summer: '#46a758', autumn: '#e0703a', winter: '#9fd3ff' };
-function seasonChip(key, holidayKey) {
-  const holiday = SeasonTree.SEASONS[holidayKey],
-    on = holiday && holiday.type !== 'season' && holiday.type !== 'none';
-  return { label: seasonLabel(key, holidayKey), accent: on ? holiday.accent : ACCENT[key] || ACCENT.summer };
+function seasonChip(m) {
+  const holiday = m.event ? SeasonTree.SEASONS[m.event.key] : holidayOf(m.holiday);
+  return { label: seasonLabel(m), accent: holiday ? holiday.accent : ACCENT[m.season] || ACCENT.summer };
 }
 // Settings dropdown entry for "follow the date".
 const autoLabel = () => tr('season.auto');
