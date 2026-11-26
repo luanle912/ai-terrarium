@@ -7,23 +7,34 @@ import { EventCritters } from './event-critters.js';
 import { WorldLogic } from './world-logic.js';
 import { WallpaperLogic } from './wallpaper-logic.js';
 import { EventLogic } from './event-logic.js';
+import { TpStyles } from './tp-styles.js';
 import { EventLandmark } from './event-landmark.js';
+import { TeleportLogic } from './teleport-logic.js';
 import { Moment } from './moment.js';
 import { Theme } from './theme.js';
 import { LookChange } from './look-change.js';
 import { SettingsSync } from './settings-sync.js';
 import {
   BLOCK,
+  DESKS,
   DOG_PLACES,
   EVENT_LAND,
+  H,
   LH,
   LW,
   REAL_WEATHER_EVERY_MS,
+  STAIRS,
   THEMES,
+  W,
   WEATHER_LABEL,
   dayFactor,
   lerpTheme,
 } from './office-scene.js';
+const TP_CHAIRS = DESKS.map(d => [d.gx + 1, d.gy + 1.45]);
+// Stair cells: a teleport landing there would lie across the steps.
+const TP_STEPS = STAIRS.flatMap(s =>
+  Array.from({ length: s.len }, (_, k) => (s.side === 'east' ? [W + 0.5, s.y + k + 0.5] : [s.x + k + 0.5, H + 0.5])),
+);
 // ClaudeOffice, the page component. Its methods are spread over the office-*.js files; each adds its own with
 // mixin(ClaudeOffice, class{ ... }), which copies them onto the prototype exactly as if they were written here.
 export function mixin(target, src) {
@@ -81,6 +92,8 @@ export class ClaudeOffice extends React.Component {
     this.seasonChoice = SeasonLogic.loadSeasonChoice(this.storage);
     this.seasonPreview = null;
     this.eventChoice = EventLogic.loadChoice(this.storage);
+    TpStyles.setChoice(TpStyles.loadChoice(this.storage));
+    TpStyles.useHoliday(now => this.tpHoliday(now));
     this.eventPreview = null;
     this.sync = SettingsSync.create(this.storage); // when the choices were made, what was sent (settings-sync.js)
     this.goneSids = new Map();
@@ -484,6 +497,19 @@ export class ClaudeOffice extends React.Component {
   seasonNow() {
     return this.moment.season;
   }
+  // The teleport for a goal change (web/teleport-logic.js), or null; `prev` is the agent before the change reset it.
+  tpPlan(a, key, prev) {
+    const c = { prev, key, agents: this.agents, chairs: TP_CHAIRS, stairs: TP_STEPS, speed: this.speed };
+    return TeleportLogic.plan(a, c);
+  }
+  // The holiday this page shows, for the teleports: the moment (web/moment.js) at `now`, worked out afresh, as
+  // planning may run before this frame's computeMoment and eventNow would block the tree's cells.
+  tpHoliday(now) {
+    const { seasonChoice, seasonPreview, eventChoice, eventPreview } = this,
+      date = new Date(now),
+      m = Moment.at({ date, now, seasonChoice, seasonPreview, eventChoice, eventPreview, df: 1, snow: 0 });
+    return TpStyles.holidayOf(m.holiday || 'default', m.event);
+  }
   get treeOn() {
     return this.season !== 'default';
   }
@@ -527,6 +553,7 @@ export class ClaudeOffice extends React.Component {
       const [sx, sy] = this.headPos(a);
       el.style.left = Math.min(92, Math.max(8, (sx / LW) * 100)) + '%';
       el.style.top = ((sy - 12) / LH) * 100 + '%';
+      el.style.visibility = TeleportLogic.unseen(a.tp) ? 'hidden' : '';
     }
   }
   // Preview buttons show a weather within 3 s for a minute, then the mode's own weather returns

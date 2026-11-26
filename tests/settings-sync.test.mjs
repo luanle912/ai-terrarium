@@ -48,7 +48,13 @@ test('sim mode pushes', async () => {
   assert.equal(log[0].url, '/api/settings')
   assert.equal(log[0].opts.method, 'POST')
   assert.equal(log[0].opts.headers['X-Terrarium'], 'settings')
-  assert.deepEqual(log[0].body, { weather: { mode: 'random', city: '' }, event: 'on', season: 'auto', updatedAt: 5000 })
+  assert.deepEqual(log[0].body, {
+    weather: { mode: 'random', city: '' },
+    event: 'on',
+    season: 'auto',
+    teleport: 'random',
+    updatedAt: 5000,
+  })
   assert.equal(host.sync.pending, false)
   assert.equal(S.loadAt(host.storage), 5000, 'the time of the choice is kept with it')
 })
@@ -191,4 +197,22 @@ test('a file with a season but no event still gets this page\'s hand-picked even
   assert.equal(host.seasonChoice, 'summer', 'the server\'s season is taken')
   assert.equal(log.length, 1)
   assert.equal(log[0].body.event, 'off')
+})
+
+test('a seed sends the weather just taken from the server, not the page state React has yet to apply', async () => {
+  const { TpStyles } = loadWeb('tp-styles')
+  TpStyles.setChoice('frog')
+  try {
+    const log = [],
+      host = fakeHost({ setWeather(p, fromServer) { this.calls.push(['weather', p, fromServer]) } })
+    host.sync.at = 1000
+    const ps = { weather: { mode: 'real', city: 'Hue' }, event: 'auto', season: 'winter', updatedAt: 5000 }
+    S.receive(host, ps, { fetch: okFetch(log), now: 6000 })
+    await settle()
+    assert.equal(log.length, 1, 'the file has no teleport style: this page seeds its own')
+    assert.equal(log[0].body.teleport, 'frog')
+    assert.deepEqual(log[0].body.weather, { mode: 'real', city: 'Hue' })
+  } finally {
+    TpStyles.reset()
+  }
 })

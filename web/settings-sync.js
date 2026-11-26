@@ -1,15 +1,16 @@
-// Sharing the Settings choices (the weather, the event and the season; previews stay this page's own) through the
-// local server (lib/page-settings.js; spec 2026-11-18 §5.8, D2b; tests/settings-sync.test.mjs). The choice belongs to
-// the viewer, not to the data source: a page pushes it from Live, Simulation and "view as another person" alike
-// whenever it can reach the server, and every value carries when it was chosen (updatedAt, ms), so the newest wins
-// everywhere (EventLogic.adopt). A push that fails keeps the local choice, marked pending, and is sent again on the
-// next change or snapshot.
+// Sharing the Settings choices (the weather, the event, the season and the teleport style; previews stay this page's
+// own) through the local server (lib/page-settings.js; spec 2026-11-18 §5.8, D2b; tests/settings-sync.test.mjs). The
+// choice belongs to the viewer, not to the data source: a page pushes it from Live, Simulation and "view as another
+// person" alike whenever it can reach the server, and every value carries when it was chosen (updatedAt, ms), so the
+// newest wins everywhere (EventLogic.adopt). A push that fails keeps the local choice, marked pending, and is sent
+// again on the next change or snapshot.
 //
 // The page keeps a small record, host.sync: { at (when this page's choice was made, or the server's it took), sentAt
 // (the `at` last sent successfully), pending (the last send failed), inFlight (sends on the way) }.
 import { EventLogic } from './event-logic.js';
 import { SeasonLogic } from './season-logic.js';
 import { SkyLogic } from './sky-logic.js';
+import { TpStyles } from './tp-styles.js';
 
 const AT_KEY = 'ai-terrarium.settingsAt';
 function loadAt(storage) {
@@ -36,7 +37,8 @@ function touch(s, storage, now) {
 // seasonChoice, settingsUrl, adoptSettings }); `touch` when it was just changed here. The server answers with the
 // value it keeps, which the page adopts: a newer one from another page wins in Simulation too. Resolves to that value,
 // or null. The wallpaper never chose anything, and the world (the hub's page) cannot reach the local server.
-async function share(host, { touch: changed = false, fetch: f, now = Date.now() } = {}) {
+// `weather`: the one just adopted, which host.state may not hold yet (React applies setState later).
+async function share(host, { touch: changed = false, fetch: f, now = Date.now(), weather } = {}) {
   if (!f && typeof fetch === 'function') f = (u, o) => fetch(u, o);
   if (host.wallpaper || host.world || typeof f !== 'function') return null;
   const s = host.sync,
@@ -44,9 +46,10 @@ async function share(host, { touch: changed = false, fetch: f, now = Date.now() 
   if (changed) touch(s, host.storage, now);
   const at = s.at,
     value = {
-      weather: { mode: st.weatherMode, city: st.city },
+      weather: weather || { mode: st.weatherMode, city: st.city },
       event: host.eventChoice || 'auto',
       season: host.seasonChoice || 'auto',
+      teleport: TpStyles.choice(),
       updatedAt: at,
     };
   s.inFlight++;
@@ -79,7 +82,9 @@ const seeds = (host, ps) =>
   !host.wallpaper &&
   !host.world &&
   !host.sync.inFlight &&
-  ((!ps.season && (host.seasonChoice || 'auto') !== 'auto') || (!ps.event && (host.eventChoice || 'auto') !== 'auto'));
+  ((!ps.season && (host.seasonChoice || 'auto') !== 'auto') ||
+    (!ps.event && (host.eventChoice || 'auto') !== 'auto') ||
+    (!ps.teleport && TpStyles.choice() !== 'random'));
 
 // The server's value (a snapshot's pageSettings, or a push's answer) against this page's: take it when it is newer,
 // else send ours when it is newer and not sent yet (or its send failed) and nothing is on the way.
@@ -96,9 +101,11 @@ function receive(host, ps, opts) {
     if (e.take) host.setEventChoice(e.take, true);
     if (SeasonLogic.CHOICES.includes(ps.season) && ps.season !== host.seasonChoice)
       host.setSeasonChoice(ps.season, true);
+    if (TpStyles.CHOICES.includes(ps.teleport) && ps.teleport !== TpStyles.choice())
+      host.setTpChoice(ps.teleport, true);
     // A file written before the season (or the event) was shared has neither, nor a stamp, so it counts as newer
     // than a page that never synced: a choice picked by hand here is sent once, stamped, or it would never get there.
-    if (seeds(host, ps)) share(host, { ...opts, touch: true });
+    if (seeds(host, ps)) share(host, { ...opts, touch: true, weather: { mode: w.mode, city: w.city } });
   } else if (e.push && !s.inFlight && (s.pending || s.sentAt !== s.at)) share(host, opts);
 }
 
@@ -108,6 +115,7 @@ function follow(host, key) {
   const store = host.storage;
   if (key === EventLogic.EVENT_KEY) host.setEventChoice(EventLogic.loadChoice(store), true);
   else if (key === SeasonLogic.SEASON_KEY) host.setSeasonChoice(SeasonLogic.loadSeasonChoice(store), true);
+  else if (key === TpStyles.KEY) host.setTpChoice(TpStyles.loadChoice(store), true);
   else if (key === SkyLogic.WEATHER_KEY) {
     const w = SkyLogic.loadWeatherSettings(store);
     if (w.mode !== host.state.weatherMode || w.city !== host.state.city)

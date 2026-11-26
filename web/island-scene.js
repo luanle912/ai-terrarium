@@ -16,6 +16,7 @@ import './office-draw-festive.js';
 import './office-draw-cathedral.js';
 import './office-draw-critters.js';
 import './office-draw-idle-xmas.js';
+import './office-draw-teleport.js';
 import './office-draw-people.js';
 import './office-render.js';
 import { DogLogic } from './dog-logic.js';
@@ -58,6 +59,9 @@ export const SCENE_METHODS = [
   'fateCtx',
   'startFate',
   'fateItems',
+  'tpItems',
+  'tpPerson',
+  'tpPlan',
   'xmasItems',
   'cathedralItems',
   'xmasTree',

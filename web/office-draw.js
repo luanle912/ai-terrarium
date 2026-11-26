@@ -597,6 +597,7 @@ mixin(
       this.smokingItems(G, items, snow);
       this.doghouseItems(G, items, snow, dfB, snB);
       this.fateItems(G, items);
+      this.tpItems(G, items);
       this.xmasItems(G, items);
       this.restroomItems(G, items, snow);
       this.dressItems(G, items);

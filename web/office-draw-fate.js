@@ -467,6 +467,7 @@ mixin(
         stool: false,
         actNow: null,
         outfitPin: true,
+        tp: null,
       };
       this.fates.push({ kind: a.fate, x: a.x, y: a.y, t0: null, seed: a.id || 1, who });
     }

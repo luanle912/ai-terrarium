@@ -147,6 +147,7 @@ mixin(
     drawPerson(G, a) {
       const { ctx, poly, box, rect, th, t } = G,
         o = outfitOf(a, G.look);
+      if (a.tp && this.tpPerson(G, a)) return;
       if (a.sleeping) return this.drawSleeper(G, a);
       let [sx, sy] = a.seated ? P(a.x, a.y, 11.5) : PA(a.x, a.y, a.actNow === 'skate' ? WATER_Z : 0);
       sx = Math.round(sx);
@@ -383,7 +384,7 @@ mixin(
         else PERSON.legs(R, L, sx, by, sh, l1, l2, a.dirFront);
         const sw = a.moving ? (walk ? 1 : -1) : 0,
           wave = st === 'talking' && !a.moving ? Math.floor(t * 4) % 2 : 0,
-          up = st === 'done' && !a.moving;
+          up = (st === 'done' || a.armsUp) && !a.moving;
         const act = !a.moving && st === 'idle' ? a.actNow : null;
         const tp = t + a.id * 1.37; // per-person phase, so a group of smokers never moves in step
         if (act && (!sit || act === 'smoke')) {
@@ -486,7 +487,7 @@ mixin(
           ctx.strokeRect(sx - 4.5, hy - 1.5, 9, 19);
         }
       }
-      if (!a.seated) {
+      if (!a.seated && !a.bare) {
         const [hx, hy] = this.headPos(a),
           col = (ST[st] || ST.working)[1];
         if (st === 'thinking') {
@@ -495,7 +496,8 @@ mixin(
           R(hx - 7, hy - 7, 15, 4, '#ffffff');
           R(hx - 2, hy - 1, 2, 2, '#ffffff');
           for (let k = 0; k < 3; k++) R(hx - 4 + k * 4, hy - 6, 2, 2, k < n ? '#5b8def' : '#c8d2e6');
-        } else if (st === 'idle' && !a.actNow) {
+        } else if (st === 'idle' && !a.actNow && !a.tp) {
+          // none during a teleport: the Z would float unsqueezed beside the column
           for (let k = 0; k < 2; k++) {
             const p = (t * 0.6 + k * 0.5) % 1;
             ctx.globalAlpha = 1 - p;

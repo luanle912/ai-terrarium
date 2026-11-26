@@ -7,6 +7,7 @@ import { SeasonLogic } from './season-logic.js';
 import { PropUse } from './prop-use.js';
 import { FateLogic } from './fate-logic.js';
 import { EventIdle } from './event-idle.js';
+import { TeleportLogic } from './teleport-logic.js';
 import { SnowLogic } from './snow-logic.js';
 import {
   CRITTER_PLACES,
@@ -579,7 +580,10 @@ mixin(
       if (a.sleeping) return;
       const g = this.goalFor(a);
       if (g.key !== a.goalKey) {
-        EventIdle.offRink(a, EVENT_IDLE, CRITTER_PLACES.water); // a skater steps off the ice first
+        // A skater steps off the ice first; a bather going back to work (or mid-teleport) leaves from the pond.
+        if (a.actNow === 'skate' || !(a.tp || g.key === 'seat' || g.key.startsWith('visit')))
+          EventIdle.offRink(a, EVENT_IDLE, CRITTER_PLACES.water);
+        const prev = { was: a.goalKey, hid: a.wcIn, stool: a.stool, act: a.actNow };
         a.goalKey = g.key;
         a.seated = false;
         a.sleeping = false;
@@ -593,9 +597,11 @@ mixin(
           .map(p => [p[0] + 0.5, p[1] + 0.5])
           .concat([g.pt]);
         if (g.key === 'seat' && a.path.length > 1) a.path.splice(a.path.length - 2, 1);
+        a.tp = this.tpPlan(a, g.key, prev);
       }
       if (a.actNow && !a.path.length) a.idleT += dt * this.speed; // the stay at an idle spot, walking not counted
       if (a.linger > 0) a.linger -= dt * this.speed;
+      if (a.tp && TeleportLogic.step(a, dt)) return; // held still while a teleport plays (web/teleport-logic.js)
       if (a.path.length) {
         a.moving = true;
         let step = 2.6 * this.speed * dt;

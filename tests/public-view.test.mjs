@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
@@ -204,4 +205,9 @@ test("the default store keeps today's order", () => {
   assert.deepEqual(v1.map((s) => s.dept), ['A', 'B'])
   const v2 = view(snap([mk({ project: 'p3' }), mk({ id: 'real-id-2', project: 'p1' })]), opts()).sessions
   assert.deepEqual(v2.map((s) => s.dept), ['C', 'A'])
+})
+
+test('the page settings (weather, event, teleport style) never reach the published view', () => {
+  const src = fs.readFileSync(new URL('../lib/public-view.js', import.meta.url), 'utf8')
+  assert.ok(!/pageSettings|teleport/.test(src))
 })
